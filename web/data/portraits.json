@@ -1,0 +1,772 @@
+{
+  "h3": {
+    "heroId": 100003,
+    "officialName": "吕布",
+    "note": "q5 汉-骑",
+    "portrait": "/portraits/h3.jpg",
+    "avatar": "/portraits/h3_s.jpg"
+  },
+  "h27": {
+    "heroId": 100027,
+    "officialName": "张辽",
+    "note": "q5 魏-骑",
+    "portrait": "/portraits/h27.jpg",
+    "avatar": "/portraits/h27_s.jpg"
+  },
+  "lvmeng": {
+    "heroId": 100035,
+    "officialName": "吕蒙",
+    "note": "q5 吴-弓",
+    "portrait": "/portraits/lvmeng.jpg",
+    "avatar": "/portraits/lvmeng_s.jpg"
+  },
+  "h704": {
+    "heroId": 100704,
+    "officialName": "文鸯",
+    "note": "q5 晋-骑",
+    "portrait": "/portraits/h704.jpg",
+    "avatar": "/portraits/h704_s.jpg"
+  },
+  "h424": {
+    "heroId": 100424,
+    "officialName": "小乔＆大乔",
+    "note": "q5 吴-步",
+    "portrait": "/portraits/h424.jpg",
+    "avatar": "/portraits/h424_s.jpg"
+  },
+  "h16": {
+    "heroId": 100016,
+    "officialName": "刘备",
+    "note": "q5 蜀-步",
+    "portrait": "/portraits/h16.jpg",
+    "avatar": "/portraits/h16_s.jpg"
+  },
+  "sp_zhaoyun": {
+    "heroId": 102001,
+    "officialName": "SP赵云",
+    "note": "q5 蜀-骑 SP",
+    "portrait": "/portraits/sp_zhaoyun.jpg",
+    "avatar": null
+  },
+  "h705": {
+    "heroId": 100705,
+    "officialName": "杜预",
+    "note": "q5 晋-弓",
+    "portrait": "/portraits/h705.jpg",
+    "avatar": "/portraits/h705_s.jpg"
+  },
+  "h790": {
+    "heroId": 100790,
+    "officialName": "袁术",
+    "note": "q5 群-步",
+    "portrait": "/portraits/h790.jpg",
+    "avatar": "/portraits/h790_s.jpg"
+  },
+  "h670": {
+    "heroId": 100670,
+    "officialName": "袁绍",
+    "note": "q5 群-弓",
+    "portrait": "/portraits/h670.jpg",
+    "avatar": "/portraits/h670_s.jpg"
+  },
+  "h23": {
+    "heroId": 100023,
+    "officialName": "曹操",
+    "note": "q5 魏-骑",
+    "portrait": "/portraits/h23.jpg",
+    "avatar": "/portraits/h23_s.jpg"
+  },
+  "h524": {
+    "heroId": 100524,
+    "officialName": "沙摩柯",
+    "note": "q5 蜀-弓",
+    "portrait": "/portraits/h524.jpg",
+    "avatar": "/portraits/h524_s.jpg"
+  },
+  "h33": {
+    "heroId": 100033,
+    "officialName": "孙坚",
+    "note": "q5 吴-步",
+    "portrait": "/portraits/h33.jpg",
+    "avatar": "/portraits/h33_s.jpg"
+  },
+  "h101": {
+    "heroId": 100101,
+    "officialName": "灵帝",
+    "note": "q5 汉-弓",
+    "portrait": "/portraits/h101.jpg",
+    "avatar": "/portraits/h101_s.jpg"
+  },
+  "h685": {
+    "heroId": 100685,
+    "officialName": "乐进",
+    "note": "q5 魏-步",
+    "portrait": "/portraits/h685.jpg",
+    "avatar": "/portraits/h685_s.jpg"
+  },
+  "h796": {
+    "heroId": 100796,
+    "officialName": "于禁",
+    "note": "q5 魏-步",
+    "portrait": "/portraits/h796.jpg",
+    "avatar": "/portraits/h796_s.jpg"
+  },
+  "h377": {
+    "heroId": 100377,
+    "officialName": "骊姬",
+    "note": "q5 群-弓",
+    "portrait": "/portraits/h377.jpg",
+    "avatar": "/portraits/h377_s.jpg"
+  },
+  "h677": {
+    "heroId": 100677,
+    "officialName": "公孙瓒",
+    "note": "q5 群-骑",
+    "portrait": "/portraits/h677.jpg",
+    "avatar": "/portraits/h677_s.jpg"
+  },
+  "zhaoyun": {
+    "heroId": 100021,
+    "officialName": "赵云",
+    "note": "q5 蜀-步",
+    "portrait": "/portraits/zhaoyun.jpg",
+    "avatar": "/portraits/zhaoyun_s.jpg"
+  },
+  "h26": {
+    "heroId": 100026,
+    "officialName": "关羽",
+    "note": "q5 魏-骑",
+    "portrait": "/portraits/h26.jpg",
+    "avatar": "/portraits/h26_s.jpg"
+  },
+  "h72": {
+    "heroId": 100072,
+    "officialName": "关银屏",
+    "note": "q5 蜀-步",
+    "portrait": "/portraits/h72.jpg",
+    "avatar": "/portraits/h72_s.jpg"
+  },
+  "h701": {
+    "heroId": 100701,
+    "officialName": "司马师",
+    "note": "q5 晋-骑",
+    "portrait": "/portraits/h701.jpg",
+    "avatar": "/portraits/h701_s.jpg"
+  },
+  "h769": {
+    "heroId": 100769,
+    "officialName": "典韦",
+    "note": "q5 魏-步",
+    "portrait": "/portraits/h769.jpg",
+    "avatar": "/portraits/h769_s.jpg"
+  },
+  "weiguan": {
+    "heroId": 100707,
+    "officialName": "卫瓘",
+    "note": "q5 晋-步",
+    "portrait": "/portraits/weiguan.jpg",
+    "avatar": "/portraits/weiguan_s.jpg"
+  },
+  "h616": {
+    "heroId": 100616,
+    "officialName": "凌统",
+    "note": "q5 吴-弓",
+    "portrait": "/portraits/h616.jpg",
+    "avatar": "/portraits/h616_s.jpg"
+  },
+  "h7": {
+    "heroId": 100007,
+    "officialName": "卢植",
+    "note": "q5 汉-骑",
+    "portrait": "/portraits/h7.jpg",
+    "avatar": "/portraits/h7_s.jpg"
+  },
+  "h451": {
+    "heroId": 100451,
+    "officialName": "关羽",
+    "note": "q5 蜀-骑",
+    "portrait": "/portraits/h451.jpg",
+    "avatar": "/portraits/h451_s.jpg"
+  },
+  "h354": {
+    "heroId": 100811,
+    "officialName": "司马徽",
+    "note": "q5 群-步",
+    "portrait": "/portraits/h354.jpg",
+    "avatar": "/portraits/h354_s.jpg"
+  },
+  "h472": {
+    "heroId": 100472,
+    "officialName": "司马懿",
+    "note": "q5 魏-步",
+    "portrait": "/portraits/h472.jpg",
+    "avatar": "/portraits/h472_s.jpg"
+  },
+  "h449": {
+    "heroId": 100449,
+    "officialName": "夏侯惇",
+    "note": "q5 魏-骑",
+    "portrait": "/portraits/h449.jpg",
+    "avatar": "/portraits/h449_s.jpg"
+  },
+  "h634": {
+    "heroId": 100634,
+    "officialName": "吕姬",
+    "note": "q5 群-步",
+    "portrait": "/portraits/h634.jpg",
+    "avatar": "/portraits/h634_s.jpg"
+  },
+  "zhouyu": {
+    "heroId": 100031,
+    "officialName": "周瑜",
+    "note": "q5 吴-弓",
+    "portrait": "/portraits/zhouyu.jpg",
+    "avatar": "/portraits/zhouyu_s.jpg"
+  },
+  "h589": {
+    "heroId": 100589,
+    "officialName": "周泰",
+    "note": "q5 吴-步",
+    "portrait": "/portraits/h589.jpg",
+    "avatar": "/portraits/h589_s.jpg"
+  },
+  "h702": {
+    "heroId": 100702,
+    "officialName": "司马昭",
+    "note": "q5 晋-骑",
+    "portrait": "/portraits/h702.jpg",
+    "avatar": "/portraits/h702_s.jpg"
+  },
+  "h372": {
+    "heroId": 100372,
+    "officialName": "妲己",
+    "note": "q5 群-步",
+    "portrait": "/portraits/h372.jpg",
+    "avatar": "/portraits/h372_s.jpg"
+  },
+  "h586": {
+    "heroId": 100586,
+    "officialName": "庞德",
+    "note": "q5 群-骑",
+    "portrait": "/portraits/h586.jpg",
+    "avatar": "/portraits/h586_s.jpg"
+  },
+  "h654": {
+    "heroId": 100654,
+    "officialName": "孙鲁班",
+    "note": "q5 吴-弓",
+    "portrait": "/portraits/h654.jpg",
+    "avatar": "/portraits/h654_s.jpg"
+  },
+  "h526": {
+    "heroId": 100526,
+    "officialName": "张机",
+    "note": "q5 汉-弓",
+    "portrait": "/portraits/h526.jpg",
+    "avatar": "/portraits/h526_s.jpg"
+  },
+  "sunquan": {
+    "heroId": 100030,
+    "officialName": "孙权",
+    "note": "q5 吴-弓",
+    "portrait": "/portraits/sunquan.jpg",
+    "avatar": "/portraits/sunquan_s.jpg"
+  },
+  "h450": {
+    "heroId": 100450,
+    "officialName": "孙策",
+    "note": "q5 吴-骑",
+    "portrait": "/portraits/h450.jpg",
+    "avatar": "/portraits/h450_s.jpg"
+  },
+  "h474": {
+    "heroId": 100474,
+    "officialName": "张宁",
+    "note": "q5 群-步",
+    "portrait": "/portraits/h474.jpg",
+    "avatar": "/portraits/h474_s.jpg"
+  },
+  "h557": {
+    "heroId": 100557,
+    "officialName": "张梁",
+    "note": "q5 群-步 SP 赛季",
+    "portrait": "/portraits/h557.jpg",
+    "avatar": "/portraits/h557_s.jpg"
+  },
+  "h435": {
+    "heroId": 100435,
+    "officialName": "夏侯渊",
+    "note": "q5 魏-骑",
+    "portrait": "/portraits/h435.jpg",
+    "avatar": "/portraits/h435_s.jpg"
+  },
+  "h553": {
+    "heroId": 100553,
+    "officialName": "朱儁",
+    "note": "q5 汉-弓 SP 赛季",
+    "portrait": "/portraits/h553.jpg",
+    "avatar": "/portraits/h553_s.jpg"
+  },
+  "h585": {
+    "heroId": 100585,
+    "officialName": "曹仁",
+    "note": "q5 魏-步 SP 赛季",
+    "portrait": "/portraits/h585.jpg",
+    "avatar": "/portraits/h585_s.jpg"
+  },
+  "h22": {
+    "heroId": 100022,
+    "officialName": "张飞",
+    "note": "q5 蜀-骑",
+    "portrait": "/portraits/h22.jpg",
+    "avatar": "/portraits/h22_s.jpg"
+  },
+  "h771": {
+    "heroId": 100771,
+    "officialName": "沮授",
+    "note": "q5 群-步",
+    "portrait": "/portraits/h771.jpg",
+    "avatar": "/portraits/h771_s.jpg"
+  },
+  "h582": {
+    "heroId": 100582,
+    "officialName": "法正",
+    "note": "q5 蜀-骑",
+    "portrait": "/portraits/h582.jpg",
+    "avatar": "/portraits/h582_s.jpg"
+  },
+  "h620": {
+    "heroId": 100620,
+    "officialName": "张绣",
+    "note": "q5 群-骑",
+    "portrait": "/portraits/h620.jpg",
+    "avatar": "/portraits/h620_s.jpg"
+  },
+  "h452": {
+    "heroId": 100452,
+    "officialName": "木鹿大王",
+    "note": "q5 群-骑",
+    "portrait": "/portraits/h452.jpg",
+    "avatar": "/portraits/h452_s.jpg"
+  },
+  "h486": {
+    "heroId": 100486,
+    "officialName": "潘凤",
+    "note": "q5 汉-骑",
+    "portrait": "/portraits/h486.jpg",
+    "avatar": "/portraits/h486_s.jpg"
+  },
+  "h797": {
+    "heroId": 100797,
+    "officialName": "胡芳",
+    "note": "q5 晋-步",
+    "portrait": "/portraits/h797.jpg",
+    "avatar": "/portraits/h797_s.jpg"
+  },
+  "h34": {
+    "heroId": 100034,
+    "officialName": "甘宁",
+    "note": "q5 吴-步",
+    "portrait": "/portraits/h34.jpg",
+    "avatar": "/portraits/h34_s.jpg"
+  },
+  "h9": {
+    "heroId": 100009,
+    "officialName": "董卓",
+    "note": "q5 群-骑",
+    "portrait": "/portraits/h9.jpg",
+    "avatar": "/portraits/h9_s.jpg"
+  },
+  "h6": {
+    "heroId": 100006,
+    "officialName": "袁绍",
+    "note": "q5 汉-步",
+    "portrait": "/portraits/h6.jpg",
+    "avatar": "/portraits/h6_s.jpg"
+  },
+  "h24": {
+    "heroId": 100024,
+    "officialName": "荀彧",
+    "note": "q5 魏-骑",
+    "portrait": "/portraits/h24.jpg",
+    "avatar": "/portraits/h24_s.jpg"
+  },
+  "h671": {
+    "heroId": 100671,
+    "officialName": "蒋钦",
+    "note": "q5 吴-弓",
+    "portrait": "/portraits/h671.jpg",
+    "avatar": "/portraits/h671_s.jpg"
+  },
+  "h17": {
+    "heroId": 100017,
+    "officialName": "诸葛亮",
+    "note": "q5 蜀-步",
+    "portrait": "/portraits/h17.jpg",
+    "avatar": "/portraits/h17_s.jpg"
+  },
+  "h310": {
+    "heroId": 100310,
+    "officialName": "邓艾",
+    "note": "q5 魏-步",
+    "portrait": "/portraits/h310.jpg",
+    "avatar": "/portraits/h310_s.jpg"
+  },
+  "h618": {
+    "heroId": 100618,
+    "officialName": "贾诩",
+    "note": "q5 魏-弓",
+    "portrait": "/portraits/h618.jpg",
+    "avatar": "/portraits/h618_s.jpg"
+  },
+  "h793": {
+    "heroId": 100793,
+    "officialName": "陈到",
+    "note": "q5 蜀-步",
+    "portrait": "/portraits/h793.jpg",
+    "avatar": "/portraits/h793_s.jpg"
+  },
+  "h522": {
+    "heroId": 100522,
+    "officialName": "诸葛恪",
+    "note": "q5 吴-弓",
+    "portrait": "/portraits/h522.jpg",
+    "avatar": "/portraits/h522_s.jpg"
+  },
+  "h443": {
+    "heroId": 100443,
+    "officialName": "陈宫",
+    "note": "q5 群-弓",
+    "portrait": "/portraits/h443.jpg",
+    "avatar": "/portraits/h443_s.jpg"
+  },
+  "h475": {
+    "heroId": 100475,
+    "officialName": "郝昭",
+    "note": "q5 魏-步",
+    "portrait": "/portraits/h475.jpg",
+    "avatar": "/portraits/h475_s.jpg"
+  },
+  "h574": {
+    "heroId": 100574,
+    "officialName": "陆抗",
+    "note": "q5 吴-步",
+    "portrait": "/portraits/h574.jpg",
+    "avatar": "/portraits/h574_s.jpg"
+  },
+  "h615": {
+    "heroId": 100615,
+    "officialName": "马岱",
+    "note": "q5 蜀-骑",
+    "portrait": "/portraits/h615.jpg",
+    "avatar": "/portraits/h615_s.jpg"
+  },
+  "h741": {
+    "heroId": 100741,
+    "officialName": "鲁肃",
+    "note": "q5 吴-步",
+    "portrait": "/portraits/h741.jpg",
+    "avatar": "/portraits/h741_s.jpg"
+  },
+  "h13": {
+    "heroId": 100013,
+    "officialName": "马超",
+    "note": "q5 群-骑",
+    "portrait": "/portraits/h13.jpg",
+    "avatar": "/portraits/h13_s.jpg"
+  },
+  "weiyan": {
+    "heroId": 100649,
+    "officialName": "魏延",
+    "note": "q5 蜀-步",
+    "portrait": "/portraits/weiyan.jpg",
+    "avatar": "/portraits/weiyan_s.jpg"
+  },
+  "h442": {
+    "heroId": 100442,
+    "officialName": "黄忠",
+    "note": "q5 蜀-步",
+    "portrait": "/portraits/h442.jpg",
+    "avatar": "/portraits/h442_s.jpg"
+  },
+  "h785": {
+    "heroId": 100605,
+    "officialName": "马腾",
+    "note": "q5 群-骑",
+    "portrait": "/portraits/h785.jpg",
+    "avatar": "/portraits/h785_s.jpg"
+  },
+  "sp_jiangwei": {
+    "heroId": 102012,
+    "officialName": "SP姜维",
+    "note": "q5 蜀-弓 SP",
+    "portrait": "/portraits/sp_jiangwei.jpg",
+    "avatar": null
+  },
+  "h786": {
+    "heroId": 100786,
+    "officialName": "卫子夫",
+    "note": "q5 汉-步",
+    "portrait": "/portraits/h786.jpg",
+    "avatar": "/portraits/h786_s.jpg"
+  },
+  "h37": {
+    "heroId": 100037,
+    "officialName": "何太后",
+    "note": "q5 汉-弓",
+    "portrait": "/portraits/h37.jpg",
+    "avatar": "/portraits/h37_s.jpg"
+  },
+  "h783": {
+    "heroId": 100783,
+    "officialName": "黄盖",
+    "note": "q5 吴-步",
+    "portrait": "/portraits/h783.jpg",
+    "avatar": "/portraits/h783_s.jpg"
+  },
+  "h689": {
+    "heroId": 100689,
+    "officialName": "刘禅",
+    "note": "q5 蜀-步",
+    "portrait": "/portraits/h689.jpg",
+    "avatar": "/portraits/h689_s.jpg"
+  },
+  "h619": {
+    "heroId": 100619,
+    "officialName": "大乔",
+    "note": "q5 吴-步",
+    "portrait": "/portraits/h619.jpg",
+    "avatar": "/portraits/h619_s.jpg"
+  },
+  "h32": {
+    "heroId": 100032,
+    "officialName": "周姬",
+    "note": "q5 吴-弓",
+    "portrait": "/portraits/h32.jpg",
+    "avatar": "/portraits/h32_s.jpg"
+  },
+  "h36": {
+    "heroId": 100036,
+    "officialName": "孙尚香",
+    "note": "q5 吴-弓",
+    "portrait": "/portraits/h36.jpg",
+    "avatar": "/portraits/h36_s.jpg"
+  },
+  "h687": {
+    "heroId": 100687,
+    "officialName": "小乔",
+    "note": "q5 吴-弓",
+    "portrait": "/portraits/h687.jpg",
+    "avatar": "/portraits/h687_s.jpg"
+  },
+  "taishici": {
+    "heroId": 100090,
+    "officialName": "太史慈",
+    "note": "q5 吴-弓",
+    "portrait": "/portraits/taishici.jpg",
+    "avatar": "/portraits/taishici_s.jpg"
+  },
+  "h562": {
+    "heroId": 100562,
+    "officialName": "张宝",
+    "note": "q5 群-弓 SP 赛季",
+    "portrait": "/portraits/h562.jpg",
+    "avatar": "/portraits/h562_s.jpg"
+  },
+  "h358": {
+    "heroId": 100358,
+    "officialName": "张姬",
+    "note": "q5 蜀-弓",
+    "portrait": "/portraits/h358.jpg",
+    "avatar": "/portraits/h358_s.jpg"
+  },
+  "h29": {
+    "heroId": 100029,
+    "officialName": "张春华",
+    "note": "q5 魏-弓",
+    "portrait": "/portraits/h29.jpg",
+    "avatar": "/portraits/h29_s.jpg"
+  },
+  "h42": {
+    "heroId": 100804,
+    "officialName": "曹操",
+    "note": "q5 汉-骑",
+    "portrait": "/portraits/h42.jpg",
+    "avatar": "/portraits/h42_s.jpg"
+  },
+  "h25": {
+    "heroId": 100025,
+    "officialName": "曹丕",
+    "note": "q5 魏-弓",
+    "portrait": "/portraits/h25.jpg",
+    "avatar": "/portraits/h25_s.jpg"
+  },
+  "h8": {
+    "heroId": 100008,
+    "officialName": "张角",
+    "note": "q5 群-骑",
+    "portrait": "/portraits/h8.jpg",
+    "avatar": "/portraits/h8_s.jpg"
+  },
+  "h672": {
+    "heroId": 100672,
+    "officialName": "曹植",
+    "note": "q5 魏-骑",
+    "portrait": "/portraits/h672.jpg",
+    "avatar": "/portraits/h672_s.jpg"
+  },
+  "h693": {
+    "heroId": 100693,
+    "officialName": "王允",
+    "note": "q5 汉-弓",
+    "portrait": "/portraits/h693.jpg",
+    "avatar": "/portraits/h693_s.jpg"
+  },
+  "h676": {
+    "heroId": 100676,
+    "officialName": "王昭君",
+    "note": "q5 汉-骑",
+    "portrait": "/portraits/h676.jpg",
+    "avatar": "/portraits/h676_s.jpg"
+  },
+  "h28": {
+    "heroId": 100028,
+    "officialName": "王异",
+    "note": "q5 魏-弓",
+    "portrait": "/portraits/h28.jpg",
+    "avatar": "/portraits/h28_s.jpg"
+  },
+  "h706": {
+    "heroId": 100706,
+    "officialName": "王元姬",
+    "note": "q5 晋-弓",
+    "portrait": "/portraits/h706.jpg",
+    "avatar": "/portraits/h706_s.jpg"
+  },
+  "h494": {
+    "heroId": 100494,
+    "officialName": "祝融夫人",
+    "note": "q5 群-骑",
+    "portrait": "/portraits/h494.jpg",
+    "avatar": "/portraits/h494_s.jpg"
+  },
+  "h592": {
+    "heroId": 100592,
+    "officialName": "董白",
+    "note": "q5 群-弓",
+    "portrait": "/portraits/h592.jpg",
+    "avatar": "/portraits/h592_s.jpg"
+  },
+  "h376": {
+    "heroId": 100376,
+    "officialName": "褒姒",
+    "note": "q5 群-骑",
+    "portrait": "/portraits/h376.jpg",
+    "avatar": "/portraits/h376_s.jpg"
+  },
+  "h655": {
+    "heroId": 100655,
+    "officialName": "郭皇后",
+    "note": "q5 魏-弓",
+    "portrait": "/portraits/h655.jpg",
+    "avatar": "/portraits/h655_s.jpg"
+  },
+  "h337": {
+    "heroId": 100337,
+    "officialName": "貂蝉",
+    "note": "q5 群-步",
+    "portrait": "/portraits/h337.jpg",
+    "avatar": "/portraits/h337_s.jpg"
+  },
+  "h742": {
+    "heroId": 100742,
+    "officialName": "阴丽华",
+    "note": "q5 汉-弓",
+    "portrait": "/portraits/h742.jpg",
+    "avatar": "/portraits/h742_s.jpg"
+  },
+  "h19": {
+    "heroId": 100019,
+    "officialName": "马云禄",
+    "note": "q5 蜀-骑",
+    "portrait": "/portraits/h19.jpg",
+    "avatar": "/portraits/h19_s.jpg"
+  },
+  "h789": {
+    "heroId": 100789,
+    "officialName": "陆绩",
+    "note": "q5 吴-弓",
+    "portrait": "/portraits/h789.jpg",
+    "avatar": "/portraits/h789_s.jpg"
+  },
+  "h5": {
+    "heroId": 100005,
+    "officialName": "貂蝉",
+    "note": "q5 汉-弓",
+    "portrait": "/portraits/h5.jpg",
+    "avatar": "/portraits/h5_s.jpg"
+  },
+  "h20": {
+    "heroId": 100020,
+    "officialName": "黄月英",
+    "note": "q5 蜀-步",
+    "portrait": "/portraits/h20.jpg",
+    "avatar": "/portraits/h20_s.jpg"
+  },
+  "h770": {
+    "heroId": 100770,
+    "officialName": "许劭",
+    "note": "q5 汉-弓",
+    "portrait": "/portraits/h770.jpg",
+    "avatar": "/portraits/h770_s.jpg"
+  },
+  "h479": {
+    "heroId": 100479,
+    "officialName": "吕布",
+    "note": "q5 群-弓 赛季",
+    "portrait": "/portraits/h479.jpg",
+    "avatar": "/portraits/h479_s.jpg"
+  },
+  "h477": {
+    "heroId": 100477,
+    "officialName": "庞统",
+    "note": "q5 蜀-步 赛季",
+    "portrait": "/portraits/h477.jpg",
+    "avatar": "/portraits/h477_s.jpg"
+  },
+  "h480": {
+    "heroId": 100480,
+    "officialName": "董卓",
+    "note": "q5 汉-步 赛季",
+    "portrait": "/portraits/h480.jpg",
+    "avatar": "/portraits/h480_s.jpg"
+  },
+  "h476": {
+    "heroId": 100476,
+    "officialName": "郭嘉",
+    "note": "q5 魏-骑 赛季",
+    "portrait": "/portraits/h476.jpg",
+    "avatar": "/portraits/h476_s.jpg"
+  },
+  "h478": {
+    "heroId": 100478,
+    "officialName": "陆逊",
+    "note": "q5 吴-步 赛季",
+    "portrait": "/portraits/h478.jpg",
+    "avatar": "/portraits/h478_s.jpg"
+  },
+  "h703": {
+    "heroId": 100703,
+    "officialName": "司马炎",
+    "note": "q5 晋-步",
+    "portrait": "/portraits/h703.jpg",
+    "avatar": "/portraits/h703_s.jpg"
+  },
+  "h807": {
+    "heroId": 100807,
+    "officialName": "司马懿",
+    "note": "q5 晋-步 XP",
+    "portrait": "/portraits/h807.jpg",
+    "avatar": "/portraits/h807_s.jpg"
+  }
+}

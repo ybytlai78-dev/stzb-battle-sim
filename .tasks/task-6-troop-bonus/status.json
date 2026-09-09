@@ -1,0 +1,29 @@
+{
+  "task_id": "task-6-troop-bonus",
+  "status": "done",
+  "summary": "配将区红蓝各自「部队加成」按钮与三页签弹层；三吴红队显示阵营加成，蓝队单魏延显示暂无阵营加成；详情页四维未改",
+  "files_changed": [
+    "web/teamEditor.ts",
+    "web/styles.css",
+    "web/mobile.css",
+    "web/smoke.test.ts"
+  ],
+  "tests_run": [
+    "npx vitest run web/smoke.test.ts -t \"红蓝部队加成\" (FAIL pre-impl, 无 .team-bonus)",
+    "npx vitest run web/smoke.test.ts -t \"红蓝部队加成\" (PASS)",
+    "npx tsc --noEmit (PASS)"
+  ],
+  "acceptance_check": {
+    "TDD 先写失败烟测再实现": "通过",
+    "红蓝各自 .team-bonus 按钮": "通过",
+    "弹层三页签 阵营/称号/兵种": "通过",
+    "无加成文案 暂无阵营加成/暂无称号加成/暂无兵种加成": "通过",
+    "红队三吴显示阵营加成含太史慈与攻击+，不含魏延": "通过",
+    "蓝队单魏延显示暂无阵营加成，不含太史慈": "通过",
+    "空槽跳过；槽位顺序 大营/中军/前锋": "通过",
+    "详情页四维未改": "通过",
+    "未提交 git": "通过"
+  },
+  "blockers": [],
+  "next_handoff": "测试子代理跑 npx vitest run web/smoke.test.ts -t \"红蓝部队加成\"；确认红队弹层有阵营加成/太史慈/攻击+且无魏延，蓝队弹层暂无阵营加成且无太史慈；确认详情页四维未改"
+}

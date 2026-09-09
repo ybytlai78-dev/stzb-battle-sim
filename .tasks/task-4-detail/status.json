@@ -1,0 +1,32 @@
+{
+  "task_id": "task-4-detail",
+  "status": "done",
+  "summary": "详情页改为图三三栏 .dv；事件文案与增减伤弹层选择器不变；smoke 20/20 + damageModifier 11/11",
+  "files_changed": [
+    "web/battleView.ts",
+    "web/styles.css",
+    "web/mobile.css",
+    "web/smoke.test.ts"
+  ],
+  "tests_run": [
+    "BASELINE: npx vitest run web/damageModifier.test.ts → 11/11 PASS",
+    "GREEN: npx vitest run web/damageModifier.test.ts → 11/11 PASS",
+    "GREEN: npx vitest run web/smoke.test.ts -t \"选将 → 开始模拟\" → 1 passed",
+    "GREEN: npx vitest run web/smoke.test.ts → 20/20 PASS",
+    "npx vitest run tests/damage_lab_smoke.test.ts → 13/13 PASS",
+    "npx tsc --noEmit → clean"
+  ],
+  "acceptance_check": {
+    "根 class battle-view + 内嵌 .dv 三栏": "通过",
+    "去掉 round-nav / troops-wrap / stats-table；轨上 .rtab 共 9": "通过",
+    ".dv-log 带 event-stream 别名；prep 【阵容】【兵种】【战法】": "通过",
+    "renderEvents 字符串口径不变；.dmg-link / .dmg-popup 仍挂 .ev.dmg-mod": "通过",
+    "unit_act_start 有 data-unit-id 与 .act-body；简 = is-simple": "通过",
+    "左列点击用 scrollTop 对齐，不用 scrollIntoView": "通过",
+    "回合 0 = renderPrepEvents；播 900ms；dv-head 第 N 回合 / 回合前阶段": "通过",
+    "颜色 var(--color-*)；未改 engine/demo；无 commit": "通过",
+    "基线 damageModifier PASS 后再实现，实现后再 PASS": "通过"
+  },
+  "blockers": [],
+  "next_handoff": "测试子代理跑 npx vitest run web/damageModifier.test.ts web/smoke.test.ts tests/damage_lab_smoke.test.ts。目视：详情三栏、左列箭头不横向滚动、点头像日志置顶、详/简切换、始/1..8/播。基线与 GREEN 见 .superpowers/sdd/task-4-report.md。"
+}

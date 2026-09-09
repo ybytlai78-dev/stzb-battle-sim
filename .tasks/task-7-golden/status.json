@@ -1,0 +1,25 @@
+{
+  "task_id": "task-7-golden",
+  "status": "done",
+  "summary": "golden 因 prep_phase/formation_bonus 与加成后兵力变化重录；二次 PASS；tsc 与 npm test 748 全绿",
+  "files_changed": [
+    "tests/__snapshots__/golden.json",
+    "src/engine/combat.ts",
+    "src/data/heroes.ts"
+  ],
+  "tests_run": [
+    "npx vitest run tests/golden.test.ts (FAIL 旧快照，T1 eventCount 115→124，prep_phase/formation_bonus)",
+    "npx vitest run tests/golden.test.ts (删除后写入，PASS)",
+    "npx vitest run tests/golden.test.ts (二次 PASS 2/2)",
+    "npx tsc --noEmit (PASS)",
+    "npm test (60 files / 748 tests PASS)"
+  ],
+  "acceptance_check": {
+    "首次 golden FAIL 来自准备阶段结构而非随机/NaN": "通过",
+    "重录后 golden 二次 PASS": "通过",
+    "tsc --noEmit": "通过",
+    "npm test 全绿": "通过"
+  },
+  "blockers": [],
+  "next_handoff": "无需再测。golden 失败确认为预期事件结构+加成伤害变化。额外：heroes.ts 无库时回退 JSON；combat.ts 省略空 titleName。报告 .superpowers/sdd/task-7-report.md"
+}

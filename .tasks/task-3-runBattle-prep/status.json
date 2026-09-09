@@ -1,0 +1,15 @@
+{
+  "task_id": "task-3-runBattle-prep",
+  "status": "done",
+  "updated_at": "2026-08-25T21:32:00+08:00",
+  "summary": "runBattle 准备三阶段：加成写入后按速度重排，发出 formation/troop/skill 事件。",
+  "files_changed": [
+    "src/engine/combat.ts",
+    "tests/troop_bonus.test.ts"
+  ],
+  "tests_run": [
+    "npx vitest run tests/troop_bonus.test.ts -t \"准备事件顺序\" (RED)",
+    "npx vitest run tests/troop_bonus.test.ts (GREEN 11/11)",
+    "npx tsc --noEmit"
+  ]
+}

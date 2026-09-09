@@ -1,0 +1,26 @@
+{
+  "name": "stzb-battle-engine",
+  "version": "0.1.0",
+  "description": "率土之滨式 SLG 回合制战斗模拟引擎（初版：单人 8 回合打木桩）",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "web": "vite",
+    "web:host": "vite --host",
+    "web:build": "vite build",
+    "preview:host": "vite preview --host",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "golden": "vitest run tests/golden.test.ts"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vite": "^5.4.21",
+    "vitest": "^2.1.0"
+  },
+  "dependencies": {
+    "mysql2": "^3.23.2"
+  }
+}

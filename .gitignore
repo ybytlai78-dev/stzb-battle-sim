@@ -1,0 +1,4 @@
+node_modules/
+dist/
+*.snap
+!__snapshots__/golden.json

@@ -1,0 +1,25 @@
+{
+  "task_id": "task-5-web-prep",
+  "status": "done",
+  "summary": "Web 战报「始」分【阵容】【兵种】【战法】三段渲染，smoke 断言通过",
+  "files_changed": [
+    "web/battleView.ts",
+    "web/styles.css",
+    "web/smoke.test.ts"
+  ],
+  "tests_run": [
+    "npx vitest run web/smoke.test.ts -t \"选将 → 开始模拟\" (FAIL pre-impl)",
+    "npx vitest run web/smoke.test.ts -t \"选将 → 开始模拟\" (PASS)",
+    "npx tsc --noEmit (PASS)"
+  ],
+  "acceptance_check": {
+    "烟测断言【阵容】【兵种】【战法】暂无效果": "通过",
+    "TDD 先失败后实现": "通过",
+    "current===0 走 renderPrepEvents 非扁平 renderEvents": "通过",
+    "未调用 appendEv(null)": "通过",
+    ".es-phase CSS": "通过",
+    "renderEvents 保留 prep_phase/formation_bonus no-op": "通过"
+  },
+  "blockers": [],
+  "next_handoff": "测试子代理跑 web/smoke.test.ts -t \"选将 → 开始模拟\"；确认默认「始」页含三段标题与兵种「暂无效果」；有加成时【阵容】应出现 formatBonusText 行"
+}

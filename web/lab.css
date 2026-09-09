@@ -1,0 +1,415 @@
+/* 伤害测试实验室 · 样式（叠加在 styles.css 之上）
+ * 布局：单屏（不整页滚动）—— 三栏主体占满高度，仅中栏武将池内部滚动；
+ *       模拟后进入独立的伤害分析页（.lab-analysis），与实验室分离。 */
+
+.lab-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── 顶部：返回配将 + 标题 ── */
+.lab-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 2px 8px;
+  flex-shrink: 0;
+}
+.lab-topbar .lab-title {
+  font-size: 14px;
+  color: var(--gold);
+  letter-spacing: 1px;
+}
+
+/* ── 三栏主体（左队伍 ｜ 中武将池 ｜ 右侍卫）── */
+.lab-main {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 300px 1fr 330px;
+  gap: 14px;
+  align-items: stretch;
+}
+
+/* 左栏：我方测试队伍 */
+.lab-team {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  padding: var(--space-3);
+  box-shadow: 0 3px 16px rgba(0, 0, 0, .35);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+.lab-team-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+  padding: 0 0 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.lab-team-head h2 {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 3px;
+  text-align: left;
+  padding: 0;
+  margin: 0;
+  border: none;
+  font-family: var(--font-kai);
+  color: var(--gold);
+  min-width: 0;
+}
+.lab-slots {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: 1fr 1fr 1fr;
+  gap: 6px;
+}
+/* 槽位卡复用主站 .slot（左画像右信息，styles.css 定义；Drop-Zone 高亮 .slot.drag-over 亦在 styles.css） */
+
+/* 中栏：武将池（hero-pool 原有样式 + 占满中栏、内部滚动） */
+.lab-pool {
+  min-height: 0;
+}
+
+/* 右栏：侍卫面板 */
+.lab-guard {
+  background: rgba(30, 30, 34, 0.92);
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: var(--text);
+  overflow-y: auto;
+  min-height: 0;
+}
+.lab-guard h2 {
+  margin: 0 0 4px;
+  font-size: 15px;
+  color: var(--gold);
+  letter-spacing: 2px;
+}
+.lab-guard .g-sub {
+  font-size: 11.5px;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+.g-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 7px 0;
+  font-size: 12.5px;
+}
+.g-row label {
+  flex: 0 0 52px;
+  color: var(--text-dim);
+}
+.g-row input[type="number"] {
+  width: 84px;
+  background: #17171a;
+  border: 1px solid #3a3a40;
+  border-radius: 4px;
+  color: var(--text);
+  padding: 3px 6px;
+  font-size: 13px;
+}
+.g-row input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+.g-troops {
+  display: flex;
+  gap: 6px;
+}
+.g-troops button {
+  flex: 1;
+  padding: 4px 0;
+  font-size: 13px;
+  border: 1px solid #3a3a40;
+  border-radius: 4px;
+  background: #17171a;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.g-troops button.on {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: rgba(212, 175, 55, 0.12);
+}
+.g-troop-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  margin: 4px 0 2px;
+}
+.g-skills {
+  margin-top: 10px;
+  border-top: 1px dashed #3a3a40;
+  padding-top: 8px;
+}
+.g-skills .g-skill-list {
+  margin: 6px 0;
+  font-size: 12.5px;
+  line-height: 1.9;
+  color: var(--text);
+}
+.g-skills .g-skill-list .d-grade {
+  color: #8fbf6b;
+  font-weight: 600;
+}
+.g-skills .tip {
+  color: var(--text-dim);
+  font-size: 11.5px;
+}
+.g-note {
+  margin-top: 10px;
+  border-top: 1px dashed #3a3a40;
+  padding-top: 8px;
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.6;
+}
+
+/* ── 底部操作栏（复用 control-bar 样式）── */
+.lab-control {
+  margin-top: 8px;
+  flex-shrink: 0;
+}
+
+/* ── 伤害分析页（与实验室分离）── */
+.lab-analysis {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.la-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 2px 0 8px;
+  flex-shrink: 0;
+}
+.la-tabs {
+  display: flex;
+  gap: 6px;
+}
+.la-head select {
+  background: #17171a;
+  border: 1px solid #3a3a40;
+  color: var(--text);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+}
+.la-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px 4px 16px;
+}
+/* 简略战报：与主站 .report-view 同链，让 .sh-art 吃到剩余高度（滚动容器内 flex:1+min-height:0 会把画像压成 0） */
+.la-body.la-fill {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding-bottom: 4px;
+}
+.la-body.la-fill .battle-summary {
+  flex: 1;
+  min-height: 0;
+}
+
+/* 队伍统计条 */
+.batch-stats {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.batch-stat {
+  background: rgba(30, 30, 34, 0.9);
+  border: 1px solid #3a3a40;
+  border-radius: 6px;
+  padding: 8px 14px;
+  min-width: 108px;
+}
+.batch-stat .bs-label {
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.batch-stat .bs-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 每将伤害卡片 */
+.share-cards {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.share-card {
+  background: rgba(30, 30, 34, 0.92);
+  border: 1px solid #3a3a40;
+  border-radius: 8px;
+  padding: 10px 12px;
+  min-width: 260px;
+  flex: 1 1 300px;
+}
+.share-card .sc-head {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.sc-head .sc-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--line-strong);
+  flex-shrink: 0;
+}
+.sc-head .sc-pos {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-weight: 400;
+}
+.sc-head .sc-main-skill {
+  font-size: 11px;
+  color: var(--gold);
+  font-weight: 400;
+  margin-left: auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.share-card .sc-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sc-pie {
+  width: 120px;
+  height: 120px;
+  flex: 0 0 120px;
+}
+.sc-pie svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.sc-legend {
+  font-size: 12px;
+  line-height: 1.85;
+  color: var(--text);
+  min-width: 0;
+}
+.sc-legend .lg-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.sc-legend .lg-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex: 0 0 10px;
+}
+.sc-legend .lg-pct {
+  color: var(--gold);
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}
+.share-card .sc-foot {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed #3a3a40;
+  font-size: 12px;
+  color: var(--text-dim);
+  display: flex;
+  justify-content: space-between;
+}
+.share-card .sc-total {
+  color: var(--gold);
+  font-weight: 700;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 数学统计表 */
+.math-table {
+  width: 100%;
+  margin-top: 8px;
+  border-collapse: collapse;
+  font-size: 11.5px;
+  color: var(--text);
+}
+.math-table td {
+  padding: 3px 6px;
+  border-top: 1px solid rgba(58, 58, 64, 0.45);
+  font-variant-numeric: tabular-nums;
+}
+.math-table td:nth-child(odd) {
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+.math-table td:nth-child(even) {
+  text-align: right;
+}
+
+/* 敌方（侍卫）统计折叠 */
+.guard-stats {
+  margin: 10px 0;
+  background: rgba(30, 30, 34, 0.8);
+  border: 1px solid #3a3a40;
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+.guard-stats summary {
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--text);
+  user-select: none;
+}
+.guard-stats table {
+  width: 100%;
+  margin-top: 6px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.guard-stats th,
+.guard-stats td {
+  text-align: right;
+  padding: 3px 6px;
+  border-bottom: 1px solid rgba(58, 58, 64, 0.5);
+  font-variant-numeric: tabular-nums;
+}
+.guard-stats th:first-child,
+.guard-stats td:first-child {
+  text-align: left;
+}
+.guard-stats th {
+  color: var(--text-dim);
+  font-weight: 400;
+}

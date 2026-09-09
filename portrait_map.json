@@ -1,0 +1,810 @@
+[
+ {
+  "ourId": "h16",
+  "ourName": "刘备",
+  "faction": "蜀",
+  "troop": "infantry",
+  "iconId": 100016,
+  "official": "刘备-蜀-步"
+ },
+ {
+  "ourId": "h3",
+  "ourName": "吕布",
+  "faction": "汉",
+  "troop": "cavalry",
+  "iconId": 100003,
+  "official": "吕布-汉-骑"
+ },
+ {
+  "ourId": "lvmeng",
+  "ourName": "吕蒙",
+  "faction": "吴",
+  "troop": "archer",
+  "iconId": 100035,
+  "official": "吕蒙-吴-弓"
+ },
+ {
+  "ourId": "h33",
+  "ourName": "孙坚",
+  "faction": "吴",
+  "troop": "infantry",
+  "iconId": 100033,
+  "official": "孙坚-吴-步"
+ },
+ {
+  "ourId": "h424",
+  "ourName": "小乔＆大乔",
+  "faction": "吴",
+  "troop": "infantry",
+  "iconId": 100424,
+  "official": "小乔＆大乔-吴-步"
+ },
+ {
+  "ourId": "h27",
+  "ourName": "张辽",
+  "faction": "魏",
+  "troop": "cavalry",
+  "iconId": 100027,
+  "official": "张辽-魏-骑"
+ },
+ {
+  "ourId": "h704",
+  "ourName": "文鸯",
+  "faction": "晋",
+  "troop": "cavalry",
+  "iconId": 100704,
+  "official": "文鸯-晋-骑"
+ },
+ {
+  "ourId": "h23",
+  "ourName": "曹操",
+  "faction": "魏",
+  "troop": "cavalry",
+  "iconId": 100023,
+  "official": "曹操-魏-骑"
+ },
+ {
+  "ourId": "h705",
+  "ourName": "杜预",
+  "faction": "晋",
+  "troop": "archer",
+  "iconId": 100705,
+  "official": "杜预-晋-弓"
+ },
+ {
+  "ourId": "h524",
+  "ourName": "沙摩柯",
+  "faction": "蜀",
+  "troop": "archer",
+  "iconId": 100524,
+  "official": "沙摩柯-蜀-弓"
+ },
+ {
+  "ourId": "h101",
+  "ourName": "灵帝",
+  "faction": "汉",
+  "troop": "archer",
+  "iconId": 100101,
+  "official": "灵帝-汉-弓"
+ },
+ {
+  "ourId": "h790",
+  "ourName": "袁术",
+  "faction": "群",
+  "troop": "infantry",
+  "iconId": 100790,
+  "official": "袁术-群-步"
+ },
+ {
+  "ourId": "h670",
+  "ourName": "袁绍",
+  "faction": "群",
+  "troop": "archer",
+  "iconId": 100670,
+  "official": "袁绍-群-弓"
+ },
+ {
+  "ourId": "zhaoyun",
+  "ourName": "赵云",
+  "faction": "蜀",
+  "troop": "infantry",
+  "iconId": 100021,
+  "official": "赵云-蜀-步"
+ },
+ {
+  "ourId": "h377",
+  "ourName": "骊姬",
+  "faction": "群",
+  "troop": "archer",
+  "iconId": 100377,
+  "official": "骊姬-群-弓"
+ },
+ {
+  "ourId": "h685",
+  "ourName": "乐进",
+  "faction": "魏",
+  "troop": "infantry",
+  "iconId": 100685,
+  "official": "乐进-魏-步"
+ },
+ {
+  "ourId": "h796",
+  "ourName": "于禁",
+  "faction": "魏",
+  "troop": "infantry",
+  "iconId": 100796,
+  "official": "于禁-魏-步"
+ },
+ {
+  "ourId": "h677",
+  "ourName": "公孙瓒",
+  "faction": "群",
+  "troop": "cavalry",
+  "iconId": 100677,
+  "official": "公孙瓒-群-骑"
+ },
+ {
+  "ourId": "h26",
+  "ourName": "关羽",
+  "faction": "魏",
+  "troop": "cavalry",
+  "iconId": 100026,
+  "official": "关羽-魏-骑"
+ },
+ {
+  "ourId": "h451",
+  "ourName": "关羽",
+  "faction": "蜀",
+  "troop": "cavalry",
+  "iconId": 100451,
+  "official": "关羽-蜀-骑"
+ },
+ {
+  "ourId": "h72",
+  "ourName": "关银屏",
+  "faction": "蜀",
+  "troop": "infantry",
+  "iconId": 100072,
+  "official": "关银屏-蜀-步"
+ },
+ {
+  "ourId": "h769",
+  "ourName": "典韦",
+  "faction": "魏",
+  "troop": "infantry",
+  "iconId": 100769,
+  "official": "典韦-魏-步"
+ },
+ {
+  "ourId": "h616",
+  "ourName": "凌统",
+  "faction": "吴",
+  "troop": "archer",
+  "iconId": 100426,
+  "official": "凌统-吴-弓"
+ },
+ {
+  "ourId": "h7",
+  "ourName": "卢植",
+  "faction": "汉",
+  "troop": "cavalry",
+  "iconId": 100007,
+  "official": "卢植-汉-骑"
+ },
+ {
+  "ourId": "weiguan",
+  "ourName": "卫瓘",
+  "faction": "晋",
+  "troop": "infantry",
+  "iconId": 100707,
+  "official": "卫瓘-晋-步"
+ },
+ {
+  "ourId": "h701",
+  "ourName": "司马师",
+  "faction": "晋",
+  "troop": "cavalry",
+  "iconId": 100701,
+  "official": "司马师-晋-骑"
+ },
+ {
+  "ourId": "h354",
+  "ourName": "司马徽",
+  "faction": "群",
+  "troop": "infantry",
+  "iconId": 100811,
+  "official": "司马徽-群-步"
+ },
+ {
+  "ourId": "h472",
+  "ourName": "司马懿",
+  "faction": "魏",
+  "troop": "infantry",
+  "iconId": 100472,
+  "official": "司马懿-魏-步"
+ },
+ {
+  "ourId": "h702",
+  "ourName": "司马昭",
+  "faction": "晋",
+  "troop": "cavalry",
+  "iconId": 100702,
+  "official": "司马昭-晋-骑"
+ },
+ {
+  "ourId": "h634",
+  "ourName": "吕姬",
+  "faction": "群",
+  "troop": "infantry",
+  "iconId": 100634,
+  "official": "吕姬-群-步"
+ },
+ {
+  "ourId": "h589",
+  "ourName": "周泰",
+  "faction": "吴",
+  "troop": "infantry",
+  "iconId": 100589,
+  "official": "周泰-吴-步"
+ },
+ {
+  "ourId": "zhouyu",
+  "ourName": "周瑜",
+  "faction": "吴",
+  "troop": "archer",
+  "iconId": 100031,
+  "official": "周瑜-吴-弓"
+ },
+ {
+  "ourId": "h449",
+  "ourName": "夏侯惇",
+  "faction": "魏",
+  "troop": "cavalry",
+  "iconId": 100449,
+  "official": "夏侯惇-魏-骑"
+ },
+ {
+  "ourId": "h435",
+  "ourName": "夏侯渊",
+  "faction": "魏",
+  "troop": "cavalry",
+  "iconId": 100420,
+  "official": "夏侯渊-魏-骑"
+ },
+ {
+  "ourId": "h372",
+  "ourName": "妲己",
+  "faction": "群",
+  "troop": "infantry",
+  "iconId": 100372,
+  "official": "妲己-群-步"
+ },
+ {
+  "ourId": "sunquan",
+  "ourName": "孙权",
+  "faction": "吴",
+  "troop": "archer",
+  "iconId": 100808,
+  "official": "孙权-吴-弓"
+ },
+ {
+  "ourId": "h450",
+  "ourName": "孙策",
+  "faction": "吴",
+  "troop": "cavalry",
+  "iconId": 100450,
+  "official": "孙策-吴-骑"
+ },
+ {
+  "ourId": "h654",
+  "ourName": "孙鲁班",
+  "faction": "吴",
+  "troop": "archer",
+  "iconId": 100654,
+  "official": "孙鲁班-吴-弓"
+ },
+ {
+  "ourId": "h586",
+  "ourName": "庞德",
+  "faction": "群",
+  "troop": "cavalry",
+  "iconId": 100586,
+  "official": "庞德-群-骑"
+ },
+ {
+  "ourId": "h474",
+  "ourName": "张宁",
+  "faction": "群",
+  "troop": "infantry",
+  "iconId": 100474,
+  "official": "张宁-群-步"
+ },
+ {
+  "ourId": "h526",
+  "ourName": "张机",
+  "faction": "汉",
+  "troop": "archer",
+  "iconId": 100526,
+  "official": "张机-汉-弓"
+ },
+ {
+  "ourId": "h557",
+  "ourName": "张梁",
+  "faction": "群",
+  "troop": "infantry",
+  "iconId": 100557,
+  "official": "张梁-群-步"
+ },
+ {
+  "ourId": "h620",
+  "ourName": "张绣",
+  "faction": "群",
+  "troop": "cavalry",
+  "iconId": 100620,
+  "official": "张绣-群-骑"
+ },
+ {
+  "ourId": "h22",
+  "ourName": "张飞",
+  "faction": "蜀",
+  "troop": "cavalry",
+  "iconId": 100022,
+  "official": "张飞-蜀-骑"
+ },
+ {
+  "ourId": "h585",
+  "ourName": "曹仁",
+  "faction": "魏",
+  "troop": "infantry",
+  "iconId": 100585,
+  "official": "曹仁-魏-步"
+ },
+ {
+  "ourId": "h452",
+  "ourName": "木鹿大王",
+  "faction": "群",
+  "troop": "cavalry",
+  "iconId": 100452,
+  "official": "木鹿大王-群-骑"
+ },
+ {
+  "ourId": "h553",
+  "ourName": "朱儁",
+  "faction": "汉",
+  "troop": "archer",
+  "iconId": 100553,
+  "official": "朱儁-汉-弓"
+ },
+ {
+  "ourId": "h771",
+  "ourName": "沮授",
+  "faction": "群",
+  "troop": "infantry",
+  "iconId": 100771,
+  "official": "沮授-群-步"
+ },
+ {
+  "ourId": "h582",
+  "ourName": "法正",
+  "faction": "蜀",
+  "troop": "cavalry",
+  "iconId": 100582,
+  "official": "法正-蜀-骑"
+ },
+ {
+  "ourId": "h486",
+  "ourName": "潘凤",
+  "faction": "汉",
+  "troop": "cavalry",
+  "iconId": 100486,
+  "official": "潘凤-汉-骑"
+ },
+ {
+  "ourId": "h34",
+  "ourName": "甘宁",
+  "faction": "吴",
+  "troop": "infantry",
+  "iconId": 100034,
+  "official": "甘宁-吴-步"
+ },
+ {
+  "ourId": "h797",
+  "ourName": "胡芳",
+  "faction": "晋",
+  "troop": "infantry",
+  "iconId": 100797,
+  "official": "胡芳-晋-步"
+ },
+ {
+  "ourId": "h24",
+  "ourName": "荀彧",
+  "faction": "魏",
+  "troop": "cavalry",
+  "iconId": 100024,
+  "official": "荀彧-魏-骑"
+ },
+ {
+  "ourId": "h9",
+  "ourName": "董卓",
+  "faction": "群",
+  "troop": "cavalry",
+  "iconId": 100009,
+  "official": "董卓-群-骑"
+ },
+ {
+  "ourId": "h671",
+  "ourName": "蒋钦",
+  "faction": "吴",
+  "troop": "archer",
+  "iconId": 100671,
+  "official": "蒋钦-吴-弓"
+ },
+ {
+  "ourId": "h6",
+  "ourName": "袁绍",
+  "faction": "汉",
+  "troop": "infantry",
+  "iconId": 100006,
+  "official": "袁绍-汉-步"
+ },
+ {
+  "ourId": "h17",
+  "ourName": "诸葛亮",
+  "faction": "蜀",
+  "troop": "infantry",
+  "iconId": 100017,
+  "official": "诸葛亮-蜀-步"
+ },
+ {
+  "ourId": "h522",
+  "ourName": "诸葛恪",
+  "faction": "吴",
+  "troop": "archer",
+  "iconId": 100522,
+  "official": "诸葛恪-吴-弓"
+ },
+ {
+  "ourId": "h618",
+  "ourName": "贾诩",
+  "faction": "魏",
+  "troop": "archer",
+  "iconId": 100618,
+  "official": "贾诩-魏-弓"
+ },
+ {
+  "ourId": "h310",
+  "ourName": "邓艾",
+  "faction": "魏",
+  "troop": "infantry",
+  "iconId": 100310,
+  "official": "邓艾-魏-步"
+ },
+ {
+  "ourId": "h475",
+  "ourName": "郝昭",
+  "faction": "魏",
+  "troop": "infantry",
+  "iconId": 100475,
+  "official": "郝昭-魏-步"
+ },
+ {
+  "ourId": "h574",
+  "ourName": "陆抗",
+  "faction": "吴",
+  "troop": "infantry",
+  "iconId": 100574,
+  "official": "陆抗-吴-步"
+ },
+ {
+  "ourId": "h793",
+  "ourName": "陈到",
+  "faction": "蜀",
+  "troop": "infantry",
+  "iconId": 100133,
+  "official": "陈到-蜀-步"
+ },
+ {
+  "ourId": "h443",
+  "ourName": "陈宫",
+  "faction": "群",
+  "troop": "archer",
+  "iconId": 100443,
+  "official": "陈宫-群-弓"
+ },
+ {
+  "ourId": "h615",
+  "ourName": "马岱",
+  "faction": "蜀",
+  "troop": "cavalry",
+  "iconId": 100615,
+  "official": "马岱-蜀-骑"
+ },
+ {
+  "ourId": "h785",
+  "ourName": "马腾",
+  "faction": "群",
+  "troop": "cavalry",
+  "iconId": 100785,
+  "official": "马腾-群-骑"
+ },
+ {
+  "ourId": "h13",
+  "ourName": "马超",
+  "faction": "群",
+  "troop": "cavalry",
+  "iconId": 100013,
+  "official": "马超-群-骑"
+ },
+ {
+  "ourId": "weiyan",
+  "ourName": "魏延",
+  "faction": "蜀",
+  "troop": "infantry",
+  "iconId": 100649,
+  "official": "魏延-蜀-步"
+ },
+ {
+  "ourId": "h741",
+  "ourName": "鲁肃",
+  "faction": "吴",
+  "troop": "infantry",
+  "iconId": 100741,
+  "official": "鲁肃-吴-步"
+ },
+ {
+  "ourId": "h442",
+  "ourName": "黄忠",
+  "faction": "蜀",
+  "troop": "infantry",
+  "iconId": 100442,
+  "official": "黄忠-蜀-步"
+ },
+ {
+  "ourId": "h783",
+  "ourName": "黄盖",
+  "faction": "吴",
+  "troop": "infantry",
+  "iconId": 100439,
+  "official": "黄盖-吴-步"
+ },
+ {
+  "ourId": "h37",
+  "ourName": "何太后",
+  "faction": "汉",
+  "troop": "archer",
+  "iconId": 100037,
+  "official": "何太后-汉-弓"
+ },
+ {
+  "ourId": "h689",
+  "ourName": "刘禅",
+  "faction": "蜀",
+  "troop": "infantry",
+  "iconId": 100689,
+  "official": "刘禅-蜀-步"
+ },
+ {
+  "ourId": "h786",
+  "ourName": "卫子夫",
+  "faction": "汉",
+  "troop": "infantry",
+  "iconId": 100786,
+  "official": "卫子夫-汉-步"
+ },
+ {
+  "ourId": "h32",
+  "ourName": "周姬",
+  "faction": "吴",
+  "troop": "archer",
+  "iconId": 100032,
+  "official": "周姬-吴-弓"
+ },
+ {
+  "ourId": "h619",
+  "ourName": "大乔",
+  "faction": "吴",
+  "troop": "infantry",
+  "iconId": 100619,
+  "official": "大乔-吴-步"
+ },
+ {
+  "ourId": "taishici",
+  "ourName": "太史慈",
+  "faction": "吴",
+  "troop": "archer",
+  "iconId": 100090,
+  "official": "太史慈-吴-弓"
+ },
+ {
+  "ourId": "h36",
+  "ourName": "孙尚香",
+  "faction": "吴",
+  "troop": "archer",
+  "iconId": 100036,
+  "official": "孙尚香-吴-弓"
+ },
+ {
+  "ourId": "h687",
+  "ourName": "小乔",
+  "faction": "吴",
+  "troop": "archer",
+  "iconId": 100687,
+  "official": "小乔-吴-弓"
+ },
+ {
+  "ourId": "h358",
+  "ourName": "张姬",
+  "faction": "蜀",
+  "troop": "archer",
+  "iconId": 100358,
+  "official": "张姬-蜀-弓"
+ },
+ {
+  "ourId": "h562",
+  "ourName": "张宝",
+  "faction": "群",
+  "troop": "archer",
+  "iconId": 100430,
+  "official": "张宝-群-弓"
+ },
+ {
+  "ourId": "h29",
+  "ourName": "张春华",
+  "faction": "魏",
+  "troop": "archer",
+  "iconId": 100029,
+  "official": "张春华-魏-弓"
+ },
+ {
+  "ourId": "h8",
+  "ourName": "张角",
+  "faction": "群",
+  "troop": "cavalry",
+  "iconId": 100008,
+  "official": "张角-群-骑"
+ },
+ {
+  "ourId": "h25",
+  "ourName": "曹丕",
+  "faction": "魏",
+  "troop": "archer",
+  "iconId": 100025,
+  "official": "曹丕-魏-弓"
+ },
+ {
+  "ourId": "h42",
+  "ourName": "曹操",
+  "faction": "汉",
+  "troop": "cavalry",
+  "iconId": 100804,
+  "official": "曹操-汉-骑"
+ },
+ {
+  "ourId": "h672",
+  "ourName": "曹植",
+  "faction": "魏",
+  "troop": "cavalry",
+  "iconId": 100672,
+  "official": "曹植-魏-骑"
+ },
+ {
+  "ourId": "h693",
+  "ourName": "王允",
+  "faction": "汉",
+  "troop": "archer",
+  "iconId": 100693,
+  "official": "王允-汉-弓"
+ },
+ {
+  "ourId": "h706",
+  "ourName": "王元姬",
+  "faction": "晋",
+  "troop": "archer",
+  "iconId": 100706,
+  "official": "王元姬-晋-弓"
+ },
+ {
+  "ourId": "h28",
+  "ourName": "王异",
+  "faction": "魏",
+  "troop": "archer",
+  "iconId": 100028,
+  "official": "王异-魏-弓"
+ },
+ {
+  "ourId": "h676",
+  "ourName": "王昭君",
+  "faction": "汉",
+  "troop": "cavalry",
+  "iconId": 100676,
+  "official": "王昭君-汉-骑"
+ },
+ {
+  "ourId": "h494",
+  "ourName": "祝融夫人",
+  "faction": "群",
+  "troop": "cavalry",
+  "iconId": 100494,
+  "official": "祝融夫人-群-骑"
+ },
+ {
+  "ourId": "h592",
+  "ourName": "董白",
+  "faction": "群",
+  "troop": "archer",
+  "iconId": 100592,
+  "official": "董白-群-弓"
+ },
+ {
+  "ourId": "h376",
+  "ourName": "褒姒",
+  "faction": "群",
+  "troop": "cavalry",
+  "iconId": 100376,
+  "official": "褒姒-群-骑"
+ },
+ {
+  "ourId": "h770",
+  "ourName": "许劭",
+  "faction": "汉",
+  "troop": "archer",
+  "iconId": 100770,
+  "official": "许劭-汉-弓"
+ },
+ {
+  "ourId": "h337",
+  "ourName": "貂蝉",
+  "faction": "群",
+  "troop": "infantry",
+  "iconId": 100337,
+  "official": "貂蝉-群-步"
+ },
+ {
+  "ourId": "h5",
+  "ourName": "貂蝉",
+  "faction": "汉",
+  "troop": "archer",
+  "iconId": 100005,
+  "official": "貂蝉-汉-弓"
+ },
+ {
+  "ourId": "h655",
+  "ourName": "郭皇后",
+  "faction": "魏",
+  "troop": "archer",
+  "iconId": 100655,
+  "official": "郭皇后-魏-弓"
+ },
+ {
+  "ourId": "h742",
+  "ourName": "阴丽华",
+  "faction": "汉",
+  "troop": "archer",
+  "iconId": 100742,
+  "official": "阴丽华-汉-弓"
+ },
+ {
+  "ourId": "h789",
+  "ourName": "陆绩",
+  "faction": "吴",
+  "troop": "archer",
+  "iconId": 100789,
+  "official": "陆绩-吴-弓"
+ },
+ {
+  "ourId": "h19",
+  "ourName": "马云禄",
+  "faction": "蜀",
+  "troop": "cavalry",
+  "iconId": 100019,
+  "official": "马云禄-蜀-骑"
+ },
+ {
+  "ourId": "h20",
+  "ourName": "黄月英",
+  "faction": "蜀",
+  "troop": "infantry",
+  "iconId": 100020,
+  "official": "黄月英-蜀-步"
+ }
+]

@@ -1,0 +1,26 @@
+{
+  "task_id": "task-6-landscape-density",
+  "status": "done",
+  "summary": "横屏底栏补 nowrap+12px；tsc 干净；产品 820 测含 golden 全过；6 项手测无浏览器未目视",
+  "files_changed": [
+    "web/mobile.css",
+    ".superpowers/sdd/task-6-report.md"
+  ],
+  "tests_run": [
+    "npx tsc --noEmit → PASS exit 0",
+    "npx vitest run → 820 tests passed; 7 failed suites all .superpowers/sdd/snapshots/task-*-before (not golden)",
+    "npx vitest run tests web → 65 files / 820 tests PASS including golden.test.ts 2/2"
+  ],
+  "acceptance_check": {
+    "header.app 在 report-open 已隐藏（styles.css L85，未重复）": "通过",
+    ".st-row min-height 50px": "通过",
+    ".dv 48px minmax(0,1fr) 32px": "通过",
+    ".report-dock nowrap + 页签 12px": "通过",
+    "手测清单 6 项": "跳过及原因：UNVERIFIED visually (no browser)",
+    "tsc --noEmit": "通过",
+    "golden 未变、未再生": "通过",
+    "未改 engine / 未做套1 / 未重做实验室 / 未 commit": "通过"
+  },
+  "blockers": [],
+  "next_handoff": "测试子代理：npx tsc --noEmit；npx vitest run tests web（避开 .superpowers/sdd/snapshots）。人工 844×390 走 task-6-report.md 六项 UNVERIFIED 清单。裸 npx vitest run 会因归档 .test.ts 失败，勿当 golden 回归。"
+}
