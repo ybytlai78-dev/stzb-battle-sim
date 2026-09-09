@@ -52,6 +52,10 @@
 
 html { font-size: 14px; }
 
+/* html 必须也上深色底：安卓 Chrome overscroll/橡皮筋区域取 html 背景，
+   body 背景不覆盖滚动越界区 —— 否则竖屏滚动上下露大白边 */
+html { background: var(--color-surface); }
+
 html, body { height: 100%; overflow: hidden; }
 
 body {

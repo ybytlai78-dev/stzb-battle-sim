@@ -23,6 +23,7 @@ import {
 } from './teamEditor';
 import { showNotice } from './notice';
 import { asset } from './assets';
+import { setupTouchDrag } from './touchDrag';
 import { createBattleView } from './battleView';
 import { createBattleSummary, createStatsView } from './battleSummary';
 import { mountDamageLab } from './damageLab';
@@ -187,6 +188,9 @@ const handlers: EditorHandlers = {
     refresh();
   },
 };
+
+// 触屏拖拽（长按武将卡拖动到槽位；HTML5 drag 在触屏不可用，仅触屏设备生效）
+setupTouchDrag(handlers);
 
 // ─── 渲染 ───
 

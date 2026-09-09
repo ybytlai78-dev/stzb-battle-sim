@@ -209,6 +209,16 @@
   .dv { min-height: 240px; }
 }
 
+/* ── 触屏拖拽跟手浮层（web/touchDrag.ts） ── */
+.drag-ghost {
+  position: fixed;
+  z-index: 9990;
+  pointer-events: none;
+  opacity: 0.88;
+  transform: scale(0.94);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.55);
+}
+
 /* ── 4. 窄桌面窗口 / 平板竖屏（高度充裕，仅收窄三列） ── */
 /* min-width:721px 排除窄手机竖屏：≤720px 的手机竖屏必须走上面第 3 段单列规则，
    否则 213 与 170 同时命中（同特异性、213 在后）会覆盖单列布局，手机看到桌面比例 */
