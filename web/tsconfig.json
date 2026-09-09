@@ -10,7 +10,7 @@
     "noEmit": true,
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "resolveJsonModule": true,
-    "types": []
+    "types": ["vite/client"]
   },
   "include": ["."],
   "exclude": ["node_modules"]

@@ -6,6 +6,7 @@ import type { General, HeroRecord } from '../src/engine/types';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import { recordToGeneral, leveledFromRecord } from '../src/data/hero-utils';
 import { isHeroListed, isLearnableSkillListed } from '../src/data/listing';
+import { asset } from './assets';
 import heroesJson from './data/heroes.json';
 import portraitsJson from './data/portraits.json';
 import heroMetaJson from './data/hero_meta.json';
@@ -123,8 +124,8 @@ export function base40Stats(rec: HeroRecord): { attack: number; defense: number;
 }
 
 /** 伤害测试实验室侍卫（id 形如 guard-0）走官方汉·侍卫卡面 */
-const GUARD_PORTRAIT = '/portraits/guard.jpg';
-const GUARD_AVATAR = '/portraits/guard_s.jpg';
+const GUARD_PORTRAIT = asset('/portraits/guard.jpg');
+const GUARD_AVATAR = asset('/portraits/guard_s.jpg');
 
 /**
  * 是否为实验室侍卫单位（buildGuardTeam 生成的 guard-0/1/2）。
@@ -138,13 +139,13 @@ function isGuardId(heroId: string): boolean {
 export function avatarSrc(heroId: string): string {
   if (isGuardId(heroId)) return GUARD_AVATAR;
   const p = PORTRAITS[heroId];
-  return p?.avatar ?? p?.portrait ?? '';
+  return asset(p?.avatar ?? p?.portrait ?? '');
 }
 
 /** 画像 src（竖版卡面） */
 export function portraitSrc(heroId: string): string {
   if (isGuardId(heroId)) return GUARD_PORTRAIT;
-  return PORTRAITS[heroId]?.portrait ?? '';
+  return asset(PORTRAITS[heroId]?.portrait ?? '');
 }
 
 /** id → HeroRecord（字段名与 DB 导出一致，已为 camelCase） */

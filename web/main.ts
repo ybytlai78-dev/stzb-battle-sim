@@ -22,6 +22,7 @@ import {
   type SlotState,
 } from './teamEditor';
 import { showNotice } from './notice';
+import { asset } from './assets';
 import { createBattleView } from './battleView';
 import { createBattleSummary, createStatsView } from './battleSummary';
 import { mountDamageLab } from './damageLab';
@@ -368,7 +369,7 @@ export function initApp(root?: HTMLElement): void {
   const header = document.createElement('header');
   header.className = 'app';
   header.innerHTML = `
-    <img class="rate-logo" src="/rate-logo.png" alt="率" title="率土之滨" />
+    <img class="rate-logo" src="${asset('/rate-logo.png')}" alt="率" title="率土之滨" />
     <div class="brand">
       <h1>率土之滨 · 战斗模拟器</h1>
     </div>

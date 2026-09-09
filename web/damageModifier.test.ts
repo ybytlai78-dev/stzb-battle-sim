@@ -271,7 +271,7 @@ describe('战报增减伤统计（Web）', () => {
       { type: 'round_start', round: 1 },
       { type: 'unit_act_start', unitId: 'e1', name: '敌军前锋', position: '前锋', phase: 'normal_attack' },
       dot,
-      { type: 'round_end', round: 1, myTroops: [9000, 9000], enemyTroops: [8900] },
+      { type: 'round_end', round: 1, myTroops: [9000, 9000], enemyTroops: [8900], myWounded: [0, 0], enemyWounded: [100], myDead: [0, 0], enemyDead: [0] },
       { type: 'battle_end', result: 'win', rounds: 1, myTroops: [9000, 9000], enemyTroops: [8900] },
     ];
     const view = createBattleView(report);
