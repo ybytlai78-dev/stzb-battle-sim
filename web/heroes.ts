@@ -95,17 +95,17 @@ export function skillTypeIcon(skillId: string): string {
   const s = SKILL_REGISTRY[skillId];
   const t = s?.type ?? 'active';
   const n = t === 'command' ? 1 : t === 'active' ? 2 : t === 'passive' ? 3 : 4;
-  return `/skills/tactics_0${n}.png`;
+  return asset(`/skills/tactics_0${n}.png`);
 }
 
 /** 品级框图标（率土原版 kuang-*） */
 export function gradeFrame(grade: string): string {
-  return `/skills/kuang-${grade.toLowerCase()}.png`;
+  return asset(`/skills/kuang-${grade.toLowerCase()}.png`);
 }
 
 /** 品级角标图标（率土原版 icon-*） */
 export function gradeRibbon(grade: string): string {
-  return `/skills/icon-${grade.toLowerCase()}.png`;
+  return asset(`/skills/icon-${grade.toLowerCase()}.png`);
 }
 
 /** 任意等级基础面板（不含加点/红度）：属性 = 初始 + (L-1)×成长（四舍五入） */

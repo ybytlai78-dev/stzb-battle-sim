@@ -210,7 +210,9 @@
 }
 
 /* ── 4. 窄桌面窗口 / 平板竖屏（高度充裕，仅收窄三列） ── */
-@media (max-width: 1150px) and (min-height: 521px) {
+/* min-width:721px 排除窄手机竖屏：≤720px 的手机竖屏必须走上面第 3 段单列规则，
+   否则 213 与 170 同时命中（同特异性、213 在后）会覆盖单列布局，手机看到桌面比例 */
+@media (max-width: 1150px) and (min-width: 721px) and (min-height: 521px) {
   .team-editor {
     grid-template-columns: minmax(220px, 1fr) minmax(240px, 1.6fr) minmax(220px, 1fr);
   }
