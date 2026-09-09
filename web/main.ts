@@ -458,3 +458,12 @@ if (typeof document !== 'undefined') {
   const el = document.getElementById('app');
   if (el) initApp(el);
 }
+
+// PWA：仅生产构建注册 Service Worker（离线缓存 + 安卓可安装为独立全屏应用）
+if (import.meta.env.PROD && typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => {
+      /* 注册失败（隐私模式等）不影响使用 */
+    });
+  });
+}
