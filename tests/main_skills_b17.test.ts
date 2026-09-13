@@ -144,7 +144,7 @@ function forceQibuHeal(ctx: CombatContext, rate: number): void {
 }
 
 describe('七步释嫌（曹植，二类指挥：友军普攻/试图主动或追击叠下一次伤害降低，每 7 次恢复）', () => {
-  it('主战法挂入指挥槽（曹植），二类指挥距离 5 我军全体，固定 -6%，charges 可叠加，恢复率 135% 成长 1.46', () => {
+  it('主战法挂入指挥槽（曹植），二类指挥距离 5 我军全体，基值 -6% 成长 0.008，charges 可叠加，恢复率 135% 成长 1.46', () => {
     const g = hero('h672');
     expect(g.name).toBe('曹植');
     expect(g.commandSkillIds).toContain('qibu_shixian');
@@ -170,6 +170,20 @@ describe('七步释嫌（曹植，二类指挥：友军普攻/试图主动或追
         boost.status.type === 'damage_boost' &&
         boost.status.rate
     ).toBe(-0.06);
+    expect(
+      boost &&
+        boost.kind === 'inflict_status' &&
+        !Array.isArray(boost.status) &&
+        boost.status.type === 'damage_boost' &&
+        boost.status.strategyScaled
+    ).toBe(true);
+    expect(
+      boost &&
+        boost.kind === 'inflict_status' &&
+        !Array.isArray(boost.status) &&
+        boost.status.type === 'damage_boost' &&
+        boost.status.growthRate
+    ).toBe(0.008);
     expect(
       boost &&
         boost.kind === 'inflict_status' &&

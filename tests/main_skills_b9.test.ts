@@ -55,6 +55,17 @@ function fullTeam(leader: General): General[] {
   return [leader, dummy('ally-front', '前锋'), dummy('ally-back', '大营')];
 }
 
+/**
+ * 张宁固定谋略（覆盖 40 级面板），用于锁定吸取基值 / 成长。
+ * @param strategy 生效谋略
+ */
+function zhangningAt(strategy: number): General {
+  return withSkills(
+    { ...level40(hero('h474'), { strategy: 0 }), position: '中军', strategy },
+    { activeSkillIds: ['huangtian_yuyin'] }
+  );
+}
+
 function run(team: General[], seed = 1, maxRounds = 8) {
   return runBattle({ seed, maxRounds, myTeam: team, enemyTeam: enemyTeam() });
 }
@@ -195,44 +206,43 @@ describe('黄天余音（张宁，主动：吸取敌军单体全属性 26 附加
     expect(act.targetMode === 'single' && act.targetSide === 'enemy').toBe(true);
   });
 
-  it('吸取敌军单体全属性（-26 减益）+ 附加自身与友军单体（+26 增益），目标池分离', () => {
-    // 张宁居中：自身(中军) + 友军(前锋) 被附加，敌军单体被吸取
-    const report = run(
-      fullTeam(withSkills({ ...level40(hero('h474'), { strategy: 88 }), position: '中军' }, { activeSkillIds: ['huangtian_yuyin'] })),
-      1
-    );
+  it('吸取敌军单体全属性（-26 减益）+ 附加自身与友军单体，目标池分离', () => {
+    // 谋略 80：敌/自身为基值 26；先补给自身后再给队友 → 队友 26+0.20×26=31
+    const report = run(fullTeam(zhangningAt(80)), 1);
     expect(casts(report, '黄天余音').length).toBeGreaterThan(0);
-    // 敌军单体收到 4 属性 -26 减益
     const enemyDebuffs = inflicted(report, 'attack_buff').filter((e) => e.unitId.startsWith('enemy'));
     expect(enemyDebuffs.length).toBeGreaterThan(0);
     expect(enemyDebuffs.every((e) => e.detail.includes('-26'))).toBe(true);
-    // 自身与友军收到 +26 增益（非敌军）
-    const allyBuffs = inflicted(report, 'attack_buff').filter((e) => !e.unitId.startsWith('enemy'));
+    const selfBuffs = inflicted(report, 'attack_buff').filter((e) => e.unitId === 'h474');
+    const allyBuffs = inflicted(report, 'attack_buff').filter((e) => !e.unitId.startsWith('enemy') && e.unitId !== 'h474');
+    expect(selfBuffs.length).toBeGreaterThan(0);
+    expect(selfBuffs.every((e) => e.detail.includes(' 26 '))).toBe(true);
     expect(allyBuffs.length).toBeGreaterThan(0);
-    expect(allyBuffs.every((e) => e.detail.includes(' 26 '))).toBe(true);
-    // 自身（h474）与友军都被附加（张宁 + 至少一名友军）
-    expect(allyBuffs.some((e) => e.unitId === 'h474')).toBe(true);
-    expect(allyBuffs.some((e) => e.unitId !== 'h474')).toBe(true);
+    expect(allyBuffs.every((e) => e.detail.includes(' 31 '))).toBe(true);
   });
 
-  it('吸取数值对称且仅持续 1 回合（敌 -26 / 我 +26）', () => {
-    const report = run(
-      fullTeam(withSkills({ ...level40(hero('h474'), { strategy: 88 }), position: '中军' }, { activeSkillIds: ['huangtian_yuyin'] })),
-      1
-    );
-    // 四属性各自对称：敌 -26，我 +26（以 attack_buff 检查，其余三属性同构）
-    const enemyAttack = inflicted(report, 'attack_buff').filter((e) => e.unitId.startsWith('enemy'));
-    const allyAttack = inflicted(report, 'attack_buff').filter((e) => !e.unitId.startsWith('enemy'));
-    expect(enemyAttack.length).toBeGreaterThan(0);
-    expect(allyAttack.length).toBeGreaterThanOrEqual(2); // 自身 + 友军
-    // 全属性各 4 个减益（attack/defense/strategy/speed_buff）
+  it('吸取数值：谋略 80 时敌/自身 ±26、队友 31；仅持续 1 回合', () => {
+    const report = run(fullTeam(zhangningAt(80)), 1);
     for (const st of ['attack_buff', 'defense_buff', 'strategy_buff', 'speed_buff']) {
       const enemyAll = inflicted(report, st).filter((e) => e.unitId.startsWith('enemy'));
       expect(enemyAll.length).toBeGreaterThan(0);
       expect(enemyAll.every((e) => e.detail.includes('-26'))).toBe(true);
-      const allyAll = inflicted(report, st).filter((e) => !e.unitId.startsWith('enemy'));
+      const selfAll = inflicted(report, st).filter((e) => e.unitId === 'h474');
+      expect(selfAll.length).toBeGreaterThan(0);
+      expect(selfAll.every((e) => e.detail.includes(' 26 '))).toBe(true);
+      const allyAll = inflicted(report, st).filter((e) => !e.unitId.startsWith('enemy') && e.unitId !== 'h474');
       expect(allyAll.length).toBeGreaterThan(0);
-      expect(allyAll.every((e) => e.detail.includes(' 26 '))).toBe(true);
+      expect(allyAll.every((e) => e.detail.includes(' 31 '))).toBe(true);
     }
+  });
+
+  it('吸取成长 0.20：谋略 283 时敌/自身 67，补给自身后再给队友 80', () => {
+    const report = run(fullTeam(zhangningAt(283)), 1);
+    const enemy = inflicted(report, 'attack_buff').filter((e) => e.unitId.startsWith('enemy'));
+    const self = inflicted(report, 'attack_buff').filter((e) => e.unitId === 'h474');
+    const ally = inflicted(report, 'attack_buff').filter((e) => !e.unitId.startsWith('enemy') && e.unitId !== 'h474');
+    expect(enemy.every((e) => e.detail.includes('-67'))).toBe(true);
+    expect(self.every((e) => e.detail.includes(' 67 '))).toBe(true);
+    expect(ally.every((e) => e.detail.includes(' 80 '))).toBe(true);
   });
 });

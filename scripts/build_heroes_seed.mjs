@@ -62,7 +62,6 @@ const SKILL_ID_BY_NAME = {
   其疾如风: 'qiji_rufeng',
   世仇: 'shichou',
   复誓业火: 'fushi_yehuo',
-  名士在野: 'mingshi_zaiye',
   未笄难言: 'weiji_nanyan',
   魏武之世: 'weiwu_zhishi',
   驱虎吞狼: 'quhu_tunlang',

@@ -222,7 +222,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'positional_physical_damage', positions: ['大营', '中军'], rate: [120, 180], source: 'fastest_ally' },
     ],
   },
-  /** 持节镇西（卫瓘主战法·一类指挥·常驻伤害前叠层）：友军每次造成攻击伤害前攻击+（受卫瓘攻击影响）、策略伤害前谋略+（受卫瓘谋略影响）、受到伤害前防御+（受卫瓘防御影响），各可叠4层，每层持续1回合（回合结束掉1层） */
+  /** 持节镇西（卫瓘主战法·一类指挥·常驻伤害前叠层）：友军每次造成攻击伤害前攻击+（受卫瓘攻击影响）、策略伤害前谋略+（受卫瓘谋略影响）、受到伤害前防御+（受卫瓘防御影响），各可叠4层，每层持续1回合（回合结束掉1层）；每层基值 22、成长率 0.15/点 */
   chijie_zhenxi: {
     id: 'chijie_zhenxi',
     name: '持节镇西',
@@ -234,9 +234,9 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     retainAfterDeath: true,
     tags: ['attack_buff', 'defense_buff', 'strategy_buff'],
     stackBuff: {
-      onAttack: { maxStacks: 4, perStack: 22, growthRate: 0.1 },
-      onStrategy: { maxStacks: 4, perStack: 22, growthRate: 0.1 },
-      onDefense: { maxStacks: 4, perStack: 22, growthRate: 0.1 },
+      onAttack: { maxStacks: 4, perStack: 22, growthRate: 0.15 },
+      onStrategy: { maxStacks: 4, perStack: 22, growthRate: 0.15 },
+      onDefense: { maxStacks: 4, perStack: 22, growthRate: 0.15 },
     },
     output: [],
   },
@@ -586,7 +586,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     ],
   },
   /** 金匮要略（张机主战法·一类指挥）：战斗开始后前 3 回合，使我军全体受到的所有伤害降低 20.4%
-   *  （受谋略影响，成长率 0.13/点），同时使我军全体受到伤害时有 50% 几率恢复一定兵力
+   *  （受谋略影响，成长率 0.18/点），同时使我军全体受到伤害时有 50% 几率恢复一定兵力
    *  （恢复率 80%，受谋略影响，成长率 0.75/点）。
    *  战法词条：受到的攻击伤害降低 + 受到的谋略伤害降低 +（持续型急救）满足条件后执行效果恢复兵力——
    *  同为指挥战法的持续型急救冲突，先施加者生效（张机 vs 刘备皇裔流离）。前 3 回合到期后急救与减伤一并移除 */
@@ -602,12 +602,12 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     retainAfterDeath: true,
     tags: ['damage_reduce', 'first_aid', 'heal'],
     output: [
-      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.204, duration: 3, strategyScaled: true, growthRate: 0.13 } },
+      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.204, duration: 3, strategyScaled: true, growthRate: 0.18 } },
       { kind: 'grant_first_aid', rate: 50, healRate: 80, healGrowthRate: 0.75, duration: 3 },
     ],
   },
   /**
-   * 谋议宏图（司马炎主战法·一类指挥）：准备阶段对我军全体挂减伤 30%（受谋略，成长率 0.13/点）与士气 +8。
+   * 谋议宏图（司马炎主战法·一类指挥）：准备阶段对我军全体挂减伤 30%（受谋略，成长率 0.175/点）与士气 +8。
    * 减伤按 8/8 计，每回合开始（含第 1 回合回合前）衰减 1/8；士气每回合开始再 +8（同战法累加）。
    * 因准备阶段已释放：第 1 回合行动时减伤剩余 7/8、士气 +16；第 3 回合行动时减伤剩余 5/8、士气 +32。
    * 不同指挥战法的士气提高冲突、数值取较高。
@@ -627,7 +627,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       output: [{ kind: 'inflict_status', status: { type: 'morale_boost', amount: 8, duration: 999 } }],
     },
     output: [
-      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.3, duration: 999, strategyScaled: true, growthRate: 0.13, decayEighths: 8 } },
+      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.3, duration: 999, strategyScaled: true, growthRate: 0.175, decayEighths: 8 } },
       { kind: 'inflict_status', status: { type: 'morale_boost', amount: 8, duration: 999 } },
     ],
   },
@@ -711,7 +711,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.15, duration: 2, direction: 'caused' } },
     ],
   },
-  /** 强势（张春华主战法）：主动战法，40%，使敌军群体进行攻击时的伤害降低 48%（受谋略影响），并使其陷入犹豫状态，无法发动主动战法，持续 2 回合（受谋略影响取基值） */
+  /** 强势（张春华主战法）：主动战法，40%，使敌军群体进行攻击时的伤害降低 48%（受谋略，成长率 0.225/点），并使其陷入犹豫状态，无法发动主动战法，持续 2 回合 */
   qiangshi: {
     id: 'qiangshi',
     name: '强势',
@@ -723,7 +723,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     targetSide: 'enemy',
     tags: ['damage_boost', 'hesitation'],
     output: [
-      { kind: 'inflict_status', status: { type: 'damage_boost', rate: -0.48, duration: 2, direction: 'caused' } },
+      { kind: 'inflict_status', status: { type: 'damage_boost', rate: -0.48, duration: 2, direction: 'caused', strategyScaled: true, growthRate: 0.225 } },
       { kind: 'inflict_status', status: { type: 'hesitation', duration: 2 } },
     ],
   },
@@ -845,15 +845,30 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['damage_reduce'],
     output: [{ kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.3, duration: 999 }, target: 'self' }],
   },
-  /** 宣威再战（张绣主战法）：追击，普通攻击后对攻击目标发动一次攻击（伤害率 150%）。发动率 100% */
+  /**
+   * 宣威再战（张绣主战法·追击）：发动率 100%。
+   * 前 3 回合：普攻后对攻击目标发动一次攻击（伤害率 150%）。
+   * 第 4 回合起：普攻后对敌军单体随机发动 1–3 次攻击（伤害率 150%），
+   * 每次目标独立判定、无视距离。
+   */
   xuanwei_zaizhan: {
     id: 'xuanwei_zaizhan',
     name: '宣威再战',
     type: 'pursuit',
-    range: 0,
+    range: 5,
     triggerRate: 1,
     tags: ['damage'],
-    output: [{ kind: 'physical_damage', rate: 150 }],
+    output: [
+      { kind: 'physical_damage', rate: 150, endRound: 3 },
+      {
+        kind: 'physical_damage',
+        rate: 150,
+        startRound: 4,
+        targetMode: 'random_single',
+        ignoreRange: true,
+        repeats: [1, 3],
+      },
+    ],
   },
 
   // ─── 批量5（v0.6.5）───
@@ -926,7 +941,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'inflict_status', status: { type: 'burning', duration: 1, rate: 114, growthRate: 0.95 } },
     ],
   },
-  /** 名士在野（司马徽主战法·一类指挥）：战斗中，使友军全体谋略属性提高 35；每回合 50% 几率使其受到攻击的伤害下降 22%（受谋略，负增伤实现），持续 1 回合 */
+  /** 名士在野（汉·四星司马徽主战法·一类指挥，不挂群五星）：友军全体谋略 +35；每回合 50% 几率受到攻击伤害下降 22%（受谋略，负增伤实现），持续 1 回合 */
   mingshi_zaiye: {
     id: 'mingshi_zaiye',
     name: '名士在野',
@@ -1048,7 +1063,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
 
   // ─── 批量 7（v0.9）───
 
-  /** 魏武之世（曹操·魏主战法·一类指挥）：本场战斗中，使敌军全体攻击/防御/谋略/速度属性下降 15%（受谋略影响，基础值锚定谋略 80，成长率 0.15/点），
+  /** 魏武之世（曹操·魏主战法·一类指挥）：本场战斗中，使敌军全体攻击/防御/谋略/速度属性下降 15%（受谋略影响，基础值锚定谋略 80，成长率 0.045/点），
    *  按目标当前生效属性（含点数增减后）结算百分比；我军全体攻击距离+1 暂未建模 */
   weiwu_zhishi: {
     id: 'weiwu_zhishi',
@@ -1062,10 +1077,10 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     retainAfterDeath: true,
     tags: ['debuff_attack', 'debuff_defense', 'debuff_strategy', 'debuff_speed'],
     output: [
-      { kind: 'inflict_status', status: { type: 'attack_buff', amount: -15, percent: true, duration: 999, strategyScaled: true, growthRate: 0.15 } },
-      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -15, percent: true, duration: 999, strategyScaled: true, growthRate: 0.15 } },
-      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -15, percent: true, duration: 999, strategyScaled: true, growthRate: 0.15 } },
-      { kind: 'inflict_status', status: { type: 'speed_buff', amount: -15, percent: true, duration: 999, strategyScaled: true, growthRate: 0.15 } },
+      { kind: 'inflict_status', status: { type: 'attack_buff', amount: -15, percent: true, duration: 999, strategyScaled: true, growthRate: 0.045 } },
+      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -15, percent: true, duration: 999, strategyScaled: true, growthRate: 0.045 } },
+      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -15, percent: true, duration: 999, strategyScaled: true, growthRate: 0.045 } },
+      { kind: 'inflict_status', status: { type: 'speed_buff', amount: -15, percent: true, duration: 999, strategyScaled: true, growthRate: 0.045 } },
     ],
   },
   /** 驱虎吞狼（荀彧主战法）：对敌军全体发动策略攻击 153%（受谋略），并使其陷入围困状态，持续 2 回合 */
@@ -1171,9 +1186,11 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'strategy_damage', rate: 70.2, strategyScaled: true, growthRate: 0.69 },
     ],
   },
-  /** 烈火焚舟（黄盖主战法·追击）：普通攻击后，使攻击目标陷入燃烧状态（伤害率 150%，受谋略），持续 2 回合。
-   *  目标已处于烈火焚舟的燃烧状态时：立即引爆剩余燃烧伤害（剩余回合数 × 每次燃烧伤害）并移除该燃烧，
-   *  再使目标及其相邻敌军陷入伤害率 270%（受谋略）、持续 1 回合的燃烧状态。士气降低暂未建模 */
+  /**
+   * 烈火焚舟（黄盖主战法·追击）：普通攻击后，使攻击目标陷入燃烧状态（伤害率 150%，受谋略，成长 1.35），持续 2 回合。
+   * 目标已处于烈火焚舟的燃烧状态时：立即引爆剩余燃烧伤害（剩余回合数 × 每次燃烧伤害）并移除该燃烧，
+   * 再使目标及其相邻敌军陷入伤害率 270%（受谋略，成长 2.26）、持续 1 回合的燃烧状态。士气降低暂未建模。
+   */
   liehuo_fenzhou: {
     id: 'liehuo_fenzhou',
     name: '烈火焚舟',
@@ -1184,8 +1201,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     output: [
       {
         kind: 'inflict_status',
-        status: { type: 'burning', duration: 2, rate: 150, growthRate: 1.0 },
-        detonate: { rate: 270, duration: 1, adjacent: true },
+        status: { type: 'burning', duration: 2, rate: 150, growthRate: 1.35 },
+        detonate: { rate: 270, growthRate: 2.26, duration: 1, adjacent: true },
       },
     ],
   },
@@ -2557,8 +2574,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'inflict_status', status: { type: 'jump_prep', rate: 0.6, duration: 1 } },
     ],
   },
-  /** 黄天余音（张宁主战法·主动）：吸取敌军单体 26 全属性（受谋略影响，取基值）并附加于自身与友军单体，持续 1 回合。
-   *  引擎属性吸取：敌单体 debuff + 自身/友军单体 buff（inflict_status output targetSide/targetMode 覆盖） */
+  /** 黄天余音（张宁主战法·主动）：吸取敌军单体 26 全属性（受谋略，成长率 0.20/点）并附加于自身与友军单体，持续 1 回合。
+   *  先按当前谋略结算吸取/自身，再按补给后的谋略结算队友（输出顺序：敌 → 自身 → 友军）。 */
   huangtian_yuyin: {
     id: 'huangtian_yuyin',
     name: '黄天余音',
@@ -2570,22 +2587,22 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     targetSide: 'enemy',
     tags: ['attack_buff', 'defense_buff', 'strategy_buff', 'speed_buff'],
     output: [
-      { kind: 'inflict_status', status: { type: 'attack_buff', amount: -26, duration: 1 } },
-      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -26, duration: 1 } },
-      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -26, duration: 1 } },
-      { kind: 'inflict_status', status: { type: 'speed_buff', amount: -26, duration: 1 } },
-      { kind: 'inflict_status', status: { type: 'attack_buff', amount: 26, duration: 1 }, target: 'self' },
-      { kind: 'inflict_status', status: { type: 'defense_buff', amount: 26, duration: 1 }, target: 'self' },
-      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: 26, duration: 1 }, target: 'self' },
-      { kind: 'inflict_status', status: { type: 'speed_buff', amount: 26, duration: 1 }, target: 'self' },
-      { kind: 'inflict_status', status: { type: 'attack_buff', amount: 26, duration: 1 }, targetSide: 'ally', targetMode: 'single', excludeSelf: true },
-      { kind: 'inflict_status', status: { type: 'defense_buff', amount: 26, duration: 1 }, targetSide: 'ally', targetMode: 'single', excludeSelf: true },
-      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: 26, duration: 1 }, targetSide: 'ally', targetMode: 'single', excludeSelf: true },
-      { kind: 'inflict_status', status: { type: 'speed_buff', amount: 26, duration: 1 }, targetSide: 'ally', targetMode: 'single', excludeSelf: true },
+      { kind: 'inflict_status', status: { type: 'attack_buff', amount: -26, duration: 1, strategyScaled: true, growthRate: 0.2 } },
+      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -26, duration: 1, strategyScaled: true, growthRate: 0.2 } },
+      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -26, duration: 1, strategyScaled: true, growthRate: 0.2 } },
+      { kind: 'inflict_status', status: { type: 'speed_buff', amount: -26, duration: 1, strategyScaled: true, growthRate: 0.2 } },
+      { kind: 'inflict_status', status: { type: 'attack_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 }, target: 'self' },
+      { kind: 'inflict_status', status: { type: 'defense_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 }, target: 'self' },
+      { kind: 'inflict_status', status: { type: 'speed_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 }, target: 'self' },
+      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 }, target: 'self' },
+      { kind: 'inflict_status', status: { type: 'attack_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 }, targetSide: 'ally', targetMode: 'single', excludeSelf: true },
+      { kind: 'inflict_status', status: { type: 'defense_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 }, targetSide: 'ally', targetMode: 'single', excludeSelf: true },
+      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 }, targetSide: 'ally', targetMode: 'single', excludeSelf: true },
+      { kind: 'inflict_status', status: { type: 'speed_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 }, targetSide: 'ally', targetMode: 'single', excludeSelf: true },
     ],
   },
   /** 母仪浮梦（何太后主战法·一类指挥）：战斗开始后使我军全体首次受击规避（1 层）；
-   *  前 4 回合敌军全体进行攻击/策略攻击时 60% 使本次伤害降低 40%（受谋略，成长率 0.15/点，造成侧负增伤）。
+   *  前 4 回合敌军全体进行攻击/策略攻击时 60% 使本次伤害降低 40%（受谋略，成长率 0.20/点，造成侧负增伤）。
    *  roundRepeat.targetSide='enemy' 与战法 targetSide='ally' 分离锁定目标。 */
   muyi_fumeng: {
     id: 'muyi_fumeng',
@@ -2603,7 +2620,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     output: [
       {
         kind: 'inflict_status',
-        status: { type: 'damage_boost', rate: -0.4, duration: 1, direction: 'caused', strategyScaled: true, growthRate: 0.15 },
+        status: { type: 'damage_boost', rate: -0.4, duration: 1, direction: 'caused', strategyScaled: true, growthRate: 0.2 },
       },
     ],
   },
@@ -2948,7 +2965,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
 
   /**
    * 七步释嫌（曹植主战法·二类指挥）：我军全体每次发动普攻、试图发动主动或追击时，
-   * 对随机敌军单体施加「下一次造成的伤害降低 6%」（谋略成长率待补，先固定 6%），可叠加，
+   * 对随机敌军单体施加「下一次造成的伤害降低 6%」（受谋略，成长率 0.008/点），可叠加，
    * 目标造成伤害后清空层数。每累计 7 次对我军群体恢复（135%，成长 1.46/点；二类指挥按实时兵力结算）。
    * 成长率由战报反推：谋略 213 → 生效 329%；兵力 3263 → 477（3088 引擎公式 463，战报 464 差 1 为八舍九入后 floor）。
    */
@@ -2978,6 +2995,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
           charges: 1,
           chargesStack: true,
           stacks: 1,
+          strategyScaled: true,
+          growthRate: 0.008,
         },
         targetSide: 'enemy',
         targetMode: 'random_single',

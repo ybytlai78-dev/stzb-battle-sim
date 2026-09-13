@@ -363,15 +363,15 @@ describe('指挥阶段时序联动：卫瓘持节镇西 × 吕蒙白衣渡江 ×
     // 白衣渡江伤害全体(3目标) → 对每个目标结算前触发持节镇西「造成策略伤害前」→ 吕蒙叠 3 层谋略
     const layers = lvmeng.statuses.filter((s) => s.type === 'strategy_buff' && s.sourceSkillId === 'chijie_zhenxi');
     expect(layers.length).toBe(3);
-    // 每层按卫瓘谋略(146)缩放：round(22 + 0.1×(146-80)) = 29
-    expect(layers.reduce((a, s) => a + ('amount' in s ? s.amount : 0), 0)).toBe(3 * 29);
+    // 每层按卫瓘谋略(146)缩放：round(22 + 0.15×(146-80)) = 32
+    expect(layers.reduce((a, s) => a + ('amount' in s ? s.amount : 0), 0)).toBe(3 * 32);
 
-    // 神兵/大赏读生效谋略（197+87=284）：roundRate(30+0.15×(284-80))=60 → 0.60
+    // 神兵/大赏读生效谋略（197+96=293）：roundRate(30+0.15×(293-80))=61.95 → 八舍九入 62 → 0.62
     const boost = (u: UnitState) =>
       u.statuses.filter((s) => s.type === 'damage_boost').reduce((a, s) => a + ('rate' in s ? s.rate : 0), 0);
     // 神兵天降 range 4：吕蒙(大营) 够不到敌方大营(e3 距离5)，只命中 e1/e2 两个目标
-    expect(boost(e1)).toBe(0.60);
-    expect(boost(e2)).toBe(0.60);
+    expect(boost(e1)).toBe(0.62);
+    expect(boost(e2)).toBe(0.62);
     expect(boost(e3)).toBe(0);
   });
 

@@ -20539,14 +20539,14 @@
       "result": "draw",
       "rounds": 8,
       "finalMyTroops": [
-        6847,
+        6872,
         9000,
         9000
       ],
       "finalEnemyTroops": [
-        3324,
-        5321,
-        8019
+        3268,
+        5279,
+        8002
       ],
       "eventCount": 263,
       "events": [
@@ -20735,18 +20735,18 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "taishici",
           "targetId": "enemy-front",
           "distance": 2,
-          "damage": 533,
+          "damage": 536,
           "breakdown": {
             "troopBase": 201,
-            "base": 60,
-            "main": 272
+            "base": 61,
+            "main": 274
           },
           "modifiers": {
             "caused": [],
@@ -20811,18 +20811,18 @@
           "type": "status_inflicted",
           "unitId": "sunquan",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "sunquan",
           "targetId": "enemy-mid",
           "distance": 4,
-          "damage": 454,
+          "damage": 458,
           "breakdown": {
             "troopBase": 201,
-            "base": 41,
-            "main": 212
+            "base": 42,
+            "main": 215
           },
           "modifiers": {
             "caused": [],
@@ -20853,18 +20853,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "weiguan",
           "targetId": "enemy-front",
           "distance": 1,
-          "damage": 593,
+          "damage": 599,
           "breakdown": {
             "troopBase": 201,
-            "base": 68,
-            "main": 324
+            "base": 70,
+            "main": 328
           },
           "modifiers": {
             "caused": [],
@@ -20887,18 +20887,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "defense_buff",
-          "detail": "防御 +32（1/4 层）"
+          "detail": "防御 +38（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "enemy-front",
           "targetId": "weiguan",
           "distance": 1,
-          "damage": 304,
+          "damage": 302,
           "breakdown": {
             "troopBase": 200,
             "base": 20,
-            "main": 84
+            "main": 82
           },
           "modifiers": {
             "caused": [],
@@ -20921,18 +20921,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "defense_buff",
-          "detail": "防御 +32（2/4 层）"
+          "detail": "防御 +38（2/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "enemy-mid",
           "targetId": "weiguan",
           "distance": 2,
-          "damage": 304,
+          "damage": 299,
           "breakdown": {
             "troopBase": 206,
             "base": 21,
-            "main": 77
+            "main": 72
           },
           "modifiers": {
             "caused": [],
@@ -20965,23 +20965,23 @@
           "type": "round_end",
           "round": 1,
           "myTroops": [
-            8392,
+            8399,
             9000,
             9000
           ],
           "enemyTroops": [
-            8874,
-            9546,
+            8865,
+            9542,
             10000
           ],
           "myWounded": [
-            578,
+            571,
             0,
             0
           ],
           "enemyWounded": [
-            1069,
-            431,
+            1078,
+            435,
             0
           ],
           "myDead": [
@@ -21010,18 +21010,18 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "taishici",
           "targetId": "enemy-front",
           "distance": 2,
-          "damage": 541,
+          "damage": 544,
           "breakdown": {
             "troopBase": 201,
-            "base": 68,
-            "main": 272
+            "base": 69,
+            "main": 274
           },
           "modifiers": {
             "caused": [],
@@ -21120,18 +21120,18 @@
           "type": "status_inflicted",
           "unitId": "sunquan",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "sunquan",
           "targetId": "enemy-front",
           "distance": 3,
-          "damage": 449,
+          "damage": 453,
           "breakdown": {
             "troopBase": 201,
-            "base": 36,
-            "main": 212
+            "base": 37,
+            "main": 215
           },
           "modifiers": {
             "caused": [],
@@ -21162,18 +21162,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "weiguan",
           "targetId": "enemy-mid",
           "distance": 2,
-          "damage": 576,
+          "damage": 581,
           "breakdown": {
             "troopBase": 195,
-            "base": 63,
-            "main": 318
+            "base": 64,
+            "main": 322
           },
           "modifiers": {
             "caused": [],
@@ -21196,7 +21196,7 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "defense_buff",
-          "detail": "防御 +32（1/4 层）"
+          "detail": "防御 +38（1/4 层）"
         },
         {
           "type": "evasion_blocked",
@@ -21219,7 +21219,7 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "defense_buff",
-          "detail": "防御 +32（2/4 层）"
+          "detail": "防御 +38（2/4 层）"
         },
         {
           "type": "evasion_blocked",
@@ -21252,23 +21252,23 @@
           "type": "round_end",
           "round": 2,
           "myTroops": [
-            8392,
+            8399,
             9000,
             9000
           ],
           "enemyTroops": [
-            7884,
-            8970,
+            7868,
+            8961,
             10000
           ],
           "myWounded": [
-            578,
+            571,
             0,
             0
           ],
           "enemyWounded": [
-            1871,
-            898,
+            1886,
+            906,
             0
           ],
           "myDead": [
@@ -21277,8 +21277,8 @@
             0
           ],
           "enemyDead": [
-            245,
-            132,
+            246,
+            133,
             0
           ]
         },
@@ -21297,18 +21297,18 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "taishici",
           "targetId": "enemy-mid",
           "distance": 3,
-          "damage": 542,
+          "damage": 545,
           "breakdown": {
             "troopBase": 201,
-            "base": 69,
-            "main": 272
+            "base": 70,
+            "main": 274
           },
           "modifiers": {
             "caused": [],
@@ -21373,18 +21373,18 @@
           "type": "status_inflicted",
           "unitId": "sunquan",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "sunquan",
           "targetId": "enemy-front",
           "distance": 3,
-          "damage": 449,
+          "damage": 453,
           "breakdown": {
             "troopBase": 201,
-            "base": 36,
-            "main": 212
+            "base": 37,
+            "main": 215
           },
           "modifiers": {
             "caused": [],
@@ -21415,18 +21415,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "weiguan",
           "targetId": "enemy-front",
           "distance": 1,
-          "damage": 574,
+          "damage": 580,
           "breakdown": {
             "troopBase": 195,
-            "base": 61,
-            "main": 318
+            "base": 63,
+            "main": 322
           },
           "modifiers": {
             "caused": [],
@@ -21449,7 +21449,7 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "defense_buff",
-          "detail": "防御 +32（1/4 层）"
+          "detail": "防御 +38（1/4 层）"
         },
         {
           "type": "evasion_blocked",
@@ -21472,18 +21472,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "defense_buff",
-          "detail": "防御 +32（1/4 层）"
+          "detail": "防御 +38（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "enemy-mid",
           "targetId": "weiguan",
           "distance": 2,
-          "damage": 297,
+          "damage": 295,
           "breakdown": {
             "troopBase": 195,
             "base": 19,
-            "main": 83
+            "main": 81
           },
           "modifiers": {
             "caused": [],
@@ -21516,33 +21516,33 @@
           "type": "round_end",
           "round": 3,
           "myTroops": [
-            8095,
+            8104,
             9000,
             9000
           ],
           "enemyTroops": [
-            6861,
-            8428,
+            6835,
+            8416,
             10000
           ],
           "myWounded": [
-            777,
+            769,
             0,
             0
           ],
           "enemyWounded": [
-            2557,
-            1261,
+            2579,
+            1271,
             0
           ],
           "myDead": [
-            128,
+            127,
             0,
             0
           ],
           "enemyDead": [
-            582,
-            311,
+            586,
+            313,
             0
           ]
         },
@@ -21561,18 +21561,18 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "taishici",
           "targetId": "enemy-back",
           "distance": 4,
-          "damage": 537,
+          "damage": 540,
           "breakdown": {
             "troopBase": 201,
-            "base": 64,
-            "main": 272
+            "base": 65,
+            "main": 274
           },
           "modifiers": {
             "caused": [],
@@ -21623,7 +21623,7 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（2/4 层）"
+          "detail": "攻击 +33（2/4 层）"
         },
         {
           "type": "damage",
@@ -21632,11 +21632,11 @@
           "skillId": "fangzhen_tuji",
           "skillName": "方阵突击",
           "damageType": "physical",
-          "damage": 900,
+          "damage": 911,
           "breakdown": {
             "troopBase": 201,
-            "base": 134,
-            "main": 565
+            "base": 138,
+            "main": 572
           },
           "modifiers": {
             "caused": [],
@@ -21690,18 +21690,18 @@
           "type": "status_inflicted",
           "unitId": "sunquan",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "sunquan",
           "targetId": "enemy-front",
           "distance": 3,
-          "damage": 448,
+          "damage": 451,
           "breakdown": {
             "troopBase": 201,
             "base": 35,
-            "main": 212
+            "main": 215
           },
           "modifiers": {
             "caused": [],
@@ -21732,18 +21732,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "weiguan",
           "targetId": "enemy-mid",
           "distance": 2,
-          "damage": 575,
+          "damage": 581,
           "breakdown": {
             "troopBase": 191,
-            "base": 70,
-            "main": 314
+            "base": 72,
+            "main": 318
           },
           "modifiers": {
             "caused": [],
@@ -21766,18 +21766,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "defense_buff",
-          "detail": "防御 +32（1/4 层）"
+          "detail": "防御 +38（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "enemy-front",
           "targetId": "weiguan",
           "distance": 1,
-          "damage": 268,
+          "damage": 266,
           "breakdown": {
             "troopBase": 169,
             "base": 23,
-            "main": 76
+            "main": 74
           },
           "modifiers": {
             "caused": [],
@@ -21800,18 +21800,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "defense_buff",
-          "detail": "防御 +32（2/4 层）"
+          "detail": "防御 +38（2/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "enemy-mid",
           "targetId": "weiguan",
           "distance": 2,
-          "damage": 279,
+          "damage": 274,
           "breakdown": {
             "troopBase": 188,
             "base": 18,
-            "main": 73
+            "main": 68
           },
           "modifiers": {
             "caused": [],
@@ -21837,34 +21837,34 @@
           "type": "round_end",
           "round": 4,
           "myTroops": [
-            7548,
+            7564,
             9000,
             9000
           ],
           "enemyTroops": [
-            6413,
-            7853,
-            8563
+            6384,
+            7835,
+            8549
           ],
           "myWounded": [
-            1067,
+            1055,
             0,
             0
           ],
           "enemyWounded": [
-            2794,
-            1566,
-            762
+            2818,
+            1579,
+            769
           ],
           "myDead": [
-            385,
+            381,
             0,
             0
           ],
           "enemyDead": [
-            793,
-            581,
-            675
+            798,
+            586,
+            682
           ]
         },
         {
@@ -21882,18 +21882,18 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "taishici",
           "targetId": "enemy-back",
           "distance": 4,
-          "damage": 544,
+          "damage": 547,
           "breakdown": {
             "troopBase": 201,
-            "base": 71,
-            "main": 272
+            "base": 72,
+            "main": 274
           },
           "modifiers": {
             "caused": [],
@@ -21980,18 +21980,18 @@
           "type": "status_inflicted",
           "unitId": "sunquan",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "sunquan",
           "targetId": "enemy-mid",
           "distance": 4,
-          "damage": 453,
+          "damage": 457,
           "breakdown": {
             "troopBase": 201,
-            "base": 40,
-            "main": 212
+            "base": 41,
+            "main": 215
           },
           "modifiers": {
             "caused": [],
@@ -22022,18 +22022,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "weiguan",
           "targetId": "enemy-front",
           "distance": 1,
-          "damage": 555,
+          "damage": 561,
           "breakdown": {
             "troopBase": 185,
-            "base": 63,
-            "main": 307
+            "base": 64,
+            "main": 312
           },
           "modifiers": {
             "caused": [],
@@ -22056,7 +22056,7 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "defense_buff",
-          "detail": "防御 +32（1/4 层）"
+          "detail": "防御 +38（1/4 层）"
         },
         {
           "type": "evasion_blocked",
@@ -22079,7 +22079,7 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "defense_buff",
-          "detail": "防御 +32（1/4 层）"
+          "detail": "防御 +38（1/4 层）"
         },
         {
           "type": "evasion_blocked",
@@ -22112,34 +22112,34 @@
           "type": "round_end",
           "round": 5,
           "myTroops": [
-            7548,
+            7564,
             9000,
             9000
           ],
           "enemyTroops": [
-            5858,
-            7400,
-            8019
+            5823,
+            7378,
+            8002
           ],
           "myWounded": [
-            1067,
+            1055,
             0,
             0
           ],
           "enemyWounded": [
-            3010,
-            1743,
-            974
+            3037,
+            1757,
+            982
           ],
           "myDead": [
-            385,
+            381,
             0,
             0
           ],
           "enemyDead": [
-            1132,
-            857,
-            1007
+            1140,
+            865,
+            1016
           ]
         },
         {
@@ -22157,18 +22157,18 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "taishici",
           "targetId": "enemy-front",
           "distance": 2,
-          "damage": 537,
+          "damage": 540,
           "breakdown": {
             "troopBase": 201,
-            "base": 64,
-            "main": 272
+            "base": 65,
+            "main": 274
           },
           "modifiers": {
             "caused": [],
@@ -22233,18 +22233,18 @@
           "type": "status_inflicted",
           "unitId": "sunquan",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "sunquan",
           "targetId": "enemy-front",
           "distance": 3,
-          "damage": 452,
+          "damage": 456,
           "breakdown": {
             "troopBase": 201,
-            "base": 39,
-            "main": 212
+            "base": 40,
+            "main": 215
           },
           "modifiers": {
             "caused": [],
@@ -22275,18 +22275,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "weiguan",
           "targetId": "enemy-mid",
           "distance": 2,
-          "damage": 559,
+          "damage": 565,
           "breakdown": {
             "troopBase": 185,
-            "base": 67,
-            "main": 307
+            "base": 68,
+            "main": 312
           },
           "modifiers": {
             "caused": [],
@@ -22309,7 +22309,7 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "defense_buff",
-          "detail": "防御 +32（1/4 层）"
+          "detail": "防御 +38（1/4 层）"
         },
         {
           "type": "evasion_blocked",
@@ -22332,7 +22332,7 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "defense_buff",
-          "detail": "防御 +32（1/4 层）"
+          "detail": "防御 +38（1/4 层）"
         },
         {
           "type": "evasion_blocked",
@@ -22365,34 +22365,34 @@
           "type": "round_end",
           "round": 6,
           "myTroops": [
-            7548,
+            7564,
             9000,
             9000
           ],
           "enemyTroops": [
-            4869,
-            6841,
-            8019
+            4827,
+            6813,
+            8002
           ],
           "myWounded": [
-            1067,
+            1055,
             0,
             0
           ],
           "enemyWounded": [
-            3257,
-            1883,
-            974
+            3286,
+            1898,
+            982
           ],
           "myDead": [
-            385,
+            381,
             0,
             0
           ],
           "enemyDead": [
-            1874,
-            1276,
-            1007
+            1887,
+            1289,
+            1016
           ]
         },
         {
@@ -22410,18 +22410,18 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "taishici",
           "targetId": "enemy-front",
           "distance": 2,
-          "damage": 528,
+          "damage": 531,
           "breakdown": {
             "troopBase": 201,
-            "base": 55,
-            "main": 272
+            "base": 56,
+            "main": 274
           },
           "modifiers": {
             "caused": [],
@@ -22486,18 +22486,18 @@
           "type": "status_inflicted",
           "unitId": "sunquan",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "sunquan",
           "targetId": "enemy-front",
           "distance": 3,
-          "damage": 455,
+          "damage": 459,
           "breakdown": {
             "troopBase": 201,
-            "base": 42,
-            "main": 212
+            "base": 43,
+            "main": 215
           },
           "modifiers": {
             "caused": [],
@@ -22528,18 +22528,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "weiguan",
           "targetId": "enemy-front",
           "distance": 1,
-          "damage": 562,
+          "damage": 569,
           "breakdown": {
             "troopBase": 185,
-            "base": 70,
-            "main": 307
+            "base": 72,
+            "main": 312
           },
           "modifiers": {
             "caused": [],
@@ -22562,18 +22562,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "defense_buff",
-          "detail": "防御 +32（1/4 层）"
+          "detail": "防御 +38（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "enemy-front",
           "targetId": "weiguan",
           "distance": 1,
-          "damage": 191,
+          "damage": 188,
           "breakdown": {
-            "troopBase": 112,
+            "troopBase": 111,
             "base": 22,
-            "main": 57
+            "main": 55
           },
           "modifiers": {
             "caused": [],
@@ -22596,18 +22596,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "defense_buff",
-          "detail": "防御 +32（2/4 层）"
+          "detail": "防御 +38（2/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "enemy-mid",
           "targetId": "weiguan",
           "distance": 2,
-          "damage": 266,
+          "damage": 262,
           "breakdown": {
             "troopBase": 175,
             "base": 22,
-            "main": 69
+            "main": 65
           },
           "modifiers": {
             "caused": [],
@@ -22640,34 +22640,34 @@
           "type": "round_end",
           "round": 7,
           "myTroops": [
-            7091,
+            7114,
             9000,
             9000
           ],
           "enemyTroops": [
-            3324,
-            6841,
-            8019
+            3268,
+            6813,
+            8002
           ],
           "myWounded": [
-            1117,
+            1105,
             0,
             0
           ],
           "enemyWounded": [
-            3427,
-            1883,
-            974
+            3457,
+            1898,
+            982
           ],
           "myDead": [
-            792,
+            781,
             0,
             0
           ],
           "enemyDead": [
-            3249,
-            1276,
-            1007
+            3275,
+            1289,
+            1016
           ]
         },
         {
@@ -22685,18 +22685,18 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "taishici",
           "targetId": "enemy-mid",
           "distance": 3,
-          "damage": 535,
+          "damage": 538,
           "breakdown": {
             "troopBase": 201,
-            "base": 62,
-            "main": 272
+            "base": 63,
+            "main": 274
           },
           "modifiers": {
             "caused": [],
@@ -22761,18 +22761,18 @@
           "type": "status_inflicted",
           "unitId": "sunquan",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "sunquan",
           "targetId": "enemy-mid",
           "distance": 4,
-          "damage": 446,
+          "damage": 450,
           "breakdown": {
             "troopBase": 201,
-            "base": 33,
-            "main": 212
+            "base": 34,
+            "main": 215
           },
           "modifiers": {
             "caused": [],
@@ -22803,18 +22803,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "attack_buff",
-          "detail": "攻击 +29（1/4 层）"
+          "detail": "攻击 +33（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "weiguan",
           "targetId": "enemy-mid",
           "distance": 2,
-          "damage": 539,
+          "damage": 546,
           "breakdown": {
             "troopBase": 179,
-            "base": 59,
-            "main": 301
+            "base": 61,
+            "main": 306
           },
           "modifiers": {
             "caused": [],
@@ -22837,7 +22837,7 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "defense_buff",
-          "detail": "防御 +32（1/4 层）"
+          "detail": "防御 +38（1/4 层）"
         },
         {
           "type": "evasion_blocked",
@@ -22860,18 +22860,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "defense_buff",
-          "detail": "防御 +32（1/4 层）"
+          "detail": "防御 +38（1/4 层）"
         },
         {
           "type": "attack_hit",
           "sourceId": "enemy-mid",
           "targetId": "weiguan",
           "distance": 2,
-          "damage": 244,
+          "damage": 242,
           "breakdown": {
             "troopBase": 152,
             "base": 21,
-            "main": 71
+            "main": 69
           },
           "modifiers": {
             "caused": [],
@@ -22904,34 +22904,34 @@
           "type": "round_end",
           "round": 8,
           "myTroops": [
-            6847,
+            6872,
             9000,
             9000
           ],
           "enemyTroops": [
-            3324,
-            5321,
-            8019
+            3268,
+            5279,
+            8002
           ],
           "myWounded": [
-            1117,
+            1105,
             0,
             0
           ],
           "enemyWounded": [
-            3427,
-            1883,
-            974
+            3457,
+            1898,
+            982
           ],
           "myDead": [
-            1036,
+            1023,
             0,
             0
           ],
           "enemyDead": [
-            3249,
-            2796,
-            1007
+            3275,
+            2823,
+            1016
           ]
         },
         {
@@ -22939,14 +22939,14 @@
           "result": "draw",
           "rounds": 8,
           "myTroops": [
-            6847,
+            6872,
             9000,
             9000
           ],
           "enemyTroops": [
-            3324,
-            5321,
-            8019
+            3268,
+            5279,
+            8002
           ]
         }
       ]

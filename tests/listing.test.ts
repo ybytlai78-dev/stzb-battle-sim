@@ -49,4 +49,24 @@ describe('暂时下架名单', () => {
     expect(hidden.length).toBeGreaterThan(0);
     expect(hidden.every((h) => !isHeroListed(h))).toBe(true);
   });
+
+  it('战报反推已确认成长的主战法上架', () => {
+    const confirmed = [
+      'chijie_zhenxi',
+      'weiwu_zhishi',
+      'qiangshi',
+      'qibu_shixian',
+      'muyi_fumeng',
+      'huangtian_yuyin',
+      'jinkui_yaolue',
+      'mouyi_hongtu',
+      'liehuo_fenzhou',
+    ];
+    for (const id of confirmed) {
+      expect(OFFLINE_MAIN_SKILLS[id], `${id} 应已从上架黑名单移除`).toBeUndefined();
+      const heroes = heroesJson.filter((h) => h.mainSkillId === id);
+      expect(heroes.length, `${id} 应有携带武将`).toBeGreaterThan(0);
+      expect(heroes.every(isHeroListed), `${id} 携带武将应上架`).toBe(true);
+    }
+  });
 });

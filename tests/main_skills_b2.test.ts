@@ -257,7 +257,7 @@ describe('金匮要略（张机，一类指挥：前 3 回合全军减伤 20.4% 
       (e): e is Extract<BattleEvent, { type: 'status_inflicted' }> =>
         e.type === 'status_inflicted' && e.statusType === 'damage_reduce'
     )!;
-    // detail: `减伤 0.32 持续 3 回合`（20.4% + 0.13/点×94 ≈ 32.62 → 八舍九入 32%）
+    // detail: `减伤 0.37 持续 3 回合`（20.4% + 0.18/点×94 ≈ 37.32 → 八舍九入 37%）
     const rate = parseFloat(reduceEvent.detail.match(/减伤 ([\d.]+)/)![1]);
     expect(rate).toBeGreaterThan(0.204);
     // detail: `持续型急救 150% 恢复率 持续 3 回合`（80% + 0.75/点×94 ≈ 150.5 → 八舍九入 150%）

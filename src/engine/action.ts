@@ -2106,6 +2106,10 @@ function executeSkillOutputs(
     lastDamageTargetIds = ids;
   };
   for (const out of list) {
+    if (out.kind === 'physical_damage') {
+      if (out.startRound != null && ctx.currentRound < out.startRound) continue;
+      if (out.endRound != null && ctx.currentRound > out.endRound) continue;
+    }
     if (out.kind === 'random_pick') {
       const picked = ctx.rng.pickN(out.options, out.count);
       executeSkillOutputs(ctx, caster, skill, targets, picked.flat());
@@ -2134,6 +2138,8 @@ function executeSkillOutputs(
     const outTarget = out.kind === 'positional_physical_damage' || out.kind === 'morale_branch' ? undefined : out.target;
     const outMode =
       out.kind === 'physical_damage' || out.kind === 'strategy_damage' ? out.targetMode : undefined;
+    const outRange =
+      out.kind === 'physical_damage' && out.ignoreRange ? Number.POSITIVE_INFINITY : skill.range;
     // 属性吸取（黄天余音）/ 分流治疗（合流、三军之众、利兵谋胜）：
     // inflict_status / heal 可带 targetSide/targetMode 单输出目标池覆盖
     const outSide = out.kind === 'inflict_status' || out.kind === 'heal' ? out.targetSide : undefined;
@@ -2146,7 +2152,7 @@ function executeSkillOutputs(
       outTarget === 'self'
         ? [caster]
         : outMode
-          ? skillTargets(ctx, caster, enemies, skill.range, outMode, 'groupCount' in out ? out.groupCount : undefined)
+          ? skillTargets(ctx, caster, enemies, outRange, outMode, 'groupCount' in out ? out.groupCount : undefined)
           : outSide === 'self'
             ? [caster]
             : outSide === 'enemy'
@@ -2169,83 +2175,101 @@ function executeSkillOutputs(
         }
         let attacked = false;
         const selectedIds: string[] = [];
-        for (const raw of pool) {
-          if (!raw.alive) continue;
-          const t = redirectPhysicalHit(ctx, raw);
-          if (!t.alive) continue;
-          attacked = true;
-          selectedIds.push(t.general.id);
-          // 常驻伤害前叠层（持节镇西）：伤害源叠攻击、受击者叠防御
-          triggerStackBuff(ctx, source, t, 'physical');
-          // 规避：默认免疫一次伤害；ignoresEvasion 时无视
-          if (!out.ignoresEvasion && consumeEvasion(ctx, t, source.general.id)) continue;
-          const atk = effectiveStat(source, 'attack');
-          const def = physicalTargetDefense(source, t);
-          const { causedMult, takenMult } = damageBoosts(ctx, source, t);
-          const reduce = sumRates(t.statuses, 'damage_reduce') + troopCounterReduceOf(source, t);
-          const rate = Array.isArray(out.rate) ? ctx.rng.intInclusive(out.rate[0], out.rate[1]) : out.rate;
-          const { damage, breakdown } = calcDamage(
-            {
+        const times = Array.isArray(out.repeats)
+          ? ctx.rng.intInclusive(out.repeats[0], out.repeats[1])
+          : (out.repeats ?? 1);
+        for (let hitI = 0; hitI < times; hitI++) {
+          const hitPool =
+            hitI === 0
+              ? pool
+              : out.targetMode
+                ? skillTargets(
+                    ctx,
+                    caster,
+                    enemies,
+                    out.ignoreRange ? Number.POSITIVE_INFINITY : skill.range,
+                    out.targetMode,
+                    out.groupCount
+                  )
+                : pool;
+          for (const raw of hitPool) {
+            if (!raw.alive) continue;
+            const t = redirectPhysicalHit(ctx, raw);
+            if (!t.alive) continue;
+            attacked = true;
+            selectedIds.push(t.general.id);
+            // 常驻伤害前叠层（持节镇西）：伤害源叠攻击、受击者叠防御
+            triggerStackBuff(ctx, source, t, 'physical');
+            // 规避：默认免疫一次伤害；ignoresEvasion 时无视
+            if (!out.ignoresEvasion && consumeEvasion(ctx, t, source.general.id)) continue;
+            const atk = effectiveStat(source, 'attack');
+            const def = physicalTargetDefense(source, t);
+            const { causedMult, takenMult } = damageBoosts(ctx, source, t);
+            const reduce = sumRates(t.statuses, 'damage_reduce') + troopCounterReduceOf(source, t);
+            const rate = Array.isArray(out.rate) ? ctx.rng.intInclusive(out.rate[0], out.rate[1]) : out.rate;
+            const { damage, breakdown } = calcDamage(
+              {
+                damageType: 'physical',
+                rate,
+                attackerAttack: atk,
+                attackerStrategy: source.general.strategy,
+                attackerTroops: source.troops,
+                targetDefense: def,
+                targetStrategy: t.general.strategy,
+                mult: buffMult(causedMult, takenMult, reduce),
+              },
+              ctx.rng
+            );
+            const capped = applyTroopCap(damage, t.troops);
+            ctx.events.push({
+              type: 'damage',
+              sourceId: source.general.id,
+              // 借谋略最低友军攻击（怀德畏威）：杀伤统计归属施法者
+              creditToId: source.general.id === caster.general.id ? undefined : caster.general.id,
+              targetId: t.general.id,
+              skillId: skill.id,
+              skillName: skill.name,
               damageType: 'physical',
-              rate,
-              attackerAttack: atk,
-              attackerStrategy: source.general.strategy,
-              attackerTroops: source.troops,
-              targetDefense: def,
-              targetStrategy: t.general.strategy,
-              mult: buffMult(causedMult, takenMult, reduce),
-            },
-            ctx.rng
-          );
-          const capped = applyTroopCap(damage, t.troops);
-          ctx.events.push({
-            type: 'damage',
-            sourceId: source.general.id,
-            // 借谋略最低友军攻击（怀德畏威）：杀伤统计归属施法者
-            creditToId: source.general.id === caster.general.id ? undefined : caster.general.id,
-            targetId: t.general.id,
-            skillId: skill.id,
-            skillName: skill.name,
-            damageType: 'physical',
-            damage: capped,
-            breakdown,
-            modifiers: collectDamageModifiers(ctx, source, t),
-          });
-          applyDamage(ctx, t, capped, source);
-          // 首次攻击标记（辕门射戟）：对本次攻击目标施加「造成攻击伤害降低」debuff（damage_boost caused 负值，
-          // buffMult 10% 伤害下限 → 强制目标造成伤害降为 min 10%），持续 duration 回合；第二次攻击独立选目标不受影响
-          if (out.markCausedReduce && t.alive) {
-            inflictStatus(
-              ctx,
-              t,
-              { type: 'damage_boost', rate: out.markCausedReduce.rate, duration: out.markCausedReduce.duration, direction: 'caused' },
-              skill.type,
-              skill.id,
-              caster.general.id
-            );
-          }
-          // 受击增伤标记（银龙冲阵：首次攻击的目标受到伤害提高）：
-          // 受施法者攻击属性缩放（20% 基础，每点攻击 +0.1%），持续至战斗结束，最多叠加 3 层
-          if (out.markTakenBoost && t.alive) {
-            const scaled = roundRate(
-              scaledValue(out.markTakenBoost.rate, out.markTakenBoost.growthRate, effectiveStat(caster, 'attack'))
-            );
-            const layerRate = scaled / 100;
-            const existing = t.statuses.find(
-              (s): s is Extract<Status, { type: 'damage_boost' }> =>
-                s.type === 'damage_boost' && s.direction === 'taken' && s.sourceSkillId === skill.id
-            );
-            if (existing && (existing.stacks ?? 1) >= out.markTakenBoost.maxStacks) {
-              // 已达叠加上限：不再施加
-            } else {
+              damage: capped,
+              breakdown,
+              modifiers: collectDamageModifiers(ctx, source, t),
+            });
+            applyDamage(ctx, t, capped, source);
+            // 首次攻击标记（辕门射戟）：对本次攻击目标施加「造成攻击伤害降低」debuff（damage_boost caused 负值，
+            // buffMult 10% 伤害下限 → 强制目标造成伤害降为 min 10%），持续 duration 回合；第二次攻击独立选目标不受影响
+            if (out.markCausedReduce && t.alive) {
               inflictStatus(
                 ctx,
                 t,
-                { type: 'damage_boost', rate: layerRate, duration: out.markTakenBoost.duration, direction: 'taken', stacks: 1 },
+                { type: 'damage_boost', rate: out.markCausedReduce.rate, duration: out.markCausedReduce.duration, direction: 'caused' },
                 skill.type,
                 skill.id,
                 caster.general.id
               );
+            }
+            // 受击增伤标记（银龙冲阵：首次攻击的目标受到伤害提高）：
+            // 受施法者攻击属性缩放（20% 基础，每点攻击 +0.1%），持续至战斗结束，最多叠加 3 层
+            if (out.markTakenBoost && t.alive) {
+              const scaled = roundRate(
+                scaledValue(out.markTakenBoost.rate, out.markTakenBoost.growthRate, effectiveStat(caster, 'attack'))
+              );
+              const layerRate = scaled / 100;
+              const existing = t.statuses.find(
+                (s): s is Extract<Status, { type: 'damage_boost' }> =>
+                  s.type === 'damage_boost' && s.direction === 'taken' && s.sourceSkillId === skill.id
+              );
+              if (existing && (existing.stacks ?? 1) >= out.markTakenBoost.maxStacks) {
+                // 已达叠加上限：不再施加
+              } else {
+                inflictStatus(
+                  ctx,
+                  t,
+                  { type: 'damage_boost', rate: layerRate, duration: out.markTakenBoost.duration, direction: 'taken', stacks: 1 },
+                  skill.type,
+                  skill.id,
+                  caster.general.id
+                );
+              }
             }
           }
         }
@@ -2399,7 +2423,11 @@ function executeSkillOutputs(
                 }
                 t.statuses = t.statuses.filter((s) => s !== existing);
                 // 引爆后：目标及其相邻单位陷入更高倍率、短持续同类 DoT（烈火焚舟：270% 持续 1 回合）
-                const scaled = scaledValue(out.detonate.rate, create.growthRate ?? 0, effStrategy);
+                const scaled = scaledValue(
+                  out.detonate.rate,
+                  out.detonate.growthRate ?? create.growthRate ?? 0,
+                  effStrategy
+                );
                 const burnCreate = {
                   ...create,
                   rate: roundRate(scaled),

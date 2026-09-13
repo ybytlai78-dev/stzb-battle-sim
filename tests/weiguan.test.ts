@@ -119,11 +119,11 @@ describe('持节镇西：攻击/谋略/防御叠层', () => {
     ctx.enemyTeam = [enemy('e1')];
     triggerCommandSkills(ctx, wg);
 
-    // 友军普攻 → 攻击 +round(22 + 0.1×(151-80)) = +29
+    // 友军普攻 → 攻击 +round(22 + 0.15×(151-80)) = +33
     actUnit(ctx, ally);
     const layer = ally.statuses.find((s) => s.type === 'attack_buff' && s.sourceSkillId === 'chijie_zhenxi');
     expect(layer).toBeDefined();
-    expect(layer && 'amount' in layer ? (layer as { amount: number }).amount : 0).toBe(29);
+    expect(layer && 'amount' in layer ? (layer as { amount: number }).amount : 0).toBe(33);
   });
 
   it('策略伤害前 → 施法者叠谋略层（按卫瓘谋略缩放）', () => {
@@ -138,9 +138,9 @@ describe('持节镇西：攻击/谋略/防御叠层', () => {
 
     actUnit(ctx, ally); // 有 45% 概率发动夹攻
     const strat = ally.statuses.filter((s) => s.type === 'strategy_buff' && s.sourceSkillId === 'chijie_zhenxi');
-    // 夹攻不一定发动，但若发动必叠谋略层（round(22 + 0.1×(146-80)) = 29）
+    // 夹攻不一定发动，但若发动必叠谋略层（round(22 + 0.15×(146-80)) = 32）
     for (const s of strat) {
-      expect((s as { amount: number }).amount).toBe(29);
+      expect((s as { amount: number }).amount).toBe(32);
     }
   });
 
@@ -158,7 +158,7 @@ describe('持节镇西：攻击/谋略/防御叠层', () => {
     actUnit(ctx, e1); // 敌方普攻 ally
     const def = ally.statuses.find((s) => s.type === 'defense_buff' && s.sourceSkillId === 'chijie_zhenxi');
     expect(def).toBeDefined();
-    expect(def && 'amount' in def ? (def as { amount: number }).amount : 0).toBe(28); // round(22 + 0.1×(144-80)) = 28
+    expect(def && 'amount' in def ? (def as { amount: number }).amount : 0).toBe(32); // round(22 + 0.15×(144-80)) = 32
   });
 });
 
@@ -197,7 +197,7 @@ describe('持节镇西：叠层上限与衰减', () => {
     }
     // 同回合内每次普攻都叠 1 层，封顶 4 层
     expect(buffLayers(ally, 'attack_buff')).toBe(4);
-    expect(buffAmount(ally, 'attack_buff')).toBe(4 * 29);
+    expect(buffAmount(ally, 'attack_buff')).toBe(4 * 33);
 
     // 行动中施加的叠层：回合末不减，持续到该单位下次行动开始前
     tickStatuses(ctx, [...ctx.myTeam, ...ctx.enemyTeam]);

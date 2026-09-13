@@ -52,8 +52,8 @@ function fullTeam(leader: General): General[] {
   return [leader, dummy('ally-front', '前锋'), dummy('ally-back', '大营')];
 }
 
-function run(team: General[], seed = 1, maxRounds = 8) {
-  return runBattle({ seed, maxRounds, myTeam: team, enemyTeam: enemyTeam() });
+function run(team: General[], seed = 1, maxRounds = 8, enemies: General[] = enemyTeam()) {
+  return runBattle({ seed, maxRounds, myTeam: team, enemyTeam: enemies });
 }
 
 const casts = (report: ReturnType<typeof run>, name: string) =>
@@ -199,13 +199,41 @@ describe('逆谋（董卓，二类指挥·战斗开始一次性：自身减伤 3
   });
 });
 
-describe('宣威再战（张绣，追击：普攻后对目标再攻 150%）', () => {
-  it('主战法挂入追击槽（张绣），发动率 100%', () => {
+/** 截取指定回合的事件（round_start 起至下一 round_start 前） */
+function eventsInRound(events: BattleEvent[], round: number): BattleEvent[] {
+  const start = events.findIndex((e) => e.type === 'round_start' && e.round === round);
+  if (start < 0) return [];
+  const end = events.findIndex((e, i) => i > start && e.type === 'round_start');
+  return events.slice(start, end < 0 ? events.length : end);
+}
+
+/** 张绣前锋（攻击距离 1，普攻只能打敌军前锋）+ 中军/大营友军 */
+function zhangxiuFront(): General[] {
+  const zx = withSkills(level40(hero('h620'), { attack: 40 }), { pursuitSkillIds: ['xuanwei_zaizhan'] });
+  zx.position = '前锋';
+  return [zx, dummy('ally-mid', '中军'), dummy('ally-back', '大营')];
+}
+
+describe('宣威再战（张绣，追击：前3回合打普攻目标 / 第4回合起1-3次随机单体）', () => {
+  it('主战法挂入追击槽（张绣），发动率 100%，第4回合起 1-3 次无视距离随机单体', () => {
     const g = hero('h620');
     expect(g.name).toBe('张绣');
     expect(g.pursuitSkillIds).toContain('xuanwei_zaizhan');
     const s = SKILL_REGISTRY['xuanwei_zaizhan'];
     expect(s.type === 'pursuit' && s.triggerRate === 1).toBe(true);
+    const early = s.output[0];
+    const late = s.output[1];
+    expect(early.kind === 'physical_damage' && early.rate === 150 && early.endRound === 3).toBe(true);
+    expect(
+      late.kind === 'physical_damage' &&
+        late.rate === 150 &&
+        late.startRound === 4 &&
+        late.targetMode === 'random_single' &&
+        late.ignoreRange === true &&
+        Array.isArray(late.repeats) &&
+        late.repeats[0] === 1 &&
+        late.repeats[1] === 3
+    ).toBe(true);
   });
 
   it('普攻后触发追击（skill_cast 事件）', () => {
@@ -214,9 +242,55 @@ describe('宣威再战（张绣，追击：普攻后对目标再攻 150%）', ()
     expect(cast.length).toBeGreaterThan(0);
   });
 
-  it('追击对攻击目标造成兵刃伤害（damage 事件）', () => {
-    const report = run(fullTeam(withSkills(level40(hero('h620'), { attack: 40 }), { pursuitSkillIds: ['xuanwei_zaizhan'] })), 1);
-    const dmg = report.events.filter((e) => e.type === 'damage' && e.skillName === '宣威再战');
-    expect(dmg.length).toBeGreaterThan(0);
+  it('前3回合追击只打普攻目标、每次恰好 1 段', () => {
+    const report = run(zhangxiuFront(), 1, 3);
+    for (let round = 1; round <= 3; round++) {
+      const ev = eventsInRound(report.events, round);
+      const hits = ev.filter(
+        (e): e is Extract<BattleEvent, { type: 'attack_hit' }> => e.type === 'attack_hit' && e.sourceId === 'h620'
+      );
+      const dmg = ev.filter(
+        (e): e is Extract<BattleEvent, { type: 'damage' }> => e.type === 'damage' && e.skillName === '宣威再战'
+      );
+      expect(hits.length).toBeGreaterThan(0);
+      expect(dmg.length).toBe(hits.length);
+      for (let i = 0; i < dmg.length; i++) {
+        expect(dmg[i].targetId).toBe(hits[i].targetId);
+      }
+    }
+  });
+
+  it('第4回合起每次追击发动 1-3 段，目标可打到普攻打不到的中军/大营（无视距离）', () => {
+    const bulky = enemyTeam().map((g) => ({ ...g, maxTroops: 50000 }));
+    const farTargets = new Set<string>();
+    const counts = new Set<number>();
+    for (let seed = 1; seed <= 40; seed++) {
+      const report = run(zhangxiuFront(), seed, 8, bulky);
+      for (let round = 4; round <= 8; round++) {
+        const ev = eventsInRound(report.events, round);
+        const castIdx = ev
+          .map((e, i) => (e.type === 'skill_cast' && e.skillName === '宣威再战' ? i : -1))
+          .filter((i) => i >= 0);
+        const hit = ev.find(
+          (e): e is Extract<BattleEvent, { type: 'attack_hit' }> => e.type === 'attack_hit' && e.sourceId === 'h620'
+        );
+        for (let k = 0; k < castIdx.length; k++) {
+          const start = castIdx[k];
+          const end = k + 1 < castIdx.length ? castIdx[k + 1] : ev.length;
+          const dmg = ev
+            .slice(start, end)
+            .filter((e): e is Extract<BattleEvent, { type: 'damage' }> => e.type === 'damage' && e.skillName === '宣威再战');
+          expect(dmg.length).toBeGreaterThanOrEqual(1);
+          expect(dmg.length).toBeLessThanOrEqual(3);
+          counts.add(dmg.length);
+          for (const d of dmg) {
+            if (d.targetId === 'enemy-mid' || d.targetId === 'enemy-back') farTargets.add(d.targetId);
+            if (hit && d.targetId !== hit.targetId) farTargets.add(d.targetId);
+          }
+        }
+      }
+    }
+    expect(farTargets.size).toBeGreaterThan(0);
+    expect(counts.has(1) && counts.has(2) && counts.has(3)).toBe(true);
   });
 });

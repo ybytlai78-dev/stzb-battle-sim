@@ -97,6 +97,20 @@ export type SkillOutput =
        * 友军不耗行动、不受混乱拦截；杀伤统计 creditToId 归施法者。缺省为施法者自己。
        */
       attacker?: 'lowest_strategy_ally';
+      /** 当前回合 ≥ 此值才结算（宣威再战第 4 回合起） */
+      startRound?: number;
+      /** 当前回合 ≤ 此值才结算（宣威再战前 3 回合） */
+      endRound?: number;
+      /**
+       * 选目标时无视战法距离，从全部存活敌军中取（宣威再战第 4 回合起随机单体）。
+       * 需配合 targetMode 使用；缺省仍按 skill.range 筛选。
+       */
+      ignoreRange?: boolean;
+      /**
+       * 本段重复次数；`[1, 3]` = 均匀随机 1~3 次（宣威再战第 4 回合起）。
+       * 每次独立重选目标（若带 targetMode）。
+       */
+      repeats?: number | [number, number];
     }
   | {
       kind: 'strategy_damage';
@@ -153,8 +167,13 @@ export type SkillOutput =
        * 引爆只针对本战法造成的同类 DoT（其他战法的 DoT 不引爆）。
        */
       detonate?: {
-        /** 引爆后新施加 DoT 的基础伤害率（如 270，受谋略缩放，成长率沿用 status.growthRate） */
+        /** 引爆后新施加 DoT 的基础伤害率（如 270，受谋略缩放） */
         rate: number;
+        /**
+         * 引爆段独立成长率（烈火焚舟二段 2.26）。
+         * 缺省沿用 status.growthRate（一段与二段同率时不必写）。
+         */
+        growthRate?: number;
         /** 引爆后新施加 DoT 的持续回合数（如 1） */
         duration: number;
         /** 是否波及目标相邻单位 */

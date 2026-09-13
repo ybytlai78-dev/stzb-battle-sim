@@ -1,12 +1,13 @@
 /**
- * 批量6 主战法测试（v0.8）：世仇（王异）/ 复誓业火（周姬）/ 名士在野（司马徽）/ 未笄难言（董白）
+ * 批量6 主战法测试（v0.8）：世仇（王异）/ 复誓业火（周姬）/ 名士在野（汉四星战法，不挂群司马徽）/ 未笄难言（董白）
+ * 司马徽·群 h811 只入库面板，「徽言龙凤」暂不实装。
  * 每战法 3 个测试：装配挂槽、机制（事件/状态/目标）、数值/共存。
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { runBattle } from '../src/engine/combat';
 import type { BattleEvent, General, Position } from '../src/engine/types';
 import { SKILL_REGISTRY } from '../src/data/skills';
-import { initHeroDB, HERO_REGISTRY, withSkills, level40 } from '../src/data/heroes';
+import { initHeroDB, HERO_REGISTRY, HERO_RECORDS, withSkills, level40 } from '../src/data/heroes';
 
 beforeAll(async () => {
   await initHeroDB();
@@ -118,27 +119,51 @@ describe('复誓业火（周姬，主动：敌军群体策略伤害提高 16% + 
   });
 });
 
-describe('名士在野（司马徽，一类指挥：友军谋略+35 + 每回合 50% 减伤 22%）', () => {
-  it('主战法挂入指挥槽（司马徽），一类指挥', () => {
-    const g = hero('h354');
+describe('司马徽·群（h811，徽言龙凤暂不实装）', () => {
+  it('入库为 h811，阵营群，面板对齐官网 100811，主战法空槽', () => {
+    expect(HERO_REGISTRY['h354']).toBeUndefined();
+    const g = hero('h811');
     expect(g.name).toBe('司马徽');
-    expect(g.commandSkillIds).toContain('mingshi_zaiye');
+    expect(g.faction).toBe('群');
+    expect(g.cost).toBe(3);
+    expect(g.attackRange).toBe(2);
+    expect(g.troopType).toBe('infantry');
+    expect(g.commandSkillIds).toEqual([]);
+    expect(g.commandSkillIds).not.toContain('mingshi_zaiye');
+    const rec = HERO_RECORDS['h811'];
+    expect(rec.mainSkillId).toBe('');
+    expect(rec.mainSkillName).toBe('徽言龙凤');
+    expect(rec.skillDesc).toContain('友军全体共计造成6次伤害后');
+    expect(rec.baseAttack).toBe(55);
+    expect(rec.baseDefense).toBe(83);
+    expect(rec.baseStrategy).toBe(93);
+    expect(rec.baseSpeed).toBe(45);
+    expect(rec.growthAttack).toBe(0.64);
+    expect(rec.growthDefense).toBe(1.7);
+    expect(rec.growthStrategy).toBe(2.25);
+    expect(rec.growthSpeed).toBe(0.6);
+  });
+});
+
+describe('名士在野（一类指挥：友军谋略+35 + 每回合 50% 减伤 22%；汉四星战法，不挂群司马徽）', () => {
+  it('战法仍为一类指挥、友军全体', () => {
     const s = SKILL_REGISTRY['mingshi_zaiye'];
     expect(s.type === 'command' && s.phase === 'prep').toBe(true);
     expect('targetSide' in s && s.targetSide === 'ally').toBe(true);
   });
 
   it('准备阶段使友军全体谋略属性提高（strategy_buff 35）', () => {
-    const report = run(fullTeam(withSkills(level40(hero('h354'), { strategy: 93 }), { commandSkillIds: ['mingshi_zaiye'] })), 1);
+    const caster = withSkills({ ...dummy('caster', '中军'), strategy: 93 }, { commandSkillIds: ['mingshi_zaiye'] });
+    const report = run(fullTeam(caster), 1);
     const buff = inflicted(report, 'strategy_buff').filter((e) => e.unitId !== undefined && !e.unitId.startsWith('enemy'));
     expect(buff.length).toBeGreaterThan(0);
     expect(buff[0].detail).toContain('35');
   });
 
   it('每回合按 50% 几率使友军受到攻击伤害下降（负增伤）', () => {
-    const report = run(fullTeam(withSkills(level40(hero('h354'), { strategy: 93 }), { commandSkillIds: ['mingshi_zaiye'] })), 2);
-    const dmgBoost = inflicted(report, 'damage_boost').filter((e) => e.unitId.startsWith('ally') || e.unitId === 'h354');
-    // 8 回合多次判定，至少一次命中
+    const caster = withSkills({ ...dummy('caster', '中军'), strategy: 93 }, { commandSkillIds: ['mingshi_zaiye'] });
+    const report = run(fullTeam(caster), 2);
+    const dmgBoost = inflicted(report, 'damage_boost').filter((e) => e.unitId.startsWith('ally') || e.unitId === 'caster');
     expect(dmgBoost.length).toBeGreaterThan(0);
   });
 });

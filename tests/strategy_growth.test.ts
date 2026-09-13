@@ -42,6 +42,17 @@ const CONFIRMED: Record<string, Record<string, number>> = {
   libing_mousheng: { strategy_damage: 2.25 },
   yunchou_juesheng: { strategy_damage: 1.585 },
   huaide_weiwei: { strategy_damage: 1.75 },
+  /** 战报反推（2026-09）：持节镇西 / 魏武之世 / 强势 / 七步释嫌 / 母仪浮梦 / 黄天余音 / 金匮要略 / 谋议宏图 */
+  chijie_zhenxi: { stack_attack: 0.15, stack_strategy: 0.15, stack_defense: 0.15 },
+  weiwu_zhishi: { attack_buff: 0.045, defense_buff: 0.045, strategy_buff: 0.045, speed_buff: 0.045 },
+  qiangshi: { damage_boost: 0.225 },
+  qibu_shixian: { damage_boost: 0.008 },
+  muyi_fumeng: { damage_boost: 0.2 },
+  huangtian_yuyin: { attack_buff: 0.2, defense_buff: 0.2, strategy_buff: 0.2, speed_buff: 0.2 },
+  jinkui_yaolue: { damage_reduce: 0.18 },
+  mouyi_hongtu: { damage_reduce: 0.175 },
+  /** 战报反推（2026-09）：烈火焚舟一段燃烧 1.35、二段引爆 2.26 */
+  liehuo_fenzhou: { burning: 1.35, detonate: 2.26 },
 };
 
 function collectOutputs(skill: Skill): SkillOutput[] {
@@ -66,12 +77,20 @@ function extractGrowths(skill: Skill): Record<string, number[]> {
     if (o.kind === 'strategy_damage' && o.strategyScaled) push('strategy_damage', o.growthRate);
     if (o.kind === 'grant_damage_boost') push('grant_damage_boost', o.growthRate);
     if (o.kind === 'inflict_status') {
+      if (o.detonate?.growthRate !== undefined) {
+        push('detonate', o.detonate.growthRate);
+      }
       for (const st of statusList(o.status)) {
         if (st.type === 'panic' || st.type === 'burning' || st.type === 'sorcery' || st.type === 'curse' || st.type === 'ignite') {
           push(st.type, st.growthRate);
         }
         if (
-          (st.type === 'damage_reduce' || st.type === 'damage_boost') &&
+          (st.type === 'damage_reduce' ||
+            st.type === 'damage_boost' ||
+            st.type === 'attack_buff' ||
+            st.type === 'defense_buff' ||
+            st.type === 'strategy_buff' ||
+            st.type === 'speed_buff') &&
           st.strategyScaled &&
           st.growthRate !== undefined
         ) {
@@ -79,6 +98,12 @@ function extractGrowths(skill: Skill): Record<string, number[]> {
         }
       }
     }
+  }
+  if (skill.type === 'command' && skill.stackBuff) {
+    const sb = skill.stackBuff;
+    if (sb.onAttack) push('stack_attack', sb.onAttack.growthRate);
+    if (sb.onStrategy) push('stack_strategy', sb.onStrategy.growthRate);
+    if (sb.onDefense) push('stack_defense', sb.onDefense.growthRate);
   }
   return found;
 }
