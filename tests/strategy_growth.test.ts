@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { SKILL_REGISTRY } from '../src/data/skills';
-import type { Skill, SkillOutput, CreateStatus } from '../src/engine/types';
+import { firstOnHurt, type Skill, type SkillOutput, type CreateStatus } from '../src/engine/types';
 
 /** 已确认：技能 id → 效果键 → 成长率/点 */
 const CONFIRMED: Record<string, Record<string, number>> = {
@@ -53,12 +53,21 @@ const CONFIRMED: Record<string, Record<string, number>> = {
   mouyi_hongtu: { damage_reduce: 0.175 },
   /** 战报反推（2026-09）：烈火焚舟一段燃烧 1.35、二段引爆 2.26 */
   liehuo_fenzhou: { burning: 1.35, detonate: 2.26 },
+  /** 用户确认（2026-09-15）：赏顺伐逆恢复 65% 成长 0.325；反击 180% 仍取基值不进本表 */
+  shangshun_fani: { heal: 0.325 },
 };
 
 function collectOutputs(skill: Skill): SkillOutput[] {
   const out = [...skill.output];
   if (skill.type === 'command' && skill.delayedOutput) {
     out.push(...skill.delayedOutput.output);
+  }
+  if ('onHeal' in skill && skill.onHeal?.output) {
+    out.push(...skill.onHeal.output);
+  }
+  if ('onHurt' in skill) {
+    const onHurtOut = firstOnHurt(skill.onHurt)?.output;
+    if (onHurtOut) out.push(...onHurtOut);
   }
   return out;
 }
@@ -75,6 +84,7 @@ function extractGrowths(skill: Skill): Record<string, number[]> {
   };
   for (const o of collectOutputs(skill)) {
     if (o.kind === 'strategy_damage' && o.strategyScaled) push('strategy_damage', o.growthRate);
+    if (o.kind === 'heal' && o.strategyScaled) push('heal', o.growthRate);
     if (o.kind === 'grant_damage_boost') push('grant_damage_boost', o.growthRate);
     if (o.kind === 'inflict_status') {
       if (o.detonate?.growthRate !== undefined) {

@@ -325,13 +325,13 @@ describe('七步释嫌（曹植，二类指挥：友军普攻/试图主动或追
     expect(healsB.length).toBe(2);
     const sum = (evts: typeof healsA) => evts.reduce((n, e) => n + (e.type === 'heal' ? e.amount : 0), 0);
     expect(sum(healsA)).toBeGreaterThan(sum(healsB));
-    // 同侧距离：自身最近，群体先治施法者再治友军；第二段按治疗后的实时兵力结算
-    const sequentialHeal = (troops: number) => {
-      const first = calcHealAmount(troops, 135);
-      return first + calcHealAmount(troops + first, 135);
-    };
-    expect(sum(healsA)).toBe(sequentialHeal(5000));
-    expect(sum(healsB)).toBe(sequentialHeal(2000));
+    // 群体随机 2 目标：先奶施法者则第二段吃上涨后兵力，先奶友军则两段都按挂上时兵力
+    const first = calcHealAmount(5000, 135);
+    const sequential = first + calcHealAmount(5000 + first, 135); // 先奶施法者，第二段吃上涨后兵力
+    const parallel = first * 2; // 先奶友军，两段都按 5000
+    expect([sequential, parallel]).toContain(sum(healsA));
+    const firstB = calcHealAmount(2000, 135);
+    expect([firstB + calcHealAmount(2000 + firstB, 135), firstB * 2]).toContain(sum(healsB));
 
     // 战报样本：谋略 213 → 329%；3263 兵 → 477（3088 兵引擎 463）
     const rate213 = roundRate(scaledValue(135, 1.46, 213));

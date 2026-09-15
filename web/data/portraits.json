@@ -768,5 +768,40 @@
     "note": "q5 晋-步 XP",
     "portrait": "/portraits/h807.jpg",
     "avatar": "/portraits/h807_s.jpg"
+  },
+  "h498": {
+    "heroId": 100498,
+    "officialName": "曹纯",
+    "note": "q5 魏-骑",
+    "portrait": "/portraits/h498.jpg",
+    "avatar": "/portraits/h498_s.jpg"
+  },
+  "h708": {
+    "heroId": 100708,
+    "officialName": "贾充",
+    "note": "q5 晋-步",
+    "portrait": "/portraits/h708.jpg",
+    "avatar": "/portraits/h708_s.jpg"
+  },
+  "h709": {
+    "heroId": 100709,
+    "officialName": "羊祜",
+    "note": "q5 晋-步",
+    "portrait": "/portraits/h709.jpg",
+    "avatar": "/portraits/h709_s.jpg"
+  },
+  "h799": {
+    "heroId": 100799,
+    "officialName": "马谡",
+    "note": "q5 蜀-骑",
+    "portrait": "/portraits/h799.jpg",
+    "avatar": "/portraits/h799_s.jpg"
+  },
+  "h794": {
+    "heroId": 100794,
+    "officialName": "荀彧",
+    "note": "q5 汉-步",
+    "portrait": "/portraits/h794.jpg",
+    "avatar": "/portraits/h794_s.jpg"
   }
 }

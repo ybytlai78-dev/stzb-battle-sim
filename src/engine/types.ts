@@ -111,6 +111,8 @@ export type SkillOutput =
        * 每次独立重选目标（若带 targetMode）。
        */
       repeats?: number | [number, number];
+      /** 独立发动率（先声夺人第三段 60%）；士气修正后判定，与 inflict_status.chance 同口径 */
+      chance?: number;
     }
   | {
       kind: 'strategy_damage';
@@ -263,8 +265,12 @@ export type CreateStatus =
   | { type: 'damage_reduce'; rate: number; duration: number; strategyScaled?: boolean; growthRate?: number; /** 按 8 份衰减（谋议宏图）：准备阶段 8/8，每回合开始 -1/8 */ decayEighths?: number }
   /** direction：'caused'=自身造成伤害提高/降低（血溅黄砂、强势）；'taken'=自身受到伤害提高/降低（神兵天降、名士在野）。缺省 'taken'。
    *  stacks：叠层计数（带上限的增减伤，银龙冲阵），同战法累加时 +1
-   *  strategyScaled=true 且给 growthRate 时（密谋定蜀每次发动 +5% 受谋略）：rate 为谋略 80 时的基础值，实际数值按 scaledValue 缩放 */
-  | { type: 'damage_boost'; rate: number; duration: number; direction?: 'caused' | 'taken'; stacks?: number; strategyScaled?: boolean; growthRate?: number; /** 次数型「下一次攻击」：有值时按攻击输出次数消耗，不按回合递减（青丘媚祸 charges:1） */ charges?: number; /** 同战法重复施加时累加 rate（七步释嫌）；缺省不叠加（青丘媚祸） */ chargesStack?: boolean }
+   *  strategyScaled=true 且给 growthRate 时（密谋定蜀每次发动 +5% 受谋略）：rate 为谋略 80 时的基础值，实际数值按 scaledValue 缩放
+   *  defenseScaled=true（当敌制决 +8%）：公式同受谋略，属性换生效防御
+   *  speedScaled=true（攻其不备 +11.6%）：受速度缩放；growthRate === undefined 时不缩放、用基值
+   *  charges：次数型「下一次攻击」，有值时按攻击输出次数消耗，不按回合递减（青丘媚祸 charges:1）
+   *  chargesStack：同战法重复施加时累加 rate（七步释嫌）；缺省不叠加（青丘媚祸） */
+  | { type: 'damage_boost'; rate: number; duration: number; direction?: 'caused' | 'taken'; stacks?: number; strategyScaled?: boolean; /** 受防御缩放（当敌制决 +8%，公式同受谋略，属性换生效防御） */ defenseScaled?: boolean; /** 受速度缩放（攻其不备 +11.6%）；growthRate === undefined 时不缩放、用基值 */ speedScaled?: boolean; growthRate?: number; charges?: number; chargesStack?: boolean }
   /**
    * 发动率提升。rate 为小数（1.2 = +120% / ×2.2）。
    * skillTypes：只对这些战法类型生效（动如雷震仅追击）；缺省主动+追击都吃（难知如阴）。
@@ -284,6 +290,8 @@ export type CreateStatus =
   | { type: 'split'; duration: number; rate: number }
   | { type: 'jump_prep'; duration: number; rate: number }
   | { type: 'taunt'; duration: number; targetId: string }
+  /** 反击资格（反击之策）：携带者被普攻实际扣兵后，对来源打 rate% 物理。不消耗。rate 与 physical_damage 同口径（100=100%） */
+  | { type: 'counter'; duration: number; rate: number }
   | { type: 'cover'; duration: number }
   /** 持续型急救（皇裔流离/金匮要略）：受击时按几率触发恢复。
    *  healRate 为谋略 80 时的恢复率（受谋略缩放）；触发率与总生效次数走战法级计数器（grant_first_aid）；
@@ -459,12 +467,15 @@ export interface CommandSkill extends BaseSkill {
    */
   roundStartRepeat?: {
     output: SkillOutput[];
+    startRound?: number;
+    endRound?: number;
   };
   /**
    * 受击触发（盲侯奋勇/陷储立齐/缓师徐持）：准备阶段只登记，不立刻结算 output。
    * 目标受到伤害后由 applyDamage 判定。
    */
-  onHurt?: OnHurtConfig;
+  onHurt?: OnHurtConfig | OnHurtConfig[];
+  onHeal?: OnHealConfig;
   output: SkillOutput[];
 }
 
@@ -473,8 +484,8 @@ export interface CommandSkill extends BaseSkill {
  * 在 applyDamage 扣兵后、阵亡标记前判定；反击伤害不再递归触发（防循环）。
  */
 export interface OnHurtConfig {
-  /** 谁受伤时判定：self=施法者自身 / ally=同侧含自己 / enemy=对侧 */
-  victim: 'self' | 'ally' | 'enemy';
+  /** 谁受伤时判定：self=施法者自身 / ally=同侧含自己 / enemy=对侧 / locked=一类指挥锁定目标 */
+  victim: 'self' | 'ally' | 'enemy' | 'locked';
   /** 基础触发率 0~1，缺省 1（必中）。盲侯 0.4、缓师 0.5 */
   rate?: number;
   /** 触发率受谋略缩放（缓师 50%） */
@@ -508,6 +519,46 @@ export interface OnHurtConfig {
     duration: number;
     stats: Array<'attack' | 'defense' | 'strategy'>;
   };
+  /** 只匹配该类伤害；缺省两类都吃。赏顺伐逆只吃策略（含 DoT） */
+  damageKind?: 'physical' | 'strategy';
+  /** 缺省 `skill.output`（典韦/盲侯）。于禁反制 / 贾充反击自带这段，不覆盖准备阶段 output */
+  output?: SkillOutput[];
+  /** 伤害来源过滤。缺省 `any`。`basic` = 只吃 applyDamage 传入 damageSource:'basic' 的普攻 */
+  damageSource?: 'basic' | 'any';
+  /** 判定时机。缺省 after_damage（扣兵后）。空城/健卒减伤走 before_damage */
+  timing?: 'before_damage' | 'after_damage';
+  /** 钩子生效回合窗口（空城 endRound:2） */
+  startRound?: number;
+  endRound?: number;
+  /** before_damage 判定成功后，本段伤害乘 (1 − rate)。健卒 0.5 */
+  thisHitReduce?: number;
+  /** 仅当 source 带 taunt 且 targetId 为受伤者（以诱待来回血） */
+  onlyIfSourceTauntsVictim?: true;
+}
+
+/** 取战法第一条受击配置（单条或数组的 [0]） */
+export function firstOnHurt(onHurt?: OnHurtConfig | OnHurtConfig[]): OnHurtConfig | undefined {
+  if (!onHurt) return undefined;
+  return Array.isArray(onHurt) ? onHurt[0] : onHurt;
+}
+
+/**
+ * 受恢复触发（赏顺伐逆）：`recoverTroops` 实际恢复 > 0 后判定。
+ * 处理期间 `resolvingHealHooks` 防重入，避免自己奶自己再套一层。
+ */
+export interface OnHealConfig {
+  /** 谁被恢复时判定：self=施法者自身 / ally=同侧含自己 */
+  victim: 'self' | 'ally';
+  /** 基础触发率 0~1，缺省 1。赏顺伐逆 0.75 */
+  rate?: number;
+  /**
+   * 效果落点：
+   * - allies：友军全体（含自己）结算 output（赏顺伐逆群体恢复）
+   * - self：只对施法者结算
+   */
+  applyTo: 'allies' | 'self';
+  /** 缺省 `skill.output` */
+  output?: SkillOutput[];
 }
 
 /** 被动战法（每回合开始触发） */
@@ -518,8 +569,12 @@ export interface PassiveSkill extends BaseSkill {
   targetMode: 'self' | 'all';
   /** 施法者阵亡后受击效果仍生效（同仇敌忾全队光环），缺省 false */
   retainAfterDeath?: boolean;
+  /** 被动生效回合窗口（先声夺人 endRound:3）；battle_start 型不受此字段影响 */
+  startRound?: number;
+  endRound?: number;
   /** 受击触发（同仇敌忾 / 舍身卫主）：战斗开始只登记，不立刻结算 output */
-  onHurt?: OnHurtConfig;
+  onHurt?: OnHurtConfig | OnHurtConfig[];
+  onHeal?: OnHealConfig;
   /**
    * 承担友军攻击伤害（舍身卫主）：前 rounds 回合、自身处于 positions 时，
    * 友军受到的物理伤害在结算前将目标改为自己（伤害计算/规避/受击均视自己为受击者）。
@@ -678,6 +733,7 @@ export type StatusType =
   | 'split'
   | 'jump_prep'
   | 'taunt'
+  | 'counter'
   | 'cover'
   | 'first_aid'
   | 'rest'
@@ -734,6 +790,7 @@ export type Status =
   | { type: 'split'; remaining: number; rate: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'jump_prep'; remaining: number; rate: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'taunt'; remaining: number; targetId: string; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'counter'; remaining: number; rate: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   | { type: 'cover'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   /**
    * 持续型急救（皇裔流离/金匮要略）：受击时按几率触发恢复。
@@ -792,7 +849,7 @@ export type BattleEvent =
       bonuses: FormationBonus;
     }
   | { type: 'preparation_end' }
-  | { type: 'round_start'; round: number }
+  | { type: 'round_start'; round: number; turnOrder?: string[] }
   | { type: 'unit_act_start'; unitId: string; name: string; position: Position; phase: string }
   | {
       type: 'skill_trigger';
@@ -835,6 +892,19 @@ export type BattleEvent =
       breakdown: DamageBreakdown;
       /** 本次伤害的增减伤归因（神兵天降/大赏三军/减伤/兵种克制），无增减伤时为 undefined */
       modifiers?: DamageModifiers;
+      /** 一类指挥 delayedOutput：预存伤害在 atRound 打出（白衣渡江/西乡武功）。详情用官方「效果使…损失兵力」口径 */
+      delayedEffect?: boolean;
+      /** delayedEffect 时：本次扣兵后的剩余兵力（官方括号内数字） */
+      afterTroops?: number;
+    }
+  | {
+      /** 一类指挥预存伤害打出后，目标身上该次策略/攻击伤害效果消失（官方第二行） */
+      type: 'stored_effect_expired';
+      unitId: string;
+      sourceId: string;
+      skillId: string;
+      skillName: string;
+      damageType: DamageType;
     }
   | {
       type: 'attack_hit';

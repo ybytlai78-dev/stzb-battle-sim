@@ -21,8 +21,8 @@ const SKIP = {
   方圆:'兵种限定', 疏数:'兵种限定', 疾风迅雷:'先手+受击混乱', 美人计:'女武将组合',
   衡轭:'兵种限定', 远攻秘策:'距离+1', 锋矢:'兵种限定', 鱼鳞:'兵种限定', 鹤翼:'兵种限定',
   远攻之策:'距离+1', 云梯:'攻城属性', 投石轰击:'攻城属性', 毁墙:'攻城属性', 鸟云山兵:'每回合行动时判定+概率提升',
-  胜兵求战:'准备时间跳过', 援军秘策:'第5回合起每回合heal', 重整旗鼓:'第5回合起每回合heal', 援军之策:'第5回合起每回合heal',
-  穷追猛打:'第4回合起每回合combo', 反计之策:'发动主动战法伤害降低机制', 空城:'受击触发规避',
+  胜兵求战:'准备时间跳过', 援军秘策:'第5回合起每回合heal', 重整旗鼓:'第5回合起每回合heal', 援军之策:'第5回合起每回合heal（pending_strategy_scale）',
+  反计之策:'发动主动战法伤害降低机制', 空城:'受击触发规避',
   长驱直入:'群体先手+概率', 先驱:'70%概率先手(priorityRounds无条件)', 
   // ── 主动 ──
   及锋而试:'士气降低', 望风而降:'士气比较', 激水之疾:'士气比较', 蓄盈待竭:'士气比较',
@@ -35,12 +35,11 @@ const SKIP = {
   反击:'受击反击', 看破:'移除敌军有益', 索敌:'移除敌军有益', 全军突击:'兵种限定+下N次增伤', 觑隙:'50%概率额外段',
   飒沓如星:'兵种限定+下2次分兵', 抢攻:'主动先手(priorityRounds仅指挥)', 胜兵求战:'准备时间跳过',
   // ── 被动 ──
-  击势:'无视防御+概率双效果', 垒实迎击:'受击触发', 百战无怯:'位置条件+造成伤害叠层+受击/回合开始掉层恢复', 健卒不殆:'受击反击',
+  垒实迎击:'受击触发', 百战无怯:'位置条件+造成伤害叠层+受击/回合开始掉层恢复', 健卒不殆:'受击反击',
   兵无常势:'随机多效果', 势无虚动:'追击触发后机制', 甚陷不惧:'兵力比例', 胜敌益强:'恢复次数递增',
-  胜负先征:'士气比较', 回马:'受击反击', 谋定后动:'准备跳过+发动后增益', 远攻奇略:'距离+1', 远攻强化:'距离+1',
-  激昂:'每回合概率双效果',
+  胜负先征:'士气比较', 回马:'受击反击', 谋定后动:'准备跳过+发动后增益',   远攻奇略:'距离+1', 远攻强化:'距离+1',
   // ── 追击 ──
-  乘胜追击:'追击多段独立判定', 疾击其后:'追击多段+区间率', 扬威:'下一次攻击伤害提升', 文伐:'下一次策略伤害提升',
+  乘胜追击:'追击多段独立判定', 文伐:'下一次策略伤害提升（pending_strategy_scale）',
   火积:'移除敌军有益', 驱逐:'移除敌军有益',
 };
 
@@ -48,7 +47,15 @@ let implemented = 0, skipped = 0, existing = 0;
 const classified = skills.map((s) => {
   if (ALREADY.has(s.name)) { existing++; return { ...s, status: 'implemented', missingMechanics: '', note: '已在SKILL_REGISTRY中' }; }
   const miss = SKIP[s.name];
-  if (miss) { skipped++; return { ...s, status: 'skipped', missingMechanics: miss, note: '' }; }
+  if (miss) {
+    skipped++;
+    return {
+      ...s,
+      status: 'skipped',
+      missingMechanics: miss,
+      note: miss.includes('pending_strategy_scale') ? 'pending_strategy_scale' : '',
+    };
+  }
   implemented++; return { ...s, status: 'implemented', missingMechanics: '', note: '' };
 });
 writeFileSync(join(__dirname, '_classified.json'), JSON.stringify(classified, null, 2), 'utf8');

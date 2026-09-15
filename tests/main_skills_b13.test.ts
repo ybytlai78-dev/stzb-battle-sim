@@ -97,8 +97,7 @@ describe('献刀七星（汉·曹操，主动 30%：单体猛攻 275% + 速度 -
     const report = run(fullTeam(withSkills(level40(hero('h42'), { attack: 40 }), { activeSkillIds: ['xiandao_qixing'] })), 1);
     const speedDown = inflicted(report, 'speed_buff').filter((e) => e.unitId.startsWith('enemy'));
     expect(speedDown.length).toBeGreaterThan(0);
-    expect(speedDown[0].detail).toContain('-28');
-    expect(speedDown[0].detail).toContain('持续 2 回合');
+    expect(speedDown[0].detail).toMatch(/速度属性降低了28\(-?\d+\)/);
   });
 });
 

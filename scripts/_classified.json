@@ -86,9 +86,9 @@
     "targetDesc": "敌军群体（有效距离内2个目标）",
     "effectDesc": "战斗中，使敌军群体在每受到一次攻击的伤害后，其所受到的所有伤害就提高11.6%（受速度属性影响），此效果最多叠加5次",
     "sources": "【群·颜良＆文丑·骑】【魏·曹纯·骑】",
-    "status": "skipped",
-    "missingMechanics": "受击后增伤",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "onHurt p1"
   },
   {
     "name": "无心恋战",
@@ -294,9 +294,9 @@
     "targetDesc": "我军群体（有效距离内2个目标）",
     "effectDesc": "战斗开始后前3回合，使我军群体每回合有75.0%的几率受到普通攻击时能进行反击（伤害率100.0%）",
     "sources": "【吴·孙坚·骑】【吴·董袭·步】",
-    "status": "skipped",
-    "missingMechanics": "受击反击",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "onHurt p1"
   },
   {
     "name": "措手不及",
@@ -372,8 +372,8 @@
     "targetDesc": "我军群体（有效距离内2个目标）",
     "effectDesc": "战斗开始后第4回合起，使我军群体每回合有60.0%的几率可以进行两次普通攻击，持续4回合",
     "sources": "【群·严氏·骑】【汉·杜氏·步】",
-    "status": "skipped",
-    "missingMechanics": "第4回合起每回合combo",
+    "status": "implemented",
+    "missingMechanics": "",
     "note": ""
   },
   {
@@ -385,9 +385,9 @@
     "targetDesc": "自己",
     "effectDesc": "战斗开始后前2回合，受到伤害时有70.0%的几率使自身进入规避状态，可以免疫伤害",
     "sources": "【吴·孙权·弓】【汉·何太后·弓】",
-    "status": "skipped",
-    "missingMechanics": "受击触发规避",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "onHurt p1"
   },
   {
     "name": "美人计",
@@ -504,7 +504,7 @@
     "sources": "【魏·李通·骑】【汉·少帝·步】",
     "status": "skipped",
     "missingMechanics": "第5回合起每回合heal",
-    "note": ""
+    "note": "pending_strategy_scale"
   },
   {
     "name": "远攻之策",
@@ -627,7 +627,7 @@
     "name": "利兵谋胜",
     "quality": "S",
     "type": "active",
-    "range": 3,
+    "range": 4,
     "triggerRate": "50%",
     "targetDesc": "敌军群体（有效距离内2个目标）",
     "effectDesc": "1回合准备，对敌军群体发动强力策略攻击（伤害率200.0%，受谋略属性影响），并使自身及友军单体回复一定兵力（恢复率149.0%，受谋略影响）",
@@ -667,7 +667,7 @@
     "quality": "S",
     "type": "active",
     "range": 4,
-    "triggerRate": "30%-50%",
+    "triggerRate": "50%",
     "targetDesc": "敌军群体（有效距离内2个目标）",
     "effectDesc": "1回合准备，使敌军群体陷入暴走状态，进行无差别攻击，持续2回合",
     "sources": "【汉·貂蝉·弓】【魏·王异·弓】",
@@ -2036,9 +2036,9 @@
     "targetDesc": "自己",
     "effectDesc": "使自身受到普通攻击时能进行反击（伤害率40.0%），受到所有伤害时都有50.0%的几率使本次伤害降低50.0%",
     "sources": "【群·孟获·步】【蜀·沙摩柯·弓】",
-    "status": "skipped",
-    "missingMechanics": "受击反击",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "onHurt p1"
   },
   {
     "name": "兵无常势",
@@ -2166,9 +2166,9 @@
     "targetDesc": "自己",
     "effectDesc": "使自身受到普通攻击时能进行反击（伤害率60.0%）",
     "sources": "【群·张梁·步】【吴·周泰·步】",
-    "status": "skipped",
-    "missingMechanics": "受击反击",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "onHurt p1"
   },
   {
     "name": "百战精兵",
@@ -2244,8 +2244,8 @@
     "targetDesc": "自己",
     "effectDesc": "每回合有30.0%的几率使自身进行攻击和策略攻击时的伤害提高60.0%，持续1回合",
     "sources": "【群·颜良·骑】【群·文丑·步】",
-    "status": "skipped",
-    "missingMechanics": "每回合概率双效果",
+    "status": "implemented",
+    "missingMechanics": "",
     "note": ""
   },
   {
@@ -2396,7 +2396,7 @@
     "quality": "A",
     "type": "pursuit",
     "range": null,
-    "triggerRate": "25%-30%",
+    "triggerRate": "30%",
     "targetDesc": "攻击目标",
     "effectDesc": "普通攻击后，对攻击目标再次发动猛攻（伤害率200.0%），并使其无法发动主动战法，持续1回合",
     "sources": "【群·甄洛·弓】【魏·荀彧·骑】【群·甄洛·弓·SP】",
@@ -2426,8 +2426,8 @@
     "targetDesc": "敌军单体",
     "effectDesc": "普通攻击后，随机对敌军单体再发动2次攻击（伤害率80.0%-140.0%），每次攻击的目标及伤害率独立判定",
     "sources": "【魏·曹仁·步·SP】【群·庞德·骑】",
-    "status": "skipped",
-    "missingMechanics": "追击多段+区间率",
+    "status": "implemented",
+    "missingMechanics": "",
     "note": ""
   },
   {
@@ -2435,7 +2435,7 @@
     "quality": "A",
     "type": "pursuit",
     "range": null,
-    "triggerRate": "25%-30%",
+    "triggerRate": "30%",
     "targetDesc": "攻击目标",
     "effectDesc": "普通攻击后，对攻击目标再次发动猛攻（伤害率200.0%），并使其无法进行普通攻击，持续1回合",
     "sources": "【吴·太史慈·弓】【蜀·张姬·弓】【吴·太史慈·弓·SP】",
@@ -2452,8 +2452,8 @@
     "targetDesc": "攻击目标",
     "effectDesc": "普通攻击后，对目标再次发动猛攻（伤害率160.0%），并使自身下1次攻击伤害提升20.0%",
     "sources": "【汉·张邈·骑】【汉·刘岱·骑】【吴·朱治·弓】",
-    "status": "skipped",
-    "missingMechanics": "下一次攻击伤害提升",
+    "status": "implemented",
+    "missingMechanics": "",
     "note": ""
   },
   {
@@ -2480,7 +2480,7 @@
     "sources": "【群·越吉·骑】【群·彻里吉·步】【群·朵思大王·弓】",
     "status": "skipped",
     "missingMechanics": "下一次策略伤害提升",
-    "note": ""
+    "note": "pending_strategy_scale"
   },
   {
     "name": "火积",

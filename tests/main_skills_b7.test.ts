@@ -88,7 +88,7 @@ describe('魏武之世（曹操·魏，一类指挥：敌军全体四属性下�
     // 每种属性 debuff 都施加到敌军，且为负百分比（受谋略影响，降幅随谋略增大）
     for (const deb of enemyDebuffs) {
       expect(deb.length).toBeGreaterThan(0);
-      expect(deb[0].detail).toMatch(/-\d+%/);
+      expect(deb[0].detail).toMatch(/降低了\d+%\(\d+\)\(\d+\)/);
     }
   });
 

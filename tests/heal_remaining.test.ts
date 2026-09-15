@@ -214,6 +214,7 @@ describe('利兵谋胜（S 准备主动：敌军群体策略 200% + 自身及友
     expect(frontTeam('libing_mousheng', 'active')[0].activeSkillIds).toContain('libing_mousheng');
     const s = SKILL_REGISTRY['libing_mousheng'];
     expect(s.type === 'active' && s.prepare).toBe(true);
+    expect(s.range).toBe(4);
   });
 
   it('发动后对敌军造成策略伤害，并恢复自身与另一名友军', () => {

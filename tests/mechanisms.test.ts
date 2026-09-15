@@ -144,6 +144,17 @@ describe('一类指挥：白衣渡江（吕蒙）', () => {
     const dmg = damageEvents(ctx.events, 'baiyi_dujiang');
     expect(dmg.length).toBe(1);
     expect(dmg[0].damageType).toBe('strategy');
+    expect(dmg[0].delayedEffect).toBe(true);
+    expect(dmg[0].afterTroops).toBe(ctx.enemyTeam[0]!.troops);
+    const expire = ctx.events.filter(
+      (e): e is Extract<BattleEvent, { type: 'stored_effect_expired' }> =>
+        e.type === 'stored_effect_expired' && e.skillId === 'baiyi_dujiang'
+    );
+    expect(expire.length).toBe(1);
+    expect(expire[0].unitId).toBe('e1');
+    expect(expire[0].sourceId).toBe('lvmeng');
+    expect(expire[0].damageType).toBe('strategy');
+    expect(ctx.events.indexOf(expire[0])).toBe(ctx.events.indexOf(dmg[0]) + 1);
   });
 
   it('无视规避：目标有规避层数仍能打出（不消耗规避）', () => {
@@ -369,10 +380,10 @@ describe('指挥阶段时序联动：卫瓘持节镇西 × 吕蒙白衣渡江 ×
     // 神兵/大赏读生效谋略（197+96=293）：roundRate(30+0.15×(293-80))=61.95 → 八舍九入 62 → 0.62
     const boost = (u: UnitState) =>
       u.statuses.filter((s) => s.type === 'damage_boost').reduce((a, s) => a + ('rate' in s ? s.rate : 0), 0);
-    // 神兵天降 range 4：吕蒙(大营) 够不到敌方大营(e3 距离5)，只命中 e1/e2 两个目标
-    expect(boost(e1)).toBe(0.62);
-    expect(boost(e2)).toBe(0.62);
-    expect(boost(e3)).toBe(0);
+    // 神兵天降 range 4：卫瓘在场时吕蒙压缩为中军位，e1/e2/e3 均可能入距；群体随机 2 目标
+    const rates = [e1, e2, e3].map(boost);
+    expect(rates.filter((r) => r === 0.62).length).toBe(2);
+    expect(rates.filter((r) => r === 0).length).toBe(1);
   });
 
   it('白衣怯战为 2 目标群体、伤害为全体（目标分离）', () => {
@@ -418,6 +429,34 @@ describe('指挥阶段时序联动：卫瓘持节镇西 × 吕蒙白衣渡江 ×
     const boost = (u: UnitState) =>
       u.statuses.filter((s) => s.type === 'damage_boost').reduce((a, s) => a + ('rate' in s ? s.rate : 0), 0);
     expect(boost(e1)).toBe(0.47);
+  });
+
+  it('大赏三军：我军群体随机两目标不重复，施法者可以不中', () => {
+    const combos = new Set<string>();
+    for (let seed = 1; seed <= 80; seed++) {
+      const ctx = makeCtx();
+      ctx.rng = new Rng(seed);
+      const front = makeUnit('front', { position: '前锋' });
+      const mid = makeUnit('mid', { position: '中军' });
+      const back = makeUnit('back', { position: '大营', strategy: 100 });
+      back.general.commandSkillIds = ['dashang_sanjun'];
+      ctx.myTeam = [front, mid, back];
+      const e1 = makeUnit('e1', { position: '前锋' });
+      e1.side = 'enemy';
+      ctx.enemyTeam = [e1];
+      triggerCommandSkills(ctx, back);
+      const has = (u: UnitState) =>
+        u.statuses.some((s) => s.type === 'damage_boost' && s.sourceSkillId === 'dashang_sanjun');
+      expect([front, mid, back].filter(has).length).toBe(2);
+      const key = ['前锋', '中军', '大营']
+        .filter((p) => (p === '前锋' ? has(front) : p === '中军' ? has(mid) : has(back)))
+        .join('+');
+      combos.add(key);
+    }
+    expect(combos.has('前锋+大营')).toBe(true);
+    expect(combos.has('中军+大营')).toBe(true);
+    expect(combos.has('前锋+中军')).toBe(true);
+    expect(combos.size).toBe(3);
   });
 });
 

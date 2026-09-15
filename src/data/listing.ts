@@ -18,6 +18,7 @@ export const OFFLINE_MAIN_SKILLS: Record<string, string> = {
   hanyun_kuangye: '伤害降低 30% 成长未确认（取基值）',
   bailou_duwu: '伤害降低 26% 成长未确认（取基值）',
   biyue: '防御 -29 成长未确认',
+  shangshun_fani: '策略反击 180% 成长未确认（恢复 65%/0.325 已确认）',
 };
 
 /**

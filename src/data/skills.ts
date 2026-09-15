@@ -445,7 +445,11 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
 
   // ─── 批量2（v0.6.2）───
 
-  /** 当敌制决（于禁主战法·二类指挥·战斗开始一次性）：战斗开始后使自身受到的伤害降低 50%（受击后对伤害来源的增伤反制暂未建模） */
+  /**
+   * 当敌制决（于禁主战法·二类指挥·战斗开始一次性）：
+   * 自身受到伤害降低 50%；受到伤害后使伤害来源受到的伤害提升 8%（受防御，成长 0.026/点），可叠加至战斗结束。
+   * 反制走 onHurt.applyTo:'source'；准备阶段只跑减伤（battleStartOnce）。
+   */
   dangdi_zhijue: {
     id: 'dangdi_zhijue',
     name: '当敌制决',
@@ -453,10 +457,27 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     phase: 'round',
     roundTrigger: 'on_act',
     battleStartOnce: true,
-    range: 1,
+    range: 5,
     triggerRate: 1,
     targetMode: 'self',
-    tags: ['damage_reduce'],
+    tags: ['damage_reduce', 'damage_boost'],
+    onHurt: {
+      victim: 'self',
+      applyTo: 'source',
+      output: [
+        {
+          kind: 'inflict_status',
+          status: {
+            type: 'damage_boost',
+            rate: 0.08,
+            duration: 999,
+            direction: 'taken',
+            defenseScaled: true,
+            growthRate: 0.026,
+          },
+        },
+      ],
+    },
     output: [{ kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.5, duration: 999 }, target: 'self' }],
   },
   /** 闭月（貂蝉主战法）：1 回合准备，使敌军群体陷入暴走状态（进行无差别攻击），并使其防御属性降低 29，持续 3 回合 */
@@ -1257,26 +1278,26 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
 
   // ─── 通用追击战法（批量 u1）───
 
-  /** 怯心夺志（A 追击）：普攻后对攻击目标再次猛攻 200%，并使其犹豫（无法发动主动战法）1 回合 */
+  /** 怯心夺志（A 追击 30%）：普攻后对攻击目标再次猛攻 200%，并使其犹豫（无法发动主动战法）1 回合 */
   qiexin_duozhi: {
     id: 'qiexin_duozhi',
     name: '怯心夺志',
     type: 'pursuit',
     range: 0,
-    triggerRate: 0.28,
+    triggerRate: 0.3,
     tags: ['damage', 'hesitation'],
     output: [
       { kind: 'physical_damage', rate: 200 },
       { kind: 'inflict_status', status: { type: 'hesitation', duration: 1 } },
     ],
   },
-  /** 钝兵挫锐（A 追击）：普攻后对攻击目标再次猛攻 200%，并使其怯战 1 回合 */
+  /** 钝兵挫锐（A 追击 30%）：普攻后对攻击目标再次猛攻 200%，并使其怯战 1 回合 */
   dunbing_cuorui: {
     id: 'dunbing_cuorui',
     name: '钝兵挫锐',
     type: 'pursuit',
     range: 0,
-    triggerRate: 0.28,
+    triggerRate: 0.3,
     tags: ['damage', 'cowardice'],
     output: [
       { kind: 'physical_damage', rate: 200 },
@@ -1660,14 +1681,14 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -18, duration: 2 } },
     ],
   },
-  /** 妖术（S 主动）：1 回合准备，使敌军群体陷入暴走状态（无差别攻击），持续 2 回合 */
+  /** 妖术（S 主动 50%）：1 回合准备，使敌军群体陷入暴走状态（无差别攻击），持续 2 回合 */
   yaoshu: {
     id: 'yaoshu',
     name: '妖术',
     type: 'active',
     prepare: true,
     range: 4,
-    triggerRate: 0.4,
+    triggerRate: 0.5,
     targetMode: 'group',
     tags: ['rampage'],
     output: [{ kind: 'inflict_status', status: { type: 'rampage', duration: 2 } }],
@@ -2852,14 +2873,14 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     ],
   },
   /**
-   * 利兵谋胜（S 准备主动）：敌军群体策略 200%（伤害成长 2.250）+ 自身及友军单体恢复 149%（成长 1.175）。
+   * 利兵谋胜（S 准备主动，距离 4）：敌军群体策略 200%（伤害成长 2.250）+ 自身及友军单体恢复 149%（成长 1.175）。
    */
   libing_mousheng: {
     id: 'libing_mousheng',
     name: '利兵谋胜',
     type: 'active',
     prepare: true,
-    range: 3,
+    range: 4,
     triggerRate: 0.5,
     targetMode: 'group',
     tags: ['damage', 'heal'],
@@ -2921,6 +2942,35 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     redirectAllyPhysical: { rounds: 3, positions: ['前锋', '中军'] },
     tags: ['damage'],
     output: [{ kind: 'physical_damage', rate: 120 }],
+  },
+  /**
+   * 赏顺伐逆（贾充主战法·被动）：受到恢复效果时 75% 为友军全体恢复 65%（受谋略，成长 0.325）；
+   * 受到策略伤害时 75% 对伤害来源策略攻击 180%（受谋略，成长率未知取基值）。
+   */
+  shangshun_fani: {
+    id: 'shangshun_fani',
+    name: '赏顺伐逆',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['heal', 'damage'],
+    onHeal: {
+      victim: 'self',
+      rate: 0.75,
+      applyTo: 'allies',
+      output: [{ kind: 'heal', rate: 65, strategyScaled: true, growthRate: 0.325 }],
+    },
+    onHurt: {
+      victim: 'self',
+      rate: 0.75,
+      damageKind: 'strategy',
+      applyTo: 'source',
+      sourceMaxDistance: 5,
+      output: [{ kind: 'strategy_damage', rate: 180, strategyScaled: false, growthRate: 0 }],
+    },
+    output: [],
   },
 
   // ─── 批量16：运筹决胜（司马师）───
@@ -3043,6 +3093,228 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         status: { type: 'confusion', duration: 1 },
         onlyIfOverlapPrevious: true,
       },
+    ],
+  },
+
+  // ─── 拆解通用补录（现有机制可做，不含受谋略缩放）───
+
+  /**
+   * 穷追猛打（B 一类指挥）：第 4 回合起共 4 回合，我军群体（距离 3 内 2 目标）
+   * 每回合 60% 获得连击（持续本回合）。窗口与措手不及同为 roundRepeat.startRound。
+   */
+  qiongzui_mengda: {
+    id: 'qiongzui_mengda',
+    name: '穷追猛打',
+    type: 'command',
+    phase: 'prep',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'group',
+    targetSide: 'ally',
+    retainAfterDeath: true,
+    roundRepeat: { startRound: 4, endRound: 7, rate: 0.6 },
+    tags: ['combo'],
+    output: [{ kind: 'inflict_status', status: { type: 'combo', duration: 1 } }],
+  },
+  /**
+   * 激昂（C 被动·round_start）：每回合 30% 使自身造成的攻击和策略伤害提高 60%，持续 1 回合。
+   * 输出级 chance 与击势相同，士气修正后判定。
+   */
+  ji_ang: {
+    id: 'ji_ang',
+    name: '激昂',
+    type: 'passive',
+    range: 1,
+    triggerRate: 1,
+    timing: 'round_start',
+    targetMode: 'self',
+    tags: ['damage_boost'],
+    output: [
+      {
+        kind: 'inflict_status',
+        chance: 0.3,
+        status: { type: 'damage_boost', rate: 0.6, duration: 1, direction: 'caused' },
+        target: 'self',
+      },
+    ],
+  },
+  /**
+   * 疾击其后（A 追击 35%）：普攻后随机对敌军单体发动 2 次攻击（80%~140%），
+   * 每次目标与伤害率独立判定。两段各带 targetMode:'random_single'，避免 repeats 首段打普攻目标。
+   */
+  jiji_qihou: {
+    id: 'jiji_qihou',
+    name: '疾击其后',
+    type: 'pursuit',
+    range: 5,
+    triggerRate: 0.35,
+    tags: ['damage'],
+    output: [
+      { kind: 'physical_damage', rate: [80, 140], targetMode: 'random_single', ignoreRange: true },
+      { kind: 'physical_damage', rate: [80, 140], targetMode: 'random_single', ignoreRange: true },
+    ],
+  },
+  /**
+   * 扬威（B 追击 35%）：对普攻目标猛攻 160%，并使自身下一次攻击伤害提高 20%（charges:1）。
+   */
+  yangwei: {
+    id: 'yangwei',
+    name: '扬威',
+    type: 'pursuit',
+    range: 0,
+    triggerRate: 0.35,
+    tags: ['damage', 'damage_boost'],
+    output: [
+      { kind: 'physical_damage', rate: 160 },
+      {
+        kind: 'inflict_status',
+        status: { type: 'damage_boost', rate: 0.2, duration: 999, direction: 'caused', charges: 1 },
+        target: 'self',
+      },
+    ],
+  },
+
+  // ─── 拆解通用 B+ 第一阶段受击链路 ───
+
+  /** 回马（B 被动）：自身受到普通攻击时反击（伤害率 60%）。必中、不限距离。只吃普攻。 */
+  huima: {
+    id: 'huima',
+    name: '回马',
+    type: 'passive',
+    triggerRate: 1,
+    timing: 'battle_start',
+    range: 1,
+    targetMode: 'self',
+    tags: ['damage'],
+    onHurt: { victim: 'self', damageSource: 'basic', applyTo: 'source', output: [{ kind: 'physical_damage', rate: 60 }] },
+    output: [],
+  },
+
+  /** 空城（B 一类指挥）：前 2 回合受击 70% 当场规避免疫当次。第 3 回合起钩子不跑。 */
+  kongcheng: {
+    id: 'kongcheng',
+    name: '空城',
+    type: 'command',
+    phase: 'prep',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['evasion'],
+    onHurt: {
+      victim: 'self',
+      timing: 'before_damage',
+      endRound: 2,
+      rate: 0.7,
+      applyTo: 'victim',
+      output: [{ kind: 'grant_evasion', stacks: 1, target: 'self' }],
+    },
+    output: [],
+  },
+
+  /** 攻其不备（S 一类指挥）：锁敌军 2 目标；其每次受到物理伤害后 taken +11.6%（受速度，无成长率用基值），最多 5 层。策略/DoT 不叠。 */
+  gongqi_bubei: {
+    id: 'gongqi_bubei',
+    name: '攻其不备',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage_boost'],
+    onHurt: {
+      victim: 'locked',
+      damageKind: 'physical',
+      applyTo: 'victim',
+      maxStacks: 5,
+      output: [{
+        kind: 'inflict_status',
+        status: { type: 'damage_boost', rate: 0.116, duration: 999, direction: 'taken', speedScaled: true, stacks: 1 },
+      }],
+    },
+    output: [],
+  },
+
+  /** 健卒不殆（A 被动）：受普攻反击 40%；受所有伤害 50% 使本次伤害降低 50%（独立判定，走士气）。 */
+  jianzu_budai: {
+    id: 'jianzu_budai',
+    name: '健卒不殆',
+    type: 'passive',
+    triggerRate: 1,
+    timing: 'battle_start',
+    range: 1,
+    targetMode: 'self',
+    tags: ['damage', 'damage_reduce'],
+    onHurt: [
+      { victim: 'self', damageSource: 'basic', applyTo: 'source', output: [{ kind: 'physical_damage', rate: 40 }] },
+      { victim: 'self', timing: 'before_damage', rate: 0.5, thisHitReduce: 0.5, applyTo: 'victim' },
+    ],
+    output: [],
+  },
+
+  /** 反击之策（B 一类指挥）：前 3 回合 round_start 对锁定友军逐个 75% 挂本回合反击（伤害率 100%）。 */
+  fanji_zhice: {
+    id: 'fanji_zhice',
+    name: '反击之策',
+    type: 'command',
+    phase: 'prep',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'ally',
+    tags: ['damage'],
+    roundStartRepeat: {
+      startRound: 1,
+      endRound: 3,
+      output: [{ kind: 'inflict_status', chance: 0.75, status: { type: 'counter', rate: 100, duration: 1 } }],
+    },
+    output: [],
+  },
+
+  /** 以诱待来（A 被动）：受击 50% 挑衅来源 1 回合（duration 2 覆盖下次行动）；来源挑衅自己时恢复 150%（不受谋略）。 */
+  yiyou_dailai: {
+    id: 'yiyou_dailai',
+    name: '以诱待来',
+    type: 'passive',
+    triggerRate: 1,
+    timing: 'battle_start',
+    range: 5,
+    targetMode: 'self',
+    tags: ['taunt', 'heal'],
+    onHurt: [
+      {
+        victim: 'self',
+        rate: 0.5,
+        applyTo: 'source',
+        output: [{ kind: 'inflict_status', status: { type: 'taunt', duration: 2, targetId: '' } }],
+      },
+      {
+        victim: 'self',
+        onlyIfSourceTauntsVictim: true,
+        applyTo: 'victim',
+        output: [{ kind: 'heal', rate: 150, strategyScaled: false, growthRate: 0, target: 'self' }],
+      },
+    ],
+    output: [],
+  },
+
+  /** 先声夺人（A 被动）：前 3 回合行动时三段各 60% 独立判定：连击、分兵 70%、敌军单体攻击 110%。 */
+  xiansheng_duoren: {
+    id: 'xiansheng_duoren',
+    name: '先声夺人',
+    type: 'passive',
+    triggerRate: 1,
+    timing: 'round_start',
+    range: 5,
+    targetMode: 'self',
+    endRound: 3,
+    tags: ['combo', 'split', 'damage'],
+    output: [
+      { kind: 'inflict_status', chance: 0.6, status: { type: 'combo', duration: 1 }, target: 'self' },
+      { kind: 'inflict_status', chance: 0.6, status: { type: 'split', rate: 70, duration: 1 }, target: 'self' },
+      { kind: 'physical_damage', chance: 0.6, rate: 110, targetMode: 'single' },
     ],
   },
 };

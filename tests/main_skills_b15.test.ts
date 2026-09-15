@@ -15,7 +15,7 @@ import {
   triggerPassiveSkills,
   type CombatContext,
 } from '../src/engine/action';
-import type { CommandSkill, General, PassiveSkill, Position, Skill, UnitState } from '../src/engine/types';
+import { firstOnHurt, type CommandSkill, type General, type PassiveSkill, type Position, type Skill, type UnitState } from '../src/engine/types';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import { initHeroDB, HERO_REGISTRY, withSkills } from '../src/data/heroes';
 import { Rng } from '../src/engine/rng';
@@ -90,7 +90,7 @@ function forceOnHurtRate(ctx: CombatContext, skillId: string, rate = 1): void {
   if (!base || (base.type !== 'command' && base.type !== 'passive') || !base.onHurt) {
     throw new Error(`forceOnHurtRate：${skillId} 无 onHurt`);
   }
-  ctx.skills.set(skillId, { ...base, onHurt: { ...base.onHurt, rate } } as Skill);
+  ctx.skills.set(skillId, { ...base, onHurt: { ...firstOnHurt(base.onHurt)!, rate } } as Skill);
 }
 
 const TWO_HIT: Skill = {
@@ -142,9 +142,9 @@ describe('青丘媚祸（妲己，一类指挥：受击 60% 随机敌军下次�
     expect(s.phase).toBe('prep');
     expect(s.range).toBe(4);
     expect(s.targetMode).toBe('random_single');
-    expect(s.onHurt?.victim).toBe('self');
-    expect(s.onHurt?.rate).toBe(0.6);
-    expect(s.onHurt?.applyTo).toBe('skill_targets');
+    expect(firstOnHurt(s.onHurt)?.victim).toBe('self');
+    expect(firstOnHurt(s.onHurt)?.rate).toBe(0.6);
+    expect(firstOnHurt(s.onHurt)?.applyTo).toBe('skill_targets');
     expect(s.tags).toEqual(['rampage', 'damage_boost']);
     const boost = s.output.find((o) => o.kind === 'inflict_status' && !Array.isArray(o.status) && o.status.type === 'damage_boost');
     const rampage = s.output.find((o) => o.kind === 'inflict_status' && !Array.isArray(o.status) && o.status.type === 'rampage');
@@ -243,10 +243,10 @@ describe('舍身卫主（典韦，被动：距离 2 内受伤 60% 反击来源�
     expect(s.type).toBe('passive');
     expect(s.timing).toBe('battle_start');
     expect(s.range).toBe(2);
-    expect(s.onHurt?.victim).toBe('self');
-    expect(s.onHurt?.rate).toBe(0.6);
-    expect(s.onHurt?.applyTo).toBe('source');
-    expect(s.onHurt?.sourceMaxDistance).toBe(2);
+    expect(firstOnHurt(s.onHurt)?.victim).toBe('self');
+    expect(firstOnHurt(s.onHurt)?.rate).toBe(0.6);
+    expect(firstOnHurt(s.onHurt)?.applyTo).toBe('source');
+    expect(firstOnHurt(s.onHurt)?.sourceMaxDistance).toBe(2);
     expect(s.redirectAllyPhysical?.rounds).toBe(3);
     expect(s.redirectAllyPhysical?.positions).toEqual(['前锋', '中军']);
     expect(s.tags).toEqual(['damage']);

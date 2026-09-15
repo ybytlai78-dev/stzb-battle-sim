@@ -90,7 +90,7 @@ describe('百分比属性增减（percent）', () => {
     const u = makeUnit('a');
     inflictStatus(ctx, u, debuff15, 'command', 'weiwu_zhishi');
     const ev = ctx.events.find((e) => e.type === 'status_inflicted' && e.statusType === 'attack_buff');
-    expect(ev && 'detail' in ev ? ev.detail : '').toContain('-15%');
+    expect(ev && 'detail' in ev ? ev.detail : '').toBe('【a】的攻击属性降低了15%(30)(170)');
   });
 });
 

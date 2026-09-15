@@ -212,13 +212,13 @@ describe('黄天余音（张宁，主动：吸取敌军单体全属性 26 附加
     expect(casts(report, '黄天余音').length).toBeGreaterThan(0);
     const enemyDebuffs = inflicted(report, 'attack_buff').filter((e) => e.unitId.startsWith('enemy'));
     expect(enemyDebuffs.length).toBeGreaterThan(0);
-    expect(enemyDebuffs.every((e) => e.detail.includes('-26'))).toBe(true);
+    expect(enemyDebuffs.every((e) => e.detail.includes('降低了26('))).toBe(true);
     const selfBuffs = inflicted(report, 'attack_buff').filter((e) => e.unitId === 'h474');
     const allyBuffs = inflicted(report, 'attack_buff').filter((e) => !e.unitId.startsWith('enemy') && e.unitId !== 'h474');
     expect(selfBuffs.length).toBeGreaterThan(0);
-    expect(selfBuffs.every((e) => e.detail.includes(' 26 '))).toBe(true);
+    expect(selfBuffs.every((e) => e.detail.includes('提高了26('))).toBe(true);
     expect(allyBuffs.length).toBeGreaterThan(0);
-    expect(allyBuffs.every((e) => e.detail.includes(' 31 '))).toBe(true);
+    expect(allyBuffs.every((e) => e.detail.includes('提高了31('))).toBe(true);
   });
 
   it('吸取数值：谋略 80 时敌/自身 ±26、队友 31；仅持续 1 回合', () => {
@@ -226,13 +226,13 @@ describe('黄天余音（张宁，主动：吸取敌军单体全属性 26 附加
     for (const st of ['attack_buff', 'defense_buff', 'strategy_buff', 'speed_buff']) {
       const enemyAll = inflicted(report, st).filter((e) => e.unitId.startsWith('enemy'));
       expect(enemyAll.length).toBeGreaterThan(0);
-      expect(enemyAll.every((e) => e.detail.includes('-26'))).toBe(true);
+      expect(enemyAll.every((e) => e.detail.includes('降低了26('))).toBe(true);
       const selfAll = inflicted(report, st).filter((e) => e.unitId === 'h474');
       expect(selfAll.length).toBeGreaterThan(0);
-      expect(selfAll.every((e) => e.detail.includes(' 26 '))).toBe(true);
+      expect(selfAll.every((e) => e.detail.includes('提高了26('))).toBe(true);
       const allyAll = inflicted(report, st).filter((e) => !e.unitId.startsWith('enemy') && e.unitId !== 'h474');
       expect(allyAll.length).toBeGreaterThan(0);
-      expect(allyAll.every((e) => e.detail.includes(' 31 '))).toBe(true);
+      expect(allyAll.every((e) => e.detail.includes('提高了31('))).toBe(true);
     }
   });
 
@@ -241,8 +241,8 @@ describe('黄天余音（张宁，主动：吸取敌军单体全属性 26 附加
     const enemy = inflicted(report, 'attack_buff').filter((e) => e.unitId.startsWith('enemy'));
     const self = inflicted(report, 'attack_buff').filter((e) => e.unitId === 'h474');
     const ally = inflicted(report, 'attack_buff').filter((e) => !e.unitId.startsWith('enemy') && e.unitId !== 'h474');
-    expect(enemy.every((e) => e.detail.includes('-67'))).toBe(true);
-    expect(self.every((e) => e.detail.includes(' 67 '))).toBe(true);
-    expect(ally.every((e) => e.detail.includes(' 80 '))).toBe(true);
+    expect(enemy.every((e) => e.detail.includes('降低了67('))).toBe(true);
+    expect(self.every((e) => e.detail.includes('提高了67('))).toBe(true);
+    expect(ally.every((e) => e.detail.includes('提高了80('))).toBe(true);
   });
 });

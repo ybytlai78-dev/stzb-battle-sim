@@ -24,6 +24,12 @@ describe('SP/普通重名武将互斥', () => {
     expect(err).toContain('互斥冲突');
   });
 
+  it('validateMutualExclusion：魏荀彧 + 汉荀彧 同队 → 返回错误信息', () => {
+    const err = validateMutualExclusion([getGeneral('h24'), getGeneral('h794')]);
+    expect(err).toBeTruthy();
+    expect(err).toContain('互斥冲突');
+  });
+
   it('runBattle：赵云 + SP赵云 同队 → 抛「配队非法」', () => {
     expect(() =>
       runBattle({

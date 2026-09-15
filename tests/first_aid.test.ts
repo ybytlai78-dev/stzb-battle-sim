@@ -7,7 +7,7 @@
  * 恢复率公式（调研）：实际恢复率 = roundRate(基础 + 成长率×(谋略-80))，谋略 80 时 = 描述值
  */
 import { describe, it, expect } from 'vitest';
-import { actUnit, triggerCommandSkills, inflictStatus, tickStatuses, type CombatContext } from '../src/engine/action';
+import { actUnit, applyDamage, recoverTroops, triggerCommandSkills, inflictStatus, tickStatuses, type CombatContext } from '../src/engine/action';
 import type { BattleEvent, Position, UnitState } from '../src/engine/types';
 import { Rng } from '../src/engine/rng';
 import { SKILL_REGISTRY } from '../src/data/skills';
@@ -273,5 +273,48 @@ describe('持续型急救（受击触发恢复）', () => {
       tickStatuses(ctx2, ctx2.myTeam);
     }
     expect(u1b.statuses.some((s) => s.type === 'first_aid')).toBe(true); // 整场常驻
+  });
+});
+
+describe('持续型急救不得救回致死 / 不得复活阵亡单位', () => {
+  /** 皇裔已挂上且触发率 100%，致死一击应阵亡，不得靠急救把兵力从 0 拉回 */
+  function lethalField(): { ctx: CombatContext; u1: UnitState } {
+    const { ctx, liubei, u1 } = field(100);
+    liubei.general.morale = 100;
+    triggerCommandSkills(ctx, liubei);
+    const counter = ctx.firstAidCounters!.find((c) => c.skillId === 'huangyi_liuli')!;
+    counter.rate = 100;
+    return { ctx, u1 };
+  }
+
+  it('兵力被打到 0：立即阵亡，急救不触发恢复，之后也不会复活', () => {
+    const { ctx, u1 } = lethalField();
+    ctx.woundedMortality = { base: 5, perRound: 14 };
+    u1.troops = 80;
+    applyDamage(ctx, u1, 80);
+
+    expect(u1.troops).toBe(0);
+    expect(u1.alive).toBe(false);
+    expect(healEvents(ctx).length).toBe(0);
+    expect(ctx.events.some((e) => e.type === 'unit_dead' && e.unitId === 'u1')).toBe(true);
+
+    // 同一目标再挨打 / 再 recover：不得把已阵亡单位救活
+    applyDamage(ctx, u1, 50);
+    expect(u1.alive).toBe(false);
+    expect(u1.troops).toBe(0);
+    expect(recoverTroops(ctx, u1, 9999)).toBe(0);
+    expect(u1.alive).toBe(false);
+    expect(u1.troops).toBe(0);
+  });
+
+  it('非致死伤害仍可急救：扣兵后兵力 > 0 时恢复，单位保持存活', () => {
+    const { ctx, u1 } = lethalField();
+    u1.troops = 5000;
+    applyDamage(ctx, u1, 100);
+
+    expect(u1.alive).toBe(true);
+    expect(u1.troops).toBeGreaterThan(4900);
+    expect(healEvents(ctx).length).toBe(1);
+    expect(healEvents(ctx)[0]!.amount).toBeGreaterThan(0);
   });
 });

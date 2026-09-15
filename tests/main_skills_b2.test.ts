@@ -4,9 +4,11 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { runBattle } from '../src/engine/combat';
-import type { BattleEvent, General, Position } from '../src/engine/types';
+import { applyDamage, triggerCommandSkills, type CombatContext } from '../src/engine/action';
+import { firstOnHurt, type BattleEvent, type General, type Position, type Skill, type UnitState } from '../src/engine/types';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import { initHeroDB, HERO_REGISTRY, withSkills, level40 } from '../src/data/heroes';
+import { Rng } from '../src/engine/rng';
 
 beforeAll(async () => {
   await initHeroDB();
@@ -67,6 +69,9 @@ describe('当敌制决（于禁，二类指挥·战斗开始一次性：自身�
     const s = SKILL_REGISTRY['dangdi_zhijue'];
     expect(s.type === 'command' && s.phase === 'round').toBe(true);
     expect('battleStartOnce' in s && s.battleStartOnce === true).toBe(true);
+    expect(s.range).toBe(5);
+    expect(s.tags).toEqual(['damage_reduce', 'damage_boost']);
+    expect(s.type === 'command' && firstOnHurt(s.onHurt)?.applyTo).toBe('source');
   });
 
   it('战斗开始即对自身施加减伤 50%', () => {
@@ -101,7 +106,119 @@ describe('当敌制决（于禁，二类指挥·战斗开始一次性：自身�
         .reduce((acc, e) => acc + (e as { damage: number }).damage, 0);
     expect(dmgTaken(boosted)).toBeLessThan(dmgTaken(plain));
   });
+
+  it('受击后使伤害来源受到的伤害提升 8%（防御 80 取基值），可叠加', () => {
+    const yujin = dummyUnit('h796', '前锋', { defense: 80, commandSkillIds: ['dangdi_zhijue'] });
+    const foe = dummyUnit('foe', '前锋', {}, 'enemy');
+    const ctx = makeCtx([yujin], [foe]);
+    triggerCommandSkills(ctx, yujin);
+    applyDamage(ctx, yujin, 100, foe, 'physical');
+    const boost = foe.statuses.find(
+      (s): s is Extract<(typeof foe.statuses)[number], { type: 'damage_boost' }> =>
+        s.type === 'damage_boost' && s.sourceSkillId === 'dangdi_zhijue'
+    );
+    expect(boost).toBeDefined();
+    expect(boost!.direction ?? 'taken').toBe('taken');
+    expect(boost!.rate).toBeCloseTo(0.08, 5);
+    applyDamage(ctx, yujin, 100, foe, 'physical');
+    expect(boost!.rate).toBeCloseTo(0.16, 5);
+  });
+
+  it('防御 172 时反制为 10%（8 + 0.026×92，八舍九入）', () => {
+    const yujin = dummyUnit('h796', '前锋', { defense: 172, commandSkillIds: ['dangdi_zhijue'] });
+    const foe = dummyUnit('foe', '前锋', {}, 'enemy');
+    const ctx = makeCtx([yujin], [foe]);
+    triggerCommandSkills(ctx, yujin);
+    applyDamage(ctx, yujin, 100, foe, 'physical');
+    const boost = foe.statuses.find(
+      (s): s is Extract<(typeof foe.statuses)[number], { type: 'damage_boost' }> =>
+        s.type === 'damage_boost' && s.sourceSkillId === 'dangdi_zhijue'
+    );
+    expect(boost?.rate).toBeCloseTo(0.1, 5);
+  });
+
+  it('策略 DoT 跳伤也叠反制', () => {
+    const yujin = dummyUnit('h796', '前锋', { defense: 80, commandSkillIds: ['dangdi_zhijue'] });
+    const foe = dummyUnit('foe', '前锋', {}, 'enemy');
+    const ctx = makeCtx([yujin], [foe]);
+    triggerCommandSkills(ctx, yujin);
+    applyDamage(ctx, yujin, 80, foe, 'strategy');
+    const boost = foe.statuses.find(
+      (s) => s.type === 'damage_boost' && s.sourceSkillId === 'dangdi_zhijue'
+    );
+    expect(boost).toBeDefined();
+  });
+
+  it('致死那一下仍叠；阵亡后再 applyDamage 不再叠', () => {
+    const yujin = dummyUnit('h796', '前锋', { defense: 80, commandSkillIds: ['dangdi_zhijue'] });
+    yujin.troops = 50;
+    const foe = dummyUnit('foe', '前锋', {}, 'enemy');
+    const ctx = makeCtx([yujin], [foe]);
+    triggerCommandSkills(ctx, yujin);
+    applyDamage(ctx, yujin, 50, foe, 'physical');
+    expect(yujin.alive).toBe(false);
+    const boost = foe.statuses.find(
+      (s): s is Extract<(typeof foe.statuses)[number], { type: 'damage_boost' }> =>
+        s.type === 'damage_boost' && s.sourceSkillId === 'dangdi_zhijue'
+    );
+    expect(boost?.rate).toBeCloseTo(0.08, 5);
+    applyDamage(ctx, yujin, 100, foe, 'physical');
+    expect(boost?.rate).toBeCloseTo(0.08, 5);
+  });
 });
+
+function dummyUnit(id: string, position: Position, extra: Partial<General> = {}, side: 'my' | 'enemy' = 'my'): UnitState {
+  const g: General = {
+    id,
+    name: id,
+    rarity: '4星',
+    cost: 1,
+    faction: '汉',
+    tags: [],
+    mutualExclusionGroup: null,
+    troopType: 'infantry',
+    position,
+    attack: 80,
+    defense: 80,
+    strategy: 80,
+    speed: 50,
+    attackRange: 2,
+    maxTroops: 10000,
+    mainSkillName: '',
+    skillDesc: '',
+    activeSkillIds: [],
+    passiveSkillIds: [],
+    commandSkillIds: [],
+    pursuitSkillIds: [],
+    morale: 100,
+    ...extra,
+  };
+  return {
+    general: g,
+    side,
+    troops: g.maxTroops,
+    wounded: 0,
+    totalDead: 0,
+    alive: true,
+    statuses: [],
+    isPreparing: false,
+    preparingSkillId: null,
+    hasActedThisRound: false,
+  };
+}
+
+function makeCtx(my: UnitState[], enemy: UnitState[], seed = 1): CombatContext {
+  return {
+    rng: new Rng(seed),
+    myTeam: my,
+    enemyTeam: enemy,
+    events: [],
+    skills: new Map<string, Skill>(Object.entries(SKILL_REGISTRY)),
+    lockedCommands: [],
+    stackBuffs: [],
+    currentRound: 1,
+  };
+}
 
 describe('闭月（貂蝉，准备群体暴走 + 防御 -29）', () => {
   it('主战法挂入主动槽，需 1 回合准备，目标对敌', () => {
@@ -130,7 +247,7 @@ describe('闭月（貂蝉，准备群体暴走 + 防御 -29）', () => {
         e.type === 'status_inflicted' && e.statusType === 'defense_buff'
     );
     expect(def).toBeDefined();
-    expect(def!.detail).toContain('-29');
+    expect(def!.detail).toMatch(/防御属性降低了29\(\d+\)/);
     // 目标为敌军（不是友军）
     const targets = targetsOf(report, 'biyue');
     expect(targets?.targetIds).toContain('enemy-front');

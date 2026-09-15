@@ -87,9 +87,17 @@ const SKILL_ID_BY_NAME = {
   缓师徐持: 'huanshi_xuchi',
   青丘媚祸: 'qingqiu_meihuo',
   舍身卫主: 'sheshen_weizhu',
+  赏顺伐逆: 'shangshun_fani',
   运筹决胜: 'yunchou_juesheng',
   七步释嫌: 'qibu_shixian',
   怀德畏威: 'huaide_weiwei',
+  回马: 'huima',
+  空城: 'kongcheng',
+  攻其不备: 'gongqi_bubei',
+  健卒不殆: 'jianzu_budai',
+  反击之策: 'fanji_zhice',
+  以诱待来: 'yiyou_dailai',
+  先声夺人: 'xiansheng_duoren',
 };
 
 /** 现有 8 个武将固定拼音 id（测试直接引用 HERO_REGISTRY.<id>） */

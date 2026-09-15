@@ -1,17 +1,18 @@
-# SDD progress — 套2 前端落地
+# SDD progress — 拆解通用 B 级以上 · 第一阶段受击链路
 
-Workspace: `C:\Users\lai15\Desktop\战斗系统`（不是 git 仓库；禁止 commit）
-Plan: `docs/superpowers/plans/2026-09-09-套2前端落地.md`
+Workspace: `C:\Users\lai15\Desktop\战斗系统`（在 main 上就地实现；Global Constraints：**不要 git commit**）
+Plan: `docs/superpowers/plans/2026-09-15-拆解通用B级以上-受击链路.md`
+Spec: `docs/superpowers/specs/2026-09-15-拆解通用B级以上-受击链路-design.md`
 
-- Task 1: complete (Approved; leftover header hex)
-- Task 2: complete (Approved)
-- Task 3: complete (Approved; leftover `.stats-share-modal` CSS)
-- Task 4: complete (Approved; leftover `.round-nav`/`.troops-wrap` CSS)
-- Task 5: complete (Approved; `#start` 未加 `.primary` class)
-- Task 6: complete (Approved; 844×390 手测 UNVERIFIED)
+（上一轮于禁/贾充受击受恢复钩子已完成，见 git working tree；本批依赖其 onHurt/onHeal。）
 
-Controller cleanup: renamed `.superpowers/sdd/snapshots/**/*.test.ts` → `*.test.ts.bak` so `npx vitest run` no longer picks archives.
+- Task 1: complete (working tree, review Approved after firstOnHurt + applyDamage 转发 damageSource)
+- Task 2: complete (working tree, review Approved；Minor: 窗口/挑衅/maxStacks 无独立单测；maxStacks 达上限仍可能已发 skill_trigger)
+- Task 3: complete (working tree, review Approved after Math.round incoming)
+- Task 4: complete (working tree, review Approved after sameSource counter 刷新 appliedRound)
+- Task 5: complete (working tree, review Approved；7 战法与 SKILL_ID_BY_NAME 与 brief 逐字段一致)
+- Task 6: complete (working tree; 913/0 after consumeEvasion 0 层立即移除；golden 未重生)
+- Final review Important（空城 0 层规避残留）已修；其余 Minor 记 later
 
-Final whole-branch review: **Ready to merge? Yes** (no Critical/Important). Polish later: dead CSS, desktop 72px avatar col, 简略红左+三段兵力（计划本切片「保持」旧简略）.
+**交接文（下一场先读）：** `.superpowers/sdd/handoff-2026-09-15-受击链路.md`
 
-Verification: `npx vitest run` → 65 files / 820 tests PASS including golden 2/2.

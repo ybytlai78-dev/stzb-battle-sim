@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { runBattle } from '../src/engine/combat';
 import { applyDamage, triggerCommandSkills, triggerPassiveSkills, type CombatContext } from '../src/engine/action';
-import type { BattleEvent, CommandSkill, General, PassiveSkill, Position, Skill, UnitState } from '../src/engine/types';
+import { firstOnHurt, type BattleEvent, type CommandSkill, type General, type PassiveSkill, type Position, type Skill, type UnitState } from '../src/engine/types';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import { initHeroDB, HERO_REGISTRY, withSkills } from '../src/data/heroes';
 import { Rng } from '../src/engine/rng';
@@ -82,7 +82,7 @@ function forceOnHurtRate(ctx: CombatContext, skillId: string, rate = 1): void {
   if (!base || (base.type !== 'command' && base.type !== 'passive') || !base.onHurt) {
     throw new Error(`forceOnHurtRate：${skillId} 无 onHurt`);
   }
-  ctx.skills.set(skillId, { ...base, onHurt: { ...base.onHurt, rate } } as Skill);
+  ctx.skills.set(skillId, { ...base, onHurt: { ...firstOnHurt(base.onHurt)!, rate } } as Skill);
 }
 
 const inflicted = (ctx: CombatContext, statusType: string) =>
@@ -103,9 +103,9 @@ describe('盲侯奋勇（夏侯惇，一类指挥：自身受伤后 40% 对距�
       expect(s.range).toBe(4);
       expect(s.targetMode).toBe('group');
       expect(s.groupCount ?? 2).toBe(2);
-      expect(s.onHurt?.victim).toBe('self');
-      expect(s.onHurt?.rate).toBe(0.4);
-      expect(s.onHurt?.applyTo).toBe('skill_targets');
+      expect(firstOnHurt(s.onHurt)?.victim).toBe('self');
+      expect(firstOnHurt(s.onHurt)?.rate).toBe(0.4);
+      expect(firstOnHurt(s.onHurt)?.applyTo).toBe('skill_targets');
     }
     expect(s.tags).toEqual(['damage']);
     const dmg = s.output.find((o) => o.kind === 'physical_damage');
@@ -158,11 +158,11 @@ describe('陷储立齐（骊姬，一类指挥：我军每单位每回合首次�
     expect(s.range).toBe(5);
     expect(s.targetSide).toBe('ally');
     expect(s.targetMode).toBe('all');
-    expect(s.onHurt?.victim).toBe('ally');
-    expect(s.onHurt?.oncePerRound).toBe(true);
-    expect(s.onHurt?.applyTo).toBe('steal');
-    expect(s.onHurt?.steal?.amount).toBe(70);
-    expect(s.onHurt?.steal?.duration).toBe(2);
+    expect(firstOnHurt(s.onHurt)?.victim).toBe('ally');
+    expect(firstOnHurt(s.onHurt)?.oncePerRound).toBe(true);
+    expect(firstOnHurt(s.onHurt)?.applyTo).toBe('steal');
+    expect(firstOnHurt(s.onHurt)?.steal?.amount).toBe(70);
+    expect(firstOnHurt(s.onHurt)?.steal?.duration).toBe(2);
     expect(s.tags).toEqual(['attack_buff', 'defense_buff', 'strategy_buff', 'debuff_attack', 'debuff_defense', 'debuff_strategy']);
   });
 
@@ -212,10 +212,10 @@ describe('同仇敌忾（鲁肃，被动：友军受伤后距离≤1 友军含�
     expect(s.type).toBe('passive');
     expect(s.timing).toBe('battle_start');
     expect(s.range).toBe(3);
-    expect(s.onHurt?.victim).toBe('ally');
-    expect(s.onHurt?.applyTo).toBe('allies_within');
-    expect(s.onHurt?.withinDistance).toBe(1);
-    expect(s.onHurt?.maxStacks).toBe(8);
+    expect(firstOnHurt(s.onHurt)?.victim).toBe('ally');
+    expect(firstOnHurt(s.onHurt)?.applyTo).toBe('allies_within');
+    expect(firstOnHurt(s.onHurt)?.withinDistance).toBe(1);
+    expect(firstOnHurt(s.onHurt)?.maxStacks).toBe(8);
     expect(s.tags).toEqual(['damage_boost', 'damage_reduce']);
     const boost = s.output.find((o) => o.kind === 'inflict_status' && !Array.isArray(o.status) && o.status.type === 'damage_boost');
     const reduce = s.output.find((o) => o.kind === 'inflict_status' && !Array.isArray(o.status) && o.status.type === 'damage_reduce');
@@ -273,12 +273,12 @@ describe('缓师徐持（沮授，一类指挥：已行动敌军受伤后 50% �
     expect(s.phase).toBe('prep');
     expect(s.range).toBe(5);
     expect(s.targetMode).toBe('self');
-    expect(s.onHurt?.victim).toBe('enemy');
-    expect(s.onHurt?.rate).toBe(0.5);
-    expect(s.onHurt?.rateStrategyScaled).toBe(true);
-    expect(s.onHurt?.onlyIfActed).toBe(true);
-    expect(s.onHurt?.rolls).toBe(2);
-    expect(s.onHurt?.applyTo).toBe('victim');
+    expect(firstOnHurt(s.onHurt)?.victim).toBe('enemy');
+    expect(firstOnHurt(s.onHurt)?.rate).toBe(0.5);
+    expect(firstOnHurt(s.onHurt)?.rateStrategyScaled).toBe(true);
+    expect(firstOnHurt(s.onHurt)?.onlyIfActed).toBe(true);
+    expect(firstOnHurt(s.onHurt)?.rolls).toBe(2);
+    expect(firstOnHurt(s.onHurt)?.applyTo).toBe('victim');
     expect(s.tags).toEqual(['debuff_attack', 'debuff_defense', 'debuff_strategy', 'debuff_speed']);
   });
 

@@ -100,21 +100,24 @@ describe('增减伤归因（伤害事件 modifiers）', () => {
     actUnit(ctx, huanggai);
     const hit = ctx.events.find((e): e is HitEvent => e.type === 'attack_hit' && e.sourceId === 'huanggai');
     expect(hit, '应有普攻命中事件').toBeTruthy();
-    expect(hit!.targetId).toBe('e1');
+    const target = ctx.enemyTeam.find((u) => u.general.id === hit!.targetId)!;
+    expect(target, '命中目标应在敌方').toBeTruthy();
 
     const mods = hit!.modifiers!;
     // 大赏三军：施加在攻击方（黄盖）身上的造成侧增伤，施法者为吕蒙
     expect(mods.caused).toEqual([
       { unitId: 'lvmeng', skillId: 'dashang_sanjun', skillName: '大赏三军', rate: 0.33, direction: 'caused' },
     ]);
-    // 神兵天降：施加在受击方（e1）身上的受到侧增伤，施法者为吕蒙
-    expect(mods.taken).toEqual([
-      { unitId: 'lvmeng', skillId: 'shenbing_tianjiang', skillName: '神兵天降', rate: 0.33, direction: 'taken' },
-    ]);
+    // 神兵天降：群体随机 2 目标；命中谁就断言谁身上的受到侧增伤
+    const hasTaken = target.statuses.some((s) => s.type === 'damage_boost' && s.sourceSkillId === 'shenbing_tianjiang');
+    if (hasTaken) {
+      expect(mods.taken).toEqual([
+        { unitId: 'lvmeng', skillId: 'shenbing_tianjiang', skillName: '神兵天降', rate: 0.33, direction: 'taken' },
+      ]);
+    } else {
+      expect(mods.taken).toEqual([]);
+    }
     expect(mods.reduce).toEqual([]);
-    // 合计提升 = 0.33 + 0.33 = 0.66 → 66%
-    const boost = (mods.caused.reduce((a, s) => a + s.rate, 0) + mods.taken.reduce((a, s) => a + s.rate, 0)) * 100;
-    expect(Math.round(boost)).toBe(66);
   });
 
   it('避其锋芒（敌军指挥减伤）：受击方带 reduce 来源，无提升', () => {

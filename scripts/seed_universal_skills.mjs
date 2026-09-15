@@ -47,6 +47,8 @@ const MECHANISM_TAGS = {
   '成竹在胸': 'passive,attribute_buff', '文韬武略': 'passive,attribute_buff', '疾风突击': 'passive,attribute_buff',
   '运筹帷幄': 'passive,attribute_buff', '速战坚守': 'passive,attribute_buff', '铁壁': 'passive,damage_reduce',
   '击势': 'passive,damage_boost,ignore_def', '兵无常势': 'passive,heal,random_effect',
+  '穷追猛打': 'command,combo', '激昂': 'passive,damage_boost',
+  '疾击其后': 'pursuit,multi_hit', '扬威': 'pursuit,damage_boost',
   '无心恋战': 'command,damage_boost',
   '重整旗鼓': 'command,heal,rest', '援军秘策': 'command,heal,rest',
   '合流': 'heal', '三军之众': 'heal', '利兵谋胜': 'damage,heal',
@@ -87,21 +89,21 @@ const MECHANISM_KEY = {
   合纵连横: 'range_plus,faction_range',
   // 兵力
   亡命一搏: 'troop_ratio', 甚陷不惧: 'troop_ratio', 临危: 'troop_ratio', 死士突击: 'troop_ratio',
-  // 特定回合起 / 恢复次数递增（重整旗鼓/援军秘策/三军之众已入库）
-  穷追猛打: 'round_from', 援军之策: 'round_from',
+  // 特定回合起 / 恢复次数递增（重整旗鼓/援军秘策/三军之众/穷追猛打已入库）
+  援军之策: 'round_from,pending_strategy_scale',
   胜敌益强: 'heal_count_growth',
   // 下一次攻击增减伤 / 下次结算
-  扬威: 'next_damage', 文伐: 'next_damage', 闪击: 'next_damage',
+  文伐: 'next_damage,pending_strategy_scale', 闪击: 'next_damage',
   翕处还张: 'next_act', 道行险阻: 'next_act',
   // 追击多段
-  乘胜追击: 'pursuit_multi', 疾击其后: 'pursuit_interval', 势无虚动: 'pursuit_hook',
+  乘胜追击: 'pursuit_multi', 势无虚动: 'pursuit_hook',
   // 特殊目标
   近攻: 'special_target', 远射: 'special_target', 连环: 'special_target', 兼弱攻昧: 'special_target',
   始计: 'special_target', 铁戟金戈: 'special_target',
   // 攻城
   云梯: 'siege_stat', 投石轰击: 'siege_stat', 毁墙: 'siege_stat',
   // 概率双效果 / 随机
-  激昂: 'round_prob_multi', 鸟云山兵: 'round_act_prob,round_prob_multi',
+  鸟云山兵: 'round_act_prob,round_prob_multi',
   万箭齐发: 'random_single', 十面埋伏: 'random_single',
   // 性别 / 阵营
   美人计: 'gender_cond',

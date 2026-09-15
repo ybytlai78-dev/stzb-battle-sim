@@ -131,6 +131,7 @@ describe('三术奇谋（S 准备：敌军单体 3 次策略攻击 + 三属性�
 describe('妖术（S 准备：敌军群体暴走 2 回合）', () => {
   it('装配：主动槽挂入', () => {
     expect(activeTeam('yaoshu')[1].activeSkillIds).toContain('yaoshu');
+    expect(SKILL_REGISTRY['yaoshu'].triggerRate).toBe(0.5);
   });
 
   it('发动后使敌军群体陷入暴走状态', () => {

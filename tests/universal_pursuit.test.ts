@@ -80,6 +80,7 @@ describe('怯心夺志（A 追击：200% 猛攻 + 犹豫 1 回合）', () => {
     const t = pursuitTeam('qiexin_duozhi');
     expect(t[0].pursuitSkillIds).toContain('qiexin_duozhi');
     expect(SKILL_REGISTRY['qiexin_duozhi'].type).toBe('pursuit');
+    expect(SKILL_REGISTRY['qiexin_duozhi'].triggerRate).toBe(0.3);
   });
 
   it('普攻命中后触发，对攻击目标造成伤害', () => {
@@ -100,6 +101,7 @@ describe('怯心夺志（A 追击：200% 猛攻 + 犹豫 1 回合）', () => {
 describe('钝兵挫锐（A 追击：200% 猛攻 + 怯战 1 回合）', () => {
   it('装配：追击槽挂入', () => {
     expect(pursuitTeam('dunbing_cuorui')[0].pursuitSkillIds).toContain('dunbing_cuorui');
+    expect(SKILL_REGISTRY['dunbing_cuorui'].triggerRate).toBe(0.3);
   });
 
   it('普攻命中后触发，对攻击目标造成伤害', () => {

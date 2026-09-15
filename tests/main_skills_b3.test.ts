@@ -269,14 +269,22 @@ describe('魏武之泽（曹丕，主动 40%：我军群体连击 + 追击伤害
   it('我军群体获得连击（combo）状态，持续 2 回合', () => {
     const report = run(fullTeam(withSkills(level40(hero('h25'), { strategy: 40 }), { activeSkillIds: ['weiwu_zhi_ze'] })), 1);
     expect(casts(report, '魏武之泽').length).toBeGreaterThan(0);
-    // 距离2：前锋位施法者覆盖自身 + 前锋友军（大营距离3超出）→ 2 目标
-    expect(distinctTargets(report, 'combo')).toBe(2);
+    // 同侧距离 2 覆盖三人；每次释放三选二（2 目标），整场多次释放去重后可达 2～3
+    const leizeTargets = report.events.filter(
+      (e): e is Extract<BattleEvent, { type: 'skill_target' }> =>
+        e.type === 'skill_target' && e.skillId === 'weiwu_zhi_ze'
+    );
+    expect(leizeTargets.length).toBeGreaterThan(0);
+    expect(leizeTargets.every((e) => e.targetIds.length === 2)).toBe(true);
+    expect(distinctTargets(report, 'combo')).toBeGreaterThanOrEqual(2);
+    expect(distinctTargets(report, 'combo')).toBeLessThanOrEqual(3);
     expect(inflicted(report, 'combo')[0].detail).toContain('2 回合');
   });
 
   it('我军群体获得追击伤害提升（damage_boost，15%）', () => {
     const report = run(fullTeam(withSkills(level40(hero('h25'), { strategy: 40 }), { activeSkillIds: ['weiwu_zhi_ze'] })), 1);
-    expect(distinctTargets(report, 'damage_boost')).toBe(2);
+    expect(distinctTargets(report, 'damage_boost')).toBeGreaterThanOrEqual(2);
+    expect(distinctTargets(report, 'damage_boost')).toBeLessThanOrEqual(3);
     expect(inflicted(report, 'damage_boost')[0].detail).toContain('造成的伤害提高 15%');
   });
 });
