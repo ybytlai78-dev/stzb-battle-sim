@@ -129,4 +129,25 @@ describe('同侧战法距离（我军群体）', () => {
     expect(seen.has(2)).toBe(true);
     expect(seen.has(3)).toBe(true);
   });
+
+  it('大营施法 range 3 group 2：有效距离内三选二，三种组合（含中军）均会出现', () => {
+    const my = fullTeam('my');
+    const en = fullTeam('enemy');
+    const caster = my[2]; // 大营
+    const combos = new Set<string>();
+    for (let seed = 1; seed <= 80; seed++) {
+      const ctx = makeCtx(my, en);
+      ctx.rng = new Rng(seed);
+      const picked = skillTargets(ctx, caster, my, 3, 'group', 2);
+      expect(picked).toHaveLength(2);
+      const key = ['前锋', '中军', '大营']
+        .filter((p) => picked.some((u) => u.general.position === p))
+        .join('+');
+      combos.add(key);
+    }
+    expect(combos.has('前锋+大营')).toBe(true);
+    expect(combos.has('中军+大营')).toBe(true);
+    expect(combos.has('前锋+中军')).toBe(true);
+    expect(combos.size).toBe(3);
+  });
 });

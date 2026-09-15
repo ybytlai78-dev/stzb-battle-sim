@@ -6,9 +6,10 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { runBattle } from '../src/engine/combat';
-import type { BattleConfig, General } from '../src/engine/types';
+import type { BattleConfig, BattleEvent, General, Position } from '../src/engine/types';
 import { buildAllFixtures } from './fixtures';
-import { initHeroDB } from '../src/data/heroes';
+import { initHeroDB, HERO_REGISTRY, withSkills, level40 } from '../src/data/heroes';
+import { roundRate, scaledValue } from '../src/engine/formulas';
 
 let ALL: Record<string, BattleConfig>;
 
@@ -105,5 +106,131 @@ describe('指挥/被动管线（T7）', () => {
     for (const h of heals) {
       expect(h.amount).toBeGreaterThan(0);
     }
+  });
+});
+
+/** 测试用木桩武将（默谋略 80，便于断言受谋略缩放） */
+function dummy(id: string, position: Position, extras: Partial<General> = {}): General {
+  return {
+    id,
+    name: id,
+    rarity: '4星',
+    cost: 1,
+    faction: '汉',
+    tags: [],
+    mutualExclusionGroup: null,
+    troopType: 'infantry',
+    position,
+    attack: 50,
+    defense: 80,
+    strategy: 80,
+    speed: 20,
+    attackRange: 2,
+    maxTroops: 9000,
+    mainSkillName: '',
+    skillDesc: '',
+    activeSkillIds: [],
+    passiveSkillIds: [],
+    commandSkillIds: [],
+    pursuitSkillIds: [],
+    morale: 100,
+    ...extras,
+  };
+}
+
+/** 三名低速木桩敌军，避免抢准备阶段出手序 */
+function enemyDummies(): General[] {
+  return [dummy('ef', '前锋', { speed: 1 }), dummy('em', '中军', { speed: 1 }), dummy('eb', '大营', { speed: 1 })];
+}
+
+/**
+ * 取出准备阶段【战法】事件（`prep_phase skill` 之后、`preparation_end` 之前）。
+ * @param report 完整战报
+ */
+function skillPhaseEvents(report: ReturnType<typeof runBattle>): BattleEvent[] {
+  const start = report.events.findIndex((e) => e.type === 'prep_phase' && e.phase === 'skill');
+  const end = report.events.findIndex((e) => e.type === 'preparation_end');
+  return report.events.slice(start + 1, end);
+}
+
+describe('准备阶段【战法】：先全部被动再全部指挥', () => {
+  it('卫瓘携带百战精兵：战法阶段先加属性，再释放持节镇西', () => {
+    const weiguan = withSkills(level40(HERO_REGISTRY.weiguan), {
+      passiveSkillIds: ['baizhan_jingbing'],
+    });
+    weiguan.position = '中军';
+    const report = runBattle({
+      seed: 1,
+      maxRounds: 1,
+      myTeam: [weiguan, dummy('ally-back', '大营', { speed: 10 })],
+      enemyTeam: enemyDummies(),
+    });
+    const phase = skillPhaseEvents(report);
+    const baizhan = phase.findIndex((e) => e.type === 'skill_cast' && e.skillName === '百战精兵');
+    const chijie = phase.findIndex((e) => e.type === 'skill_cast' && e.skillName === '持节镇西');
+    expect(baizhan).toBeGreaterThan(-1);
+    expect(chijie).toBeGreaterThan(-1);
+    expect(baizhan).toBeLessThan(chijie);
+    const stratBuff = phase.findIndex(
+      (e) => e.type === 'status_inflicted' && e.statusType === 'strategy_buff' && e.unitId === weiguan.id
+    );
+    expect(stratBuff).toBeGreaterThan(-1);
+    expect(stratBuff).toBeLessThan(chijie);
+  });
+
+  it('全场 battle_start 被动均早于一类指挥（快将指挥 vs 慢将被动）', () => {
+    const report = runBattle({
+      seed: 1,
+      maxRounds: 1,
+      myTeam: [
+        dummy('fast-cmd', '前锋', { speed: 200, commandSkillIds: ['xianqu_tuji'] }),
+        dummy('slow-psv', '中军', { speed: 30, passiveSkillIds: ['baizhan_jingbing'] }),
+        dummy('back', '大营', { speed: 10 }),
+      ],
+      enemyTeam: enemyDummies(),
+    });
+    const phase = skillPhaseEvents(report);
+    const lastPassive = phase.reduce(
+      (idx, e, i) => (e.type === 'unit_act_start' && e.phase === 'passive_skill' ? i : idx),
+      -1
+    );
+    const firstCommand = phase.findIndex((e) => e.type === 'unit_act_start' && e.phase === 'command_skill');
+    expect(lastPassive).toBeGreaterThan(-1);
+    expect(firstCommand).toBeGreaterThan(-1);
+    expect(lastPassive).toBeLessThan(firstCommand);
+  });
+
+  it('指挥受谋略缩放读到百战精兵已加的谋略（大赏三军）', () => {
+    const carrier = dummy('carrier', '前锋', {
+      strategy: 80,
+      speed: 50,
+      faction: '群',
+      troopType: 'cavalry',
+      commandSkillIds: ['dashang_sanjun'],
+      passiveSkillIds: ['baizhan_jingbing'],
+    });
+    const report = runBattle({
+      seed: 1,
+      maxRounds: 1,
+      myTeam: [
+        carrier,
+        dummy('ally-mid', '中军', { speed: 20, faction: '蜀', troopType: 'archer' }),
+        dummy('ally-back', '大营', { speed: 10, faction: '魏', troopType: 'infantry' }),
+      ],
+      enemyTeam: [
+        dummy('ef', '前锋', { speed: 1, faction: '吴', troopType: 'cavalry' }),
+        dummy('em', '中军', { speed: 1, faction: '汉', troopType: 'archer' }),
+        dummy('eb', '大营', { speed: 1, faction: '晋', troopType: 'infantry' }),
+      ],
+    });
+    const phase = skillPhaseEvents(report);
+    const boosts = phase.filter(
+      (e): e is Extract<BattleEvent, { type: 'status_inflicted' }> =>
+        e.type === 'status_inflicted' && e.statusType === 'damage_boost'
+    );
+    expect(boosts.length).toBeGreaterThan(0);
+    // 谋略 80+32=112 → roundRate(30 + 0.15×32) = 34%
+    const expected = roundRate(scaledValue(30, 0.15, 80 + 32));
+    expect(boosts[0].detail).toContain(`造成的伤害提高 ${expected}%`);
   });
 });

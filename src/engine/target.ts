@@ -80,9 +80,11 @@ function skillDistance(ctx: CombatContext, caster: UnitState, target: UnitState)
   return distanceBetween(ctx, caster, target);
 }
 
-/** 战法目标选择：按战法有效距离（实时）+ 目标模式。
- *  groupCount：仅 group 模式有效——目标数（缺省 2）；`[2,3]` = 50% 概率 2 目标 / 50% 概率 3 目标（辕门射戟 / 动如雷震）。
- *  取距离最近的目标 + 其后按站位排序的存活目标（站位先手优先）。 */
+/**
+ * 战法目标选择：按战法有效距离（实时）+ 目标模式。
+ * groupCount：仅 group 模式有效——目标数（缺省 2）；`[2,3]` = 50% 概率 2 目标 / 50% 概率 3 目标（辕门射戟 / 动如雷震）。
+ * 群体在有效距离内存活单位中均匀随机抽取（率土「三选二」），不是最近优先。
+ */
 export function skillTargets(
   ctx: CombatContext,
   caster: UnitState,
@@ -108,15 +110,22 @@ export function skillTargets(
   }
   if (mode === 'single') return [inRange[0]];
 
-  // group：距离最近的目标 + 其后按站位序的存活目标；目标数 groupCount（[2,3] 时 50/50 随机）
+  // group：有效距离内不放回均匀抽取 want 个（大赏三军「我军群体 2 目标」= 三选二，含自身但不强制选自己）
   const want = Array.isArray(groupCount) ? (ctx.rng.chance(0.5) ? groupCount[0] : groupCount[1]) : groupCount;
-  const group: UnitState[] = [inRange[0]];
-  const candidates = inRange
-    .filter((e) => e !== inRange[0])
-    .sort((a, b) => sortByPosition(a, b));
-  for (const c of candidates) {
-    if (group.length >= want) break;
-    group.push(c);
+  return pickRandom(ctx, inRange, want);
+}
+
+/**
+ * 从候选中不放回均匀抽取 n 个。优先走 Rng.pickN；测试 stub 只有 int() 时用 splice 回退。
+ */
+function pickRandom(ctx: CombatContext, items: UnitState[], n: number): UnitState[] {
+  if (typeof ctx.rng.pickN === 'function') return ctx.rng.pickN(items, n);
+  const pool = items.slice();
+  const group: UnitState[] = [];
+  const count = Math.min(Math.max(n, 0), pool.length);
+  for (let i = 0; i < count; i++) {
+    const idx = ctx.rng.int(pool.length);
+    group.push(pool.splice(idx, 1)[0]);
   }
   return group;
 }

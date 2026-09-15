@@ -286,4 +286,141 @@ describe('战报增减伤统计（Web）', () => {
     const pop = view.el.querySelector('.dmg-popup') as HTMLElement;
     expect(pop.textContent).toContain('【黄盖】【巾帼战阵】伤害提升 40%');
   });
+
+  it('详情左侧出手顺序随回合切换：用该回合 round_start.turnOrder（当前速度序）', () => {
+    const report = reportWith(undefined);
+    report.events = [
+      { type: 'battle_start', turnOrder: ['huanggai', 'lvmeng', 'e1'], seed: 1 },
+      { type: 'preparation_end' },
+      { type: 'round_start', round: 1, turnOrder: ['lvmeng', 'huanggai', 'e1'] },
+      { type: 'unit_act_start', unitId: 'lvmeng', name: '吕蒙', position: '中军', phase: 'normal_attack' },
+      { type: 'round_end', round: 1, myTroops: [9000, 9000], enemyTroops: [9000], myWounded: [0, 0], enemyWounded: [0], myDead: [0, 0], enemyDead: [0] },
+      { type: 'battle_end', result: 'win', rounds: 1, myTroops: [9000, 9000], enemyTroops: [9000] },
+    ];
+    const view = createBattleView(report);
+    document.body.appendChild(view.el);
+    view.setRound(0);
+    expect(Array.from(view.el.querySelectorAll('.dv-turns .turn')).map((b) => (b as HTMLElement).dataset.unitId)).toEqual([
+      'huanggai', 'lvmeng', 'e1',
+    ]);
+    view.setRound(1);
+    expect(Array.from(view.el.querySelectorAll('.dv-turns .turn')).map((b) => (b as HTMLElement).dataset.unitId)).toEqual([
+      'lvmeng', 'huanggai', 'e1',
+    ]);
+  });
+});
+
+describe('持节镇西详情战报文案', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('两行官方口径：执行效果 + 增幅(增加后数值)，不显示层数', () => {
+    const report = reportWith(undefined);
+    report.myTeam.push(mkGeneral('weiguan', '卫瓘', '中军'));
+    report.events = [
+      { type: 'battle_start', turnOrder: ['huanggai', 'weiguan', 'e1'], seed: 1 },
+      { type: 'preparation_end' },
+      { type: 'round_start', round: 1 },
+      { type: 'unit_act_start', unitId: 'huanggai', name: '黄盖', position: '前锋', phase: 'active_skill' },
+      {
+        type: 'status_inflicted',
+        unitId: 'huanggai',
+        statusType: 'strategy_buff',
+        detail:
+          '【黄盖】执行来自【卫瓘】的【持节镇西】效果！\n' +
+          '【黄盖】的谋略属性提高了32(182)',
+      },
+      { type: 'round_end', round: 1, myTroops: [9000, 9000, 9000], enemyTroops: [9000], myWounded: [0, 0, 0], enemyWounded: [0], myDead: [0, 0, 0], enemyDead: [0] },
+      { type: 'battle_end', result: 'win', rounds: 1, myTroops: [9000, 9000, 9000], enemyTroops: [9000] },
+    ];
+    const view = createBattleView(report);
+    view.setRound(1);
+    document.body.appendChild(view.el);
+    const lines = Array.from(view.el.querySelectorAll('.act-body .ev.status')).map((n) => n.textContent ?? '');
+    expect(lines).toContain('【黄盖】执行来自【卫瓘】的【持节镇西】效果！');
+    expect(lines.some((t) => t.includes('谋略属性提高了32(182)'))).toBe(true);
+    expect(lines.join('')).not.toContain('层');
+    expect(lines.join('')).not.toContain('获得：');
+  });
+
+  it('魏武之世：百分比降低为 比率(变化点数)(变化后)', () => {
+    const report = reportWith(undefined);
+    report.myTeam.push(mkGeneral('caocao', '曹操', '大营'));
+    report.events = [
+      { type: 'battle_start', turnOrder: ['caocao', 'e1'], seed: 1 },
+      { type: 'preparation_end' },
+      { type: 'round_start', round: 1 },
+      { type: 'unit_act_start', unitId: 'caocao', name: '曹操', position: '大营', phase: 'command_skill' },
+      { type: 'skill_cast', unitId: 'caocao', skillId: 'weiwu_zhishi', skillName: '魏武之世' },
+      {
+        type: 'status_inflicted',
+        unitId: 'e1',
+        statusType: 'attack_buff',
+        detail: '【敌军前锋】的攻击属性降低了22%(11)(39)',
+      },
+      { type: 'round_end', round: 1, myTroops: [9000, 9000, 9000], enemyTroops: [9000], myWounded: [0, 0, 0], enemyWounded: [0], myDead: [0, 0, 0], enemyDead: [0] },
+      { type: 'battle_end', result: 'win', rounds: 1, myTroops: [9000, 9000, 9000], enemyTroops: [9000] },
+    ];
+    const view = createBattleView(report);
+    view.setRound(1);
+    document.body.appendChild(view.el);
+    const text = view.el.textContent ?? '';
+    expect(text).toContain('【曹操】发动【魏武之世】！');
+    expect(text).toContain('【敌军前锋】的攻击属性降低了22%(11)(39)');
+    expect(text).not.toContain('获得：');
+  });
+});
+
+describe('白衣渡江详情战报文案', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  it('第3回合延迟伤害：官方两行，无 unit_act_start 也显示', () => {
+    const report = reportWith(undefined);
+    report.myTeam = [mkGeneral('lvmeng', '吕蒙', '大营')];
+    report.enemyTeam = [mkGeneral('taishici', '太史慈', '前锋')];
+    report.events = [
+      { type: 'battle_start', turnOrder: ['lvmeng', 'taishici'], seed: 1 },
+      { type: 'preparation_end' },
+      { type: 'round_start', round: 1 },
+      { type: 'round_end', round: 1, myTroops: [9000], enemyTroops: [9000], myWounded: [0], enemyWounded: [0], myDead: [0], enemyDead: [0] },
+      { type: 'round_start', round: 2 },
+      { type: 'round_end', round: 2, myTroops: [9000], enemyTroops: [9000], myWounded: [0], enemyWounded: [0], myDead: [0], enemyDead: [0] },
+      { type: 'round_start', round: 3 },
+      {
+        type: 'damage',
+        sourceId: 'lvmeng',
+        targetId: 'taishici',
+        skillId: 'baiyi_dujiang',
+        skillName: '白衣渡江',
+        damageType: 'strategy',
+        damage: 1414,
+        breakdown: { troopBase: 200, base: 200, main: 1014 },
+        delayedEffect: true,
+        afterTroops: 7986,
+      },
+      {
+        type: 'stored_effect_expired',
+        unitId: 'taishici',
+        sourceId: 'lvmeng',
+        skillId: 'baiyi_dujiang',
+        skillName: '白衣渡江',
+        damageType: 'strategy',
+      },
+      { type: 'round_end', round: 3, myTroops: [9000], enemyTroops: [7986], myWounded: [0], enemyWounded: [1014], myDead: [0], enemyDead: [0] },
+      { type: 'battle_end', result: 'win', rounds: 3, myTroops: [9000], enemyTroops: [7986] },
+    ];
+    report.rounds = 3;
+    report.finalMyTroops = [9000];
+    report.finalEnemyTroops = [7986];
+    const view = createBattleView(report);
+    view.setRound(3);
+    document.body.appendChild(view.el);
+    const text = view.el.textContent ?? '';
+    expect(text).toContain('【吕蒙】【白衣渡江】的效果使【太史慈】损失了1414兵力(7986)');
+    expect(text).toContain('【太史慈】的来自【吕蒙】【白衣渡江】的策略攻击伤害效果消失了');
+    expect(text).not.toContain('对「太史慈」造成');
+  });
 });

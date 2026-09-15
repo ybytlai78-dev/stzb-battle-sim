@@ -29,6 +29,7 @@ const PHASE_NAME: Record<string, string> = {
   pursuit_skill: '追击战法判定',
   command_skill: '指挥战法',
   passive_skill: '被动战法',
+  dot_tick: '持续伤害',
 };
 
 export interface BattleView {
@@ -110,10 +111,21 @@ export function createBattleView(report: BattleReport, opts: BattleViewOpts = {}
   root.appendChild(banner);
 
   const startEv = report.events.find((e) => e.type === 'battle_start');
-  const turnOrder: string[] =
+  const startTurnOrder: string[] =
     startEv && startEv.type === 'battle_start' && startEv.turnOrder.length > 0
       ? startEv.turnOrder
       : [...report.myTeam, ...report.enemyTeam].map((g) => g.id);
+
+  /**
+   * 指定回合的出手顺序：准备阶段用开场序；正式回合用该回合 round_start.turnOrder
+   * （按当时生效速度重排，含速度增益 / 先手组）。
+   */
+  const turnOrderForRound = (r: number): string[] => {
+    if (r <= 0) return startTurnOrder;
+    const ev = report.events.find((e) => e.type === 'round_start' && e.round === r);
+    if (ev && ev.type === 'round_start' && ev.turnOrder && ev.turnOrder.length > 0) return ev.turnOrder;
+    return startTurnOrder;
+  };
 
   /** 轨上按钮 */
   const railBtn = (text: string): HTMLButtonElement => {
@@ -135,16 +147,6 @@ export function createBattleView(report: BattleReport, opts: BattleViewOpts = {}
   const turns = document.createElement('aside');
   turns.className = 'dv-turns';
   const turnBtns: HTMLButtonElement[] = [];
-  turnOrder.forEach((id, i) => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'turn';
-    btn.dataset.unitId = id;
-    btn.innerHTML = `<span class="n">${i + 1}</span><span class="av"><img src="${avatarSrc(id)}" alt="" onerror="this.style.display='none'" /></span>`;
-    btn.onclick = () => scrollLogToUnit(id);
-    turns.appendChild(btn);
-    turnBtns.push(btn);
-  });
 
   const mid = document.createElement('section');
   mid.className = 'dv-mid';
@@ -244,6 +246,23 @@ export function createBattleView(report: BattleReport, opts: BattleViewOpts = {}
     log.scrollTop += group.getBoundingClientRect().top - log.getBoundingClientRect().top;
   }
 
+  /** 按当前回合出手顺序刷新左侧头像列 */
+  function renderTurnOrder(r: number): void {
+    const ids = turnOrderForRound(r);
+    turns.innerHTML = '';
+    turnBtns.length = 0;
+    ids.forEach((id, i) => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'turn';
+      btn.dataset.unitId = id;
+      btn.innerHTML = `<span class="n">${i + 1}</span><span class="av"><img src="${avatarSrc(id)}" alt="" onerror="this.style.display='none'" /></span>`;
+      btn.onclick = () => scrollLogToUnit(id);
+      turns.appendChild(btn);
+      turnBtns.push(btn);
+    });
+  }
+
   function setRound(r: number): void {
     current = Math.max(0, Math.min(report.rounds, r));
     headTitle.textContent = current === 0 ? '回合前阶段' : `第 ${current} 回合`;
@@ -258,6 +277,7 @@ export function createBattleView(report: BattleReport, opts: BattleViewOpts = {}
 
   function renderRound(): void {
     closePopup();
+    renderTurnOrder(current);
     log.innerHTML = '';
     if (current === 0) {
       renderPrepEvents(log, prepEvents(report.events), nm, { toggle: togglePopup }, evCtx);
@@ -312,7 +332,7 @@ function prepEvents(events: BattleEvent[]): BattleEvent[] {
 }
 
 /**
- * 准备阶段事件流：【阵容】出手顺序 + 部队加成、【兵种】暂无效果、【战法】指挥/被动。
+ * 准备阶段事件流：【阵容】出手顺序 + 部队加成、【兵种】暂无效果、【战法】被动/指挥。
  * 不调用 `appendEv(null, …)`（group 为 null 时直接 return）。
  */
 function renderPrepEvents(
@@ -404,6 +424,24 @@ function renderEvents(
     if (group) { container.appendChild(group); group = null; }
   };
 
+  /**
+   * delayedOutput / 回合开始结算发生在首个 unit_act_start 之前。
+   * 无行动组时建无头组，避免 appendEv(null) 静默丢行。
+   */
+  const ensureGroup = () => {
+    if (group) return;
+    group = document.createElement('div');
+    group.className = 'act-group';
+    const body = document.createElement('div');
+    body.className = 'act-body';
+    group.appendChild(body);
+  };
+
+  const add = (cls: string, html: string) => {
+    ensureGroup();
+    appendEv(group, cls, html);
+  };
+
   for (const ev of evs) {
     switch (ev.type) {
       case 'unit_act_start': {
@@ -430,84 +468,102 @@ function renderEvents(
             ev.targetId && ev.targetId !== ev.unitId
               ? `【${nm(ev.targetId)}】来自【${nm(ev.unitId)}】的`
               : `【${nm(ev.unitId)}】`;
-          appendEv(group, ev.success ? 'good' : 'dim', `${who}【${ev.skillName}】当前生效几率为${ev.rate}%`);
+          add(ev.success ? 'good' : 'dim', `${who}【${ev.skillName}】当前生效几率为${ev.rate}%`);
         } else {
           const s = SKILL_REGISTRY[ev.skillId];
           const base = s && (s.type === 'active' || s.type === 'pursuit') ? `（基础发动率 ${Math.round(s.triggerRate * 100)}%）` : '';
-          appendEv(group, ev.success ? 'good' : 'dim',
+          add(ev.success ? 'good' : 'dim',
             `战法「${ev.skillName}」判定：${ev.success ? '发动' : '未发动'} <span class="sub">${base}</span>`);
         }
         break;
       }
       case 'skill_target': {
-        appendEv(group, 'dim', `　目标：${ev.targetIds.map(nm).join('、')}`);
+        add('dim', `　目标：${ev.targetIds.map(nm).join('、')}`);
         break;
       }
       case 'skill_cast': {
-        appendEv(group, 'status', `${nm(ev.unitId)} 释放「${ev.skillName}」`);
+        add('status', `【${nm(ev.unitId)}】发动【${ev.skillName}】！`);
         break;
       }
       case 'damage': {
+        if (ev.delayedEffect && ev.afterTroops !== undefined) {
+          const cls = ev.damageType === 'physical' ? 'dmg-phy' : 'dmg-stg';
+          add(cls,
+            `【${nm(ev.sourceId)}】【${ev.skillName}】的效果使【${nm(ev.targetId)}】损失了<b>${ev.damage}</b>兵力(${ev.afterTroops})`);
+          break;
+        }
         appendDamageModifierLine(group, ev.modifiers, popupApi);
         const cls = ev.damageType === 'physical' ? 'dmg-phy' : 'dmg-stg';
         const typeName = ev.damageType === 'physical' ? '兵刃' : '谋略';
-        appendEv(group, cls,
+        add(cls,
           `对「${nm(ev.targetId)}」造成<b> ${typeName}伤害 ${ev.damage.toLocaleString()} </b>`);
+        break;
+      }
+      case 'stored_effect_expired': {
+        const kind = ev.damageType === 'strategy' ? '策略攻击伤害效果' : '攻击伤害效果';
+        add('dim', `【${nm(ev.unitId)}】的来自【${nm(ev.sourceId)}】【${ev.skillName}】的${kind}消失了`);
         break;
       }
       case 'attack_hit': {
         appendDamageModifierLine(group, ev.modifiers, popupApi);
-        appendEv(group, 'dmg-phy',
+        add('dmg-phy',
           `普攻命中「${nm(ev.targetId)}」（距离${ev.distance}）造成 <b>${ev.damage.toLocaleString()}</b>`);
         break;
       }
       case 'no_attack_target':
-        appendEv(group, 'dim', `　无法普攻：${ev.reason}`);
+        add('dim', `　无法普攻：${ev.reason}`);
         break;
       case 'heal':
-        appendEv(group, 'heal', `「${nm(ev.targetId)}」恢复兵力 <b>${ev.amount.toLocaleString()}</b>（${ev.before.toLocaleString()} → ${ev.after.toLocaleString()}）`);
+        add('heal', `「${nm(ev.targetId)}」恢复兵力 <b>${ev.amount.toLocaleString()}</b>（${ev.before.toLocaleString()} → ${ev.after.toLocaleString()}）`);
         break;
       case 'status_inflicted':
-        appendEv(group, 'status', `${nm(ev.unitId)} 获得：${ev.detail}`);
+        if (isAttrReportDetail(ev.detail)) {
+          // 属性增减 / 持节镇西：官方两行，不再套「获得：」
+          for (const line of ev.detail.split('\n')) {
+            add('status', line.replace(/(提高了|降低了)(.+)$/, '$1<b>$2</b>'));
+          }
+        } else {
+          add('status', `${nm(ev.unitId)} 获得：${ev.detail}`);
+        }
         break;
       case 'status_conflict':
-        appendEv(group, 'conflict', `✘ ${nm(ev.unitId)} ${ev.detail}`);
+        add('conflict', `✘ ${nm(ev.unitId)} ${ev.detail}`);
         break;
       case 'status_expired':
-        appendEv(group, 'dim', `　${nm(ev.unitId)} 的${statusName(ev.statusType)}状态解除`);
+        add('dim', `　${nm(ev.unitId)} 的${statusName(ev.statusType)}状态解除`);
         break;
       case 'evasion_blocked':
-        appendEv(group, 'good', `规避：「${nm(ev.unitId)}」免疫伤害（剩余 ${ev.remainingStacks} 层）`);
+        add('good', `规避：「${nm(ev.unitId)}」免疫伤害（剩余 ${ev.remainingStacks} 层）`);
         break;
       case 'insight_blocked':
-        appendEv(group, 'good', `洞察：「${nm(ev.unitId)}」免疫了${statusName(ev.statusType)}`);
+        add('good', `洞察：「${nm(ev.unitId)}」免疫了${statusName(ev.statusType)}`);
         break;
       case 'siege_blocked':
-        appendEv(group, 'conflict', `✘ 「${nm(ev.unitId)}」受围困影响，无法回复兵力`);
+        add('conflict', `✘ 「${nm(ev.unitId)}」受围困影响，无法回复兵力`);
         break;
       case 'dot_tick': {
         // DoT（燃烧/恐慌/妖术/诅咒/引燃）：增减伤归因在挂上时冻结（modifiers 恒存在），
         // 归属施法者（casterId）而非受击者
         appendDamageModifierLine(group, ev.modifiers, popupApi);
-        appendEv(group, 'dmg-stg', `「${nm(ev.targetId)}」受到${dotName(ev.dotType)}伤害 <b>${ev.damage.toLocaleString()}</b>`);
+        add('dmg-stg', `「${nm(ev.targetId)}」受到${dotName(ev.dotType)}伤害 <b>${ev.damage.toLocaleString()}</b>`);
         break;
       }
       case 'split_damage': {
         appendDamageModifierLine(group, ev.modifiers, popupApi);
-        appendEv(group, 'dmg-phy', `分兵溅射「${nm(ev.targetId)}」造成 <b>${ev.damage.toLocaleString()}</b>`);
+        add('dmg-phy', `分兵溅射「${nm(ev.targetId)}」造成 <b>${ev.damage.toLocaleString()}</b>`);
         break;
       }
       case 'prepare_start':
-        appendEv(group, 'status', `${nm(ev.unitId)} 开始准备「${ev.skillName}」`);
+        add('status', `${nm(ev.unitId)} 开始准备「${ev.skillName}」`);
         break;
       case 'prepare_skip':
-        appendEv(group, 'good', `${nm(ev.unitId)} 跳过准备，直接发动「${ev.skillName}」`);
+        add('good', `${nm(ev.unitId)} 跳过准备，直接发动「${ev.skillName}」`);
         break;
       case 'prepare_end':
-        appendEv(group, 'status', `${nm(ev.unitId)} 准备完成，发动「${ev.skillName}」`);
+        add('status', `${nm(ev.unitId)} 准备完成，发动「${ev.skillName}」`);
         break;
       case 'unit_dead':
-        appendEv(group, 'dead', `${nm(ev.unitId)} 阵亡`);
+        add('dead', `${nm(ev.unitId)} 阵亡`);
         break;
       case 'unit_act_end':
       case 'prep_phase':
@@ -521,6 +577,11 @@ function renderEvents(
     }
   }
   flush();
+}
+
+/** 属性增减 / 持节镇西战报行：官方口径，不套「获得：」 */
+function isAttrReportDetail(detail: string): boolean {
+  return detail.includes('执行来自') || /的(攻击|防御|谋略|速度)属性(提高了|降低了)/.test(detail);
 }
 
 function appendEv(group: HTMLElement | null, cls: string, html: string): void {

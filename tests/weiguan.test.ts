@@ -11,11 +11,14 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { runBattle } from '../src/engine/combat';
 import {
   actUnit,
+  inflictStatus,
+  triggerActiveSkill,
   triggerCommandSkills,
   tickStatuses,
   type CombatContext,
 } from '../src/engine/action';
-import type { Position, UnitState } from '../src/engine/types';
+import type { Position, Skill, UnitState } from '../src/engine/types';
+import { targetStratMitigation } from '../src/engine/formulas';
 import { Rng } from '../src/engine/rng';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import { level40, withSkills, HERO_REGISTRY, initHeroDB } from '../src/data/heroes';
@@ -116,14 +119,28 @@ describe('持节镇西：攻击/谋略/防御叠层', () => {
     wg.general.commandSkillIds = ['chijie_zhenxi'];
     const ally = makeUnit('ally', { position: '前锋', attack: 100 });
     ctx.myTeam = [wg, ally];
-    ctx.enemyTeam = [enemy('e1')];
+    const e1 = enemy('e1');
+    ctx.enemyTeam = [e1];
     triggerCommandSkills(ctx, wg);
 
-    // 友军普攻 → 攻击 +round(22 + 0.15×(151-80)) = +33
+    // 友军普攻 → 攻击 +round(22 + 0.15×(151-80)) = +33；增加后 100+33=133
     actUnit(ctx, ally);
     const layer = ally.statuses.find((s) => s.type === 'attack_buff' && s.sourceSkillId === 'chijie_zhenxi');
     expect(layer).toBeDefined();
     expect(layer && 'amount' in layer ? (layer as { amount: number }).amount : 0).toBe(33);
+    const ev = ctx.events.find(
+      (e): e is Extract<(typeof ctx.events)[number], { type: 'status_inflicted' }> =>
+        e.type === 'status_inflicted' && e.statusType === 'attack_buff'
+    );
+    expect(ev?.detail).toBe(
+      '【ally】执行来自【weiguan】的【持节镇西】效果！\n' +
+        '【ally】的攻击属性提高了33(133)'
+    );
+    // 打敌军：出手方只加攻击，不加防御（防御仅受击前）
+    expect(buffLayers(ally, 'defense_buff')).toBe(0);
+    expect(buffLayers(e1, 'defense_buff')).toBe(0);
+    const inflicted = ctx.events.filter((e) => e.type === 'status_inflicted');
+    expect(inflicted.every((e) => e.statusType === 'attack_buff')).toBe(true);
   });
 
   it('策略伤害前 → 施法者叠谋略层（按卫瓘谋略缩放）', () => {
@@ -144,6 +161,119 @@ describe('持节镇西：攻击/谋略/防御叠层', () => {
     }
   });
 
+  it('策略伤害结算使用叠层后的生效谋略（谋略基础按叠后值）', () => {
+    const ctx = makeCtx();
+    const wg = makeUnit('weiguan', { position: '中军', strategy: 146 });
+    wg.general.commandSkillIds = ['chijie_zhenxi'];
+    const ally = makeUnit('ally', { position: '前锋', strategy: 150, troops: 10000 });
+    ctx.myTeam = [wg, ally];
+    const e1 = enemy('e1');
+    e1.general.strategy = 100;
+    e1.general.defense = 100;
+    ctx.enemyTeam = [e1];
+    triggerCommandSkills(ctx, wg);
+
+    /** 必中单体谋略伤：无受谋略缩放，隔离「谋略基础」是否吃到叠层 */
+    const skill: Skill = {
+      id: 'test_stg',
+      name: '测试谋略伤',
+      type: 'active',
+      prepare: false,
+      range: 5,
+      triggerRate: 1,
+      targetMode: 'single',
+      tags: ['damage'],
+      output: [{ kind: 'strategy_damage', rate: 100, strategyScaled: false, growthRate: 0 }],
+    };
+    triggerActiveSkill(ctx, ally, skill, ctx.enemyTeam, ctx.myTeam, ctx.enemyTeam);
+
+    expect(buffLayers(ally, 'strategy_buff')).toBe(1);
+    const stgEv = ctx.events.find(
+      (e): e is Extract<(typeof ctx.events)[number], { type: 'status_inflicted' }> =>
+        e.type === 'status_inflicted' && e.statusType === 'strategy_buff'
+    );
+    expect(stgEv?.detail).toBe(
+      '【ally】执行来自【weiguan】的【持节镇西】效果！\n' +
+        '【ally】的谋略属性提高了32(182)'
+    );
+    const dmg = ctx.events.find(
+      (e): e is Extract<(typeof ctx.events)[number], { type: 'damage' }> =>
+        e.type === 'damage' && e.damageType === 'strategy'
+    );
+    expect(dmg).toBeDefined();
+    // 叠层后谋略 150+32=182；谋略基础 = round(182 × 0.5 × 目标谋略减伤)
+    const mit = targetStratMitigation(100);
+    expect(dmg!.breakdown.base).toBe(Math.round(182 * 0.5 * mit));
+    expect(dmg!.breakdown.base).not.toBe(Math.round(150 * 0.5 * mit));
+    expect(buffLayers(ally, 'defense_buff')).toBe(0);
+    expect(buffLayers(e1, 'defense_buff')).toBe(0);
+  });
+
+  it('燃烧跳伤前 → 友军施法者叠谋略、不叠防御', () => {
+    const ctx = makeCtx();
+    const wg = makeUnit('weiguan', { position: '中军', strategy: 146 });
+    wg.general.commandSkillIds = ['chijie_zhenxi'];
+    const ally = makeUnit('ally', { position: '前锋', strategy: 150 });
+    ctx.myTeam = [wg, ally];
+    const e1 = enemy('e1');
+    e1.general.attackRange = 0; // 跳伤后不普攻，隔离出手叠层
+    ctx.enemyTeam = [e1];
+    triggerCommandSkills(ctx, wg);
+
+    inflictStatus(
+      ctx,
+      e1,
+      { type: 'burning', rate: 100, duration: 2, growthRate: 0.5, sourceStrategy: 150 },
+      'pursuit',
+      'liehuo_fenzhou',
+      'ally'
+    );
+    expect(buffLayers(ally, 'strategy_buff')).toBe(0);
+
+    actUnit(ctx, e1);
+    expect(buffLayers(ally, 'strategy_buff')).toBe(1);
+    expect(buffLayers(ally, 'defense_buff')).toBe(0);
+    expect(buffLayers(ally, 'attack_buff')).toBe(0);
+    const stgEv = ctx.events.find(
+      (e): e is Extract<(typeof ctx.events)[number], { type: 'status_inflicted' }> =>
+        e.type === 'status_inflicted' && e.statusType === 'strategy_buff'
+    );
+    expect(stgEv?.detail).toContain('谋略属性提高了');
+    expect(stgEv?.detail).not.toContain('防御属性');
+  });
+
+  it('友军被燃烧跳伤前 → 受击者叠防御、不叠攻击', () => {
+    const ctx = makeCtx();
+    const wg = makeUnit('weiguan', { position: '中军', defense: 144 });
+    wg.general.commandSkillIds = ['chijie_zhenxi'];
+    const ally = makeUnit('ally', { position: '前锋' });
+    ally.general.attackRange = 0; // 跳伤后不普攻，隔离出手叠层
+    ctx.myTeam = [wg, ally];
+    const e1 = enemy('e1');
+    ctx.enemyTeam = [e1];
+    triggerCommandSkills(ctx, wg);
+
+    inflictStatus(
+      ctx,
+      ally,
+      { type: 'burning', rate: 100, duration: 2, growthRate: 0.5, sourceStrategy: 100 },
+      'active',
+      'enemy_fire',
+      'e1'
+    );
+
+    actUnit(ctx, ally);
+    expect(buffLayers(ally, 'defense_buff')).toBe(1);
+    expect(buffLayers(ally, 'attack_buff')).toBe(0);
+    expect(buffLayers(ally, 'strategy_buff')).toBe(0);
+    const defEv = ctx.events.find(
+      (e): e is Extract<(typeof ctx.events)[number], { type: 'status_inflicted' }> =>
+        e.type === 'status_inflicted' && e.statusType === 'defense_buff'
+    );
+    expect(defEv?.detail).toContain('防御属性提高了');
+    expect(defEv?.detail).not.toContain('攻击属性');
+  });
+
   it('受到伤害前 → 受击者叠防御层（按卫瓘防御缩放）', () => {
     const ctx = makeCtx();
     const wg = makeUnit('weiguan', { position: '中军', defense: 144 }); // 40级卫瓘防御
@@ -159,6 +289,13 @@ describe('持节镇西：攻击/谋略/防御叠层', () => {
     const def = ally.statuses.find((s) => s.type === 'defense_buff' && s.sourceSkillId === 'chijie_zhenxi');
     expect(def).toBeDefined();
     expect(def && 'amount' in def ? (def as { amount: number }).amount : 0).toBe(32); // round(22 + 0.15×(144-80)) = 32
+    const defEv = ctx.events.find(
+      (e): e is Extract<(typeof ctx.events)[number], { type: 'status_inflicted' }> =>
+        e.type === 'status_inflicted' && e.statusType === 'defense_buff'
+    );
+    // ally 默认防御 100 +32 = 132
+    expect(defEv?.detail).toContain('防御属性提高了32(132)');
+    expect(defEv?.detail).not.toContain('层');
   });
 });
 
@@ -232,8 +369,9 @@ describe('持节镇西：战斗级（40级面板）', () => {
         e.type === 'status_inflicted' && e.statusType === 'attack_buff' && e.unitId === 'taishici'
     );
     expect(atkLayers.length).toBeGreaterThan(0);
-    // 层数事件里含「层」计数
-    expect(atkLayers[0].detail).toContain('层');
+    expect(atkLayers[0].detail).toContain('执行来自');
+    expect(atkLayers[0].detail).toMatch(/攻击属性提高了\d+\(\d+\)/);
+    expect(atkLayers[0].detail).not.toContain('层');
   });
 
   it('卫瓘阵亡后持节镇西仍生效（retainAfterDeath）', () => {

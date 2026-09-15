@@ -131,6 +131,9 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
       break;
     case 'round_start':
       lines.push(`────────── 第 ${ev.round} 回合 ──────────`);
+      if (ev.turnOrder && ev.turnOrder.length > 0) {
+        lines.push(`> 出手顺序：${ev.turnOrder.join(' > ')}`);
+      }
       break;
     case 'unit_act_start':
       lines.push(`[行动] ${ev.name}（${ev.position}）· ${renderPhase(ev.phase)}`);
@@ -148,14 +151,23 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
       break;
     }
     case 'skill_cast':
-      lines.push(`  ✦ ${ev.unitId} 释放战法「${ev.skillName}」`);
+      lines.push(`  ✦ 【${ev.unitId}】发动【${ev.skillName}】！`);
       break;
     case 'skill_target':
       lines.push(`  → 目标：${ev.targetIds.join('、')}`);
       break;
     case 'damage':
-      lines.push(`  → 对「${ev.targetId}」造成${ev.damageType === 'physical' ? '兵刃' : '谋略'}伤害 ${fmt(ev.damage)}（${renderBreakdown(ev.breakdown)}）`);
+      if (ev.delayedEffect && ev.afterTroops !== undefined) {
+        lines.push(`  ✦ 【${ev.sourceId}】【${ev.skillName}】的效果使【${ev.targetId}】损失了${ev.damage}兵力(${ev.afterTroops})`);
+      } else {
+        lines.push(`  → 对「${ev.targetId}」造成${ev.damageType === 'physical' ? '兵刃' : '谋略'}伤害 ${fmt(ev.damage)}（${renderBreakdown(ev.breakdown)}）`);
+      }
       break;
+    case 'stored_effect_expired': {
+      const kind = ev.damageType === 'strategy' ? '策略攻击伤害效果' : '攻击伤害效果';
+      lines.push(`  ✦ 【${ev.unitId}】的来自【${ev.sourceId}】【${ev.skillName}】的${kind}消失了`);
+      break;
+    }
     case 'attack_hit':
       lines.push(`  → 普攻命中「${ev.targetId}」（距离${ev.distance}）造成 ${fmt(ev.damage)}（${renderBreakdown(ev.breakdown)}）`);
       break;
@@ -163,7 +175,13 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
       lines.push(`  → ${ev.name} 无法普攻：${ev.reason}`);
       break;
     case 'status_inflicted':
-      lines.push(`  ✦ ${ev.unitId} 获得效果：${ev.detail}`);
+      if (ev.detail.includes('执行来自') || /的(攻击|防御|谋略|速度)属性(提高了|降低了)/.test(ev.detail)) {
+        for (const line of ev.detail.split('\n')) {
+          lines.push(`  ✦ ${line}`);
+        }
+      } else {
+        lines.push(`  ✦ ${ev.unitId} 获得效果：${ev.detail}`);
+      }
       break;
     case 'status_conflict':
       lines.push(`  ✘ ${ev.unitId} ${ev.detail}`);
@@ -247,6 +265,7 @@ function statusName(type: string): string {
     case 'ignite': return '引燃';
     case 'split': return '分兵';
     case 'taunt': return '挑衅';
+    case 'counter': return '反击';
     case 'cover': return '援護';
     case 'rest': return '休整';
     case 'ignore_def': return '无视防御';

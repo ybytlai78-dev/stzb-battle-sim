@@ -1,6 +1,6 @@
 /**
  * 战斗主循环（v0.2）
- *   准备阶段：速度排序、一类指挥战法（一次）→ 8 回合逐个行动 → 胜负判定
+ *   准备阶段：速度排序、battle_start 被动、一类指挥战法（一次）→ 8 回合逐个行动 → 胜负判定
  *   行动阶段（被动 → 指挥预备/二类 → 主动 → 普攻 → 追击）
  *   混乱：禁主动战法 + 普攻；被动/指挥仍正常判定
  *   胜利规则（斩首制）：一侧大营阵亡即失败（不再要求全灭）
@@ -40,7 +40,7 @@ export function runBattle(config: BattleConfig): BattleReport {
     woundedMortality: config.woundedMortality ?? { base: 5, perRound: 14 },
   };
 
-  // ── 准备阶段：阵容加成写入（mutate ctx 内同一 team 引用）→ 速度重排 → 三段事件 → 指挥/被动 ──
+  // ── 准备阶段：阵容加成写入（mutate ctx 内同一 team 引用）→ 速度重排 → 三段事件 → 被动/指挥 ──
   const applyTeamBonus = (team: UnitState[]) => {
     const result = computeTroopBonuses(team.map((u) => u.general));
     for (const u of team) {
@@ -80,13 +80,12 @@ export function runBattle(config: BattleConfig): BattleReport {
 
   events.push({ type: 'prep_phase', phase: 'troop' });
   events.push({ type: 'prep_phase', phase: 'skill' });
-  // 一类指挥战法：战斗开始（准备阶段）判定一次（二类指挥不在此触发）
-  for (const unit of turnOrder) {
-    triggerCommandSkills(ctx, unit);
-  }
-  // 战斗开始被动（马超血溅黄砂等）：准备阶段触发一次
+  // 【战法】先判定全部 battle_start 被动（百战精兵等加属性），再判定一类指挥（持节镇西等读生效属性）
   for (const unit of turnOrder) {
     triggerPassiveSkills(ctx, unit, 'battle_start');
+  }
+  for (const unit of turnOrder) {
+    triggerCommandSkills(ctx, unit);
   }
   events.push({ type: 'preparation_end' });
 
@@ -95,7 +94,8 @@ export function runBattle(config: BattleConfig): BattleReport {
 
   for (let round = 1; round <= config.maxRounds; round++) {
     if (winner) break;
-    events.push({ type: 'round_start', round });
+    const roundStartEv: BattleEvent = { type: 'round_start', round };
+    events.push(roundStartEv);
     ctx.currentRound = round;
     for (const u of [...myTeam, ...enemyTeam]) u.hasActedThisRound = false;
 
@@ -105,8 +105,9 @@ export function runBattle(config: BattleConfig): BattleReport {
     // 一类指挥 delayedOutput：白衣渡江第 3 回合自动结算（无视规避，预先结算的伤害）
     triggerDelayedOutputs(ctx, round);
 
-    // 先驱突击等先手：携带 priorityRounds 覆盖本回合的单位先出手
-    const roundOrder = buildPriorityOrder(turnOrder, round, skills);
+    // 每回合按当前生效速度重排（含加点、部队加成、速度增益/减益）；先手组（priorityRounds）仍优先
+    const roundOrder = buildPriorityOrder([...myTeam, ...enemyTeam], round, skills);
+    roundStartEv.turnOrder = roundOrder.map((u) => u.general.id);
 
     for (const unit of roundOrder) {
       if (!unit.alive) continue;
@@ -191,8 +192,8 @@ export function buildTurnOrder(units: UnitState[]): UnitState[] {
   });
 }
 
-/** 每回合实际行动顺序：携带 priorityRounds（如先驱突击前 3 回合）的单位先出手，其余按速度 */
-function buildPriorityOrder(
+/** 每回合实际行动顺序：携带 priorityRounds（如先驱突击前 3 回合）的单位先出手，其余按当前生效速度 */
+export function buildPriorityOrder(
   turnOrder: UnitState[],
   round: number,
   skills: Map<string, Skill>
