@@ -7,17 +7,13 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import mysql from 'mysql2/promise';
+import { DB_CONFIG } from './db-config.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const OUT = join(__dirname, '../web/data/heroes.json');
 
-const conn = await mysql.createConnection({
-  host: 'localhost',
-  port: 3306,
-  user: 'ybyt',
-  password: '123456',
-  database: 'stzb战斗系统',
-});
+// 工作树自动隔离：库名由 scripts/db-config.mjs 推导（见 docs/多工作树开发公约.md §六）
+const conn = await mysql.createConnection({ ...DB_CONFIG });
 
 const [rows] = await conn.query(
   `SELECT id, name, rarity, cost, faction, tags, mutual_exclusion_group, troop_type,

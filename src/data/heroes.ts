@@ -25,12 +25,30 @@ export interface HeroDBConfig {
   database: string;
 }
 
+/** 树根目录（本文件位于 <树根>/src/data/ 下） */
+const TREE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
+
+/**
+ * 工作树目录名（`.wt-stzb/<name>`），非工作树返回 null。
+ * ⚠️ 本逻辑须与 `scripts/db-config.mjs` 保持一致（tsconfig 的 include 不含 scripts/，无法直接 import）。
+ */
+function worktreeName(): string | null {
+  return /[\\/]\.wt-stzb[\\/]([^\\/]+)$/.exec(TREE_ROOT)?.[1] ?? null;
+}
+
+/**
+ * 默认连接配置。**工作树自动隔离**：在 `.wt-stzb/<name>` 下运行时自动改用独立库
+ * `stzb战斗系统_wt_<name>`，避免三棵树共用一库互相污染（见 `docs/多工作树开发公约.md` §六）。
+ * 可用 `STZB_DB_HOST` / `STZB_DB_PORT` / `STZB_DB_USER` / `STZB_DB_PASSWORD` / `STZB_DB_NAME` 覆盖。
+ */
 const DEFAULT_DB_CONFIG: HeroDBConfig = {
-  host: 'localhost',
-  port: 3306,
-  user: 'ybyt',
-  password: '123456',
-  database: 'stzb战斗系统',
+  host: process.env.STZB_DB_HOST ?? 'localhost',
+  port: Number(process.env.STZB_DB_PORT ?? 3306),
+  user: process.env.STZB_DB_USER ?? 'ybyt',
+  password: process.env.STZB_DB_PASSWORD ?? '123456',
+  database:
+    process.env.STZB_DB_NAME ??
+    (worktreeName() ? `stzb战斗系统_wt_${worktreeName()}` : 'stzb战斗系统'),
 };
 
 /** 武将 ID → HeroRecord（DB 原始字段，含成长值） */
@@ -103,7 +121,15 @@ export async function initHeroDB(config: HeroDBConfig = DEFAULT_DB_CONFIG): Prom
     for (const row of rows as HeroRow[]) ingestHeroRow(row);
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
-    if (code !== 'ECONNREFUSED' && code !== 'ENOTFOUND' && code !== 'ETIMEDOUT') throw err;
+    // 库不存在（工作树独立库尚未初始化）同样回退，避免忘建库直接把全部测试炸掉
+    const CONN_ERRORS = ['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'ER_BAD_DB_ERROR'];
+    if (!CONN_ERRORS.includes(code ?? '')) throw err;
+    if (code === 'ER_BAD_DB_ERROR') {
+      console.warn(
+        `[heroes] 库 \`${config.database}\` 不存在，回退到 web/data/heroes.json` +
+          `（工作树未初始化独立库？见 docs/多工作树开发公约.md §六）`
+      );
+    }
     loadHeroesFromJson();
   } finally {
     if (conn) await conn.end();

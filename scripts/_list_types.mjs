@@ -1,4 +1,5 @@
 import mysql from 'mysql2/promise';
+import { DB_CONFIG } from './db-config.mjs';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -32,13 +33,8 @@ function skillTypesFromSource(src) {
 
 const TYPES = skillTypesFromSource(skillsSrc);
 
-const conn = await mysql.createConnection({
-  host: 'localhost',
-  port: 3306,
-  user: 'ybyt',
-  password: '123456',
-  database: 'stzb战斗系统',
-});
+// 工作树自动隔离：库名由 scripts/db-config.mjs 推导（见 docs/多工作树开发公约.md §六）
+const conn = await mysql.createConnection({ ...DB_CONFIG });
 
 const [rows] = await conn.execute(
   `SELECT name, faction, rarity, main_skill_id, main_skill_name FROM heroes WHERE main_skill_id != '' ORDER BY name`
