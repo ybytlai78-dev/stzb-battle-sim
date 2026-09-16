@@ -850,7 +850,7 @@ function fastestAlly(allies: UnitState[], exclude?: UnitState): UnitState | unde
 
 /**
  * 谋略最低的存活友军（不含施法者）。并列时速度更低优先，再比站位（前锋 > 中军 > 大营）。
- * 怀德畏威借出手：无存活友军时返回 undefined，调用方跳过该段物理伤害。
+ * 怀德畏威借出手：无存活友军时返回 undefined，调用方跳过该段攻击伤害。
  */
 function lowestStrategyAlly(allies: UnitState[], exclude: UnitState): UnitState | undefined {
   const alive = allies.filter((a) => a.alive && a !== exclude);
@@ -868,7 +868,7 @@ function lowestStrategyAlly(allies: UnitState[], exclude: UnitState): UnitState 
 
 /**
  * 常驻伤害前叠层（持节镇西）：友军每次造成攻击伤害前 → 出手方叠攻击；造成策略伤害前 → 出手方叠谋略；
- * 受到伤害前 → 受击者叠防御。物理/策略/DoT/诅咒/引燃均走此入口。
+ * 受到伤害前 → 受击者叠防御。攻击/策略/DoT/诅咒/引燃均走此入口。
  * 只作用于持有者的友军（同侧，含持有者自身）。每层各自持续 1 回合（回合结束掉 1 层），至多 maxStacks 层；
  * 数值按持有者（卫瓘）自身对应属性缩放。
  */
@@ -882,7 +882,7 @@ function triggerStackBuff(
     const caster = ctx.myTeam.concat(ctx.enemyTeam).find((u) => u.general.id === eff.casterId);
     if (!caster) continue;
     // 一类指挥（持节镇西 retainAfterDeath）：卫瓘阵亡后效果仍存在，按当前面板属性缩放
-    // 物理伤害 → 施法者叠攻击；策略伤害 → 施法者叠谋略（只对持有者友军生效）
+    // 攻击伤害 → 施法者叠攻击；策略伤害 → 施法者叠谋略（只对持有者友军生效）
     if (actor.side === caster.side) {
       const cfg = damageType === 'physical' ? eff.config.onAttack : eff.config.onStrategy;
       if (cfg) {
@@ -1148,7 +1148,7 @@ function tickDots(ctx: CombatContext, unit: UnitState): void {
   }
 }
 
-/** 分兵攻击：普攻命中后，对目标同队的相邻存活单位造成比例物理伤害（无视攻击距离） */
+/** 分兵攻击：普攻命中后，对目标同队的相邻存活单位造成比例攻击伤害（无视攻击距离） */
 function executeSplitAttack(
   ctx: CombatContext,
   unit: UnitState,
@@ -2118,7 +2118,7 @@ export function tickStatuses(ctx: CombatContext, units: UnitState[]): void {
 /**
  * 回合前准备阶段（谋议宏图 / 恃强淬锋）：`round_start` 之后、单位行动之前。
  * 1. 带 `eighths` 的减伤/增伤（谋议宏图 / 虎豹督军）衰减 1/8（≤0 则移除）；**不对 fifths 做回合衰减**
- * 2. 被动 `selfPhysBoost.onRoundStart` 给持有者叠 1 层造成物理伤害提高
+ * 2. 被动 `selfPhysBoost.onRoundStart` 给持有者叠 1 层造成攻击伤害提高
  * 3. 一类指挥 `roundStartRepeat` 对锁定目标再结算（士气叠层，同战法累加）
  */
 export function tickRoundStartStatuses(ctx: CombatContext): void {
@@ -2235,7 +2235,7 @@ export function effectiveStat(unit: UnitState, kind: 'attack' | 'defense' | 'str
 }
 
 /**
- * 物理伤害用的目标防御：先生效属性，再按攻击方 ignore_def 比例折减。
+ * 攻击伤害用的目标防御：先生效属性，再按攻击方 ignore_def 比例折减。
  * 攻防差 = 攻击 − 目标防御 × (1 − 无视比例)。
  */
 function physicalTargetDefense(attacker: UnitState, target: UnitState): number {
@@ -2413,7 +2413,7 @@ function skillTypeName(type: SkillType): string {
 
 /**
  * 承担友军攻击伤害（舍身卫主）：前 N 回合、承担者位于指定站位时，
- * 将本次物理伤害的结算目标改为承担者（防御/规避/兵力/受击均视其为受击者）。
+ * 将本次攻击伤害的结算目标改为承担者（防御/规避/兵力/受击均视其为受击者）。
  */
 function redirectPhysicalHit(ctx: CombatContext, original: UnitState): UnitState {
   const team = original.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
@@ -2449,7 +2449,7 @@ function consumeAttackCharges(ctx: CombatContext, attacker: UnitState, hit?: Dam
 /**
  * 受击次数型 taken charges（文伐：下一次受到策略攻击）：
  * 本次伤害已计入该层（damageBoosts 在 applyDamage 之前算完），扣兵后再 −1，到 0 移除。
- * 物理受击不匹配 strategy taken，不消耗。
+ * 攻击受击不匹配 strategy taken，不消耗。
  */
 function consumeTakenCharges(target: UnitState, hit: DamageHitContext): void {
   for (const s of [...target.statuses]) {
@@ -2481,7 +2481,7 @@ function decayFifthsOnHit(ctx: CombatContext, target: UnitState, hit: DamageHitC
 }
 
 /**
- * 恃强淬锋：给持有者叠 1 层造成物理伤害提高（sameSource 累加，maxStacks 封顶）。
+ * 恃强淬锋：给持有者叠 1 层造成攻击伤害提高（sameSource 累加，maxStacks 封顶）。
  */
 function applySelfPhysBoost(ctx: CombatContext, unit: UnitState, skill: Extract<Skill, { type: 'passive' }>): void {
   const cfg = skill.selfPhysBoost;
@@ -2861,7 +2861,7 @@ function executeSkillOutputs(
           triggerStackBuff(ctx, caster, t, 'strategy');
           // 规避：默认免疫一次伤害；ignoresEvasion 时无视
           if (!out.ignoresEvasion && consumeEvasion(ctx, t, caster.general.id)) continue;
-          // 叠层后再读生效谋略（与物理伤害先叠攻击再读 effectiveStat 对齐；
+          // 叠层后再读生效谋略（与攻击伤害先叠攻击再读 effectiveStat 对齐；
           // 群体逐目标叠层，每段伤害吃到截至本目标的全部层）
           const effStrategy = effectiveStat(caster, 'strategy');
           let rate = out.rate;
@@ -3505,7 +3505,7 @@ function normalAttack(
   return target;
 }
 
-/** 计算并结算一次兵刃普攻（含连击的追击加成待做） */
+/** 计算并结算一次攻击伤害普攻（含连击的追击加成待做） */
 function dealAttack(ctx: CombatContext, unit: UnitState, target: UnitState, distance: number): void {
   const hit = redirectPhysicalHit(ctx, target);
   if (!hit.alive) return;
@@ -3946,7 +3946,7 @@ function applyOnHurtEffect(
 }
 
 /**
- * 普攻实际扣兵后结算反击：按 dealAttack 同口径对来源打物理。
+ * 普攻实际扣兵后结算反击：按 dealAttack 同口径对来源打攻击。
  * 调用方须已设 `resolvingHurtHooks`，使本次 applyDamage 不再套 before/after/counter。
  * 不消耗 counter 状态。
  */

@@ -496,7 +496,7 @@ function renderEvents(
         }
         appendDamageModifierLine(group, ev.modifiers, popupApi);
         const cls = ev.damageType === 'physical' ? 'dmg-phy' : 'dmg-stg';
-        const typeName = ev.damageType === 'physical' ? '兵刃' : '谋略';
+        const typeName = ev.damageType === 'physical' ? '攻击' : '谋略';
         add(cls,
           `对「${nm(ev.targetId)}」造成<b> ${typeName}伤害 ${ev.damage.toLocaleString()} </b>`);
         break;

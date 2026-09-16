@@ -116,7 +116,7 @@ describe('taken charges 受击消耗', () => {
     expect(def.troops).toBe(9900);
   });
 
-  it('物理受击不扣策略 taken charges', () => {
+  it('攻击受击不扣策略 taken charges', () => {
     const atk = dummyUnit('atk', '前锋');
     const def = dummyUnit('def', '前锋', {}, 'enemy');
     const ctx = makeCtx([atk], [def]);
@@ -141,7 +141,7 @@ describe('taken charges 受击消耗', () => {
     if (st?.type === 'damage_boost') expect(st.charges).toBe(1);
   });
 
-  it('目标自己打出物理不消耗身上的 taken charges', () => {
+  it('目标自己打出攻击不消耗身上的 taken charges', () => {
     const unit = dummyUnit('u', '前锋');
     const foe = dummyUnit('foe', '前锋', {}, 'enemy');
     const ctx = makeCtx([unit], [foe]);
@@ -288,7 +288,7 @@ describe('decayFifths', () => {
     expect(boost()).toBeUndefined();
   });
 
-  it('物理受击不衰减策略 fifths', () => {
+  it('攻击受击不衰减策略 fifths', () => {
     const atk = dummyUnit('atk', '前锋');
     const def = dummyUnit('def', '前锋', {}, 'enemy');
     const ctx = makeCtx([atk], [def]);
@@ -318,7 +318,7 @@ describe('decayFifths', () => {
 });
 
 describe('selfPhysBoost', () => {
-  it('回合开始 +1 层；造成物理扣兵后再 +1；封顶 12', () => {
+  it('回合开始 +1 层；造成攻击扣兵后再 +1；封顶 12', () => {
     const skill: Skill = {
       id: 'test_sq',
       name: '测叠层',

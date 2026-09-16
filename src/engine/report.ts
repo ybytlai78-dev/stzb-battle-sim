@@ -160,7 +160,7 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
       if (ev.delayedEffect && ev.afterTroops !== undefined) {
         lines.push(`  ✦ 【${ev.sourceId}】【${ev.skillName}】的效果使【${ev.targetId}】损失了${ev.damage}兵力(${ev.afterTroops})`);
       } else {
-        lines.push(`  → 对「${ev.targetId}」造成${ev.damageType === 'physical' ? '兵刃' : '谋略'}伤害 ${fmt(ev.damage)}（${renderBreakdown(ev.breakdown)}）`);
+        lines.push(`  → 对「${ev.targetId}」造成${ev.damageType === 'physical' ? '攻击' : '谋略'}伤害 ${fmt(ev.damage)}（${renderBreakdown(ev.breakdown)}）`);
       }
       break;
     case 'stored_effect_expired': {

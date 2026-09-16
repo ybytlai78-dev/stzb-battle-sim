@@ -394,7 +394,7 @@ describe('落首箭（沙摩柯 h524）', () => {
     }
   });
 
-  it('强制释放：300% 物理任意单体 + 大营再攻 + 大营混乱', () => {
+  it('强制释放：300% 攻击任意单体 + 大营再攻 + 大营混乱', () => {
     const me = heroUnit('h524', '前锋', { activeSkillIds: ['luoshou_jian'] });
     const front = makeUnit(dummy('front', '前锋', { maxTroops: 30000 }), 'enemy');
     const mid = makeUnit(dummy('mid', '中军', { maxTroops: 30000 }), 'enemy');
@@ -644,7 +644,7 @@ describe('虎步关右（夏侯渊 h435）', () => {
     }
   });
 
-  it('强制发动后 charges:1 rate:0.7 physical；打出一次物理后 charges 消失', () => {
+  it('强制发动后 charges:1 rate:0.7 physical；打出一次攻击后 charges 消失', () => {
     const me = heroUnit('h435', '前锋', { activeSkillIds: ['hubu_guanyou'] });
     const foe = makeUnit(dummy('foe', '前锋', { maxTroops: 30000 }), 'enemy');
     const ctx = makeCtx([me], [foe]);
@@ -693,7 +693,7 @@ describe('火兽冲锋（祝融夫人 h494）', () => {
     }
   });
 
-  it('chance=1：160% 物理 + charges basic +1.6；普攻 modifiers.caused 同时含 0.8 与 1.6', () => {
+  it('chance=1：160% 攻击 + charges basic +1.6；普攻 modifiers.caused 同时含 0.8 与 1.6', () => {
     const me = makeUnit(dummy('zhu', '前锋', { passiveSkillIds: ['huoshou_chongfeng'], attackRange: 5, attack: 120 }));
     const foe = makeUnit(dummy('foe', '前锋', { maxTroops: 30000 }), 'enemy');
     const ctx = makeCtx([me], [foe]);

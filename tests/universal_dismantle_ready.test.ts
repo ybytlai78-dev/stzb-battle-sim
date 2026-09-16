@@ -157,7 +157,7 @@ describe('疾击其后（A 追击：随机单体 2 次，伤害率 80%~140% 独�
     expect(SKILL_REGISTRY['jiji_qihou'].triggerRate).toBe(0.35);
   });
 
-  it('每次发动打出 2 段物理伤害', () => {
+  it('每次发动打出 2 段攻击伤害', () => {
     let found = false;
     for (let seed = 1; seed <= 80 && !found; seed++) {
       const report = run(pursuitTeam('jiji_qihou'), seed);
@@ -191,7 +191,7 @@ describe('扬威（B 追击：160% 猛攻 + 自身下一次攻击伤害 +20%）'
     expect(SKILL_REGISTRY['yangwei'].type).toBe('pursuit');
   });
 
-  it('发动后对攻击目标造成物理伤害', () => {
+  it('发动后对攻击目标造成攻击伤害', () => {
     let found = false;
     for (let seed = 1; seed <= 80 && !found; seed++) {
       const report = run(pursuitTeam('yangwei'), seed);

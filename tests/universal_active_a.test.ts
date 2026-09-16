@@ -82,7 +82,7 @@ const damage = (report: ReturnType<typeof run>, name: string, damageType: 'physi
 const healed = (report: ReturnType<typeof run>) =>
   report.events.filter((e): e is Extract<BattleEvent, { type: 'heal' }> => e.type === 'heal');
 
-describe('一骑当千（S 准备：敌军全体兵刃 280%）', () => {
+describe('一骑当千（S 准备：敌军全体攻击伤害 280%）', () => {
   it('装配：主动槽挂入，准备战法', () => {
     const t = activeTeam('yiji_dangqian');
     expect(t[1].activeSkillIds).toContain('yiji_dangqian');
@@ -162,7 +162,7 @@ describe('伐谋（A 主动：敌军单体策略 209% + 攻击谋略降 45）', 
   });
 });
 
-describe('折戟强攻（A 主动：敌军群体兵刃 225% + 自身攻击降 50）', () => {
+describe('折戟强攻（A 主动：敌军群体攻击伤害 225% + 自身攻击降 50）', () => {
   it('装配：主动槽挂入', () => {
     expect(activeTeam('zheji_qianggong')[1].activeSkillIds).toContain('zheji_qianggong');
   });
@@ -180,7 +180,7 @@ describe('折戟强攻（A 主动：敌军群体兵刃 225% + 自身攻击降 50
   });
 });
 
-describe('掎角之势（A 主动：敌军单体兵刃 180% + 策略 143%）', () => {
+describe('掎角之势（A 主动：敌军单体攻击伤害 180% + 策略 143%）', () => {
   it('装配：主动槽挂入', () => {
     expect(activeTeam('jijiao_zhishi')[1].activeSkillIds).toContain('jijiao_zhishi');
   });
@@ -259,7 +259,7 @@ describe('迷阵（A 主动：敌军单体策略 155% + 暴走 1 回合）', () 
   });
 });
 
-describe('雄兵破敌（A 准备：敌军群体兵刃 210% + 防御谋略降 65）', () => {
+describe('雄兵破敌（A 准备：敌军群体攻击伤害 210% + 防御谋略降 65）', () => {
   it('装配：主动槽挂入', () => {
     expect(activeTeam('xiongbing_podi')[1].activeSkillIds).toContain('xiongbing_podi');
   });
@@ -368,7 +368,7 @@ describe('安抚军心（B 主动：移除我军群体有害 + 恢复兵力）',
   });
 });
 
-describe('斩铁（B 主动：敌军单体兵刃 170% + 混乱）', () => {
+describe('斩铁（B 主动：敌军单体攻击伤害 170% + 混乱）', () => {
   it('装配：主动槽挂入', () => {
     expect(activeTeam('zhantie')[1].activeSkillIds).toContain('zhantie');
   });
@@ -385,7 +385,7 @@ describe('斩铁（B 主动：敌军单体兵刃 170% + 混乱）', () => {
   });
 });
 
-describe('枪阵（B 准备：敌军群体兵刃 175% + 防御降 30）', () => {
+describe('枪阵（B 准备：敌军群体攻击伤害 175% + 防御降 30）', () => {
   it('装配：主动槽挂入', () => {
     expect(activeTeam('qiangzhen')[1].activeSkillIds).toContain('qiangzhen');
   });
@@ -419,7 +419,7 @@ describe('水淹七军（B 准备：敌军群体策略 205% + 攻击降 10）', 
   });
 });
 
-describe('破胆（B 主动：敌军单体兵刃 214% + 攻击降 30）', () => {
+describe('破胆（B 主动：敌军单体攻击伤害 214% + 攻击降 30）', () => {
   it('装配：主动槽挂入', () => {
     expect(activeTeam('podan')[1].activeSkillIds).toContain('podan');
   });
@@ -436,7 +436,7 @@ describe('破胆（B 主动：敌军单体兵刃 214% + 攻击降 30）', () => 
   });
 });
 
-describe('破魂（B 主动：敌军单体兵刃 180% + 暴走）', () => {
+describe('破魂（B 主动：敌军单体攻击伤害 180% + 暴走）', () => {
   it('装配：主动槽挂入', () => {
     expect(activeTeam('pohun')[1].activeSkillIds).toContain('pohun');
   });
@@ -453,7 +453,7 @@ describe('破魂（B 主动：敌军单体兵刃 180% + 暴走）', () => {
   });
 });
 
-describe('箭岚（B 准备：敌军群体兵刃 170% + 攻击降 45）', () => {
+describe('箭岚（B 准备：敌军群体攻击伤害 170% + 攻击降 45）', () => {
   it('装配：主动槽挂入', () => {
     expect(activeTeam('jianlan')[1].activeSkillIds).toContain('jianlan');
   });
@@ -470,7 +470,7 @@ describe('箭岚（B 准备：敌军群体兵刃 170% + 攻击降 45）', () => 
   });
 });
 
-describe('车悬（B 准备：敌军单体兵刃 355%）', () => {
+describe('车悬（B 准备：敌军单体攻击伤害 355%）', () => {
   it('装配：主动槽挂入', () => {
     expect(activeTeam('chexuan')[1].activeSkillIds).toContain('chexuan');
   });

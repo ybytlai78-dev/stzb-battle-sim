@@ -149,7 +149,7 @@ describe('奋疾先登（乐进·二类指挥·行动叠层）', () => {
     });
     // 词条：造成单次伤害（不冲突）/ 速度属性降低 / 攻击伤害提高
     expect(s.tags).toEqual(expect.arrayContaining(['damage', 'speed_buff', 'damage_boost']));
-    // 触发攻击：物理 190%
+    // 触发攻击：攻击 190%
     expect(s.output).toEqual([{ kind: 'physical_damage', rate: 190 }]);
   });
 

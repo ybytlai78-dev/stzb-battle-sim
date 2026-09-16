@@ -82,7 +82,7 @@ describe('献刀七星（汉·曹操，主动 30%：单体猛攻 275% + 速度 -
     expect(s.tags).toEqual(['damage', 'debuff_speed']);
   });
 
-  it('发动后对敌军单体造成物理伤害', () => {
+  it('发动后对敌军单体造成攻击伤害', () => {
     const report = run(fullTeam(withSkills(level40(hero('h42'), { attack: 40 }), { activeSkillIds: ['xiandao_qixing'] })), 1);
     expect(casts(report, '献刀七星').length).toBeGreaterThan(0);
     const dmg = report.events.filter((e) => e.type === 'damage' && e.skillName === '献刀七星');

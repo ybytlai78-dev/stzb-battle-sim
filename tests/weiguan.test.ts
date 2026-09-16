@@ -113,7 +113,7 @@ describe('持节镇西：准备阶段注册', () => {
 });
 
 describe('持节镇西：攻击/谋略/防御叠层', () => {
-  it('物理攻击前 → 攻击方叠攻击层（按卫瓘攻击缩放）', () => {
+  it('攻击前 → 攻击方叠攻击层（按卫瓘攻击缩放）', () => {
     const ctx = makeCtx();
     const wg = makeUnit('weiguan', { position: '中军', attack: 151 }); // 40级卫瓘攻击
     wg.general.commandSkillIds = ['chijie_zhenxi'];

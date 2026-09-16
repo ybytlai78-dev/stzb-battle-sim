@@ -91,7 +91,7 @@ const inflicted = (ctx: CombatContext, statusType: string) =>
       e.type === 'status_inflicted' && e.statusType === statusType
   );
 
-describe('盲侯奋勇（夏侯惇，一类指挥：自身受伤后 40% 对距离 4 内敌军群体物理 60%）', () => {
+describe('盲侯奋勇（夏侯惇，一类指挥：自身受伤后 40% 对距离 4 内敌军群体攻击 60%）', () => {
   it('主战法挂入指挥槽（夏侯惇），一类指挥距离 4 群体 2，发动率 40%', () => {
     const g = hero('h449');
     expect(g.name).toBe('夏侯惇');
@@ -112,7 +112,7 @@ describe('盲侯奋勇（夏侯惇，一类指挥：自身受伤后 40% 对距�
     expect(dmg && dmg.kind === 'physical_damage' && dmg.rate).toBe(60);
   });
 
-  it('自身受伤后对距离 4 内敌军群体发动一次物理攻击（伤害率 60%）', () => {
+  it('自身受伤后对距离 4 内敌军群体发动一次攻击（伤害率 60%）', () => {
     const xiah = makeUnit(withSkills(dummy('xiah', '前锋', { attack: 120 }), { commandSkillIds: ['manghou_fenyong'] }));
     const ally = makeUnit(dummy('ally', '中军'));
     const e1 = makeUnit(dummy('e1', '前锋'), 'enemy');

@@ -100,7 +100,7 @@ describe('statusMatchesHit', () => {
     expect(statusMatchesHit({}, undefined)).toBe(true);
   });
 
-  it('basic 不匹配 skill 物理', () => {
+  it('basic 不匹配 skill 攻击', () => {
     expect(statusMatchesHit({ damageSource: 'basic' }, basic)).toBe(true);
     expect(statusMatchesHit({ damageSource: 'basic' }, activePhys)).toBe(false);
   });
@@ -191,7 +191,7 @@ describe('同类型 damage_boost 冲突替换过滤字段', () => {
 });
 
 /**
- * 方圆 × 大赏终态：同号胜者 0.3 无过滤，负号 −0.2 basic 共存；主动物理只吃一条正 caused。
+ * 方圆 × 大赏终态：同号胜者 0.3 无过滤，负号 −0.2 basic 共存；主动攻击只吃一条正 caused。
  */
 function assertFangyuanDashangEnd(
   u: UnitState,

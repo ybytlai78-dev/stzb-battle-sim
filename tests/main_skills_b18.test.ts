@@ -155,7 +155,7 @@ describe('怀德畏威（司马昭，主动：借谋略最低友军攻击 + 自�
     expect(hasStatus(enemy, 'confusion')).toBe(true);
   });
 
-  it('无存活友军时跳过物理段、策略照打、不上混乱；谋略 180 策略伤害高于 80', () => {
+  it('无存活友军时跳过攻击段、策略照打、不上混乱；谋略 180 策略伤害高于 80', () => {
     const at80 = makeUnit(
       withSkills(dummy('s80', '中军', { strategy: 80, attack: 40 }), {
         activeSkillIds: ['huaide_weiwei'],

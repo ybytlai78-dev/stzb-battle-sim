@@ -156,7 +156,7 @@ describe('反计（C 主动：敌军单体犹豫 2 回合）', () => {
   });
 });
 
-describe('奔袭（C 主动：敌军单体兵刃 225%）', () => {
+describe('奔袭（C 主动：敌军单体攻击伤害 225%）', () => {
   it('装配：主动槽挂入', () => {
     expect(activeTeam('benxi')[1].activeSkillIds).toContain('benxi');
   });
@@ -285,7 +285,7 @@ describe('疑兵（C 主动：敌军单体暴走 1 回合）', () => {
   });
 });
 
-describe('窃兵（C 主动：敌军单体兵刃 170% + 恢复自身）', () => {
+describe('窃兵（C 主动：敌军单体攻击伤害 170% + 恢复自身）', () => {
   it('装配：主动槽挂入', () => {
     expect(activeTeam('qiebing')[1].activeSkillIds).toContain('qiebing');
   });
@@ -356,7 +356,7 @@ describe('规避（C 主动：自身规避 1 次）', () => {
   });
 });
 
-describe('设伏（C 主动：敌军群体兵刃 145%）', () => {
+describe('设伏（C 主动：敌军群体攻击伤害 145%）', () => {
   it('装配：主动槽挂入', () => {
     expect(activeTeam('shefu')[1].activeSkillIds).toContain('shefu');
   });
@@ -411,7 +411,7 @@ describe('雀伏（C 主动：敌军单体策略 165%）', () => {
   });
 });
 
-describe('齐射（C 主动：敌军群体兵刃 90% + 攻击降）', () => {
+describe('齐射（C 主动：敌军群体攻击伤害 90% + 攻击降）', () => {
   it('装配：主动槽挂入', () => {
     expect(activeTeam('qishe')[1].activeSkillIds).toContain('qishe');
   });
@@ -427,7 +427,7 @@ describe('齐射（C 主动：敌军群体兵刃 90% + 攻击降）', () => {
   });
 });
 
-describe('乱击（D 准备：敌军群体兵刃 120% + 防御降）', () => {
+describe('乱击（D 准备：敌军群体攻击伤害 120% + 防御降）', () => {
   it('装配：主动槽挂入', () => {
     expect(activeTeam('luanji')[1].activeSkillIds).toContain('luanji');
   });
@@ -520,7 +520,7 @@ describe('威压（D 主动：敌军群体进行攻击伤害降低）', () => {
   });
 });
 
-describe('强攻（D 主动：敌军单体兵刃 105% + 防御降）', () => {
+describe('强攻（D 主动：敌军单体攻击伤害 105% + 防御降）', () => {
   it('装配：主动槽挂入', () => {
     expect(activeTeam('qianggong')[1].activeSkillIds).toContain('qianggong');
   });
@@ -610,7 +610,7 @@ describe('顽抗（D 主动：移除自身有害 + 敌军单体攻击）', () =>
   });
 });
 
-describe('飞虹（D 主动：敌军单体兵刃 110% + 攻击降）', () => {
+describe('飞虹（D 主动：敌军单体攻击伤害 110% + 攻击降）', () => {
   it('装配：主动槽挂入', () => {
     expect(activeTeam('feihong')[1].activeSkillIds).toContain('feihong');
   });

@@ -211,7 +211,7 @@ describe('thisHitReduce 改扣兵量', () => {
 });
 
 describe('counter 只吃普攻且二次不反击', () => {
-  it('basic 扣兵后对来源打 100% 物理；skill 不触发；反击段不再套 counter', () => {
+  it('basic 扣兵后对来源打 100% 攻击；skill 不触发；反击段不再套 counter', () => {
     const me = dummyUnit('me', '前锋');
     const foe = dummyUnit('foe', '前锋', {}, 'enemy');
     me.statuses.push({

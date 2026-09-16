@@ -167,7 +167,7 @@ function makeCtx(my: General[], seed = 1): CombatContext {
   };
 }
 
-describe('万箭齐发（A 主动 35%：群体 2 物理 150% + 策略造成 −50% 受攻击）', () => {
+describe('万箭齐发（A 主动 35%：群体 2 攻击 150% + 策略造成 −50% 受攻击）', () => {
   it('装配：prepare false、triggerRate 0.35、range 5、groupCount 2、group', () => {
     expect(activeTeam('wanjian_qifa')[0].activeSkillIds).toContain('wanjian_qifa');
     const s = asActive('wanjian_qifa');
@@ -178,7 +178,7 @@ describe('万箭齐发（A 主动 35%：群体 2 物理 150% + 策略造成 −5
     expect(s.targetMode).toBe('group');
   });
 
-  it('机制：output[0] 物理 150；output[1] 策略 caused −0.5 duration 2 attackScaled 无 growthRate', () => {
+  it('机制：output[0] 攻击 150；output[1] 策略 caused −0.5 duration 2 attackScaled 无 growthRate', () => {
     const s = asActive('wanjian_qifa');
     expect(s.output[0].kind).toBe('physical_damage');
     if (s.output[0].kind === 'physical_damage') expect(s.output[0].rate).toBe(150);
@@ -285,7 +285,7 @@ describe('不攻（S 一类指挥：自身怯战 + 策略 +25% + 每回合策略
   });
 });
 
-describe('恃强淬锋（A 被动：策略 taken −30% 五份衰减 + 物理叠层 3.4%）', () => {
+describe('恃强淬锋（A 被动：策略 taken −30% 五份衰减 + 攻击叠层 3.4%）', () => {
   it('装配：battle_start、selfPhysBoost maxStacks 12 perStack 0.034', () => {
     expect(passiveTeam('shiqiang_cuifeng')[0].passiveSkillIds).toContain('shiqiang_cuifeng');
     const s = asPassive('shiqiang_cuifeng');

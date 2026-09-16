@@ -121,9 +121,9 @@ describe('兵种相克（集成：普攻与战法事件）', () => {
     }
   });
 
-  it('战法伤害同样受克制：突进（D 主动物理）damage.modifiers 带兵种克制 30%', () => {
+  it('战法伤害同样受克制：突进（D 主动攻击）damage.modifiers 带兵种克制 30%', () => {
     const inf = makeGeneral('inf', 'infantry');
-    inf.activeSkillIds = ['tujin']; // 突进：距离1，25%，单体物理 115%
+    inf.activeSkillIds = ['tujin']; // 突进：距离1，25%，单体攻击 115%
     const rep = runDuel(inf, makeGeneral('cav', 'cavalry'), 888);
     const dmg = rep.events.filter((e): e is DmgEvent => e.type === 'damage' && e.skillId === 'tujin' && e.sourceId === 'inf');
     expect(dmg.length).toBeGreaterThan(0);

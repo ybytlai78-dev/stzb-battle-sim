@@ -6,7 +6,7 @@
 import type { Skill } from '../engine/types';
 
 export const SKILL_REGISTRY: Record<string, Skill> = {
-  /** 突进（D 主动）：距离1，25%，敌军单体，兵刃 115% */
+  /** 突进（D 主动）：距离1，25%，敌军单体，攻击伤害 115% */
   tujin: {
     id: 'tujin',
     name: '突进',
@@ -18,7 +18,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['damage'],
     output: [{ kind: 'physical_damage', rate: 115 }],
   },
-  /** 凿穿（C 主动）：距离2，25%，敌军单体，兵刃 135% */
+  /** 凿穿（C 主动）：距离2，25%，敌军单体，攻击伤害 135% */
   zaochuan: {
     id: 'zaochuan',
     name: '凿穿',
@@ -45,7 +45,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
 
   // ─── 三将主战法 ───
 
-  /** 方阵突击（太史慈主战法）：追击，普攻后对目标再攻 200% 兵刃 + 混乱 1 回合 */
+  /** 方阵突击（太史慈主战法）：追击，普攻后对目标再攻 200% 攻击伤害 + 混乱 1 回合 */
   fangzhen_tuji: {
     id: 'fangzhen_tuji',
     name: '方阵突击',
@@ -266,7 +266,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['damage_boost'],
     output: [{ kind: 'grant_damage_boost', rate: 30, growthRate: 0.15, duration: 3, direction: 'caused' }],
   },
-  /** 温酒斩将（A 追击）：普攻后对攻击目标再次发动猛攻（兵刃 200%） */
+  /** 温酒斩将（A 追击）：普攻后对攻击目标再次发动猛攻（攻击伤害 200%） */
   wenjiu_zhanjiang: {
     id: 'wenjiu_zhanjiang',
     name: '温酒斩将',
@@ -1676,7 +1676,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
 
   // ─── 通用主动战法·S/A 级（批量 u3a）───
 
-  /** 一骑当千（S 主动）：1 回合准备，对敌军全体发动一次猛烈攻击（兵刃 280%） */
+  /** 一骑当千（S 主动）：1 回合准备，对敌军全体发动一次猛烈攻击（攻击伤害 280%） */
   yiji_dangqian: {
     id: 'yiji_dangqian',
     name: '一骑当千',
@@ -3109,7 +3109,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    * 怀德畏威（司马昭主战法·主动 S）：40% / 距离 5。
    * 令谋略最低的友军单体对敌军随机单体发动一次攻击 160%（借友军面板兵力与增伤，creditToId 归司马昭）；
    * 自身对敌军群体 2 目标策略攻击 160%（受谋略，成长率 1.75：战报 兵力5905/谋略222/目标谋略78 → 有效率408%，引擎 851 / 战报 850）；
-   * 两段目标重合则该敌军混乱 1 回合。无存活友军时跳过物理段，策略照打。
+   * 两段目标重合则该敌军混乱 1 回合。无存活友军时跳过攻击段，策略照打。
    */
   huaide_weiwei: {
     id: 'huaide_weiwei',
@@ -3260,7 +3260,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     output: [],
   },
 
-  /** 攻其不备（S 一类指挥）：锁敌军 2 目标；其每次受到物理伤害后 taken +11.6%（受速度，无成长率用基值），最多 5 层。策略/DoT 不叠。 */
+  /** 攻其不备（S 一类指挥）：锁敌军 2 目标；其每次受到攻击伤害后 taken +11.6%（受速度，无成长率用基值），最多 5 层。策略/DoT 不叠。 */
   gongqi_bubei: {
     id: 'gongqi_bubei',
     name: '攻其不备',
@@ -3405,7 +3405,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     ],
   },
   /**
-   * 疏数（B 一类指挥）：仅弓+骑阵容生效。弓兵防御 +50，骑兵每回合 40% 对距离 3 敌军单体代打物理 100%。基值无成长率。
+   * 疏数（B 一类指挥）：仅弓+骑阵容生效。弓兵防御 +50，骑兵每回合 40% 对距离 3 敌军单体代打攻击 100%。基值无成长率。
    */
   shushu: {
     id: 'shushu',
@@ -3608,7 +3608,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     },
   },
   /**
-   * 全军突击（A 主动 35% 距离 4）：移除我军骑/步有害效果，对敌军单体物理 145%，并使骑/步接下来 2 次攻击伤害提高 28%（受谋略基值，无成长率）。
+   * 全军突击（A 主动 35% 距离 4）：移除我军骑/步有害效果，对敌军单体攻击 145%，并使骑/步接下来 2 次攻击伤害提高 28%（受谋略基值，无成长率）。
    */
   quanjun_tuji: {
     id: 'quanjun_tuji',
@@ -3666,7 +3666,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     ],
   },
   /**
-   * 落首箭（沙摩柯 h524·准备主动 40% 距离 5）：前半口径。对敌军随机单体物理 300%，并对大营再攻 180% + 混乱 1–2 回合（无受击增伤）。
+   * 落首箭（沙摩柯 h524·准备主动 40% 距离 5）：前半口径。对敌军随机单体攻击 300%，并对大营再攻 180% + 混乱 1–2 回合（无受击增伤）。
    */
   luoshou_jian: {
     id: 'luoshou_jian',
@@ -3685,7 +3685,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     ],
   },
   /**
-   * 长坂之吼（张飞 h22·准备主动 75% 距离 4）：前半口径。2 回合准备，敌军群体 2–3 目标物理 450%，无视兵种相克（非三次单体）。
+   * 长坂之吼（张飞 h22·准备主动 75% 距离 4）：前半口径。2 回合准备，敌军群体 2–3 目标攻击 450%，无视兵种相克（非三次单体）。
    */
   changban_zhihou: {
     id: 'changban_zhihou',
@@ -3747,7 +3747,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     }],
   },
   /**
-   * 火兽冲锋（祝融夫人 h494·被动）：开战普攻造成伤害 +80%；每回合行动阶段 50% 对敌军单体物理 160% 且下一次普攻 +160%（charges 1）。
+   * 火兽冲锋（祝融夫人 h494·被动）：开战普攻造成伤害 +80%；每回合行动阶段 50% 对敌军单体攻击 160% 且下一次普攻 +160%（charges 1）。
    */
   huoshou_chongfeng: {
     id: 'huoshou_chongfeng',
@@ -3821,7 +3821,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     }],
   },
   /**
-   * 万箭齐发（A 主动 35% 距离 5）：敌军群体 2 物理 150%；目标策略造成伤害 −50%（受攻击，无成长率）持续 1 回合（行动中施加 duration 2）。
+   * 万箭齐发（A 主动 35% 距离 5）：敌军群体 2 攻击 150%；目标策略造成伤害 −50%（受攻击，无成长率）持续 1 回合（行动中施加 duration 2）。
    */
   wanjian_qifa: {
     id: 'wanjian_qifa',
@@ -3912,7 +3912,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     },
   },
   /**
-   * 恃强淬锋（A 被动）：受策略伤害 −30%（受攻击，无成长率）五份衰减；回合开始或每次造成物理伤害 +3.4%/层（受攻击，无成长率），最多 12 层至战斗结束。
+   * 恃强淬锋（A 被动）：受策略伤害 −30%（受攻击，无成长率）五份衰减；回合开始或每次造成攻击伤害 +3.4%/层（受攻击，无成长率），最多 12 层至战斗结束。
    */
   shiqiang_cuifeng: {
     id: 'shiqiang_cuifeng',

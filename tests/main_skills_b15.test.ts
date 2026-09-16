@@ -1,7 +1,7 @@
 /**
  * 批量15 主战法测试：青丘媚祸（妲己）/ 舍身卫主（典韦）
  * 新机制：下一次攻击次数计数器（charges）+ 待下次行动再生效的暴走；
- * 攻击伤害转嫁（友军受物理伤害前目标改为典韦）。
+ * 攻击伤害转嫁（友军受攻击伤害前目标改为典韦）。
  * 每战法 3 个测试：装配挂槽、机制、数值或共存。
  */
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -110,7 +110,7 @@ const TWO_HIT: Skill = {
 
 const AOE_PHYS: Skill = {
   id: 'test_aoe_phys',
-  name: '测试全体物理',
+  name: '测试全体攻击',
   type: 'active',
   prepare: false,
   range: 5,
@@ -254,7 +254,7 @@ describe('舍身卫主（典韦，被动：距离 2 内受伤 60% 反击来源�
     expect(dmg && dmg.kind === 'physical_damage' && dmg.rate).toBe(120);
   });
 
-  it('群体物理：典韦与友军同时受击 → 典韦挨两刀、友军不受伤；策略伤害不转嫁', () => {
+  it('群体攻击：典韦与友军同时受击 → 典韦挨两刀、友军不受伤；策略伤害不转嫁', () => {
     const dian = makeUnit(withSkills(dummy('dianwei', '前锋', { defense: 80 }), { passiveSkillIds: ['sheshen_weizhu'] }));
     const ally = makeUnit(dummy('ally', '中军', { defense: 80 }));
     const foe = makeUnit(withSkills(dummy('foe', '前锋', { attack: 200, strategy: 200 }), { activeSkillIds: ['test_aoe_phys'] }), 'enemy');
@@ -266,7 +266,7 @@ describe('舍身卫主（典韦，被动：距离 2 内受伤 60% 反击来源�
     const dianBefore = dian.troops;
     const allyBefore = ally.troops;
     triggerActiveSkill(ctx, foe, AOE_PHYS, ctx.myTeam, ctx.enemyTeam, ctx.myTeam);
-    const physHits = ctx.events.filter((e) => e.type === 'damage' && e.skillName === '测试全体物理');
+    const physHits = ctx.events.filter((e) => e.type === 'damage' && e.skillName === '测试全体攻击');
     expect(physHits.length).toBe(2);
     expect(physHits.every((e) => e.type === 'damage' && e.targetId === 'dianwei')).toBe(true);
     expect(dian.troops).toBeLessThan(dianBefore);

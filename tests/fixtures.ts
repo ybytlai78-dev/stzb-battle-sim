@@ -70,7 +70,7 @@ export const T1_PURE_ATTACK: BattleConfig = {
   maxRounds: 8,
 };
 
-/** T2 兵刃战法：3 将带 突进/凿穿 */
+/** T2 攻击伤害战法：3 将带 突进/凿穿 */
 export const T2_PHYSICAL_SKILL: BattleConfig = {
   myTeam: [
     general({

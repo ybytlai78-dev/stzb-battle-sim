@@ -1,12 +1,12 @@
 /**
  * 伤害公式（v0.2 严格拟合，v0.14 按权威调研复核修正）
  * 依据《战斗伤害公式调研.md》（十面埋伏 2022 系列原文 OCR 复核）三部分相加模型：
- *   兵刃伤害 = 兵力基础 + 攻击基础 + 主要伤害
+ *   攻击伤害 = 兵力基础 + 攻击基础 + 主要伤害
  *   谋略伤害 = 兵力基础 + 谋略基础 + 主要伤害
  * 精确锚点全部按文档：兵力 10000 锚点、攻击基础随机 0.30~0.39、攻防差高收益区 [-70,130]、
  * 谋略减伤阶梯、有效伤害率 八舍九入、增减伤单一总和下限 -90% 保留 10%。
- * v0.14 修正：删除「物理宏观 ±5% 波动」（权威文章只承认攻击基础随机 0.3~0.39，模拟器无 ±5%）；
- * 增减伤因子改为单一总和模型 max(10%, 1+Σ增伤−Σ减伤)（物理/谋略统一，策略特殊减伤规则为官方历史缺陷，不建模）。
+ * v0.14 修正：删除「攻击伤害宏观 ±5% 波动」（权威文章只承认攻击基础随机 0.3~0.39，模拟器无 ±5%）；
+ * 增减伤因子改为单一总和模型 max(10%, 1+Σ增伤−Σ减伤)（攻击/谋略统一，策略特殊减伤规则为官方历史缺陷，不建模）。
  * 兵种克制 -30% 并入该加算（不独立乘区），与其他增减伤一同受 10% 下限保护。
  */
 import type { DamageBreakdown, DamageType, TroopType } from './types';
@@ -40,7 +40,7 @@ export function troopCounterReduce(attackerTroopType: TroopType, targetTroopType
 
 /**
  * 兵力基础伤害：仅与当前兵力有关，与伤害率无关
- * 物理：373×兵/(7700+兵)（参考模拟器拟合，10000兵≈211）
+ * 攻击：373×兵/(7700+兵)（参考模拟器拟合，10000兵≈211）
  * 策略：178×兵/(6459+兵)（参考模拟器拟合，10000兵≈108）
  */
 export function troopBaseDamage(troops: number, damageType: DamageType): number {
@@ -52,9 +52,9 @@ export function troopBaseDamage(troops: number, damageType: DamageType): number 
 
 /**
  * 单位伤害曲线（兵力 → 主要伤害的单位因子）
- * 参考模拟器（FlxSNX/stzbBattleSimulator，社区战报反推）：物理/策略共用
+ * 参考模拟器（FlxSNX/stzbBattleSimulator，社区战报反推）：攻击/策略共用
  *   unit = 300×兵/(3500+兵)，9000 兵 ≈216、10000 兵 ≈222
- * （引擎旧实现误用兵力基础伤害锚点，策略 108 / 物理 211，导致主要伤害偏低约 2 倍）
+ * （引擎旧实现误用兵力基础伤害锚点，策略 108 / 攻击 211，导致主要伤害偏低约 2 倍）
  */
 export function unitDamage(troops: number, _damageType: DamageType): number {
   return (300 * troops) / (3500 + troops);
@@ -63,7 +63,7 @@ export function unitDamage(troops: number, _damageType: DamageType): number {
 // ─── 属性影响曲线（调研 2.4 / 参考模拟器）───
 
 /**
- * 兵刃攻防差属性曲线（攻防差 = 攻击 - 目标防御，参考模拟器拟合）：
+ * 攻击伤害的攻防差属性曲线（攻防差 = 攻击 - 目标防御，参考模拟器拟合）：
  *   diff ≥ 0：3 - 500/(250+diff)（diff=0→1.0，diff=100→1.57，diff=250→2.0，趋近 3）
  *   diff < 0：100/(100-diff)（diff=-70→0.59，diff=-100→0.5，趋近 0）
  * 保留两位小数。
@@ -90,7 +90,7 @@ export function targetStratMitigation(targetStrategy: number): number {
 
 const ATK_BASE_COEFFS = [0.3, 0.31, 0.32, 0.33, 0.34, 0.35, 0.36, 0.37, 0.38, 0.39];
 
-/** 攻击基础随机系数 ∈ {0.30 … 0.39}，可复现（调研 2.3：普通兵刃唯一的随机来源；无宏观 ±5% 波动） */
+/** 攻击基础随机系数 ∈ {0.30 … 0.39}，可复现（调研 2.3：普通攻击伤害唯一的随机来源；无宏观 ±5% 波动） */
 export function atkBaseRandomCoeff(rng: Rng): number {
   return ATK_BASE_COEFFS[rng.int(ATK_BASE_COEFFS.length)];
 }
@@ -100,7 +100,7 @@ export function atkBaseRandomCoeff(rng: Rng): number {
 const MIN_DAMAGE_FACTOR = 0.1; // 增减伤总和 < -90% 时最低保留 10%
 
 /**
- * 增减伤因子 = max(10%, 1 + Σ增伤 − Σ减伤)（单一总和模型，物理/谋略统一）。
+ * 增减伤因子 = max(10%, 1 + Σ增伤 − Σ减伤)（单一总和模型，攻击/谋略统一）。
  * 造成侧/受到侧增伤（causedMult/takenMult，各为 1+Σrate）与受击方减伤（reduce = Σdamage_reduce rate）
  * 全部数值相加：mult = 1 + Σ增伤 − Σ减伤。例：增 60% + 减 60% → 1.0（增伤与减伤相互抵消）。
  * 策略伤害的「造成侧增伤不被受到侧减伤抵消」特殊规则是官方承认的历史缺陷（2022-05-11 已部分修复，
@@ -184,7 +184,7 @@ export interface CalcInput {
 
 /**
  * 计算一次伤害，返回三部分拆解与总伤害。
- * 兵刃：三部分（随机仅存在于攻击基础系数 0.30~0.39，无宏观波动）；
+ * 攻击伤害：三部分（随机仅存在于攻击基础系数 0.30~0.39，无宏观波动）；
  * 谋略：三部分，无随机。
  */
 export function calcDamage(input: CalcInput, rng: Rng): { damage: number; breakdown: DamageBreakdown } {
@@ -224,7 +224,7 @@ export function calcDamage(input: CalcInput, rng: Rng): { damage: number; breakd
       effMult;
   }
 
-  // 三部分分别四舍五入后相加（无宏观波动：物理随机仅来自攻击基础系数）
+  // 三部分分别四舍五入后相加（无宏观波动：攻击随机仅来自攻击基础系数）
   const breakdown: DamageBreakdown = {
     troopBase: Math.round(troopBase),
     base: Math.round(base),

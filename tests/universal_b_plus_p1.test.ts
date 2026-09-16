@@ -127,7 +127,7 @@ function inflictStatusOf(out: SkillOutput | undefined) {
 }
 
 describe('回马（B 被动：受普攻反击 60%）', () => {
-  it('装配：被动槽挂入，onHurt 只吃普攻，物理 60%', () => {
+  it('装配：被动槽挂入，onHurt 只吃普攻，攻击 60%', () => {
     expect(passiveTeam('huima')[0].passiveSkillIds).toContain('huima');
     const s = asPassive('huima');
     const oh = firstOnHurt(s.onHurt);
@@ -135,7 +135,7 @@ describe('回马（B 被动：受普攻反击 60%）', () => {
     expect(oh?.output).toEqual([{ kind: 'physical_damage', rate: 60 }]);
   });
 
-  it('机制：多 seed 存在回马物理伤害', () => {
+  it('机制：多 seed 存在回马攻击伤害', () => {
     let hits: ReturnType<typeof damage> = [];
     for (let seed = 1; seed <= 40 && hits.length === 0; seed++) {
       hits = damage(run(passiveTeam('huima'), seed), '回马');
@@ -198,7 +198,7 @@ describe('空城（B 一类指挥：前 2 回合受击 70% 规避当次）', () 
   });
 });
 
-describe('攻其不备（S 一类指挥：锁 2 目标，受物理伤害 taken +11.6%，最多 5 层）', () => {
+describe('攻其不备（S 一类指挥：锁 2 目标，受攻击伤害 taken +11.6%，最多 5 层）', () => {
   it('装配：groupCount 2，victim locked，maxStacks 5，speedScaled 无成长率', () => {
     expect(commandTeam('gongqi_bubei')[1].commandSkillIds).toContain('gongqi_bubei');
     const s = asCommand('gongqi_bubei');
@@ -400,7 +400,7 @@ describe('先声夺人（A 被动：前 3 回合行动时连击 / 分兵 / 单�
     expect(s.output.every((o) => 'chance' in o && o.chance === 0.6)).toBe(true);
   });
 
-  it('机制：多 seed 出现 combo 或 split 或先声夺人物理伤害', () => {
+  it('机制：多 seed 出现 combo 或 split 或先声夺人攻击伤害', () => {
     let hit = false;
     for (let seed = 1; seed <= 40 && !hit; seed++) {
       const report = run(passiveTeam('xiansheng_duoren'), seed);

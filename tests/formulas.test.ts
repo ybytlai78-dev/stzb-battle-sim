@@ -16,7 +16,7 @@ import {
 import { Rng } from '../src/engine/rng';
 
 describe('troopBaseDamage', () => {
-  it('兵力 10000 时命中调研锚点（兵刃 211 / 谋略 108）', () => {
+  it('兵力 10000 时命中调研锚点（攻击伤害 211 / 谋略 108）', () => {
     expect(troopBaseDamage(10000, 'physical')).toBe(211);
     expect(troopBaseDamage(10000, 'strategy')).toBe(108);
   });
@@ -183,7 +183,7 @@ describe('calcDamage', () => {
     expect(damage).toBe(breakdown.troopBase + breakdown.base + breakdown.main);
     expect(damage).toBeGreaterThan(0);
   });
-  it('兵刃伤害命中兵力上限截断', () => {
+  it('攻击伤害命中兵力上限截断', () => {
     const rng = new Rng(2);
     const { damage } = calcDamage(
       {

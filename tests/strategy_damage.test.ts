@@ -89,7 +89,7 @@ describe('策略伤害公式（对照参考模拟器）', () => {
     expect(dot.breakdown.main).toBe(plain.breakdown.main);
   });
 
-  it('单位伤害曲线：9000 兵 ≈216、10000 兵 ≈222（300×兵/(3500+兵)，物理/策略共用）', () => {
+  it('单位伤害曲线：9000 兵 ≈216、10000 兵 ≈222（300×兵/(3500+兵)，攻击/策略共用）', () => {
     expect(unitDamage(9000, 'strategy')).toBeCloseTo(216, 0);
     expect(unitDamage(10000, 'strategy')).toBeCloseTo(222.2, 0);
     expect(unitDamage(9000, 'physical')).toBeCloseTo(216, 0);
@@ -102,7 +102,7 @@ describe('策略伤害公式（对照参考模拟器）', () => {
   });
 });
 
-describe('物理伤害公式（参考模拟器校准）', () => {
+describe('攻击伤害公式（参考模拟器校准）', () => {
   it('攻防差因子：diff=0→1.0、100→1.57、-70→0.59、-100→0.5', () => {
     expect(attrFactor(0)).toBe(1);
     expect(attrFactor(100)).toBe(1.57);

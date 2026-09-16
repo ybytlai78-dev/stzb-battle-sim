@@ -332,7 +332,7 @@ describe('怒浪伐敌（蒋钦，追击 240%：普攻后对攻击目标再次�
     expect(cast.length).toBeGreaterThan(0);
   });
 
-  it('追击对攻击目标造成兵刃伤害（damage 事件）', () => {
+  it('追击对攻击目标造成攻击伤害（damage 事件）', () => {
     const report = run(fullTeam(withSkills(level40(hero('h671'), { attack: 40 }), { pursuitSkillIds: ['nulang_fadi'] })), 1);
     const dmg = report.events.filter((e) => e.type === 'damage' && e.skillName === '怒浪伐敌');
     expect(dmg.length).toBeGreaterThan(0);

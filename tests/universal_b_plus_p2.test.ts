@@ -436,7 +436,7 @@ describe('白刃（A 一类指挥：前 3 回合策略 −35%；骑/步防 +45�
   });
 });
 
-describe('全军突击（A 主动 35%：驱散骑/步 + 单体物理 145% + 下 2 次 +28%）', () => {
+describe('全军突击（A 主动 35%：驱散骑/步 + 单体攻击 145% + 下 2 次 +28%）', () => {
   it('装配：active 0.35 range 4 group 3 ally', () => {
     expect(activeTeam('quanjun_tuji')[0].activeSkillIds).toContain('quanjun_tuji');
     const s = asActive('quanjun_tuji');
