@@ -732,8 +732,13 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
 
   /**
    * 动如雷震（公孙瓒主战法）：主动战法，35%，我军群体（有效距离内 2–3 个目标，各 50%）
-   * 追击战法发动率 +100 个百分点（上限 100%）、追击伤害提升 40%，持续 1 回合。
-   * 官方有效距离 3（网易技能库 200955）。伤害「受速度影响」成长率暂空。
+   * 追击战法发动率 +100 个百分点（上限 100%）、追击战法伤害提升 40%（受速度属性影响），持续 1 回合。
+   * 官方有效距离 3（网易技能库 200955）。
+   * 受速度成长率 = **0.2532 / 点**（2026-09-16 三点实测反解，用户提供）：
+   *   速度 208.8 → 72%、256.9 → 84%、281.4 → 91%（游戏内实读）。
+   *   在「基值 40 @ 速度 80 + 1% 粒度八舍九入」口径下三点自洽，反解区间 [0.25273, 0.25382)，
+   *   取中点附近 0.2532（≈ 40/158，即 +158 速度使该效果翻倍）。
+   * 伤害口径为「追击战法伤害」→ damage_boost 加 skillTypes: ['pursuit']（与发动率过滤一致）。
    */
   dongru_leizhen: {
     id: 'dongru_leizhen',
@@ -748,7 +753,18 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['damage_boost'],
     output: [
       { kind: 'inflict_status', status: { type: 'trigger_boost', rate: 1, duration: 1, skillTypes: ['pursuit'], additive: true } },
-      { kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.4, duration: 1, direction: 'caused' } },
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'damage_boost',
+          rate: 0.4,
+          duration: 1,
+          direction: 'caused',
+          speedScaled: true,
+          growthRate: 0.2532,
+          skillTypes: ['pursuit'],
+        },
+      },
     ],
   },
   /**
