@@ -875,6 +875,105 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     },
     output: [],
   },
+  /**
+   * 帝临回光（灵帝主战法·一类指挥）：战斗开始后第 3 回合起，以无法恢复兵力（围困）为代价，
+   * 使自身攻击距离 +1、进入分兵状态（伤害率 50%，受谋略属性影响），同时令敌军群体陷入恐慌
+   * （每回合损失兵力，伤害率 69%，受谋略属性影响），持续直到战斗结束；恐慌伤害无视规避。
+   * 官方：指挥 A，有效距离 5，目标「自己」（来源 scripts/skill_extra.json）。
+   * 「受谋略属性影响」的分兵 50% / 恐慌 69% 成长率未确认 → 留空（分兵不给缩放字段、
+   * 恐慌 growthRate: 0 = 不缩放按基值）。恐慌为 DoT（行动时跳伤，不经规避判定，与官方「无视规避」一致）。
+   * 引擎配套：新增「攻击距离提高」机制（range_buff 状态 + target.ts attackRangeOf，只放大普攻可达距离，
+   * 不影响战法有效距离）。
+   */
+  diling_huiguang: {
+    id: 'diling_huiguang',
+    name: '帝临回光',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'self',
+    retainAfterDeath: true,
+    tags: ['siege', 'split', 'panic', 'damage', 'range_buff'],
+    delayedOutput: {
+      atRound: 3,
+      output: [
+        // ① 无法恢复兵力（围困）
+        { kind: 'inflict_status', target: 'self', status: { type: 'siege', duration: 999 } },
+        // ② 攻击距离 +1
+        { kind: 'inflict_status', target: 'self', status: { type: 'range_buff', amount: 1, duration: 999 } },
+        // ③ 分兵 50%（受谋略，成长率未确认 → 留空）
+        { kind: 'inflict_status', target: 'self', status: { type: 'split', duration: 999, rate: 50 } },
+        // ④ 敌军群体恐慌 69%（受谋略，成长率未确认 → 留空）
+        {
+          kind: 'inflict_status',
+          targetSide: 'enemy',
+          targetMode: 'all',
+          status: { type: 'panic', duration: 999, rate: 69, growthRate: 0 },
+        },
+      ],
+    },
+    output: [],
+  },
+  /**
+   * 列营守险（SP姜维主战法·主动）：使我军全体攻击、防御、速度、谋略属性提高 29.2（受谋略属性影响），
+   * 持续 2 回合；同时友军全体受到下 3 次伤害时有 50% 几率进入规避状态，免疫该次伤害；
+   * 若自身士气高昂时，规避状态的目标变为我军全体。
+   * 官方：主动 A，有效距离 4，发动率 40%，目标「我军群体（有效距离内 3 个目标）」、可用兵种弓/步
+   * （scripts/skill_extra.json id 200072；挂槽依据 scripts/hero_extra.json「SP姜维 methodName 列营守险」）。
+   * 「受谋略属性影响」的四维 29.2 成长率未确认 → 留空（strategyScaled: true 但不给 growthRate → 引擎不缩放、用基值）。
+   * 引擎配套：① 概率规避 evade_chance（受击消耗 1 次机会并掷率，命中完全免疫；并入 consumeEvasion 统一入口）
+   *           ② morale_branch.by:'caster'（按施法者自身士气整体判定一次，此前仅逐目标判目标士气）
+   * 目标口径（用户 2026-09-16 确认）：「友军全体」= **不含施法者自身**（非高昂分支走 excludeSelf: true）；
+   * 士气高昂（>100）时目标变为「我军全体」= **含自身**（high 分支不带 excludeSelf）。
+   */
+  lieying_shouxian: {
+    id: 'lieying_shouxian',
+    name: '列营守险',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.4,
+    targetMode: 'group',
+    groupCount: 3,
+    targetSide: 'ally',
+    tags: ['attack_buff', 'defense_buff', 'strategy_buff', 'speed_buff', 'evasion'],
+    output: [
+      // ① 我军全体四维 +29.2（受谋略，成长率未确认 → 留空）
+      {
+        kind: 'inflict_status',
+        applyAll: true,
+        status: [
+          { type: 'attack_buff', amount: 29.2, duration: 2, strategyScaled: true },
+          { type: 'defense_buff', amount: 29.2, duration: 2, strategyScaled: true },
+          { type: 'strategy_buff', amount: 29.2, duration: 2, strategyScaled: true },
+          { type: 'speed_buff', amount: 29.2, duration: 2, strategyScaled: true },
+        ],
+      },
+      // ② 士气分支（按施法者自身）：高昂 → 规避给我军全体；否则友军全体（不含自身）
+      {
+        kind: 'morale_branch',
+        by: 'caster',
+        high: [
+          {
+            kind: 'inflict_status',
+            targetSide: 'ally',
+            targetMode: 'all',
+            status: { type: 'evade_chance', rate: 0.5, charges: 3, duration: 2 },
+          },
+        ],
+        low: [
+          {
+            kind: 'inflict_status',
+            targetSide: 'ally',
+            targetMode: 'all',
+            excludeSelf: true,
+            status: { type: 'evade_chance', rate: 0.5, charges: 3, duration: 2 },
+          },
+        ],
+      },
+    ],
+  },
   /** 魏武之泽（曹丕主战法）：主动战法，40%，我军群体免疫怯战，普通攻击与追击伤害提高 15%（受谋略影响），每回合可两次普攻，持续 2 回合。免疫怯战暂未建模 */
   weiwu_zhi_ze: {
     id: 'weiwu_zhi_ze',
@@ -1244,7 +1343,9 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
   // ─── 批量 7（v0.9）───
 
   /** 魏武之世（曹操·魏主战法·一类指挥）：本场战斗中，使敌军全体攻击/防御/谋略/速度属性下降 15%（受谋略影响，基础值锚定谋略 80，成长率 0.045/点），
-   *  按目标当前生效属性（含点数增减后）结算百分比；我军全体攻击距离+1 暂未建模 */
+   *  按目标当前生效属性（含点数增减后）结算百分比；同时使我军全体攻击距离 +1（range_buff，只放大普攻可达距离）。
+   *  官方 desc 为两版本拼接（「攻击距离+1」/「主动战法距离+1」，effect 标签同时含「攻击距离提高;战法有效距离提高」），
+   *  按 gen_skill_data 的 dedupeDesc 清洗口径取前半 → 攻击距离。 */
   weiwu_zhishi: {
     id: 'weiwu_zhishi',
     name: '魏武之世',
@@ -1255,12 +1356,14 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     targetMode: 'all',
     targetSide: 'enemy',
     retainAfterDeath: true,
-    tags: ['debuff_attack', 'debuff_defense', 'debuff_strategy', 'debuff_speed'],
+    tags: ['debuff_attack', 'debuff_defense', 'debuff_strategy', 'debuff_speed', 'range_buff'],
     output: [
       { kind: 'inflict_status', status: { type: 'attack_buff', amount: -15, percent: true, duration: 999, strategyScaled: true, growthRate: 0.045 } },
       { kind: 'inflict_status', status: { type: 'defense_buff', amount: -15, percent: true, duration: 999, strategyScaled: true, growthRate: 0.045 } },
       { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -15, percent: true, duration: 999, strategyScaled: true, growthRate: 0.045 } },
       { kind: 'inflict_status', status: { type: 'speed_buff', amount: -15, percent: true, duration: 999, strategyScaled: true, growthRate: 0.045 } },
+      // 我军全体攻击距离 +1（官方 effect 标签「攻击距离提高」）
+      { kind: 'inflict_status', targetSide: 'ally', targetMode: 'all', status: { type: 'range_buff', amount: 1, duration: 999 } },
     ],
   },
   /** 驱虎吞狼（荀彧主战法）：对敌军全体发动策略攻击 153%（受谋略），并使其陷入围困状态，持续 2 回合 */
@@ -2735,7 +2838,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
 
   // ─── 批量 9（v0.11）：主动发动率提升 + 属性吸取 ───
 
-  /** 难知如阴（法正主战法·二类指挥）：每 2 回合使友军单体在 1 回合内主动主战法发动率提高 120%（trigger_boost），
+  /** 难知如阴（法正主战法·二类指挥）：每 2 回合使友军单体在 1 回合内主动主战法发动率提高 120%（trigger_boost，
+   *  与基础发动率**直接相加**：35% + 120% → 封顶 100%，即必定发动——用户确认口径，见 boostedBaseRate），
    *  并使其主动战法有 60% 几率跳过准备（jump_prep）。第 3 回合起目标调整为友军全体（近似：始终友军全体） */
   nanzhi_ruyin: {
     id: 'nanzhi_ruyin',
@@ -2750,7 +2854,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     targetSide: 'ally',
     tags: [],
     output: [
-      { kind: 'inflict_status', status: { type: 'trigger_boost', rate: 1.2, duration: 1 } },
+      { kind: 'inflict_status', status: { type: 'trigger_boost', rate: 1.2, duration: 1, additive: true } },
       { kind: 'inflict_status', status: { type: 'jump_prep', rate: 0.6, duration: 1 } },
     ],
   },

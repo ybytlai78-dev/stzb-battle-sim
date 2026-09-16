@@ -42,6 +42,8 @@ const SKILL_ID_BY_NAME = {
   令明负榇: 'lingming_fuchen',
   疮痍累身: 'chuangyi_leishen',
   怀橘遗亲: 'huai_ju_yiqin',
+  帝临回光: 'diling_huiguang',
+  列营守险: 'lieying_shouxian',
   闭月: 'biyue',
   金吾飞将: 'jinwu_feijiang',
   奇佐鬼谋: 'qizuo_guimou',

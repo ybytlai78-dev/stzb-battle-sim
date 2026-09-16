@@ -54,7 +54,8 @@ export type EffectTag =
   | 'first_aid' // 持续型急救：受击时按几率触发恢复（皇裔流离/金匮要略），同类指挥互相冲突
   | 'rest' // 休整：每回合行动时恢复（挂上时冻结），指挥与主动互不冲突
   | 'morale_boost' // 士气提高：指挥战法同号冲突取较高；同一战法重复触发累加（谋议宏图）
-  | 'ignore_def'; // 无视防御：攻击时目标防御 × (1 − rate)，作用于攻防差（击势）
+  | 'ignore_def' // 无视防御：攻击时目标防御 × (1 − rate)，作用于攻防差（击势）
+  | 'range_buff'; // 攻击距离提高：普攻可达的敌军距离上限 +amount（帝临回光）
 
 // ─── 战法输出效果（联合类型）───
 
@@ -285,6 +286,10 @@ export type SkillOutput =
       kind: 'morale_branch';
       /** 高昂阈值，缺省 100（>100 为高昂） */
       threshold?: number;
+      /** 士气判定对象：缺省 'target'（逐目标按各自士气分支，盛气横凌）；
+       *  'caster' = 按施法者自身士气**整体判定一次**并对整个目标池执行选中分支
+       *  （列营守险「若自身士气高昂时，规避状态的目标变为我军全体」） */
+      by?: 'caster' | 'target';
       high: SkillOutput[];
       low: SkillOutput[];
     }
@@ -305,6 +310,9 @@ export type CreateStatus =
   | { type: 'cowardice'; duration: number }
   | { type: 'hesitation'; duration: number }
   | { type: 'evasion'; stacks: number }
+  /** 概率规避（列营守险）：受到下 charges 次伤害时各掷一次 rate，命中则完全免疫该次伤害。
+   *  与 evasion 的「层数式必挡」不同：判定失败也消耗 1 次机会。 */
+  | { type: 'evade_chance'; rate: number; charges: number; duration: number }
   | { type: 'combo'; duration: number }
   /** amount 为谋略 80 时的基础值；strategyScaled=true 且给 growthRate 时，实际数值按 scaledValue 缩放。
    *  percent=true 时 amount 为百分比（如 15 = 15%），按目标当前生效属性（含点数增减后）结算 */
@@ -327,10 +335,11 @@ export type CreateStatus =
   /**
    * 发动率提升。rate 为小数（1.2 = +120% / ×2.2）。
    * skillTypes：只对这些战法类型生效（动如雷震仅追击）；缺省主动+追击都吃（难知如阴）。
-   * additive：true 时为基础率 + rate（动如雷震 +100 个百分点），超过 100% 由发动率判定封顶；
-   * 缺省为乘算 基础率 × (1+rate)（难知如阴）。
+   * **缺省即为基础率 + rate（直接相加，率土口径）**：追击 30% 受 +100% → 130%，
+   * 超过 100% 由发动率判定封顶为必定发动。
+   * additive：仅 `false` 有意义——显式退回乘算 基础率 × (1+rate)。
    */
-  | { type: 'trigger_boost'; rate: number; duration: number; skillTypes?: SkillType[]; additive?: boolean }
+  | { type: 'trigger_boost'; rate: number; duration: number; skillTypes?: SkillType[]; /** 仅 false 生效：退回乘算；缺省加法 */ additive?: boolean }
   | { type: 'insight'; duration: number }
   | { type: 'siege'; duration: number }
   | { type: 'sorcery'; duration: number; rate: number; growthRate: number; sourceStrategy?: number }
@@ -362,7 +371,9 @@ export type CreateStatus =
   /** 士气提高（谋议宏图）：amount 为士气点数；同战法累加，不同指挥战法冲突取较高 */
   | { type: 'morale_boost'; amount: number; duration: number }
   /** 无视防御比例（0.6 = 60%），自身攻击时目标防御 × (1 − rate) */
-  | { type: 'ignore_def'; rate: number; duration: number };
+  | { type: 'ignore_def'; rate: number; duration: number }
+  /** 攻击距离提高（帝临回光「攻击距离 +1」）：普攻可达距离上限 +amount，见 target.ts attackRangeOf */
+  | { type: 'range_buff'; amount: number; duration: number };
 
 // ─── 战法（联合类型）───
 
@@ -811,6 +822,7 @@ export type StatusType =
   | 'cowardice'
   | 'hesitation'
   | 'evasion'
+  | 'evade_chance'
   | 'combo'
   | 'attack_buff'
   | 'defense_buff'
@@ -834,7 +846,8 @@ export type StatusType =
   | 'first_aid'
   | 'rest'
   | 'morale_boost'
-  | 'ignore_def';
+  | 'ignore_def'
+  | 'range_buff';
 
 /** DoT（妖术/燃烧/恐慌）挂上时冻结的每次伤害（滞后触发）：
  *  伤害在「挂上时」结算并冻结——按当时的增伤合计（造成侧 + 受到侧）、施法者兵力、
@@ -858,6 +871,8 @@ export type Status =
   | { type: 'cowardice'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'hesitation'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'evasion'; stacks: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  /** 概率规避（列营守险）：charges = 剩余机会；每次受击消耗 1，命中则免疫该次伤害，用尽即移除 */
+  | { type: 'evade_chance'; rate: number; charges: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   | { type: 'combo'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'attack_buff'; amount: number; percent?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   | { type: 'defense_buff'; amount: number; percent?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
@@ -904,7 +919,9 @@ export type Status =
    */
   | { type: 'rest'; remaining: number; healAmount: number; startRound: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   | { type: 'morale_boost'; amount: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
-  | { type: 'ignore_def'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string };
+  | { type: 'ignore_def'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
+  /** 攻击距离提高（帝临回光）：普攻可达距离上限 +amount（target.ts attackRangeOf 求和） */
+  | { type: 'range_buff'; amount: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string };
 
 export interface UnitState {
   readonly general: General;
