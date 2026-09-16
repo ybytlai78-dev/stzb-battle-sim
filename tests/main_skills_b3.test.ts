@@ -96,7 +96,7 @@ function leizhenTargetCounts(team: General[], seeds: number[]): number[] {
   return counts;
 }
 
-describe('动如雷震（公孙瓒，主动 35%：我军群体 2–3 目标追击伤害提升 40%，持续 1 回合）', () => {
+describe('动如雷震（公孙瓒，主动 35%：我军群体 2–3 目标追击伤害提升 40%（受速度影响，成长 0.2532/点），持续 1 回合）', () => {
   it('主战法挂入主动槽（公孙瓒），主动非准备，群体 2–3 目标、距离 3', () => {
     const g = hero('h677');
     expect(g.name).toBe('公孙瓒');
@@ -112,15 +112,19 @@ describe('动如雷震（公孙瓒，主动 35%：我军群体 2–3 目标追�
     expect(boost && !Array.isArray(boost) && boost.type === 'trigger_boost' && boost.skillTypes).toEqual(['pursuit']);
     const dmg = outs.find((st) => !Array.isArray(st) && st.type === 'damage_boost');
     expect(dmg && !Array.isArray(dmg) && dmg.type === 'damage_boost' && dmg.rate === 0.4).toBe(true);
-    expect(dmg && !Array.isArray(dmg) && dmg.type === 'damage_boost' && dmg.growthRate).toBeUndefined();
+    // 受速度缩放（实测三点反解，见下方 describe）；伤害口径仅追击
+    expect(dmg && !Array.isArray(dmg) && dmg.type === 'damage_boost' && dmg.speedScaled).toBe(true);
+    expect(dmg && !Array.isArray(dmg) && dmg.type === 'damage_boost' && dmg.growthRate).toBe(0.2532);
+    expect(dmg && !Array.isArray(dmg) && dmg.type === 'damage_boost' && dmg.skillTypes).toEqual(['pursuit']);
   });
 
-  it('我军群体获得追击伤害提升（damage_boost，40%），持续 1 回合；目标数为 2 或 3', () => {
+  it('我军群体获得追击伤害提升（damage_boost，按施法者速度缩放），持续 1 回合；目标数为 2 或 3', () => {
     const report = run(positionedTeam('前锋'), 1);
     expect(casts(report, '动如雷震').length).toBeGreaterThan(0);
     const n = distinctTargets(report, 'damage_boost');
     expect([2, 3]).toContain(n);
-    expect(inflicted(report, 'damage_boost')[0].detail).toContain('造成的伤害提高 40%');
+    // 测试阵容为 40 级 + 速度加点 40 → 速度 219 → 40 + 0.2532×139 = 75.19 → 八舍九入 75%
+    expect(inflicted(report, 'damage_boost')[0].detail).toContain('造成的伤害提高 75%');
     expect(inflicted(report, 'damage_boost')[0].detail).toContain('1 回合');
   });
 
@@ -140,6 +144,28 @@ describe('动如雷震（公孙瓒，主动 35%：我军群体 2–3 目标追�
     const counts = new Set(leizhenTargetCounts(positionedTeam('中军'), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]));
     expect(counts.has(2)).toBe(true);
     expect(counts.has(3)).toBe(true);
+  });
+
+  it('速度缩放实测锁定：208.8→72%、256.9→84%、281.4→91%（游戏内实读三点）', () => {
+    const points = [{ speed: 208.8, pct: 72 }, { speed: 256.9, pct: 84 }, { speed: 281.4, pct: 91 }];
+    for (const { speed, pct } of points) {
+      const caster = makeUnit('caster', { activeSkillIds: ['dongru_leizhen'] });
+      caster.general.speed = speed;
+      const ally = makeUnit('ally');
+      const foe = makeUnit('foe');
+      foe.side = 'enemy';
+      const ctx = makeFixedChanceCtx(0); // 0 < 0.35 → 本轮必发动
+      ctx.myTeam = [caster, ally];
+      ctx.enemyTeam = [foe];
+      actUnit(ctx, caster);
+      const boost = ctx.events.filter(
+        (e): e is Extract<BattleEvent, { type: 'status_inflicted' }> =>
+          e.type === 'status_inflicted' && e.statusType === 'damage_boost'
+      );
+      expect(boost.length).toBeGreaterThan(0);
+      // 基值 40 @ 速度 80 + 成长 0.2532/点，1% 粒度八舍九入 → 必须与游戏内实读一致
+      expect(boost[0].detail).toContain(`造成的伤害提高 ${pct}%`);
+    }
   });
 
   it('我军目标获得追击发动率 +100%（additive trigger_boost，仅追击）', () => {
