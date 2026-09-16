@@ -222,6 +222,8 @@ export type SkillOutput =
       };
       /** 只对这些兵种的当前目标池结算 */
       troopTypes?: TroopType[];
+      /** 施法者须处于这些站位之一，否则本段不结算（疮痍累身：仅前锋/中军时援护友军） */
+      casterPositions?: Position[];
       /**
        * 有值时忽略战法整体目标，改为按站位筛选：缺省敌军（落首箭混乱打大营）；
        * 配合 targetSide:'ally' 时改筛友军（怀橘遗亲：大营 / 前锋中军）。缺员则跳过。
@@ -559,6 +561,11 @@ export interface OnHurtConfig {
   rateGrowthRate?: number;
   /** 每单位每回合只触发一次（陷储立齐） */
   oncePerRound?: boolean;
+  /**
+   * 该单位首次受击时必定触发，且额外触发 1 次（疮痍累身：「首次受到伤害时该效果必定触发且额外触发 1 次」）。
+   * 首次按「战法 × 施法者 × 受击者」记录（ctx.hurtFirstKeys）。
+   */
+  firstGuaranteed?: boolean;
   /** 仅当受伤者本回合已行动完毕（缓师徐持） */
   onlyIfActed?: boolean;
   /** 独立判定次数（缓师 2），缺省 1 */

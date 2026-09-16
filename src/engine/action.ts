@@ -131,6 +131,8 @@ export interface CombatContext {
   woundedMortality?: WoundedMortalityConfig;
   /** 受击触发「每单位每回合首次」（陷储立齐）：key = `${round}:${skillId}:${casterId}:${victimId}` */
   hurtOnceKeys?: Set<string>;
+  /** 首次受击必触发已用标记（疮痍累身），键为 `skillId:casterId:victimId` */
+  hurtFirstKeys?: Set<string>;
   /** 受击 hook 重入保护：反击/引爆等二次 applyDamage 不再触发 onHurt（防盲侯循环） */
   resolvingHurtHooks?: boolean;
   /** 受恢复 hook 重入保护：赏顺伐逆群体奶不再触发 onHeal */
@@ -2693,6 +2695,16 @@ function executeSkillOutputs(
     if (out.kind === 'physical_damage' && out.attacker === 'recipient') {
       pool = targets;
     }
+    // 施法者站位条件（疮痍累身：仅「位于前锋及中军时」才援护友军全体）：
+    // 与该段是否结算绑定，不满足则整段跳过（减伤段无此字段，故不受限）
+    if (
+      out.kind === 'inflict_status' &&
+      out.casterPositions &&
+      out.casterPositions.length > 0 &&
+      !out.casterPositions.includes(caster.general.position)
+    ) {
+      continue;
+    }
     if ('troopTypes' in out && out.troopTypes && out.troopTypes.length > 0) {
       pool = pool.filter((u) => out.troopTypes!.includes(u.general.troopType));
     }
@@ -3819,9 +3831,22 @@ function triggerOnHurt(
             if (ctx.hurtOnceKeys.has(key)) continue;
             ctx.hurtOnceKeys.add(key);
           }
-          const rolls = cfg.rolls ?? 1;
+          // 首次受击必触发，且额外触发 1 次（疮痍累身：
+          // 「首次受到伤害时，该效果必定触发且额外触发1次」）
+          let guaranteedFirst = false;
+          if (cfg.firstGuaranteed) {
+            ctx.hurtFirstKeys ??= new Set();
+            const firstKey = `${skill.id}:${caster.general.id}:${victim.general.id}`;
+            if (!ctx.hurtFirstKeys.has(firstKey)) {
+              ctx.hurtFirstKeys.add(firstKey);
+              guaranteedFirst = true;
+            }
+          }
+          const rolls = (cfg.rolls ?? 1) + (guaranteedFirst ? 1 : 0);
           for (let i = 0; i < rolls; i++) {
             const rolled = rollOnHurt(ctx, caster, skill, cfg);
+            // 首次必中：覆盖判定结果，但 rate/baseRate 仍取原值供战报显示
+            const hitOk = guaranteedFirst || rolled.success;
             if ((cfg.rate ?? 1) < 1 || cfg.rateStrategyScaled) {
               ctx.events.push({
                 type: 'skill_trigger',
@@ -3829,13 +3854,13 @@ function triggerOnHurt(
                 targetId: victim.general.id,
                 skillId: skill.id,
                 skillName: skill.name,
-                success: rolled.success,
+                success: hitOk,
                 rate: Math.round(rolled.rate * 100),
                 baseRate: Math.round(rolled.baseRate * 100),
                 morale: effectiveMorale(caster),
               });
             }
-            if (!rolled.success) continue;
+            if (!hitOk) continue;
             if (timing === 'before_damage') {
               if (cfg.thisHitReduce != null) remaining *= 1 - cfg.thisHitReduce;
               const outs = cfg.output;
