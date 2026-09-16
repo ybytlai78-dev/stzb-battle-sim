@@ -29,6 +29,7 @@ npx tsc --noEmit                    # 类型检查（strict）
 | 武将面板值 / 攻击距离 | `src/data/heroes.ts` | `武将数据调研.md` |
 | 伤害公式 | `src/engine/formulas.ts` | `战斗伤害公式调研.md` + `谋略战法受谋略成长调研.md` |
 | **待补充机制清点（88 个 skipped 通用战法按缺失机制分组）** | `docs/待补充机制清点.md` | 由 `scripts/seed_universal_skills.mjs` 的 `mechanism_key` 联动 DB `skills.mechanism_key` 列 |
+| **下架武将 / 战法清单（58 个下架武将 + 31 个下架战法的卡点、缺失机制分布）** | `docs/下架武将清单.md` | 由 `npx tsx scripts/gen_offline_report.mts` 按 `listing.ts` 口径生成 |
 
 根目录 `战斗系统设计文档.md` 是决策记录与整体设计（v0.1 起步，现引擎已超出其范围：指挥/被动/追击/状态/冲突已实现）。
 
@@ -225,6 +226,7 @@ npx tsc --noEmit                    # 类型检查（strict）
 | `scripts/_list_types.mjs` | 保留的查询脚本（解析 SKILL_REGISTRY 类型→查 DB） |
 | `tests/main_skills_bN.test.ts` | 每批战法测试（每战法 3 测试） |
 | `dateyuan/hero_growth_verified.json` | 武将成长值唯一权威来源 |
+| `scripts/gen_offline_report.mts` | 生成 `docs/下架武将清单.md`（下架武将 / 战法卡点与缺失机制分布） |
 
 ### 常用流程
 
