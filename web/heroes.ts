@@ -13,7 +13,18 @@ import heroMetaJson from './data/hero_meta.json';
 import skillGradesJson from './data/skill_grades.json';
 import skillDescJson from './data/skill_desc.json';
 
-export type HeroJson = (typeof heroesJson)[number];
+/**
+ * 武将 JSON 记录类型。
+ *
+ * ⚠️ 不要直接用 `(typeof heroesJson)[number]`：JSON 字面量推断对**数据分布**敏感 ——
+ * 当数组元素的 `tags` 同时存在 `[]` 与 `["sp"]` 时，TS 可能推断出 `never[] | string[]` 联合，
+ * 于是 `hero.tags.includes('sp')` 报 `Argument of type '"sp"' is not assignable to parameter of type 'never'`
+ * （2026-09-16 新增 XP姜维 条目即触发，tsc 3 处红）。故把易变字段显式钉死，其余仍走推断。
+ */
+export type HeroJson = Omit<(typeof heroesJson)[number], 'tags' | 'mutualExclusionGroup'> & {
+  tags: string[];
+  mutualExclusionGroup: string | null;
+};
 export { isHeroListed, isLearnableSkillListed };
 
 /** 全量五星（含暂时下架），供主战法集合与内部查找 */

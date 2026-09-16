@@ -1,10 +1,52 @@
 {
+  "h2": {
+    "iconId": 100002,
+    "heroId": 100002,
+    "officialName": "十常侍",
+    "isSpCard": false,
+    "note": "q5 汉-弓"
+  },
+  "h653": {
+    "iconId": 100653,
+    "heroId": 100653,
+    "officialName": "关兴＆张苞",
+    "isSpCard": false,
+    "note": "q5 蜀-步 XP"
+  },
+  "h495": {
+    "iconId": 100495,
+    "heroId": 100495,
+    "officialName": "颜良＆文丑",
+    "isSpCard": false,
+    "note": "q5 群-骑 赛季"
+  },
   "sp_zhaoyun": {
     "iconId": 102001,
     "heroId": 102001,
     "officialName": "SP赵云",
     "isSpCard": true,
     "note": "q5 蜀-骑 SP"
+  },
+  "h784": {
+    "iconId": 100784,
+    "heroId": 100784,
+    "officialName": "周瑜",
+    "isSpCard": false,
+    "note": "q5 吴-步 XP"
+  },
+  "h808": {
+    "iconId": 100808,
+    "heroId": 100808,
+    "officialName": "孙权",
+    "isSpCard": false,
+    "note": "q5 吴-弓 XP"
+  },
+  "h519": {
+    "iconId": 100519,
+    "heroId": 100519,
+    "officialName": "兀突骨",
+    "isSpCard": false,
+    "note": "q5 群-步"
   },
   "h16": {
     "iconId": 100016,
@@ -13,12 +55,26 @@
     "isSpCard": false,
     "note": "q5 蜀-步"
   },
-  "h479": {
-    "iconId": 100479,
-    "heroId": 100479,
-    "officialName": "吕布",
+  "h647": {
+    "iconId": 100647,
+    "heroId": 100647,
+    "officialName": "华雄",
     "isSpCard": false,
-    "note": "q5 群-弓 赛季"
+    "note": "q5 群-骑"
+  },
+  "h807": {
+    "iconId": 100807,
+    "heroId": 100807,
+    "officialName": "司马懿",
+    "isSpCard": false,
+    "note": "q5 晋-步 XP"
+  },
+  "h703": {
+    "iconId": 100703,
+    "heroId": 100703,
+    "officialName": "司马炎",
+    "isSpCard": false,
+    "note": "q5 晋-步"
   },
   "h3": {
     "iconId": 100003,
@@ -26,6 +82,13 @@
     "officialName": "吕布",
     "isSpCard": false,
     "note": "q5 汉-骑"
+  },
+  "h479": {
+    "iconId": 100479,
+    "heroId": 100479,
+    "officialName": "吕布",
+    "isSpCard": false,
+    "note": "q5 群-弓 赛季"
   },
   "lvmeng": {
     "iconId": 100035,
@@ -90,6 +153,13 @@
     "isSpCard": false,
     "note": "q5 汉-弓"
   },
+  "h794": {
+    "iconId": 100794,
+    "heroId": 100794,
+    "officialName": "荀彧",
+    "isSpCard": false,
+    "note": "q5 汉-步 XP"
+  },
   "h790": {
     "iconId": 100790,
     "heroId": 100790,
@@ -117,6 +187,111 @@
     "officialName": "骊姬",
     "isSpCard": false,
     "note": "q5 群-弓"
+  },
+  "h102002": {
+    "iconId": 102002,
+    "heroId": 102002,
+    "officialName": "SP夏侯渊",
+    "isSpCard": true,
+    "note": "q5 魏-骑 SP"
+  },
+  "h102014": {
+    "iconId": 102014,
+    "heroId": 102014,
+    "officialName": "SP张角",
+    "isSpCard": true,
+    "note": "q5 群-骑 SP"
+  },
+  "h534": {
+    "iconId": 100534,
+    "heroId": 100534,
+    "officialName": "徐庶",
+    "isSpCard": true,
+    "note": "q5 蜀-骑 SP 赛季"
+  },
+  "h788": {
+    "iconId": 100788,
+    "heroId": 100788,
+    "officialName": "丁奉",
+    "isSpCard": false,
+    "note": "q5 吴-步 XP"
+  },
+  "h675": {
+    "iconId": 100675,
+    "heroId": 100675,
+    "officialName": "刘表",
+    "isSpCard": false,
+    "note": "q5 汉-弓 XP"
+  },
+  "h691": {
+    "iconId": 100691,
+    "heroId": 100691,
+    "officialName": "周仓",
+    "isSpCard": false,
+    "note": "q5 蜀-步 XP"
+  },
+  "xp_jiangwei": {
+    "iconId": 100806,
+    "heroId": 100806,
+    "officialName": "姜维",
+    "isSpCard": false,
+    "note": "q5 蜀-骑 XP"
+  },
+  "h815": {
+    "iconId": 100815,
+    "heroId": 100815,
+    "officialName": "孟获",
+    "isSpCard": false,
+    "note": "q5 群-步 XP"
+  },
+  "h802": {
+    "iconId": 100802,
+    "heroId": 100802,
+    "officialName": "左慈",
+    "isSpCard": false,
+    "note": "q5 群-骑 XP"
+  },
+  "h787": {
+    "iconId": 100787,
+    "heroId": 100787,
+    "officialName": "程昱",
+    "isSpCard": false,
+    "note": "q5 魏-弓 XP"
+  },
+  "h684": {
+    "iconId": 100684,
+    "heroId": 100684,
+    "officialName": "程普",
+    "isSpCard": false,
+    "note": "q5 吴-步 XP"
+  },
+  "h800": {
+    "iconId": 100800,
+    "heroId": 100800,
+    "officialName": "蒋琬",
+    "isSpCard": false,
+    "note": "q5 蜀-步 XP"
+  },
+  "h791": {
+    "iconId": 100791,
+    "heroId": 100791,
+    "officialName": "陆逊",
+    "isSpCard": false,
+    "note": "q5 吴-弓 XP"
+  },
+  "h810": {
+    "iconId": 100810,
+    "heroId": 100810,
+    "officialName": "黄忠",
+    "isSpCard": false,
+    "note": "q5 蜀-弓 XP"
+  },
+  "h631": {
+    "iconId": 100631,
+    "heroId": 100631,
+    "officialName": "严颜",
+    "isSpCard": false,
+    "note": "q5 蜀-骑"
   },
   "h685": {
     "iconId": 100685,
@@ -167,12 +342,26 @@
     "isSpCard": false,
     "note": "q5 魏-步"
   },
+  "h812": {
+    "iconId": 100812,
+    "heroId": 100812,
+    "officialName": "冯嫽",
+    "isSpCard": false,
+    "note": "q5 汉-骑"
+  },
   "h616": {
     "iconId": 100616,
     "heroId": 100616,
     "officialName": "凌统",
     "isSpCard": false,
     "note": "q5 吴-弓"
+  },
+  "h814": {
+    "iconId": 100814,
+    "heroId": 100814,
+    "officialName": "刘徽",
+    "isSpCard": false,
+    "note": "q5 晋-弓"
   },
   "h7": {
     "iconId": 100007,
@@ -216,20 +405,6 @@
     "isSpCard": false,
     "note": "q5 晋-骑"
   },
-  "h703": {
-    "iconId": 100703,
-    "heroId": 100703,
-    "officialName": "司马炎",
-    "isSpCard": false,
-    "note": "q5 晋-步"
-  },
-  "h807": {
-    "iconId": 100807,
-    "heroId": 100807,
-    "officialName": "司马懿",
-    "isSpCard": false,
-    "note": "q5 晋-步 XP"
-  },
   "h634": {
     "iconId": 100634,
     "heroId": 100634,
@@ -271,6 +446,13 @@
     "officialName": "妲己",
     "isSpCard": false,
     "note": "q5 群-步"
+  },
+  "h805": {
+    "iconId": 100805,
+    "heroId": 100805,
+    "officialName": "孙坚",
+    "isSpCard": false,
+    "note": "q5 汉-弓"
   },
   "sunquan": {
     "iconId": 100030,
@@ -314,6 +496,13 @@
     "isSpCard": false,
     "note": "q5 群-步"
   },
+  "h648": {
+    "iconId": 100648,
+    "heroId": 100648,
+    "officialName": "张昭",
+    "isSpCard": false,
+    "note": "q5 吴-弓"
+  },
   "h526": {
     "iconId": 100526,
     "heroId": 100526,
@@ -335,6 +524,13 @@
     "isSpCard": false,
     "note": "q5 群-骑"
   },
+  "h593": {
+    "iconId": 100593,
+    "heroId": 100593,
+    "officialName": "张郃",
+    "isSpCard": false,
+    "note": "q5 群-骑"
+  },
   "h22": {
     "iconId": 100022,
     "heroId": 100022,
@@ -342,12 +538,33 @@
     "isSpCard": false,
     "note": "q5 蜀-骑"
   },
+  "h645": {
+    "iconId": 100645,
+    "heroId": 100645,
+    "officialName": "徐晃",
+    "isSpCard": false,
+    "note": "q5 魏-骑"
+  },
   "h585": {
     "iconId": 100585,
     "heroId": 100585,
     "officialName": "曹仁",
     "isSpCard": true,
     "note": "q5 魏-步 SP 赛季"
+  },
+  "h683": {
+    "iconId": 100683,
+    "heroId": 100683,
+    "officialName": "曹彰",
+    "isSpCard": false,
+    "note": "q5 魏-骑"
+  },
+  "h498": {
+    "iconId": 100498,
+    "heroId": 100498,
+    "officialName": "曹纯",
+    "isSpCard": false,
+    "note": "q5 魏-骑 赛季"
   },
   "h452": {
     "iconId": 100452,
@@ -391,6 +608,27 @@
     "isSpCard": false,
     "note": "q5 吴-步"
   },
+  "h692": {
+    "iconId": 100692,
+    "heroId": 100692,
+    "officialName": "田丰",
+    "isSpCard": false,
+    "note": "q5 群-骑"
+  },
+  "h630": {
+    "iconId": 100630,
+    "heroId": 100630,
+    "officialName": "皇甫嵩",
+    "isSpCard": false,
+    "note": "q5 汉-步"
+  },
+  "h709": {
+    "iconId": 100709,
+    "heroId": 100709,
+    "officialName": "羊祜",
+    "isSpCard": false,
+    "note": "q5 晋-步 XP"
+  },
   "h797": {
     "iconId": 100797,
     "heroId": 100797,
@@ -405,19 +643,19 @@
     "isSpCard": false,
     "note": "q5 魏-骑"
   },
-  "h9": {
-    "iconId": 100009,
-    "heroId": 100009,
-    "officialName": "董卓",
-    "isSpCard": false,
-    "note": "q5 群-骑"
-  },
   "h480": {
     "iconId": 100480,
     "heroId": 100480,
     "officialName": "董卓",
     "isSpCard": false,
     "note": "q5 汉-步 赛季"
+  },
+  "h9": {
+    "iconId": 100009,
+    "heroId": 100009,
+    "officialName": "董卓",
+    "isSpCard": false,
+    "note": "q5 群-骑"
   },
   "h671": {
     "iconId": 100671,
@@ -433,12 +671,26 @@
     "isSpCard": false,
     "note": "q5 汉-步"
   },
+  "h801": {
+    "iconId": 100801,
+    "heroId": 100801,
+    "officialName": "裴秀",
+    "isSpCard": false,
+    "note": "q5 晋-步"
+  },
   "h17": {
     "iconId": 100017,
     "heroId": 100017,
     "officialName": "诸葛亮",
     "isSpCard": false,
     "note": "q5 蜀-步"
+  },
+  "h496": {
+    "iconId": 100496,
+    "heroId": 100496,
+    "officialName": "诸葛亮",
+    "isSpCard": false,
+    "note": "q5 蜀-弓 赛季"
   },
   "h522": {
     "iconId": 100522,
@@ -517,10 +769,24 @@
     "isSpCard": false,
     "note": "q5 群-骑"
   },
+  "h799": {
+    "iconId": 100799,
+    "heroId": 100799,
+    "officialName": "马谡",
+    "isSpCard": false,
+    "note": "q5 蜀-骑 XP"
+  },
   "h13": {
     "iconId": 100013,
     "heroId": 100013,
     "officialName": "马超",
+    "isSpCard": false,
+    "note": "q5 群-骑"
+  },
+  "h656": {
+    "iconId": 100656,
+    "heroId": 100656,
+    "officialName": "高顺",
     "isSpCard": false,
     "note": "q5 群-骑"
   },
@@ -552,6 +818,20 @@
     "isSpCard": false,
     "note": "q5 吴-步"
   },
+  "h102004": {
+    "iconId": 102004,
+    "heroId": 102004,
+    "officialName": "SP卢植",
+    "isSpCard": true,
+    "note": "q5 汉-骑 SP"
+  },
+  "h102003": {
+    "iconId": 102003,
+    "heroId": 102003,
+    "officialName": "SP太史慈",
+    "isSpCard": true,
+    "note": "q5 吴-弓 SP"
+  },
   "sp_jiangwei": {
     "iconId": 102012,
     "heroId": 102012,
@@ -559,12 +839,61 @@
     "isSpCard": true,
     "note": "q5 蜀-弓 SP"
   },
+  "h102015": {
+    "iconId": 102015,
+    "heroId": 102015,
+    "officialName": "SP孙尚香",
+    "isSpCard": true,
+    "note": "q5 蜀-弓 SP"
+  },
+  "h102016": {
+    "iconId": 102016,
+    "heroId": 102016,
+    "officialName": "SP祝融夫人",
+    "isSpCard": true,
+    "note": "q5 群-骑 SP"
+  },
+  "h102011": {
+    "iconId": 102011,
+    "heroId": 102011,
+    "officialName": "SP蔡文姬",
+    "isSpCard": true,
+    "note": "q5 汉-步 SP"
+  },
+  "h795": {
+    "iconId": 100795,
+    "heroId": 100795,
+    "officialName": "献帝",
+    "isSpCard": false,
+    "note": "q5 汉-骑 XP"
+  },
+  "h652": {
+    "iconId": 100652,
+    "heroId": 100652,
+    "officialName": "王朗",
+    "isSpCard": false,
+    "note": "q5 魏-弓 XP"
+  },
+  "h792": {
+    "iconId": 100792,
+    "heroId": 100792,
+    "officialName": "马良",
+    "isSpCard": false,
+    "note": "q5 蜀-步 XP"
+  },
   "h37": {
     "iconId": 100037,
     "heroId": 100037,
     "officialName": "何太后",
     "isSpCard": false,
     "note": "q5 汉-弓"
+  },
+  "h803": {
+    "iconId": 100803,
+    "heroId": 100803,
+    "officialName": "刘备",
+    "isSpCard": false,
+    "note": "q5 汉-步"
   },
   "h689": {
     "iconId": 100689,
@@ -600,6 +929,13 @@
     "officialName": "太史慈",
     "isSpCard": false,
     "note": "q5 吴-弓"
+  },
+  "h74": {
+    "iconId": 100074,
+    "heroId": 100074,
+    "officialName": "姜维",
+    "isSpCard": false,
+    "note": "q5 蜀-步"
   },
   "h36": {
     "iconId": 100036,
@@ -663,6 +999,20 @@
     "officialName": "曹植",
     "isSpCard": false,
     "note": "q5 魏-骑"
+  },
+  "h604": {
+    "iconId": 100604,
+    "heroId": 100604,
+    "officialName": "李儒",
+    "isSpCard": false,
+    "note": "q5 群-弓"
+  },
+  "h497": {
+    "iconId": 100497,
+    "heroId": 100497,
+    "officialName": "步皇后",
+    "isSpCard": false,
+    "note": "q5 吴-步 赛季"
   },
   "h693": {
     "iconId": 100693,
@@ -734,6 +1084,13 @@
     "isSpCard": false,
     "note": "q5 群-步"
   },
+  "h708": {
+    "iconId": 100708,
+    "heroId": 100708,
+    "officialName": "贾充",
+    "isSpCard": false,
+    "note": "q5 晋-步 XP"
+  },
   "h655": {
     "iconId": 100655,
     "heroId": 100655,
@@ -768,40 +1125,5 @@
     "officialName": "黄月英",
     "isSpCard": false,
     "note": "q5 蜀-步"
-  },
-  "h498": {
-    "iconId": 100498,
-    "heroId": 100498,
-    "officialName": "曹纯",
-    "isSpCard": false,
-    "note": "q5 魏-骑"
-  },
-  "h708": {
-    "iconId": 100708,
-    "heroId": 100708,
-    "officialName": "贾充",
-    "isSpCard": false,
-    "note": "q5 晋-步"
-  },
-  "h709": {
-    "iconId": 100709,
-    "heroId": 100709,
-    "officialName": "羊祜",
-    "isSpCard": false,
-    "note": "q5 晋-步"
-  },
-  "h799": {
-    "iconId": 100799,
-    "heroId": 100799,
-    "officialName": "马谡",
-    "isSpCard": false,
-    "note": "q5 蜀-骑"
-  },
-  "h794": {
-    "iconId": 100794,
-    "heroId": 100794,
-    "officialName": "荀彧",
-    "isSpCard": false,
-    "note": "q5 汉-步"
   }
 }

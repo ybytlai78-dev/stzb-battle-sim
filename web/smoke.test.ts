@@ -395,15 +395,17 @@ describe('Web 战斗模拟器冒烟', () => {
     expect((redPanel.querySelectorAll('.slot')[2] as HTMLElement).textContent).toContain('兵力11000');
   });
 
-  it('互斥校验：关羽（魏）+ 关羽（蜀）同队被拒', async () => {
+  it('互斥校验：关羽（魏）+ 关羽（蜀）同队**不再被拒**（2026-09-16 互斥改白名单制）', async () => {
     await boot();
     pickHeroIntoSlot('red', 0, '关羽', { skill: '千里单骑' });
     pickHeroIntoSlot('red', 1, '关羽', { skill: '樊渊泅囚' });
-    expect(document.querySelector('.app-notice')!.textContent).toContain('互斥冲突');
+    // 白名单只剩 赵云↔SP赵云、姜维↔SP姜维；同名不同势力（关羽蜀/魏）可同队
+    // 注：这两组互斥成员含下架武将（SP赵云/SP姜维），UI 池里选不到 → 互斥拦截至此仅由单元/引擎测试覆盖
+    expect(document.querySelector('.app-notice')?.textContent ?? '').not.toContain('互斥冲突');
     const redPanel = document.querySelector('.team-panel.red') as HTMLElement;
     const slot1 = redPanel.querySelectorAll('.slot')[1] as HTMLElement;
-    expect(slot1.textContent).not.toContain('樊渊泅囚');
-    expect(slot1.textContent).toContain('点击选择');
+    expect(slot1.textContent).toContain('樊渊泅囚');
+    expect(slot1.textContent).not.toContain('点击选择');
   });
 
   it('装配上限：主战法不占位，可装 2 个装配战法（共 3 个）', async () => {

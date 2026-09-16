@@ -5,8 +5,9 @@
  * 转换规则：
  *  - 兵种：弓→archer / 步→infantry / 骑→cavalry
  *  - rarity：cost>=2.5 → 5星，cost<2.5 → 4星
- *  - id：现有 8 个武将用固定拼音映射（测试引用）；SP姜维用 sp_jiangwei；其余 h<hero_id>
- *  - mutual_exclusion_group：同名武将（含 SP 前缀去除后同名）归入同组 → 不可同队
+ *  - id：现有 8 个武将用固定拼音映射（测试引用）；SP姜维 → sp_jiangwei / XP姜维 → xp_jiangwei；其余 h<hero_id>
+ *  - mutual_exclusion_group：**白名单制** —— 仅 赵云↔SP赵云、姜维↔SP姜维 不可同队；
+ *    其余同名武将（关羽蜀/魏、司马懿魏/晋、吕布汉/群 …）一律可同队，XP 卡不入互斥组（用户 2026-09-16 口径）
  *  - tags：SP 前缀 → 'sp'；其余空
  *  - main_skill_id：中文名命中 SKILL_REGISTRY 的实现战法 → 对应 ID；否则留空（名称/描述仍入库）
  *  - 跳过：冯嫽 / 裴秀（无英雄 id、无战法、无势力，数据不完整）
@@ -19,7 +20,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const heroes = JSON.parse(readFileSync(join(__dirname, '../dateyuan/hero_growth_verified.json'), 'utf8'));
 
 const TROOP_MAP = { 弓: 'archer', 步: 'infantry', 骑: 'cavalry' };
-const SKIP = new Set(['冯嫽', '裴秀']);
+/** 数据不完整需跳过的武将（冯嫽 / 裴秀 已于 2026-09-16 从官网补齐势力/战法数据，移出本表） */
+const SKIP = new Set();
 
 /** 已实现的武将主战法（SKILL_REGISTRY 中存在）：中文名 → ID */
 const SKILL_ID_BY_NAME = {
@@ -135,29 +137,37 @@ const FIXED_IDS = {
   SP赵云: 'sp_zhaoyun',
 };
 
-/** 去 SP 前缀后的基础名（用于互斥分组与固定 id 匹配） */
-const baseName = (n) => (n.startsWith('SP') ? n.slice(2) : n);
-
-// 1) 先算基础名 → 分组，确定互斥组
-const groupByBase = new Map();
-for (const h of heroes) {
-  if (SKIP.has(h.name)) continue;
-  const b = baseName(h.name);
-  if (!groupByBase.has(b)) groupByBase.set(b, []);
-  groupByBase.get(b).push(h.name);
-}
-const groups = [...groupByBase.values()].filter((l) => l.length > 1);
-console.log('互斥组:', groups.map((l) => `${l[0]} 组(${l.length})`).join('  |  '));
-
-const groupOf = (name) => {
-  const b = baseName(name);
-  return (groupByBase.get(b)?.length ?? 0) > 1 ? b : null;
+/**
+ * 互斥组**白名单**（用户 2026-09-16 口径，按游戏内实际规则）：
+ * 只有下面这些武将不可同队，其余同名/同基础名武将**可同队**。
+ *   - 赵云 ↔ SP赵云
+ *   - 姜维（蜀·步）↔ SP姜维（蜀·弓）
+ * 明确可同队的例子（此前按「同名自动成组」被误判互斥，现全部放开）：
+ *   关羽蜀/魏、司马懿魏/晋、吕布汉/群、貂蝉汉/群、曹操汉/魏、荀彧魏/汉、袁绍汉/群、董卓汉/群；
+ *   **XP姜维 与其基础名版本可同队**（XP 卡不入任何互斥组）。
+ */
+const MUTEX_GROUP_BY_NAME = {
+  赵云: '赵云',
+  SP赵云: '赵云',
+  姜维: '姜维',
+  SP姜维: '姜维',
 };
+
+const groupOf = (name) => MUTEX_GROUP_BY_NAME[name] ?? null;
+
+const mutexGroupNames = [...new Set(Object.values(MUTEX_GROUP_BY_NAME))];
+console.log(
+  '互斥组（白名单）:',
+  mutexGroupNames
+    .map((g) => `${g} 组(${Object.keys(MUTEX_GROUP_BY_NAME).filter((n) => MUTEX_GROUP_BY_NAME[n] === g).length})`)
+    .join('  |  ')
+);
 
 // 2) 分配 id（直接传 hero 对象，避免重名武将 find 命中第一个）
 const idOf = (h) => {
   if (FIXED_IDS[h.name]) return FIXED_IDS[h.name];
   if (h.name === 'SP姜维') return 'sp_jiangwei';
+  if (h.name === 'XP姜维') return 'xp_jiangwei';
   return `h${h.hero_id}`;
 };
 
@@ -250,7 +260,7 @@ const values = rows
 const sql = `-- 武将全量种子数据（由 scripts/build_heroes_seed.mjs 从 hero_growth_verified.json 生成，勿手改）
 -- 数据库：stzb战斗系统（MySQL 8.0.12）
 -- 注意：站位（大营/中军/前锋）由用户装配阵容时决定，不属于武将固有数据，故不入库。
--- 互斥组：同名武将（含 SP/不同势力）不可同队。
+-- 互斥组：白名单制 —— 仅 赵云↔SP赵云、姜维↔SP姜维 不可同队；其余同名武将（含 XP 卡）可同队。
 
 CREATE TABLE IF NOT EXISTS heroes (
   id                    VARCHAR(64)     NOT NULL PRIMARY KEY,

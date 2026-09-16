@@ -1,7 +1,12 @@
 /**
- * 武将画像映射：将 web/data/heroes.json 的 103 个武将映射到网易官方武将库 ID
+ * 武将画像映射：将 web/data/heroes.json 的全量武将映射到网易官方武将库 ID
  * 输入：web/data/heroes.json + 官方 hero.json（本脚本运行前需先下载到 scripts/_official_hero.json）
  * 输出：web/data/portrait_map.json（ourId → { iconId, officialName, uniqueName }）
+ *
+ * 三类卡的定位口径：
+ *  - 普卡：按官方 `name` 精确匹配 + quality=5
+ *  - SP 卡（tags 含 'sp'）：官方 JSON 名为基础名，用 is_sp_card=1 + 102xxx 段定位
+ *  - XP 卡（name 以 'XP' 开头，如 XP姜维）：官方 JSON 名为基础名，用 `season === 'XP'` 定位
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -27,6 +32,9 @@ for (const o of off) {
 
 for (const h of ours) {
   const isSp = (h.tags || []).includes('sp');
+  const isXp = /^XP/.test(h.name);
+  /** 查官方库用的名字：SP / XP 前缀都要剥掉（官方 JSON 存的是基础名） */
+  const lookupName = isSp ? h.name.replace(/^SP/, '') : isXp ? h.name.replace(/^XP/, '') : h.name;
   const country = COUNTRY[h.faction] ?? h.faction;
   const type = TYPE[`${h.troopType === 'cavalry' ? 3 : h.troopType === 'infantry' ? 2 : 1}`];
   if (isSp && SP_BY_BASE[h.name.replace(/^SP/, '')]) {
@@ -40,7 +48,12 @@ for (const h of ours) {
     };
     continue;
   }
-  let cands = off.filter((o) => o.name === h.name && o.quality === 5);
+  let cands = off.filter((o) => o.name === lookupName && o.quality === 5);
+  // XP 卡与同基础名的普卡/SP 卡区分：只取 season='XP' 的那张（如 XP姜维 → 100806 蜀-骑）
+  if (isXp) {
+    const xpOnly = cands.filter((o) => o.season === 'XP');
+    if (xpOnly.length > 0) cands = xpOnly;
+  }
   if (cands.length === 0) {
     problems.push(`${h.id} ${h.name}: no q5 name match`);
     continue;
@@ -62,7 +75,9 @@ for (const h of ours) {
     heroId: pick.hero_id,
     officialName: pick.name,
     isSpCard: pick.is_sp_card === 1,
-    note: `q${pick.quality} ${COUNTRY[pick.country]}-${TYPE[pick.hero_type]}${pick.is_sp_card ? ' SP' : ''}${pick.season !== 'N' ? ' 赛季' : ''}`,
+    note: `q${pick.quality} ${COUNTRY[pick.country]}-${TYPE[pick.hero_type]}${pick.is_sp_card ? ' SP' : ''}${
+      pick.season === 'XP' ? ' XP' : pick.season !== 'N' ? ' 赛季' : ''
+    }`,
   };
 }
 

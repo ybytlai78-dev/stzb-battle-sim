@@ -89,7 +89,7 @@ describe('七将面板入库（空槽 / 取基值下架）', () => {
     expect(isHeroListed(rec)).toBe(false);
   });
 
-  it('汉荀彧 h794 举贤决机空槽，与魏荀彧互斥', () => {
+  it('汉荀彧 h794 举贤决机空槽；与魏荀彧**不再互斥**（2026-09-16 互斥改白名单制）', () => {
     const rec = HERO_RECORDS['h794'];
     const g = HERO_REGISTRY['h794'];
     expect(g.name).toBe('荀彧');
@@ -100,11 +100,11 @@ describe('七将面板入库（空槽 / 取基值下架）', () => {
     expect(rec.growthStrategy).toBe(2.55);
     expect(rec.mainSkillId).toBe('');
     expect(rec.mainSkillName).toBe('举贤决机');
-    expect(rec.mutualExclusionGroup).toBe('荀彧');
-    expect(HERO_RECORDS['h24'].mutualExclusionGroup).toBe('荀彧');
+    expect(rec.mutualExclusionGroup).toBeNull();
+    expect(HERO_RECORDS['h24'].mutualExclusionGroup).toBeNull();
     expect(isHeroListed(rec)).toBe(false);
     const err = validateMutualExclusion([getGeneral('h24'), getGeneral('h794')]);
-    expect(err).toContain('互斥冲突');
+    expect(err).toBeNull();
   });
 
   it('马岱 h615 仍空槽（奉令护蜀不实现）', () => {
