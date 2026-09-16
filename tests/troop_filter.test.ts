@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { teamPassesTroopFilter, triggerCommandSkills, statusMatchesHit, inflictStatus, actUnit, tickRoundStartStatuses, type CombatContext } from '../src/engine/action';
-import type { General, Position, Skill, SkillOutput, SkillType, Status, UnitState } from '../src/engine/types';
+import type { CreateStatus, General, Position, Skill, SkillOutput, SkillType, Status, UnitState } from '../src/engine/types';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import { Rng } from '../src/engine/rng';
 
@@ -125,95 +125,92 @@ describe('statusMatchesHit', () => {
   });
 });
 
-describe('同类型 damage_boost 冲突替换过滤字段', () => {
+describe('增减伤分类键（大类|小类）：不同类共存相加 / 同类取较高', () => {
+  const basic = { damageSource: 'basic' as const, damageType: 'physical' as const };
   const activePhys = { damageSource: 'skill' as const, damageType: 'physical' as const, skillType: 'active' as const };
 
-  it('高率带 damageSource:basic 替换无过滤 +30%，过滤字段随胜者', () => {
+  /** 目标身上的造成侧增伤列表 */
+  const causedList = (u: UnitState) =>
+    u.statuses.filter(
+      (s): s is Extract<Status, { type: 'damage_boost' }> => s.type === 'damage_boost' && s.direction === 'caused',
+    );
+
+  /** 本次命中上下文下匹配到的增伤合计 */
+  const matchedSum = (
+    list: Extract<Status, { type: 'damage_boost' }>[],
+    hit: { damageSource: 'basic' | 'skill'; damageType: 'physical' | 'strategy'; skillType?: SkillType },
+  ) => list.filter((s) => statusMatchesHit(s, hit)).reduce((acc, s) => acc + s.rate, 0);
+
+  it('全域 +30%（大赏三军）与 普通基础 +50%（锋矢段）分类不同 → 共存；普攻吃两条、主动只吃全域', () => {
     const u = dummyUnit('u', '前锋');
-    const foe = dummyUnit('foe', '前锋', {}, 'enemy');
-    const ctx = makeCtx([u], [foe]);
+    const ctx = makeCtx([u], [dummyUnit('foe', '前锋', {}, 'enemy')]);
     inflictStatus(ctx, u, { type: 'damage_boost', rate: 0.3, duration: 3, direction: 'caused' }, 'command', 'dashang_sanjun');
     inflictStatus(ctx, u, { type: 'damage_boost', rate: 0.5, duration: 3, direction: 'caused', damageSource: 'basic' }, 'command', 'fengshi');
-    const surviving = u.statuses.find((s) => s.type === 'damage_boost');
-    expect(surviving?.type).toBe('damage_boost');
-    if (surviving?.type !== 'damage_boost') return;
-    expect(surviving.rate).toBe(0.5);
-    expect(surviving.damageSource).toBe('basic');
+
+    const caused = causedList(u);
+    expect(caused).toHaveLength(2);
+    // 普攻：全域与普通两类都吃 → 0.3 + 0.5
+    expect(matchedSum(caused, basic)).toBeCloseTo(0.8, 10);
+    // 主动战法：普通基础段不吃战法伤害，只剩全域 → 0.3
+    expect(matchedSum(caused, activePhys)).toBeCloseTo(0.3, 10);
   });
 
-  it('无过滤高率替换带 damageSource:basic 低率，清掉残留过滤', () => {
+  it('反向顺序：分类键判定与施加先后无关，终态一致', () => {
     const u = dummyUnit('u', '前锋');
-    const foe = dummyUnit('foe', '前锋', {}, 'enemy');
-    const ctx = makeCtx([u], [foe]);
-    inflictStatus(ctx, u, { type: 'damage_boost', rate: 0.2, duration: 3, direction: 'caused', damageSource: 'basic' }, 'command', 'fengshi');
-    inflictStatus(ctx, u, { type: 'damage_boost', rate: 0.4, duration: 3, direction: 'caused' }, 'command', 'dashang_sanjun');
-    const surviving = u.statuses.find((s) => s.type === 'damage_boost');
-    expect(surviving?.type).toBe('damage_boost');
-    if (surviving?.type !== 'damage_boost') return;
-    expect(surviving.rate).toBe(0.4);
-    expect(surviving.damageSource).toBeUndefined();
-    expect(statusMatchesHit(surviving, activePhys)).toBe(true);
+    const ctx = makeCtx([u], [dummyUnit('foe', '前锋', {}, 'enemy')]);
+    inflictStatus(ctx, u, { type: 'damage_boost', rate: 0.5, duration: 3, direction: 'caused', damageSource: 'basic' }, 'command', 'fengshi');
+    inflictStatus(ctx, u, { type: 'damage_boost', rate: 0.3, duration: 3, direction: 'caused' }, 'command', 'dashang_sanjun');
+
+    const caused = causedList(u);
+    expect(caused).toHaveLength(2);
+    expect(matchedSum(caused, basic)).toBeCloseTo(0.8, 10);
+    expect(matchedSum(caused, activePhys)).toBeCloseTo(0.3, 10);
   });
 
-  it('方圆先挂再挂大赏：同号取较高为 +30%，−20% basic 仍在，主动不叠 16.8%', () => {
-    const u = dummyUnit('u', '前锋');
-    const foe = dummyUnit('foe', '前锋', {}, 'enemy');
-    const ctx = makeCtx([u], [foe]);
-    inflictStatus(ctx, u, {
-      type: 'damage_boost', rate: -0.2, duration: 999, direction: 'caused', damageSource: 'basic',
-    }, 'command', 'fangyuan');
-    inflictStatus(ctx, u, {
-      type: 'damage_boost', rate: 0.168, duration: 999, direction: 'caused',
-      damageSource: 'skill', skillTypes: ['active', 'pursuit'],
-    }, 'command', 'fangyuan');
-    inflictStatus(ctx, u, {
-      type: 'damage_boost', rate: 0.3, duration: 3, direction: 'caused',
-    }, 'command', 'dashang_sanjun');
-    assertFangyuanDashangEnd(u, activePhys);
+  it('方圆两段 + 大赏三军：−20% 普通 / +16.8% 主动追击 / +30% 全域 三条共存（两种施加顺序一致）', () => {
+    const fangNeg: CreateStatus = { type: 'damage_boost', rate: -0.2, duration: 999, direction: 'caused', damageSource: 'basic' };
+    const fangPos: CreateStatus = { type: 'damage_boost', rate: 0.168, duration: 999, direction: 'caused', damageSource: 'skill', skillTypes: ['active', 'pursuit'] };
+    const dashang: CreateStatus = { type: 'damage_boost', rate: 0.3, duration: 3, direction: 'caused' };
+    const orders: Array<Array<[string, CreateStatus]>> = [
+      [['fangyuan', fangNeg], ['fangyuan', fangPos], ['dashang_sanjun', dashang]],
+      [['dashang_sanjun', dashang], ['fangyuan', fangNeg], ['fangyuan', fangPos]],
+    ];
+
+    for (const order of orders) {
+      const u = dummyUnit('u', '前锋');
+      const ctx = makeCtx([u], [dummyUnit('foe', '前锋', {}, 'enemy')]);
+      for (const [skillId, status] of order) inflictStatus(ctx, u, status, 'command', skillId);
+
+      const caused = causedList(u);
+      expect(caused).toHaveLength(3);
+      // 主动攻击伤害：普攻段(−0.2)不匹配，正号两条相加 → +46.8%
+      expect(matchedSum(caused, activePhys)).toBeCloseTo(0.468, 10);
+      // 普攻：−20% 普通段 + 全域 +30% → +10%
+      expect(matchedSum(caused, basic)).toBeCloseTo(0.1, 10);
+    }
   });
 
-  it('大赏先挂再挂方圆：终态同为 −20% basic + 无过滤 +30%，+16.8% 被拒', () => {
+  it('分类键相同（均为「全域|主动」）→ 仍取较高；过滤字段随胜者写入/清除', () => {
     const u = dummyUnit('u', '前锋');
-    const foe = dummyUnit('foe', '前锋', {}, 'enemy');
-    const ctx = makeCtx([u], [foe]);
-    inflictStatus(ctx, u, {
-      type: 'damage_boost', rate: 0.3, duration: 3, direction: 'caused',
-    }, 'command', 'dashang_sanjun');
-    inflictStatus(ctx, u, {
-      type: 'damage_boost', rate: -0.2, duration: 999, direction: 'caused', damageSource: 'basic',
-    }, 'command', 'fangyuan');
-    inflictStatus(ctx, u, {
-      type: 'damage_boost', rate: 0.168, duration: 999, direction: 'caused',
-      damageSource: 'skill', skillTypes: ['active', 'pursuit'],
-    }, 'command', 'fangyuan');
-    assertFangyuanDashangEnd(u, activePhys);
+    const ctx = makeCtx([u], [dummyUnit('foe', '前锋', {}, 'enemy')]);
+    inflictStatus(ctx, u, { type: 'damage_boost', rate: 0.3, duration: 3, direction: 'caused', damageSource: 'skill', skillTypes: ['active'] }, 'command', 'skill_a');
+    inflictStatus(ctx, u, { type: 'damage_boost', rate: 0.5, duration: 3, direction: 'caused', skillTypes: ['active'] }, 'command', 'skill_b');
+
+    const caused = causedList(u);
+    expect(caused).toHaveLength(1);
+    expect(caused[0].rate).toBe(0.5);
+    expect(caused[0].sourceSkillId).toBe('skill_b');
+    // 胜者只带 skillTypes：damageSource 被清掉，不留败者残留
+    expect(caused[0].damageSource).toBeUndefined();
+    expect(caused[0].skillTypes).toEqual(['active']);
+
+    // 低率再施加不替换高率，字段也不回退
+    inflictStatus(ctx, u, { type: 'damage_boost', rate: 0.3, duration: 3, direction: 'caused', damageSource: 'skill', skillTypes: ['active'] }, 'command', 'skill_c');
+    expect(causedList(u)).toHaveLength(1);
+    expect(causedList(u)[0].rate).toBe(0.5);
+    expect(causedList(u)[0].skillTypes).toEqual(['active']);
   });
 });
-
-/**
- * 方圆 × 大赏终态：同号胜者 0.3 无过滤，负号 −0.2 basic 共存；主动攻击只吃一条正 caused。
- */
-function assertFangyuanDashangEnd(
-  u: UnitState,
-  activePhys: { damageSource: 'skill'; damageType: 'physical'; skillType: 'active' },
-): void {
-  const caused = u.statuses.filter(
-    (s): s is Extract<Status, { type: 'damage_boost' }> => s.type === 'damage_boost' && s.direction === 'caused',
-  );
-  expect(caused.some((s) => s.rate === 0.168)).toBe(false);
-  const neg = caused.find((s) => s.rate < 0);
-  expect(neg?.rate).toBe(-0.2);
-  expect(neg?.damageSource).toBe('basic');
-  const pos = caused.filter((s) => s.rate > 0);
-  expect(pos).toHaveLength(1);
-  expect(pos[0].rate).toBe(0.3);
-  expect(pos[0].sourceSkillId).toBe('dashang_sanjun');
-  expect(pos[0].damageSource).toBeUndefined();
-  expect(pos[0].skillTypes).toBeUndefined();
-  const matchingPos = caused.filter((s) => s.rate > 0 && statusMatchesHit(s, activePhys));
-  expect(matchingPos).toHaveLength(1);
-  expect(matchingPos[0].rate).toBe(0.3);
-}
 
 describe('oddRounds', () => {
   it('仅第 1/3 回合 roundStartRepeat 结算（maxRounds 3 时第 2 回合不挂分兵）', () => {
