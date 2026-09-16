@@ -1846,8 +1846,8 @@ function pushStatus(
     if ((type === 'damage_boost' || type === 'damage_reduce') && 'damageType' in create && create.damageType != null) {
       (push as { damageType?: 'physical' | 'strategy' }).damageType = create.damageType;
     }
-    // 谋议宏图减伤按 8/8 衰减：冻结满额减伤率为 baseRate
-    if (type === 'damage_reduce' && 'decayEighths' in create && create.decayEighths) {
+    // 谋议宏图减伤 / 虎豹督军增伤按 8/8 衰减：冻结满额率为 baseRate
+    if ((type === 'damage_reduce' || type === 'damage_boost') && 'decayEighths' in create && create.decayEighths) {
       (push as { eighths?: number }).eighths = create.decayEighths;
       (push as { baseRate?: number }).baseRate = create.rate;
     }
@@ -1872,7 +1872,11 @@ function pushStatus(
     // damage_boost 用百分数 + 语义化（0.08 → 「造成的伤害提高8%」；≤ -90% → 「造成的伤害大幅降低」）
     const durText = create.duration >= 999 ? '持续至战斗结束' : `持续 ${create.duration} 回合`;
     let detail: string;
-    if (type === 'damage_boost' && 'decayFifths' in create && create.decayFifths) {
+    if (type === 'damage_boost' && 'decayEighths' in create && create.decayEighths) {
+      const pct = Math.round(Math.abs(create.rate) * 100);
+      const dirName = (create.direction ?? 'taken') === 'caused' ? '造成的' : '受到的';
+      detail = `${dirName}伤害${create.rate >= 0 ? '提高' : '降低'} ${pct}% 剩余 ${create.decayEighths}/8 ${durText}`;
+    } else if (type === 'damage_boost' && 'decayFifths' in create && create.decayFifths) {
       const pct = Math.round(Math.abs(create.rate) * 100);
       const dirName = (create.direction ?? 'taken') === 'caused' ? '造成的' : '受到的';
       detail = `${dirName}伤害${create.rate >= 0 ? '提高' : '降低'} ${pct}% 剩余 ${create.decayFifths}/${create.decayFifths} ${durText}`;
@@ -2113,7 +2117,7 @@ export function tickStatuses(ctx: CombatContext, units: UnitState[]): void {
 
 /**
  * 回合前准备阶段（谋议宏图 / 恃强淬锋）：`round_start` 之后、单位行动之前。
- * 1. 带 `eighths` 的减伤衰减 1/8（≤0 则移除）；**不对 fifths 做回合衰减**
+ * 1. 带 `eighths` 的减伤/增伤（谋议宏图 / 虎豹督军）衰减 1/8（≤0 则移除）；**不对 fifths 做回合衰减**
  * 2. 被动 `selfPhysBoost.onRoundStart` 给持有者叠 1 层造成物理伤害提高
  * 3. 一类指挥 `roundStartRepeat` 对锁定目标再结算（士气叠层，同战法累加）
  */
@@ -2122,7 +2126,7 @@ export function tickRoundStartStatuses(ctx: CombatContext): void {
   for (const unit of units) {
     if (!unit.alive) continue;
     for (const s of [...unit.statuses]) {
-      if (s.type !== 'damage_reduce' || s.eighths === undefined || s.baseRate === undefined) continue;
+      if ((s.type !== 'damage_reduce' && s.type !== 'damage_boost') || s.eighths === undefined || s.baseRate === undefined) continue;
       s.eighths -= 1;
       if (s.eighths <= 0) {
         unit.statuses = unit.statuses.filter((x) => x !== s);
@@ -2135,11 +2139,15 @@ export function tickRoundStartStatuses(ctx: CombatContext): void {
       }
       s.rate = s.baseRate * (s.eighths / 8);
       const durText = s.remaining >= 999 ? '持续至战斗结束' : `持续 ${s.remaining} 回合`;
+      const decayDetail =
+        s.type === 'damage_boost'
+          ? `${(s.direction ?? 'taken') === 'caused' ? '造成的' : '受到的'}伤害${s.rate >= 0 ? '提高' : '降低'} ${Math.round(Math.abs(s.rate) * 100)}% 剩余 ${s.eighths}/8 ${durText}`
+          : `${statusName(s.type)} ${s.rate} 剩余 ${s.eighths}/8 ${durText}`;
       ctx.events.push({
         type: 'status_inflicted',
         unitId: unit.general.id,
-        statusType: 'damage_reduce',
-        detail: `${statusName('damage_reduce')} ${s.rate} 剩余 ${s.eighths}/8 ${durText}`,
+        statusType: s.type,
+        detail: decayDetail,
       });
     }
   }

@@ -716,6 +716,32 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.4, duration: 1, direction: 'caused' } },
     ],
   },
+  /**
+   * 虎豹督军（曹纯主战法·一类指挥）：战斗开始后首回合，使我军群体（有效距离内 2–3 目标，各 50%）
+   * 进行攻击的伤害提高 50%，该效果每回合开始时减少 1/8（准备阶段 8/8，第 1 回合前 7/8，同谋议宏图口径）。
+   * 官方：指挥 A，有效距离 3（网易技能库 200739；来源 dateyuan/七将主战法调研.md §3.1）。
+   * 「受攻击属性影响」成长率未确认 → 留空（attackScaled 不给 growthRate，引擎按基值不缩放）。
+   * 「进行攻击的伤害」沿用既有口径（大赏三军 / 强势 / 冲锋同为不过滤伤害类型）。
+   */
+  hubao_dujun: {
+    id: 'hubao_dujun',
+    name: '虎豹督军',
+    type: 'command',
+    phase: 'prep',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'group',
+    targetSide: 'ally',
+    groupCount: [2, 3],
+    retainAfterDeath: true,
+    tags: ['damage_boost'],
+    output: [
+      {
+        kind: 'inflict_status',
+        status: { type: 'damage_boost', rate: 0.5, duration: 999, direction: 'caused', attackScaled: true, decayEighths: 8 },
+      },
+    ],
+  },
   /** 魏武之泽（曹丕主战法）：主动战法，40%，我军群体免疫怯战，普通攻击与追击伤害提高 15%（受谋略影响），每回合可两次普攻，持续 2 回合。免疫怯战暂未建模 */
   weiwu_zhi_ze: {
     id: 'weiwu_zhi_ze',

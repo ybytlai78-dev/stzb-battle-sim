@@ -1,0 +1,160 @@
+/**
+ * 虎豹督军（曹纯·魏·骑 主战法）：一类指挥，我军群体（有效距离内 2–3 目标，各 50%）
+ * 进行攻击的伤害提高 50%，该效果每回合开始时减少 1/8（准备阶段 8/8，第 1 回合前 7/8，
+ * 同谋议宏图口径；「受攻击属性影响」成长率未确认 → 留空、按基值不缩放）。
+ *
+ * 引擎新增：`damage_boost` 支持 `decayEighths`（此前仅 `damage_reduce` 有）。
+ */
+import { describe, it, expect, beforeAll } from 'vitest';
+import { runBattle } from '../src/engine/combat';
+import { tickRoundStartStatuses, inflictStatus } from '../src/engine/action';
+import type { CombatContext } from '../src/engine/action';
+import type { BattleEvent, General, Position, UnitState } from '../src/engine/types';
+import { SKILL_REGISTRY } from '../src/data/skills';
+import { initHeroDB, HERO_REGISTRY, withSkills, level40 } from '../src/data/heroes';
+import { Rng } from '../src/engine/rng';
+
+beforeAll(async () => {
+  await initHeroDB();
+});
+
+function hero(id: string): General {
+  return { ...HERO_REGISTRY[id] };
+}
+
+function dummy(id: string, position: Position, troops = 10000): General {
+  return {
+    id,
+    name: `木桩${position}`,
+    rarity: '4星',
+    cost: 1,
+    faction: '汉',
+    tags: [],
+    mutualExclusionGroup: null,
+    troopType: 'infantry',
+    position,
+    attack: 80,
+    defense: 80,
+    strategy: 60,
+    speed: 20,
+    attackRange: 2,
+    maxTroops: troops,
+    mainSkillName: '',
+    skillDesc: '',
+    activeSkillIds: [],
+    passiveSkillIds: [],
+    commandSkillIds: [],
+    pursuitSkillIds: [],
+    morale: 100,
+  };
+}
+
+function enemyTeam(): General[] {
+  return [dummy('enemy-front', '前锋'), dummy('enemy-mid', '中军'), dummy('enemy-back', '大营')];
+}
+
+/** 曹纯（大营）+ 两名木桩友军：我军群体增伤有 3 个候选目标 */
+function caoTeam(): General[] {
+  const cao = withSkills(level40(hero('h498')), { commandSkillIds: ['hubao_dujun'] });
+  return [dummy('ally-front', '前锋'), dummy('ally-mid', '中军'), { ...cao, position: '大营' }];
+}
+
+function run(team: General[], seed = 1, maxRounds = 8) {
+  return runBattle({ seed, maxRounds, myTeam: team, enemyTeam: enemyTeam() });
+}
+
+type Inflicted = Extract<BattleEvent, { type: 'status_inflicted' }>;
+
+function boostEvents(events: BattleEvent[]): Inflicted[] {
+  return events.filter((e): e is Inflicted => e.type === 'status_inflicted' && e.statusType === 'damage_boost');
+}
+
+function makeUnit(g: General): UnitState {
+  return {
+    general: g,
+    side: 'my',
+    troops: 10000,
+    wounded: 0,
+    totalDead: 0,
+    alive: true,
+    statuses: [],
+    isPreparing: false,
+    preparingSkillId: null,
+  };
+}
+
+function makeCtx(units: UnitState[]): CombatContext {
+  return {
+    rng: new Rng(1),
+    myTeam: units,
+    enemyTeam: [],
+    events: [],
+    skills: new Map(Object.entries(SKILL_REGISTRY)),
+    lockedCommands: [],
+    stackBuffs: [],
+    currentRound: 1,
+  };
+}
+
+describe('虎豹督军（曹纯，一类指挥：我军群体增伤 50%，每回合 1/8 衰减）', () => {
+  it('装配挂槽：曹纯主战法挂入指挥槽，一类指挥对我军群体 2–3 目标', () => {
+    const g = hero('h498');
+    expect(g.name).toBe('曹纯');
+    expect(g.commandSkillIds).toContain('hubao_dujun');
+
+    const s = SKILL_REGISTRY['hubao_dujun'];
+    expect(s.type === 'command' && s.phase === 'prep').toBe(true);
+    expect(s.type === 'command' && s.targetSide === 'ally' && s.targetMode === 'group').toBe(true);
+    expect(s.type === 'command' && s.groupCount).toEqual([2, 3]);
+    expect(s.type === 'command' && s.range).toBe(3);
+    expect(s.tags).toEqual(expect.arrayContaining(['damage_boost']));
+  });
+
+  it('机制：准备阶段我军群体挂 8/8 增伤 50%；第 1 回合前衰减为 7/8（44%）', () => {
+    const report = run(caoTeam(), 1, 1);
+    expect(report.events.filter((e) => e.type === 'skill_cast' && e.skillName === '虎豹督军')).toHaveLength(1);
+
+    const prepEnd = report.events.findIndex((e) => e.type === 'preparation_end');
+    const prep = report.events.filter(
+      (e, i): e is Inflicted => i < prepEnd && e.type === 'status_inflicted' && e.statusType === 'damage_boost'
+    );
+    // 我军群体 2–3 目标（groupCount [2,3] 各 50%）
+    expect(prep.length).toBeGreaterThanOrEqual(2);
+    expect(prep.length).toBeLessThanOrEqual(3);
+    expect(prep.every((e) => e.detail.includes('提高 50%') && e.detail.includes('剩余 8/8'))).toBe(true);
+
+    const r1 = report.events.findIndex((e) => e.type === 'round_start' && e.round === 1);
+    const decayed = report.events.find(
+      (e, i): e is Inflicted =>
+        i > r1 && e.type === 'status_inflicted' && e.statusType === 'damage_boost' && e.detail.includes('剩余 7/8')
+    );
+    expect(decayed).toBeDefined();
+    expect(decayed!.detail).toContain('提高 44%'); // 0.5 × 7/8 = 0.4375 → 44%
+  });
+
+  it('数值：衰减序列 8/8 → 1/8 后移除，且 rate 按份数等比缩放', () => {
+    const report = run(caoTeam(), 1, 8);
+    const details = boostEvents(report.events).map((e) => e.detail);
+    expect(details.some((d) => d.includes('剩余 7/8'))).toBe(true);
+    expect(details.some((d) => d.includes('剩余 1/8'))).toBe(true);
+    expect(
+      report.events.some((e) => e.type === 'status_expired' && e.statusType === 'damage_boost')
+    ).toBe(true);
+
+    // 单元级：8/8 挂上后连续 tick 6 次 → 剩余 2/8（rate = 50% × 2/8 = 12.5% → 13%）
+    const unit = makeUnit(dummy('unit', '大营'));
+    const ctx = makeCtx([unit]);
+    inflictStatus(ctx, unit, {
+      type: 'damage_boost',
+      rate: 0.5,
+      duration: 999,
+      direction: 'caused',
+      attackScaled: true,
+      decayEighths: 8,
+    }, 'command', 'hubao_dujun');
+    for (let i = 0; i < 6; i++) tickRoundStartStatuses(ctx);
+    const st = unit.statuses.find((s) => s.type === 'damage_boost');
+    expect(st && 'eighths' in st ? st.eighths : undefined).toBe(2);
+    expect(st && 'eighths' in st ? st.rate : undefined).toBeCloseTo(0.125, 6);
+  });
+});

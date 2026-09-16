@@ -36,6 +36,7 @@ const SKILL_ID_BY_NAME = {
   将倾之柱: 'jiangqing_zhizhu',
   血溅黄砂: 'xuejian_huangsha',
   当敌制决: 'dangdi_zhijue',
+  虎豹督军: 'hubao_dujun',
   闭月: 'biyue',
   金吾飞将: 'jinwu_feijiang',
   奇佐鬼谋: 'qizuo_guimou',

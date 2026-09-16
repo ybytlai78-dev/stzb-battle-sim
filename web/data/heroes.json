@@ -1141,7 +1141,7 @@
     "growthDefense": 1.75,
     "growthStrategy": 0.99,
     "growthSpeed": 1.41,
-    "mainSkillId": "",
+    "mainSkillId": "hubao_dujun",
     "mainSkillName": "虎豹督军",
     "skillDesc": "战斗开始后首回合，使我军群体进行攻击的伤害提高50.0%（受攻击属性影响），此效果每回合降低1/8"
   },

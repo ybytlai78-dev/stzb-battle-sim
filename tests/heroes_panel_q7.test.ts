@@ -12,7 +12,7 @@ beforeAll(async () => {
 });
 
 describe('七将面板入库（空槽 / 取基值下架）', () => {
-  it('曹纯 h498 魏骑面板对齐 extra，虎豹督军空槽', () => {
+  it('曹纯 h498 魏骑面板对齐 extra，虎豹督军已挂槽上架', () => {
     const rec = HERO_RECORDS['h498'];
     const g = HERO_REGISTRY['h498'];
     expect(g.name).toBe('曹纯');
@@ -28,11 +28,11 @@ describe('七将面板入库（空槽 / 取基值下架）', () => {
     expect(rec.growthDefense).toBe(1.75);
     expect(rec.growthStrategy).toBe(0.99);
     expect(rec.growthSpeed).toBe(1.41);
-    expect(rec.mainSkillId).toBe('');
+    expect(rec.mainSkillId).toBe('hubao_dujun');
     expect(rec.mainSkillName).toBe('虎豹督军');
     expect(rec.skillDesc).toContain('50.0%');
     expect(rec.skillDesc).toContain('1/8');
-    expect(isHeroListed(rec)).toBe(false);
+    expect(isHeroListed(rec)).toBe(true); // 虎豹督军已实现 → 上架
   });
 
   it('贾充 h708 晋步面板对齐 extra，赏顺伐逆已挂槽因反击成长未确认仍下架', () => {
