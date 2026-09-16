@@ -481,7 +481,7 @@
     "growthDefense": 1.85,
     "growthStrategy": 1.59,
     "growthSpeed": 0.94,
-    "mainSkillId": "",
+    "mainSkillId": "diling_huiguang",
     "mainSkillName": "帝临回光",
     "skillDesc": "战斗开始后第3回合起，以无法恢复兵力为代价，使自身攻击距离+1，并进入分兵状态（伤害率50.0%，受谋略属性影响），同时令敌军群体处于恐慌中，每回合损失一定兵力（伤害率69.0%，受谋略属性影响），持续直到战斗结束，恐慌效果造成的伤害无视规避"
   },
@@ -2649,7 +2649,7 @@
     "growthDefense": 1.68,
     "growthStrategy": 1.21,
     "growthSpeed": 0.82,
-    "mainSkillId": "",
+    "mainSkillId": "lieying_shouxian",
     "mainSkillName": "列营守险",
     "skillDesc": "使我军全体攻击、防御、速度、谋略属性提高29.2（受谋略属性影响），持续2回合，同时友军全体受到下3次伤害时有50.0%几率进入规避状态，免疫该次伤害。若自身士气高昂时，规避状态的目标变为我军全体"
   },
@@ -2963,7 +2963,7 @@
     "growthDefense": 1.68,
     "growthStrategy": 1.21,
     "growthSpeed": 0.39,
-    "mainSkillId": "",
+    "mainSkillId": "lieying_shouxian",
     "mainSkillName": "列营守险",
     "skillDesc": "使我军全体攻击、防御、速度、谋略属性提高29.2（受谋略属性影响），持续2回合，同时友军全体受到下3次伤害时有50.0%几率进入规避状态，免疫该次伤害。若自身士气高昂时，规避状态的目标变为我军全体"
   },
