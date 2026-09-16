@@ -62,10 +62,23 @@ function sortByPosition(a: UnitState, b: UnitState): number {
   return ai - bi; // 前锋(0) 先于 中军(1) 先于 大营(2)
 }
 
+/**
+ * 攻击距离（含 `range_buff` 状态加成）：面板 attackRange + Σ range_buff.amount。
+ * 帝临回光「使自身攻击距离 +1」用此口径——只影响普攻可达范围，不影响战法有效距离（skill.range）。
+ */
+export function attackRangeOf(unit: UnitState): number {
+  let bonus = 0;
+  for (const s of unit.statuses) {
+    if (s.type === 'range_buff') bonus += s.amount;
+  }
+  return unit.general.attackRange + bonus;
+}
+
 /** 攻击范围内随机一个存活敌军（率土普攻目标选取：距离内均匀随机，非最近优先）。距离实时计算 */
 export function nearestEnemy(ctx: CombatContext, attacker: UnitState, enemies: UnitState[]): UnitState | null {
+  const range = attackRangeOf(attacker);
   const inRange = enemies.filter(
-    (e) => e.alive && distanceBetween(ctx, attacker, e) <= attacker.general.attackRange
+    (e) => e.alive && distanceBetween(ctx, attacker, e) <= range
   );
   if (inRange.length === 0) return null;
   return inRange[ctx.rng.int(inRange.length)];

@@ -26,7 +26,7 @@ import type {
 } from './types';
 import type { Rng } from './rng';
 import { calcDamage, applyTroopCap, scaledValue, roundRate, sumRates, buffMult, calcHealAmount, moraleRate, applyIgnoreDef, troopCounterReduce } from './formulas';
-import { nearestEnemy, skillTargets, distanceBetween, adjacentUnits, sameSideDistance, POSITION_INDEX } from './target';
+import { nearestEnemy, skillTargets, distanceBetween, adjacentUnits, sameSideDistance, attackRangeOf, POSITION_INDEX } from './target';
 
 /** 兵种克制减伤率（加算进增减伤单一总和）：被克制方攻击克制方 0.3，否则 0 */
 function troopCounterReduceOf(source: UnitState, target: UnitState): number {
@@ -60,17 +60,20 @@ function moraleTriggerRate(morale: number, baseRate: number): number {
 
 /**
  * 发动率提升后的基础率（士气封顶前）。
- *  缺省（难知如阴）：基础率 × (1 + rate)，主动/追击都吃。
- *  additive（动如雷震）：基础率 + rate（+100% = +1.0），超过 100% 由 moraleTriggerRate 封顶。
- *  skillTypes 限定战法类型（动如雷震仅追击）；多种 trigger_boost 按施加顺序叠加。
+ * **率土口径：「使 X 战法发动率提升 N%」= 与基础发动率直接相加（百分点加算）** ——
+ * 例：追击战法基础 30% 受到「提升 100%」→ 130%；超过 100% 由 moraleTriggerRate 封顶为必定发动。
+ * ⚠️ 旧实现缺省走乘算（基础率 × (1+rate)），会把「提高 120%」记成 35% → 77%，
+ *    与官方「100% 发动率」不符，已按官方口径纠正为缺省相加。
+ * `additive: false` 显式声明时才退回乘算；skillTypes 限定战法类型（动如雷震仅追击）；
+ * 多种 trigger_boost 按施加顺序逐条相加叠加。
  */
 function boostedBaseRate(unit: UnitState, skillType: SkillType, baseRate: number): number {
   let rate = baseRate;
   for (const s of unit.statuses) {
     if (s.type !== 'trigger_boost') continue;
     if (s.skillTypes && s.skillTypes.length > 0 && !s.skillTypes.includes(skillType)) continue;
-    if (s.additive) rate += s.rate;
-    else rate *= 1 + s.rate;
+    if (s.additive === false) rate *= 1 + s.rate;
+    else rate += s.rate;
   }
   return rate;
 }
@@ -1610,7 +1613,7 @@ export function inflictStatus(
     // 同一战法重复触发：数值类累加，规避加层，控制刷新剩余
     if (sameSource.type === 'evasion') {
       if (create.type === 'evasion') sameSource.stacks += create.stacks;
-    } else if (sameSource.type === 'attack_buff' || sameSource.type === 'defense_buff' || sameSource.type === 'strategy_buff' || sameSource.type === 'speed_buff' || sameSource.type === 'damage_reduce' || sameSource.type === 'damage_boost' || sameSource.type === 'trigger_boost' || sameSource.type === 'morale_boost') {
+    } else if (sameSource.type === 'attack_buff' || sameSource.type === 'defense_buff' || sameSource.type === 'strategy_buff' || sameSource.type === 'speed_buff' || sameSource.type === 'damage_reduce' || sameSource.type === 'damage_boost' || sameSource.type === 'trigger_boost' || sameSource.type === 'morale_boost' || sameSource.type === 'range_buff') {
       if ('amount' in sameSource && 'amount' in create) {
         sameSource.amount += create.amount;
         // 官方口径（疮痍累身截图）：同类属性增益重复施加 → 「【周泰】的攻击属性提高效果刷新了」
@@ -1836,6 +1839,36 @@ function pushStatus(
       unitId: target.general.id,
       statusType: type,
       detail: `规避 +${create.stacks} 层`,
+    });
+    return;
+  }
+  if (type === 'evade_chance') {
+    // 概率规避（列营守险）：受击时消耗 1 次机会并掷 rate，命中则完全免疫该次伤害（见 consumeEvasion）
+    const push: Status = { type, remaining, appliedRound, sourceSkillType, sourceSkillId } as Status;
+    (push as { rate: number }).rate = create.rate;
+    (push as { charges: number }).charges = create.charges;
+    if (casterId) (push as { sourceUnitId?: string }).sourceUnitId = casterId;
+    target.statuses.push(push);
+    ctx.events.push({
+      type: 'status_inflicted',
+      unitId: target.general.id,
+      statusType: type,
+      detail: `概率规避 ${Math.round(create.rate * 100)}% 共 ${create.charges} 次 ${create.duration >= 999 ? '持续至战斗结束' : `持续 ${create.duration} 回合`}`,
+    });
+    return;
+  }
+  if (type === 'range_buff') {
+    // 攻击距离提高（帝临回光「使自身攻击距离 +1」）：只放大普攻可达距离上限，
+    // 由 target.ts attackRangeOf 求和，不影响战法有效距离（skill.range）
+    const push: Status = { type, remaining, appliedRound, sourceSkillType, sourceSkillId } as Status;
+    (push as { amount: number }).amount = create.amount;
+    if (casterId) (push as { sourceUnitId?: string }).sourceUnitId = casterId;
+    target.statuses.push(push);
+    ctx.events.push({
+      type: 'status_inflicted',
+      unitId: target.general.id,
+      statusType: type,
+      detail: `攻击距离 +${create.amount} ${create.duration >= 999 ? '持续至战斗结束' : `持续 ${create.duration} 回合`}`,
     });
     return;
   }
@@ -2244,22 +2277,47 @@ export function removeDebuffs(ctx: CombatContext, targets: UnitState[]): void {
   }
 }
 
-/** 规避：消耗 1 层免疫该次伤害。
- *  stacks<=0 视为无效（不挡、不发 evasion_blocked），减到 0 时立刻移除，避免同回合后续伤害白嫖残留层。 */
+/**
+ * 规避判定（所有伤害结算点的统一入口）：
+ * ① 层数式 `evasion`：消耗 1 层，必定免疫该次伤害。
+ * ② 概率式 `evade_chance`（列营守险「受到下 N 次伤害时有 X% 几率进入规避状态，免疫该次伤害」）：
+ *    每次受击消耗 1 次机会并掷 X%——命中则完全免疫该次伤害，未命中照常结算（机会同样消耗）。
+ * stacks / charges <= 0 视为无效（不挡、不发 evasion_blocked），减到 0 时立刻移除，
+ * 避免同回合后续伤害白嫖残留层。
+ */
 export function consumeEvasion(ctx: CombatContext, target: UnitState, sourceId: string): boolean {
   const ev = getStatus(target, 'evasion');
-  if (!ev || ev.stacks <= 0) return false;
-  ev.stacks -= 1;
-  if (ev.stacks <= 0) {
-    target.statuses = target.statuses.filter((s) => s !== ev);
+  if (ev && ev.stacks > 0) {
+    ev.stacks -= 1;
+    if (ev.stacks <= 0) {
+      target.statuses = target.statuses.filter((s) => s !== ev);
+    }
+    ctx.events.push({
+      type: 'evasion_blocked',
+      unitId: target.general.id,
+      sourceId,
+      remainingStacks: ev.stacks,
+    });
+    return true;
   }
-  ctx.events.push({
-    type: 'evasion_blocked',
-    unitId: target.general.id,
-    sourceId,
-    remainingStacks: ev.stacks,
-  });
-  return true;
+  const ec = getStatus(target, 'evade_chance');
+  if (ec && ec.charges > 0) {
+    ec.charges -= 1;
+    const evaded = ctx.rng.chance(ec.rate);
+    if (ec.charges <= 0) {
+      target.statuses = target.statuses.filter((s) => s !== ec);
+    }
+    if (evaded) {
+      ctx.events.push({
+        type: 'evasion_blocked',
+        unitId: target.general.id,
+        sourceId,
+        remainingStacks: ec.charges,
+      });
+      return true;
+    }
+  }
+  return false;
 }
 
 /** 生效属性：面板基础值 + 部队加成点数 + 战法点数增减（攻击/防御/谋略/速度）+ 百分比增减。
@@ -2423,6 +2481,7 @@ function statusName(type: StatusType): string {
     case 'cowardice': return '怯战';
     case 'hesitation': return '犹豫';
     case 'evasion': return '规避';
+    case 'evade_chance': return '概率规避';
     case 'combo': return '连击';
     case 'attack_buff': return '攻击增益';
     case 'defense_buff': return '防御增益';
@@ -2447,6 +2506,7 @@ function statusName(type: StatusType): string {
     case 'rest': return '休整';
     case 'morale_boost': return '士气提高';
     case 'ignore_def': return '无视防御';
+    case 'range_buff': return '攻击距离';
   }
 }
 
@@ -3233,6 +3293,15 @@ function executeSkillOutputs(
       }
       case 'morale_branch': {
         const threshold = out.threshold ?? 100;
+        // by:'caster'（列营守险「若自身士气高昂时，规避状态的目标变为我军全体」）：
+        // 按施法者自身士气**整体判定一次**，对整个目标池执行选中分支
+        // （逐目标判定会按目标数重复施加同一段状态，战报出现多条重复）
+        if (out.by === 'caster') {
+          const branch = effectiveMorale(caster) > threshold ? out.high : out.low;
+          executeSkillOutputs(ctx, caster, skill, pool, branch);
+          break;
+        }
+        // 缺省 'target'：逐目标按各自士气分支（盛气横凌）
         for (const t of pool) {
           if (!t.alive) continue;
           const branch = effectiveMorale(t) > threshold ? out.high : out.low;
@@ -3598,7 +3667,7 @@ function normalAttack(
       type: 'no_attack_target',
       unitId: unit.general.id,
       name: unit.general.name,
-      reason: `攻击距离 ${unit.general.attackRange} 内无存活敌军`,
+      reason: `攻击距离 ${attackRangeOf(unit)} 内无存活敌军`,
     });
     return null;
   }

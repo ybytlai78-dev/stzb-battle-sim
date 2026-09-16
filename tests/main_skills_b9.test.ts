@@ -165,25 +165,25 @@ describe('难知如阴（法正，二类指挥：每2回合友军主动发动率
     expect(jump.every((e) => !e.unitId.startsWith('enemy'))).toBe(true);
   });
 
-  it('携带 trigger_boost 的友军主动战法发动率显著提升（35% → 77%，固定随机 0.37 从失败变成功）', () => {
+  it('发动率提升与基础发动率直接相加并封顶 100%（35% + 120% → 必定发动，固定随机 0.99 仍触发）', () => {
     const boosted = makeUnit('f', { position: '前锋', activeSkillIds: ['jiangmen_hunv'] });
-    boosted.statuses.push({ type: 'trigger_boost', rate: 1.2, remaining: 1, appliedRound: 1, sourceSkillType: 'command', sourceSkillId: 'nanzhi_ruyin' });
+    boosted.statuses.push({ type: 'trigger_boost', rate: 1.2, remaining: 1, appliedRound: 1, sourceSkillType: 'command', sourceSkillId: 'nanzhi_ruyin', additive: true });
     const e1 = makeUnit('e1', { position: '前锋' });
     e1.side = 'enemy';
-    const ctx = makeCtx(0.37);
+    const ctx = makeCtx(0.99);
     ctx.myTeam = [boosted];
     ctx.enemyTeam = [e1];
     actUnit(ctx, boosted);
     const cast = ctx.events.filter(
       (e): e is Extract<BattleEvent, { type: 'skill_cast' }> => e.type === 'skill_cast' && e.skillName === '将门虎女'
     );
-    expect(cast.length).toBeGreaterThan(0); // 35%×2.2=77% > 0.37 → 触发
+    expect(cast.length).toBeGreaterThan(0); // 35% + 120% = 155% → 封顶 100% → 0.99 也发动
 
-    // 对照：无 boost 时 35% < 0.37 → 不触发
+    // 对照：无 boost 时 35% < 0.99 → 不触发
     const plain = makeUnit('f2', { position: '前锋', activeSkillIds: ['jiangmen_hunv'] });
     const e2 = makeUnit('e2', { position: '前锋' });
     e2.side = 'enemy';
-    const ctx2 = makeCtx(0.37);
+    const ctx2 = makeCtx(0.99);
     ctx2.myTeam = [plain];
     ctx2.enemyTeam = [e2];
     actUnit(ctx2, plain);
@@ -191,6 +191,21 @@ describe('难知如阴（法正，二类指挥：每2回合友军主动发动率
       (e): e is Extract<BattleEvent, { type: 'skill_cast' }> => e.type === 'skill_cast' && e.skillName === '将门虎女'
     );
     expect(cast2.length).toBe(0);
+  });
+
+  it('缺省（不写 additive）同样是直接相加——率土口径下只有 additive:false 才乘算', () => {
+    const implicit = makeUnit('f3', { position: '前锋', activeSkillIds: ['jiangmen_hunv'] });
+    implicit.statuses.push({ type: 'trigger_boost', rate: 1.2, remaining: 1, appliedRound: 1, sourceSkillType: 'command', sourceSkillId: 'nanzhi_ruyin' });
+    const e3 = makeUnit('e3', { position: '前锋' });
+    e3.side = 'enemy';
+    const ctx3 = makeCtx(0.99);
+    ctx3.myTeam = [implicit];
+    ctx3.enemyTeam = [e3];
+    actUnit(ctx3, implicit);
+    const cast3 = ctx3.events.filter(
+      (e): e is Extract<BattleEvent, { type: 'skill_cast' }> => e.type === 'skill_cast' && e.skillName === '将门虎女'
+    );
+    expect(cast3.length).toBeGreaterThan(0); // 缺省加法：35% + 120% → 100%
   });
 });
 

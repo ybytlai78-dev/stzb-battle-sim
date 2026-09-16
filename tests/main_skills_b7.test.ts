@@ -99,6 +99,16 @@ describe('魏武之世（曹操·魏，一类指挥：敌军全体四属性下�
     );
     expect(anyDebuff).toBe(false);
   });
+
+  it('我军全体攻击距离 +1（range_buff 实装）', () => {
+    const report = run(fullTeam(withSkills(level40(hero('h23'), { strategy: 90 }), { commandSkillIds: ['weiwu_zhishi'] })), 1);
+    const rb = inflicted(report, 'range_buff');
+    // 三名友军各一条；敌军不吃这条增益
+    expect(rb).toHaveLength(3);
+    expect(rb.every((e) => !e.unitId.startsWith('enemy'))).toBe(true);
+    expect(rb[0].detail).toContain('攻击距离 +1');
+    expect(SKILL_REGISTRY['weiwu_zhishi'].tags).toContain('range_buff');
+  });
 });
 
 describe('驱虎吞狼（荀彧，主动：敌军全体策略攻击 + 围困）', () => {
