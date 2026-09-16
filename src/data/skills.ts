@@ -783,6 +783,63 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+  /**
+   * 怀橘遗亲（陆绩主战法·一类指挥）：每回合开始时，降低自身与我军除大营外友军单体 10 点攻击/防御/谋略，
+   * 并提升我军大营 20 点攻击/防御/谋略，均持续至该回合结束。
+   * 官方：指挥 C，有效距离 2，目标「我军群体（有效距离内 5 个目标）」——来源 scripts/skill_extra.json。
+   * 引擎配套：「按站位筛友军」= positions + targetSide:'ally'（本轮扩展；此前 positions 仅用于敌军落首箭）。
+   */
+  huai_ju_yiqin: {
+    id: 'huai_ju_yiqin',
+    name: '怀橘遗亲',
+    type: 'command',
+    phase: 'prep',
+    range: 2,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['attack_buff', 'defense_buff', 'strategy_buff'],
+    roundStartRepeat: {
+      output: [
+        {
+          kind: 'inflict_status',
+          target: 'self',
+          applyAll: true,
+          status: [
+            { type: 'attack_buff', amount: -10, duration: 1 },
+            { type: 'defense_buff', amount: -10, duration: 1 },
+            { type: 'strategy_buff', amount: -10, duration: 1 },
+          ],
+        },
+        {
+          kind: 'inflict_status',
+          targetSide: 'ally',
+          targetMode: 'random_single',
+          positions: ['前锋', '中军'],
+          excludeSelf: true,
+          applyAll: true,
+          status: [
+            { type: 'attack_buff', amount: -10, duration: 1 },
+            { type: 'defense_buff', amount: -10, duration: 1 },
+            { type: 'strategy_buff', amount: -10, duration: 1 },
+          ],
+        },
+        {
+          kind: 'inflict_status',
+          targetSide: 'ally',
+          targetMode: 'all',
+          positions: ['大营'],
+          applyAll: true,
+          status: [
+            { type: 'attack_buff', amount: 20, duration: 1 },
+            { type: 'defense_buff', amount: 20, duration: 1 },
+            { type: 'strategy_buff', amount: 20, duration: 1 },
+          ],
+        },
+      ],
+    },
+    output: [],
+  },
   /** 魏武之泽（曹丕主战法）：主动战法，40%，我军群体免疫怯战，普通攻击与追击伤害提高 15%（受谋略影响），每回合可两次普攻，持续 2 回合。免疫怯战暂未建模 */
   weiwu_zhi_ze: {
     id: 'weiwu_zhi_ze',

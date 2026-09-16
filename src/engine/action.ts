@@ -2660,8 +2660,28 @@ function executeSkillOutputs(
       pool = ctx.myTeam.concat(ctx.enemyTeam).filter((u) => u.alive && overlap.has(u.general.id));
     }
     if (out.kind === 'inflict_status' && out.positions && out.positions.length > 0) {
-      const foes = caster.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
-      pool = foes.filter((u) => u.alive && out.positions!.includes(u.general.position));
+      // 阵营池：缺省敌军（落首箭混乱打大营）；targetSide:'ally' 时改按友军站位筛（怀橘遗亲：大营 / 前锋中军）
+      const sidePool =
+        out.targetSide === 'ally'
+          ? caster.side === 'my'
+            ? ctx.myTeam
+            : ctx.enemyTeam
+          : out.targetSide === 'self'
+            ? [caster]
+            : caster.side === 'my'
+              ? ctx.enemyTeam
+              : ctx.myTeam;
+      let positioned = sidePool.filter((u) => u.alive && out.positions!.includes(u.general.position));
+      // 「除自己外」的池（怀橘遗亲：自身单列，友军单体不含自己）
+      if (out.excludeSelf) positioned = positioned.filter((u) => u.general.id !== caster.general.id);
+      // 站位筛选后仍须遵守本段目标模式：单体（含随机）只取 1 个
+      // （怀橘遗亲「我军除大营外友军单体」= 随机 1 名前锋/中军）
+      if ((out.targetMode === 'single' || out.targetMode === 'random_single') && positioned.length > 1) {
+        const idx = out.targetMode === 'random_single' ? ctx.rng.int(positioned.length) : 0;
+        pool = [positioned[idx]];
+      } else {
+        pool = positioned;
+      }
     }
     // recipient 代打：忽略 targetMode 从敌军重建的池，用锁定/战法目标（友军）再滤兵种
     if (out.kind === 'physical_damage' && out.attacker === 'recipient') {

@@ -2485,7 +2485,7 @@
     "growthDefense": 1.29,
     "growthStrategy": 1.75,
     "growthSpeed": 0.82,
-    "mainSkillId": "",
+    "mainSkillId": "huai_ju_yiqin",
     "mainSkillName": "怀橘遗亲",
     "skillDesc": "每回合开始时，降低自身和我军除大营外友军单体10.0点攻击、防御、谋略属性，并提升我军大营20.0点攻击、防御、谋略属性，持续至该回合结束"
   },
