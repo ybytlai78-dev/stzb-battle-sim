@@ -26,9 +26,14 @@ function dedupeDesc(d) {
   return b.startsWith(a) ? b : a;
 }
 
-const src = fs.readFileSync(path.join(root, 'src/data/skills.ts'), 'utf8');
+// ⚠️ Windows 检出的 skills.ts 是 CRLF：先剥掉 CR 再走 `\n` 正则。
+// 原写法 `\{\n` 匹配不了 `{\r\n` → 正则 0 命中 → 两个 json 被写成空表 `{}`，
+// 连带 web/dataIntegrity 与 web/smoke 的「官方品级 / 满级描述」断言整批红。
+// 另：`^\s{2}` 的 \s 会跨行吞掉换行，改为纯空格。
+const CR = String.fromCharCode(13);
+const src = fs.readFileSync(path.join(root, 'src/data/skills.ts'), 'utf8').split(CR).join('');
 // 解析 SKILL_REGISTRY 条目：key: { id: 'x', name: 'y', ... }
-const re = /^\s{2}([A-Za-z0-9_]+):\s*\{\n([\s\S]*?)\n\s{2}\},/gm;
+const re = /^ {2}([A-Za-z0-9_]+):\s*\{\n([\s\S]*?)\n {2}\},/gm;
 const grades = {};
 const descs = {};
 const problems = [];
