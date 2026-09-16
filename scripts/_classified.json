@@ -8,9 +8,9 @@
     "targetDesc": "自己",
     "effectDesc": "在战斗中无法进行普通攻击，使自身发动策略攻击时造成的伤害提高25.0%，并在每回合都会对有效距离5以内的敌军单体发动一次策略攻击（伤害率83.0%，受谋略属性影响）",
     "sources": "【汉·蔡文姬·骑】【群·贾诩·步】【吴·周瑜·弓】【汉·蔡文姬·步·SP】",
-    "status": "skipped",
-    "missingMechanics": "禁普攻+每回合策略攻击",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "attack scale p3"
   },
   {
     "name": "众谋不懈",
@@ -242,9 +242,9 @@
     "targetDesc": "我军群体（有效距离内3个目标）",
     "effectDesc": "战斗开始后前3回合，使敌我全军进行策略攻击的伤害降低35.0%，我军全体骑兵及步兵防御属性提高45.0，此效果结束后，攻击属性提高45.0，持续3回合",
     "sources": "【魏·郝昭·步】【吴·周泰·步】",
-    "status": "skipped",
-    "missingMechanics": "敌我全军+兵种限定",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "troop filter p2"
   },
   {
     "name": "诱敌深入",
@@ -333,9 +333,9 @@
     "targetDesc": "我军群体（有效距离内3个目标）",
     "effectDesc": "战斗中，使我军全体步兵进行普通攻击的伤害降低20.0%，主动、追击战法的伤害提高16.8%（受防御属性影响）",
     "sources": "【群·麴义·步】",
-    "status": "skipped",
-    "missingMechanics": "兵种限定",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "troop filter p2"
   },
   {
     "name": "疏数",
@@ -346,9 +346,9 @@
     "targetDesc": "我军群体（有效距离内3个目标）",
     "effectDesc": "战斗中，使我军弓兵防御提高50.0，骑兵每回合有40.0%的几率对距离3以内敌军单体发动一次攻击（伤害率100.0%），我军仅由弓兵和骑兵组成时生效",
     "sources": "【汉·袁姬·弓】【群·步度根·骑】",
-    "status": "skipped",
-    "missingMechanics": "兵种限定",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "troop filter p2"
   },
   {
     "name": "疾风迅雷",
@@ -424,9 +424,9 @@
     "targetDesc": "我军群体（有效距离内3个目标）",
     "effectDesc": "战斗中，使我军骑兵谋略属性提高50.0，步兵发动普通攻击造成的伤害提升50.0%，我军仅由骑兵和步兵组成时生效",
     "sources": "【魏·辛宪英·步】【吴·吾粲·步】【魏·于禁·骑】",
-    "status": "skipped",
-    "missingMechanics": "兵种限定",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "troop filter p2"
   },
   {
     "name": "远攻秘策",
@@ -450,9 +450,9 @@
     "targetDesc": "我军群体（有效距离内3个目标）",
     "effectDesc": "战斗中，使我军全体骑兵进行普通攻击的伤害降低25.0%，发动主动战法的伤害提高18.0%（受速度属性影响）",
     "sources": "【群·吕姬·骑】【蜀·马姬·骑】【汉·公孙瓒·骑】",
-    "status": "skipped",
-    "missingMechanics": "兵种限定",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "troop filter p2"
   },
   {
     "name": "长兵方阵",
@@ -476,9 +476,9 @@
     "targetDesc": "我军群体（有效距离内3个目标）",
     "effectDesc": "战斗中，使我军步兵防御属性提高50.0，弓兵受策略伤害降低35.0%，我军仅由步兵和弓兵组成时生效",
     "sources": "【吴·诸葛瑾·弓】【汉·刘表·弓】【蜀·蜀三相·步】",
-    "status": "skipped",
-    "missingMechanics": "兵种限定",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "troop filter p2"
   },
   {
     "name": "鹤翼",
@@ -489,9 +489,9 @@
     "targetDesc": "我军群体（有效距离内3个目标）",
     "effectDesc": "战斗第1、3、5、7回合，我军全体弓兵进入分兵状态，普通攻击后同时对附近的敌军造成伤害（伤害率49.0%，受谋略属性影响），同时造成的普通攻击伤害降低20.0%，持续1回合",
     "sources": "【魏·夏侯渊·骑】【吴·丁奉·骑】【群·韩遂·骑】",
-    "status": "skipped",
-    "missingMechanics": "兵种限定",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "troop filter p2"
   },
   {
     "name": "援军之策",
@@ -693,13 +693,13 @@
     "quality": "A",
     "type": "active",
     "range": 5,
-    "triggerRate": "40%",
-    "targetDesc": "敌军群体（有效距离内3个目标）",
-    "effectDesc": "1回合准备，对敌军全体发动一次攻击（伤害率180.0%），并随机使敌军单体进行攻击的伤害大幅度降低，持续1回合",
+    "triggerRate": "35%",
+    "targetDesc": "敌军群体（有效距离内2个目标）",
+    "effectDesc": "对敌军群体发动一次攻击（伤害率150.0%），并使敌军群体进行策略攻击的伤害降低50.0%（受攻击属性影响），持续1回合",
     "sources": "【群·吕布·弓】【汉·董卓·步】",
-    "status": "skipped",
-    "missingMechanics": "随机单体大幅降低无数值",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "attack scale p3"
   },
   {
     "name": "伐谋",
@@ -723,9 +723,9 @@
     "targetDesc": "我军群体（有效距离内3个目标）",
     "effectDesc": "移除我军全体骑兵及步兵的有害效果，对敌军单体发动一次攻击（伤害率145.0%），并使我军全体骑兵及步兵接下来2次攻击的伤害提高28.0%（受谋略属性影响）",
     "sources": "【群·祝融夫人·骑】【魏·钟会·弓】【晋·钟会·弓·SP】【汉·许劭·弓】【蜀·祝融夫人·骑·SP】",
-    "status": "skipped",
-    "missingMechanics": "兵种限定+下N次增伤",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "troop filter p2"
   },
   {
     "name": "兼弱攻昧",
@@ -1204,9 +1204,9 @@
     "targetDesc": "我军群体（有效距离内2个目标）",
     "effectDesc": "使我军群体骑兵造成的普通攻击伤害提升36.0%（受谋略属性影响），持续2回合，并使其下2次普通攻击进入分兵状态（伤害率55.0%）",
     "sources": "【群·华雄·骑】【吴·张昭·弓】",
-    "status": "skipped",
-    "missingMechanics": "兵种限定+下2次分兵",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "troop filter p2"
   },
   {
     "name": "临危",
@@ -2041,6 +2041,19 @@
     "note": "onHurt p1"
   },
   {
+    "name": "恃强淬锋",
+    "quality": "A",
+    "type": "passive",
+    "range": 5,
+    "triggerRate": null,
+    "targetDesc": "自己",
+    "effectDesc": "令自身受到策略伤害降低30.0%（受攻击属性影响），每次受到策略伤害时，降低1/5；每回合开始时或每次造成攻击伤害时，使自身造成的攻击伤害提高3.4%（受攻击属性影响），此效果最多叠加12次，持续到战斗结束",
+    "sources": "【群·孟获·步】",
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "attack scale p3"
+  },
+  {
     "name": "兵无常势",
     "quality": "A",
     "type": "passive",
@@ -2478,9 +2491,9 @@
     "targetDesc": "攻击目标",
     "effectDesc": "普通攻击后，对攻击目标再次发动策略攻击（伤害率228.0%，受谋略属性影响），并使其下一次受到策略攻击的伤害提升20.0%",
     "sources": "【群·越吉·骑】【群·彻里吉·步】【群·朵思大王·弓】",
-    "status": "skipped",
-    "missingMechanics": "下一次策略伤害提升",
-    "note": "pending_strategy_scale"
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "attack scale p3"
   },
   {
     "name": "火积",
