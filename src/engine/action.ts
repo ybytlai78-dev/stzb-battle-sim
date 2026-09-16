@@ -1857,8 +1857,8 @@ function pushStatus(
       (push as { eighths?: number }).eighths = create.decayEighths;
       (push as { baseRate?: number }).baseRate = create.rate;
     }
-    // 恃强淬锋 taken 减伤按 N 份衰减：冻结满额份数 fifthsBase 与满额 rate
-    if (type === 'damage_boost' && 'decayFifths' in create && create.decayFifths) {
+    // 受击按份衰减（恃强淬锋增减伤 / 疮痍累身减伤）：冻结满额份数 fifthsBase 与满额 rate
+    if ((type === 'damage_boost' || type === 'damage_reduce') && 'decayFifths' in create && create.decayFifths) {
       (push as { fifths?: number }).fifths = create.decayFifths;
       (push as { fifthsBase?: number }).fifthsBase = create.decayFifths;
       (push as { baseRate?: number }).baseRate = create.rate;
@@ -2467,12 +2467,18 @@ function consumeTakenCharges(target: UnitState, hit: DamageHitContext): void {
 }
 
 /**
- * 恃强淬锋：受匹配伤害且实际扣兵后 fifths −1；
+ * 受击按份衰减（恃强淬锋 / 疮痍累身）：受匹配伤害且实际扣兵后 fifths −1；
  * rate = baseRate × fifths / fifthsBase；fifths ≤ 0 则移除。
+ * damage_boost（恃强淬锋，增减伤）与 damage_reduce（疮痍累身，减伤，按 damageType 分轨）通用。
  */
 function decayFifthsOnHit(ctx: CombatContext, target: UnitState, hit: DamageHitContext): void {
   for (const s of [...target.statuses]) {
-    if (s.type !== 'damage_boost' || s.fifths === undefined || s.baseRate === undefined || s.fifthsBase === undefined) {
+    if (
+      (s.type !== 'damage_boost' && s.type !== 'damage_reduce') ||
+      s.fifths === undefined ||
+      s.baseRate === undefined ||
+      s.fifthsBase === undefined
+    ) {
       continue;
     }
     if (!statusMatchesHit(s, hit)) continue;
