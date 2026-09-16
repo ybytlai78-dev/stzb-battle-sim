@@ -288,6 +288,41 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['confusion'],
     output: [{ kind: 'inflict_status', status: { type: 'confusion', duration: 2 } }],
   },
+  /** 疮痍累身（周泰主战法·被动）：战斗开始后使自身受到的所有伤害降低 84.0%（受攻击伤害 / 受策略伤害
+   *  两条各自独立的衰减轨），每当受到该类型伤害后，此类型减伤降低 1/12（12 份受击衰减，decayFifths）；
+   *  位于前锋及中军时，前 2 回合援护友军全体——官方口径「为其抵挡普通攻击」，故仅普攻转移（cover 状态挂
+   *  在施法者自身，由他代为承受，applyDamage 的 basic 分支判定）；同时每次受到伤害后有 50.0% 几率使
+   *  攻击属性、防御属性、谋略属性提高 20.0，可叠加、持续直到战斗结束，且首次受到伤害时该效果必定触发
+   *  并额外触发 1 次（onHurt.firstGuaranteed）。 */
+  chuangyi_leishen: {
+    id: 'chuangyi_leishen',
+    name: '疮痍累身',
+    type: 'passive',
+    range: 1,
+    triggerRate: 1,
+    timing: 'battle_start',
+    targetMode: 'self',
+    tags: ['damage_reduce', 'buff_attack', 'buff_defense', 'buff_strategy', 'cover'],
+    output: [
+      // ① 受攻击伤害降低 84%，每受该类型伤害 −1/12
+      { kind: 'inflict_status', target: 'self', status: { type: 'damage_reduce', rate: 0.84, duration: 999, decayFifths: 12, damageType: 'physical' } },
+      // ② 受策略伤害降低 84%，与①各自独立衰减
+      { kind: 'inflict_status', target: 'self', status: { type: 'damage_reduce', rate: 0.84, duration: 999, decayFifths: 12, damageType: 'strategy' } },
+      // ③ 位于前锋及中军时前 2 回合援护友军全体（施法者站位条件；cover 挂自身 = 自己代为承受）
+      { kind: 'inflict_status', target: 'self', casterPositions: ['前锋', '中军'], status: { type: 'cover', duration: 2 } },
+    ],
+    onHurt: {
+      victim: 'self',
+      rate: 0.5,
+      firstGuaranteed: true,
+      applyTo: 'victim',
+      output: [
+        { kind: 'inflict_status', status: { type: 'attack_buff', amount: 20, duration: 999 } },
+        { kind: 'inflict_status', status: { type: 'defense_buff', amount: 20, duration: 999 } },
+        { kind: 'inflict_status', status: { type: 'strategy_buff', amount: 20, duration: 999 } },
+      ],
+    },
+  },
   /** 步步为营（A 被动）：使自身受到的所有伤害降低 11%，每回合开始额外叠加一次，持续直到战斗结束 */
   bubu_weiyin: {
     id: 'bubu_weiyin',

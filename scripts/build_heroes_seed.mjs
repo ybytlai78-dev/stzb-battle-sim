@@ -38,6 +38,7 @@ const SKILL_ID_BY_NAME = {
   当敌制决: 'dangdi_zhijue',
   虎豹督军: 'hubao_dujun',
   令明负榇: 'lingming_fuchen',
+  疮痍累身: 'chuangyi_leishen',
   怀橘遗亲: 'huai_ju_yiqin',
   闭月: 'biyue',
   金吾飞将: 'jinwu_feijiang',

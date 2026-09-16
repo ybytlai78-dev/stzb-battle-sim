@@ -515,11 +515,15 @@ function renderEvents(
       case 'no_attack_target':
         add('dim', `　无法普攻：${ev.reason}`);
         break;
+      case 'cover':
+        // 援护代受（移花接木 / 疮痍累身）：仅普通攻击转移，战法伤害不转移
+        add('good', `援护：「${nm(ev.unitId)}」为「${nm(ev.targetId)}」抵挡普通攻击`);
+        break;
       case 'heal':
         add('heal', `「${nm(ev.targetId)}」恢复兵力 <b>${ev.amount.toLocaleString()}</b>（${ev.before.toLocaleString()} → ${ev.after.toLocaleString()}）`);
         break;
       case 'status_inflicted':
-        if (isAttrReportDetail(ev.detail)) {
+        if (isAttrReportDetail(ev.detail) || /】使【/.test(ev.detail)) {
           // 属性增减 / 持节镇西：官方两行，不再套「获得：」
           for (const line of ev.detail.split('\n')) {
             add('status', line.replace(/(提高了|降低了)(.+)$/, '$1<b>$2</b>'));
@@ -530,6 +534,18 @@ function renderEvents(
         break;
       case 'status_conflict':
         add('conflict', `✘ ${nm(ev.unitId)} ${ev.detail}`);
+        break;
+      case 'skill_exec':
+        // 战法效果执行行（疮痍累身）：官方口径「【周泰】执行来自【周泰】的【疮痍累身】效果！」
+        add('status', ev.detail);
+        break;
+      case 'status_changed':
+        // 受击递减（疮痍累身每受该类型伤 −1/12）：官方口径
+        // 「【周泰】的受到攻击伤害降低效果下降了」+ 递减后的新值一行
+        add(
+          /^【/.test(ev.detail) ? 'status' : 'dim',
+          /^【/.test(ev.detail) ? ev.detail : `${nm(ev.unitId)} 的${ev.detail}`
+        );
         break;
       case 'status_expired':
         add('dim', `　${nm(ev.unitId)} 的${statusName(ev.statusType)}状态解除`);

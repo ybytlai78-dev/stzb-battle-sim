@@ -821,8 +821,12 @@ export function triggerPassiveSkills(
       position: unit.general.position,
       phase: 'passive_skill',
     });
-    // 受击触发被动（同仇敌忾）：战斗开始只登记，output 留到受伤时结算
-    if (skill.onHurt) {
+    // 受击触发被动（同仇敌忾）：战斗开始只登记，output 留到受伤时结算。
+    // 例外：受击配置自带 output（疮痍累身「每次受伤后叠属性」）时，战法 output 属「准备阶段」段
+    // （两轨减伤 + 援护），必须照常结算，否则整段 battle_start 效果丢失。
+    const hurtCfg = skill.onHurt ? (Array.isArray(skill.onHurt) ? skill.onHurt : [skill.onHurt]) : [];
+    const onHurtOwnsOutput = hurtCfg.some((c) => (c.output?.length ?? 0) > 0);
+    if (skill.onHurt && !onHurtOwnsOutput) {
       ctx.events.push({
         type: 'skill_cast',
         unitId: unit.general.id,
@@ -930,16 +934,17 @@ const ATTR_STAT_LABEL = {
 function formatAttrChangeDetail(
   target: UnitState,
   type: keyof typeof ATTR_STAT_LABEL,
-  opts: { amount: number; percent?: boolean; before: number; after: number }
+  opts: { amount: number; percent?: boolean; before: number; after: number; srcPrefix?: string }
 ): string {
   const verb = opts.amount >= 0 ? '提高了' : '降低了';
   const label = ATTR_STAT_LABEL[type];
+  const p = opts.srcPrefix ?? '';
   if (opts.percent) {
     const pct = Math.abs(opts.amount);
     const delta = Math.abs(opts.after - opts.before);
-    return `【${target.general.name}】的${label}${verb}${pct}%(${delta})(${opts.after})`;
+    return `${p}【${target.general.name}】的${label}${verb}${pct}%(${delta})(${opts.after})`;
   }
-  return `【${target.general.name}】的${label}${verb}${Math.abs(opts.amount)}(${opts.after})`;
+  return `${p}【${target.general.name}】的${label}${verb}${Math.abs(opts.amount)}(${opts.after})`;
 }
 
 /**
@@ -1606,8 +1611,19 @@ export function inflictStatus(
     if (sameSource.type === 'evasion') {
       if (create.type === 'evasion') sameSource.stacks += create.stacks;
     } else if (sameSource.type === 'attack_buff' || sameSource.type === 'defense_buff' || sameSource.type === 'strategy_buff' || sameSource.type === 'speed_buff' || sameSource.type === 'damage_reduce' || sameSource.type === 'damage_boost' || sameSource.type === 'trigger_boost' || sameSource.type === 'morale_boost') {
-      if ('amount' in sameSource && 'amount' in create) sameSource.amount += create.amount;
-      else if ('rate' in sameSource && 'rate' in create) {
+      if ('amount' in sameSource && 'amount' in create) {
+        sameSource.amount += create.amount;
+        // 官方口径（疮痍累身截图）：同类属性增益重复施加 → 「【周泰】的攻击属性提高效果刷新了」
+        if (type in ATTR_STAT_LABEL) {
+          const label = ATTR_STAT_LABEL[type as keyof typeof ATTR_STAT_LABEL];
+          ctx.events.push({
+            type: 'status_changed',
+            unitId: target.general.id,
+            statusType: type,
+            detail: `${label}${create.amount >= 0 ? '提高' : '降低'}效果刷新了`,
+          });
+        }
+      } else if ('rate' in sameSource && 'rate' in create) {
         sameSource.rate += create.rate;
         // 叠层计数（银龙冲阵）：带上限的增减伤每层 +1
         if (type === 'damage_boost' && 'stacks' in sameSource) {
@@ -1743,14 +1759,27 @@ export function inflictStatus(
  * charges 只比「有/无」，不比具体次数。过滤维不同则视为独立效果（火兽冲锋常驻 vs 次数刀）。
  * 非 damage_boost 一律视为可累加。
  */
+/** 伤害类型中文口径（疮痍累身按类型分轨的文案）：率土只有「攻击伤害 / 策略攻击伤害」两类 */
+function damageKindText(t?: 'physical' | 'strategy'): string {
+  if (t === 'physical') return '攻击伤害';
+  if (t === 'strategy') return '策略攻击伤害';
+  return '伤害';
+}
+
 function sameDamageBoostFilter(existing: Status, incoming: CreateStatus): boolean {
-  if (existing.type !== 'damage_boost' || incoming.type !== 'damage_boost') return true;
+  // 增减伤的同源合并必须过滤维一致：疮痍累身「受攻击伤害减伤 / 受策略伤害减伤」是两条
+  // 独立衰减轨，若被判同源会把 rate 累成 1.68；方圆「普攻减伤 vs 主动/追击增伤」同理。
+  if (existing.type !== 'damage_boost' && existing.type !== 'damage_reduce') return true;
+  if (incoming.type !== 'damage_boost' && incoming.type !== 'damage_reduce') return true;
   const norm = (types?: SkillType[]) => [...(types ?? [])].sort().join(',');
+  // charges 仅 damage_boost 有（次数型下一次攻击）；damage_reduce 无此字段，用 in 安全探测
+  const hasCharges = (s: Status | CreateStatus): boolean =>
+    'charges' in s ? (s as { charges?: number }).charges != null : false;
   return (
     (existing.damageSource ?? undefined) === (incoming.damageSource ?? undefined) &&
     (existing.damageType ?? undefined) === (incoming.damageType ?? undefined) &&
     norm(existing.skillTypes) === norm(incoming.skillTypes) &&
-    (existing.charges != null) === (incoming.charges != null)
+    hasCharges(existing) === hasCharges(incoming)
   );
 }
 
@@ -1819,6 +1848,11 @@ function pushStatus(
     if (casterId) (push as { sourceUnitId?: string }).sourceUnitId = casterId;
     target.statuses.push(push);
     const after = effectiveStat(target, kind);
+    // 官方口径（见疮痍累身战报截图）：属性增减行前缀「【施法者】【战法名】的效果使」；
+    // 取不到施法者/战法名时（直连 inflictStatus 的单测等）不加前缀，保持原格式
+    const srcUnit = casterId ? castUnit(ctx, casterId) : undefined;
+    const srcSkillName = ctx.skills.get(sourceSkillId)?.name;
+    const srcPrefix = srcUnit && srcSkillName ? `【${srcUnit.general.name}】【${srcSkillName}】的效果使` : '';
     ctx.events.push({
       type: 'status_inflicted',
       unitId: target.general.id,
@@ -1828,6 +1862,7 @@ function pushStatus(
         percent: create.percent,
         before,
         after,
+        srcPrefix,
       }),
     });
     return;
@@ -1903,6 +1938,13 @@ function pushStatus(
       const scope = pursuitOnly ? '追击战法发动率' : '发动率';
       const verb = 'additive' in create && create.additive ? '提高' : '提升';
       detail = `${scope}${verb} ${pct}% ${durText}`;
+    } else if (type === 'damage_reduce' && 'decayFifths' in create && create.decayFifths) {
+      // 疮痍累身：官方口径「【疮痍累身】使【周泰】受到攻击伤害降低84%」——
+      // 受攻击 / 受策略两条独立轨，受击后各自按 1/12 递减（见 decayFifthsOnHit）
+      const pct = Math.round(Math.abs(create.rate) * 100);
+      const kind = damageKindText(create.damageType);
+      const srcName = ctx.skills.get(sourceSkillId)?.name ?? sourceSkillId;
+      detail = `【${srcName}】使【${target.general.name}】受到${kind}降低${pct}% ${durText}`;
     } else if (type === 'damage_reduce' && 'decayEighths' in create && create.decayEighths) {
       detail = `${statusName(type)} ${create.rate} 剩余 ${create.decayEighths}/8 ${durText}`;
     } else if (type === 'ignore_def') {
@@ -2491,6 +2533,25 @@ function decayFifthsOnHit(ctx: CombatContext, target: UnitState, hit: DamageHitC
       continue;
     }
     s.rate = s.baseRate * (s.fifths / s.fifthsBase);
+    // 战报（官方口径，疮痍累身）：先「受到攻击伤害降低效果下降了」，再给递减后的新值。
+    // 仅减伤轨推送（damage_boost 的恃强淬锋保持原事件流，零回归）。
+    if (s.type === 'damage_reduce') {
+      const kind = damageKindText(s.damageType);
+      ctx.events.push({
+        type: 'status_changed',
+        unitId: target.general.id,
+        statusType: s.type,
+        detail: `受到${kind}降低效果下降了`,
+      });
+      const pct = Math.round(Math.abs(s.rate) * 100);
+      const srcName = ctx.skills.get(s.sourceSkillId)?.name ?? s.sourceSkillId;
+      ctx.events.push({
+        type: 'status_changed',
+        unitId: target.general.id,
+        statusType: s.type,
+        detail: `【${srcName}】使【${target.general.name}】受到${kind}降低${pct}%`,
+      });
+    }
   }
 }
 
@@ -3861,6 +3922,16 @@ function triggerOnHurt(
               });
             }
             if (!hitOk) continue;
+            // 官方口径（疮痍累身）：自带 output 的受击战法在每次触发时先出一行
+            // 「【周泰】执行来自【周泰】的【疮痍累身】效果！」——仅此类战法推送，
+            // 盲侯/陷储/同仇等「output 落在战法整体」的既有受击战法事件流不变（零回归）
+            if (cfg.output && cfg.output.length > 0) {
+              ctx.events.push({
+                type: 'skill_exec',
+                unitId: victim.general.id,
+                detail: `【${victim.general.name}】执行来自【${caster.general.name}】的【${skill.name}】效果！`,
+              });
+            }
             if (timing === 'before_damage') {
               if (cfg.thisHitReduce != null) remaining *= 1 - cfg.thisHitReduce;
               const outs = cfg.output;
@@ -4053,6 +4124,20 @@ function settleCounterOnHurt(ctx: CombatContext, holder: UnitState, attacker: Un
  * @param damageType 本次伤害类型；缺省不按 `onHurt.damageKind` 过滤，旧调用保持原行为
  * @param damageSource 伤害来源；缺省不传或 `'basic'` 均匹配 `onHurt.damageSource==='basic'`，仅明确 `'skill'` 被拒绝
  */
+/**
+ * 援护（移花接木 / 疮痍累身）：受击者为友军时，由同阵营带 cover 状态且存活的单位代为承受。
+ * 官方口径为「为其抵挡普通攻击」——仅普攻伤害转移，战法伤害不转移；援护者不援护自己。
+ */
+function findCoverGuard(ctx: CombatContext, victim: UnitState): UnitState | undefined {
+  const team = victim.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+  return team.find(
+    (u) =>
+      u.alive &&
+      u.general.id !== victim.general.id &&
+      u.statuses.some((s) => s.type === 'cover')
+  );
+}
+
 export function applyDamage(
   ctx: CombatContext,
   target: UnitState,
@@ -4063,6 +4148,22 @@ export function applyDamage(
 ): void {
   // 已阵亡单位不再吃伤害、不再走急救（阻止伤兵池膨胀后被救回）
   if (!target.alive) return;
+  // 援护代受：被援护者的普攻转由援护者承接（战报记 cover 事件，原目标本次不受伤害）。
+  // 嵌套结算（反击/引爆）不再次转移，避免与 ctx.resolvingHurtHooks 下的二次 applyDamage 打架。
+  if (damageSource === 'basic' && !ctx.resolvingHurtHooks) {
+    const guard = findCoverGuard(ctx, target);
+    if (guard) {
+      const coverStatus = guard.statuses.find((s) => s.type === 'cover');
+      ctx.events.push({
+        type: 'cover',
+        unitId: guard.general.id,
+        targetId: target.general.id,
+        skillId:
+          coverStatus && 'sourceSkillId' in coverStatus ? coverStatus.sourceSkillId : undefined,
+      });
+      target = guard;
+    }
+  }
   /** 本段 thisHitReduce 合计（缺省 0）；嵌套 applyDamage 跳过 before/after */
   let reduceRate = 0;
   if (!ctx.resolvingHurtHooks) {

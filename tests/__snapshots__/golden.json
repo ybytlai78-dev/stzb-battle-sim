@@ -12423,7 +12423,7 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "【太史慈】的攻击属性提高了30(138)"
+          "detail": "【太史慈】【先驱突击】的效果使【太史慈】的攻击属性提高了30(138)"
         },
         {
           "type": "unit_act_start",

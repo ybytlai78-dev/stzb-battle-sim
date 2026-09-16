@@ -966,6 +966,16 @@ export type BattleEvent =
       /** 判定方士气（施法者士气），如 120 */
       morale?: number;
     }
+  /**
+   * 援护代受（移花接木 / 疮痍累身）：unitId 为友军 targetId 抵挡了一次普通攻击。
+   * 官方口径「为其抵挡普通攻击」——仅普攻转移，战法伤害不转移。
+   */
+  | {
+      type: 'cover';
+      unitId: string;
+      targetId: string;
+      skillId?: string;
+    }
   | {
       type: 'skill_cast';
       unitId: string;
@@ -1026,6 +1036,19 @@ export type BattleEvent =
       type: 'status_inflicted';
       unitId: string;
       statusType: StatusType;
+      detail: string;
+    }
+  /** 已有状态被就地改动（疮痍累身受击后减伤按 1/12 递减）：官方战报「【周泰】的受到攻击伤害降低效果下降了」 */
+  | {
+      type: 'status_changed';
+      unitId: string;
+      statusType: StatusType;
+      detail: string;
+    }
+  /** 战法效果执行行（疮痍累身受击触发）：官方战报「【周泰】执行来自【周泰】的【疮痍累身】效果！」 */
+  | {
+      type: 'skill_exec';
+      unitId: string;
       detail: string;
     }
   | {
