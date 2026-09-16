@@ -40,7 +40,8 @@ describe('批量补入 · 普通卡（按官网面板）', () => {
     expect(r.troopType).toBe('infantry');
     expect(r.cost).toBe(2.5);
     expect(r.mainSkillName).toBe('列营守险');
-    expect(isHeroListed(r)).toBe(false);
+    // 列营守险已于 2026-09-16 实现（feat/mechanic-and-skills）→ 挂槽后该武将随之上架
+    expect(isHeroListed(r)).toBe(true);
   });
 
   it('冯嫽 h812（原被 SKIP 的空数据条目）已从官网补齐', () => {
