@@ -1246,16 +1246,16 @@
       "result": "draw",
       "rounds": 8,
       "finalMyTroops": [
-        6424,
-        8242,
+        6208,
+        9046,
         10000
       ],
       "finalEnemyTroops": [
         0,
-        4878,
-        8859
+        1628,
+        9449
       ],
-      "eventCount": 211,
+      "eventCount": 226,
       "events": [
         {
           "type": "battle_start",
@@ -1478,10 +1478,10 @@
           "skillId": "tujin",
           "skillName": "突进",
           "damageType": "physical",
-          "damage": 693,
+          "damage": 682,
           "breakdown": {
             "troopBase": 211,
-            "base": 86,
+            "base": 75,
             "main": 396
           },
           "modifiers": {
@@ -1502,10 +1502,10 @@
           "sourceId": "t2a",
           "targetId": "enemy-front",
           "distance": 1,
-          "damage": 615,
+          "damage": 620,
           "breakdown": {
             "troopBase": 211,
-            "base": 60,
+            "base": 65,
             "main": 344
           },
           "modifiers": {
@@ -1530,10 +1530,43 @@
           "unitId": "t2b",
           "skillId": "zaochuan",
           "skillName": "凿穿",
-          "success": false,
+          "success": true,
           "rate": 25,
           "baseRate": 25,
           "morale": 100
+        },
+        {
+          "type": "skill_target",
+          "unitId": "t2b",
+          "skillId": "zaochuan",
+          "targetIds": [
+            "enemy-front"
+          ]
+        },
+        {
+          "type": "skill_cast",
+          "unitId": "t2b",
+          "skillId": "zaochuan",
+          "skillName": "凿穿"
+        },
+        {
+          "type": "damage",
+          "sourceId": "t2b",
+          "targetId": "enemy-front",
+          "skillId": "zaochuan",
+          "skillName": "凿穿",
+          "damageType": "physical",
+          "damage": 721,
+          "breakdown": {
+            "troopBase": 211,
+            "base": 75,
+            "main": 435
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
         },
         {
           "type": "unit_act_start",
@@ -1547,551 +1580,11 @@
           "sourceId": "t2b",
           "targetId": "enemy-front",
           "distance": 2,
-          "damage": 587,
+          "damage": 599,
           "breakdown": {
             "troopBase": 211,
-            "base": 54,
+            "base": 66,
             "main": 322
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": []
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "t2b"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "t2c",
-          "name": "无战法将",
-          "position": "大营",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "t2c",
-          "targetId": "enemy-front",
-          "distance": 3,
-          "damage": 560,
-          "breakdown": {
-            "troopBase": 211,
-            "base": 56,
-            "main": 293
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": []
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "t2c"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "enemy-front",
-          "name": "木桩前锋",
-          "position": "前锋",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "enemy-front",
-          "targetId": "t2b",
-          "distance": 2,
-          "damage": 335,
-          "breakdown": {
-            "troopBase": 185,
-            "base": 21,
-            "main": 129
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": []
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "enemy-front"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "enemy-mid",
-          "name": "木桩中军",
-          "position": "中军",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "enemy-mid",
-          "targetId": "t2a",
-          "distance": 2,
-          "damage": 384,
-          "breakdown": {
-            "troopBase": 211,
-            "base": 22,
-            "main": 151
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": []
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "enemy-mid"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "enemy-back",
-          "name": "木桩大营",
-          "position": "大营",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "no_attack_target",
-          "unitId": "enemy-back",
-          "name": "木桩大营",
-          "reason": "攻击距离 2 内无存活敌军"
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "enemy-back"
-        },
-        {
-          "type": "round_end",
-          "round": 1,
-          "myTroops": [
-            9616,
-            9665,
-            10000
-          ],
-          "enemyTroops": [
-            7545,
-            10000,
-            10000
-          ],
-          "myWounded": [
-            365,
-            318,
-            0
-          ],
-          "enemyWounded": [
-            2332,
-            0,
-            0
-          ],
-          "myDead": [
-            19,
-            17,
-            0
-          ],
-          "enemyDead": [
-            123,
-            0,
-            0
-          ]
-        },
-        {
-          "type": "round_start",
-          "round": 2,
-          "turnOrder": [
-            "t2a",
-            "t2b",
-            "t2c",
-            "enemy-front",
-            "enemy-mid",
-            "enemy-back"
-          ]
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "t2a",
-          "name": "突进将",
-          "position": "前锋",
-          "phase": "active_skill"
-        },
-        {
-          "type": "skill_trigger",
-          "unitId": "t2a",
-          "skillId": "tujin",
-          "skillName": "突进",
-          "success": false,
-          "rate": 25,
-          "baseRate": 25,
-          "morale": 100
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "t2a",
-          "name": "突进将",
-          "position": "前锋",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "t2a",
-          "targetId": "enemy-mid",
-          "distance": 2,
-          "damage": 609,
-          "breakdown": {
-            "troopBase": 207,
-            "base": 61,
-            "main": 341
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": []
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "t2a"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "t2b",
-          "name": "凿穿将",
-          "position": "中军",
-          "phase": "active_skill"
-        },
-        {
-          "type": "skill_trigger",
-          "unitId": "t2b",
-          "skillId": "zaochuan",
-          "skillName": "凿穿",
-          "success": true,
-          "rate": 25,
-          "baseRate": 25,
-          "morale": 100
-        },
-        {
-          "type": "skill_target",
-          "unitId": "t2b",
-          "skillId": "zaochuan",
-          "targetIds": [
-            "enemy-front"
-          ]
-        },
-        {
-          "type": "skill_cast",
-          "unitId": "t2b",
-          "skillId": "zaochuan",
-          "skillName": "凿穿"
-        },
-        {
-          "type": "damage",
-          "sourceId": "t2b",
-          "targetId": "enemy-front",
-          "skillId": "zaochuan",
-          "skillName": "凿穿",
-          "damageType": "physical",
-          "damage": 707,
-          "breakdown": {
-            "troopBase": 208,
-            "base": 68,
-            "main": 431
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": []
-          }
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "t2b",
-          "name": "凿穿将",
-          "position": "中军",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "t2b",
-          "targetId": "enemy-front",
-          "distance": 2,
-          "damage": 579,
-          "breakdown": {
-            "troopBase": 208,
-            "base": 52,
-            "main": 319
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": []
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "t2b"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "t2c",
-          "name": "无战法将",
-          "position": "大营",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "t2c",
-          "targetId": "enemy-front",
-          "distance": 3,
-          "damage": 557,
-          "breakdown": {
-            "troopBase": 211,
-            "base": 53,
-            "main": 293
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": []
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "t2c"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "enemy-front",
-          "name": "木桩前锋",
-          "position": "前锋",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "enemy-front",
-          "targetId": "t2a",
-          "distance": 1,
-          "damage": 303,
-          "breakdown": {
-            "troopBase": 159,
-            "base": 18,
-            "main": 126
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": []
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "enemy-front"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "enemy-mid",
-          "name": "木桩中军",
-          "position": "中军",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "enemy-mid",
-          "targetId": "t2a",
-          "distance": 2,
-          "damage": 376,
-          "breakdown": {
-            "troopBase": 205,
-            "base": 22,
-            "main": 149
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": []
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "enemy-mid"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "enemy-back",
-          "name": "木桩大营",
-          "position": "大营",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "no_attack_target",
-          "unitId": "enemy-back",
-          "name": "木桩大营",
-          "reason": "攻击距离 2 内无存活敌军"
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "enemy-back"
-        },
-        {
-          "type": "round_end",
-          "round": 2,
-          "myTroops": [
-            8937,
-            9665,
-            10000
-          ],
-          "enemyTroops": [
-            5702,
-            9391,
-            10000
-          ],
-          "myWounded": [
-            915,
-            318,
-            0
-          ],
-          "enemyWounded": [
-            3825,
-            493,
-            0
-          ],
-          "myDead": [
-            148,
-            17,
-            0
-          ],
-          "enemyDead": [
-            473,
-            116,
-            0
-          ]
-        },
-        {
-          "type": "round_start",
-          "round": 3,
-          "turnOrder": [
-            "t2a",
-            "t2b",
-            "t2c",
-            "enemy-front",
-            "enemy-mid",
-            "enemy-back"
-          ]
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "t2a",
-          "name": "突进将",
-          "position": "前锋",
-          "phase": "active_skill"
-        },
-        {
-          "type": "skill_trigger",
-          "unitId": "t2a",
-          "skillId": "tujin",
-          "skillName": "突进",
-          "success": false,
-          "rate": 25,
-          "baseRate": 25,
-          "morale": 100
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "t2a",
-          "name": "突进将",
-          "position": "前锋",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "t2a",
-          "targetId": "enemy-mid",
-          "distance": 2,
-          "damage": 592,
-          "breakdown": {
-            "troopBase": 200,
-            "base": 58,
-            "main": 334
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": []
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "t2a"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "t2b",
-          "name": "凿穿将",
-          "position": "中军",
-          "phase": "active_skill"
-        },
-        {
-          "type": "skill_trigger",
-          "unitId": "t2b",
-          "skillId": "zaochuan",
-          "skillName": "凿穿",
-          "success": true,
-          "rate": 25,
-          "baseRate": 25,
-          "morale": 100
-        },
-        {
-          "type": "skill_target",
-          "unitId": "t2b",
-          "skillId": "zaochuan",
-          "targetIds": [
-            "enemy-front"
-          ]
-        },
-        {
-          "type": "skill_cast",
-          "unitId": "t2b",
-          "skillId": "zaochuan",
-          "skillName": "凿穿"
-        },
-        {
-          "type": "damage",
-          "sourceId": "t2b",
-          "targetId": "enemy-front",
-          "skillId": "zaochuan",
-          "skillName": "凿穿",
-          "damageType": "physical",
-          "damage": 712,
-          "breakdown": {
-            "troopBase": 208,
-            "base": 73,
-            "main": 431
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": []
-          }
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "t2b",
-          "name": "凿穿将",
-          "position": "中军",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "t2b",
-          "targetId": "enemy-front",
-          "distance": 2,
-          "damage": 581,
-          "breakdown": {
-            "troopBase": 208,
-            "base": 54,
-            "main": 319
           },
           "modifiers": {
             "caused": [],
@@ -2143,11 +1636,11 @@
           "sourceId": "enemy-front",
           "targetId": "t2b",
           "distance": 2,
-          "damage": 246,
+          "damage": 323,
           "breakdown": {
-            "troopBase": 125,
-            "base": 22,
-            "main": 99
+            "troopBase": 175,
+            "base": 23,
+            "main": 125
           },
           "modifiers": {
             "caused": [],
@@ -2171,11 +1664,11 @@
           "sourceId": "enemy-mid",
           "targetId": "t2a",
           "distance": 2,
-          "damage": 366,
+          "damage": 381,
           "breakdown": {
-            "troopBase": 199,
-            "base": 21,
-            "main": 146
+            "troopBase": 211,
+            "base": 19,
+            "main": 151
           },
           "modifiers": {
             "caused": [],
@@ -2206,41 +1699,41 @@
         },
         {
           "type": "round_end",
-          "round": 3,
+          "round": 1,
           "myTroops": [
-            8571,
-            9419,
+            9619,
+            9677,
             10000
           ],
           "enemyTroops": [
-            3860,
-            8799,
+            6829,
+            10000,
             10000
           ],
           "myWounded": [
-            1160,
-            483,
+            362,
+            307,
             0
           ],
           "enemyWounded": [
-            5059,
-            890,
+            3013,
+            0,
             0
           ],
           "myDead": [
-            269,
-            98,
+            19,
+            16,
             0
           ],
           "enemyDead": [
-            1081,
-            311,
+            158,
+            0,
             0
           ]
         },
         {
           "type": "round_start",
-          "round": 4,
+          "round": 2,
           "turnOrder": [
             "t2a",
             "t2b",
@@ -2262,10 +1755,43 @@
           "unitId": "t2a",
           "skillId": "tujin",
           "skillName": "突进",
-          "success": false,
+          "success": true,
           "rate": 25,
           "baseRate": 25,
           "morale": 100
+        },
+        {
+          "type": "skill_target",
+          "unitId": "t2a",
+          "skillId": "tujin",
+          "targetIds": [
+            "enemy-front"
+          ]
+        },
+        {
+          "type": "skill_cast",
+          "unitId": "t2a",
+          "skillId": "tujin",
+          "skillName": "突进"
+        },
+        {
+          "type": "damage",
+          "sourceId": "t2a",
+          "targetId": "enemy-front",
+          "skillId": "tujin",
+          "skillName": "突进",
+          "damageType": "physical",
+          "damage": 667,
+          "breakdown": {
+            "troopBase": 207,
+            "base": 68,
+            "main": 392
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
         },
         {
           "type": "unit_act_start",
@@ -2279,11 +1805,11 @@
           "sourceId": "t2a",
           "targetId": "enemy-front",
           "distance": 1,
-          "damage": 591,
+          "damage": 611,
           "breakdown": {
-            "troopBase": 196,
-            "base": 65,
-            "main": 330
+            "troopBase": 207,
+            "base": 63,
+            "main": 341
           },
           "modifiers": {
             "caused": [],
@@ -2324,10 +1850,247 @@
           "sourceId": "t2b",
           "targetId": "enemy-front",
           "distance": 2,
-          "damage": 581,
+          "damage": 577,
+          "breakdown": {
+            "troopBase": 208,
+            "base": 50,
+            "main": 319
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "t2b"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "t2c",
+          "name": "无战法将",
+          "position": "大营",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "t2c",
+          "targetId": "enemy-front",
+          "distance": 3,
+          "damage": 557,
+          "breakdown": {
+            "troopBase": 211,
+            "base": 53,
+            "main": 293
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "t2c"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "enemy-front",
+          "name": "木桩前锋",
+          "position": "前锋",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "enemy-front",
+          "targetId": "t2b",
+          "distance": 2,
+          "damage": 262,
+          "breakdown": {
+            "troopBase": 136,
+            "base": 21,
+            "main": 105
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "enemy-front"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "enemy-mid",
+          "name": "木桩中军",
+          "position": "中军",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "enemy-mid",
+          "targetId": "t2a",
+          "distance": 2,
+          "damage": 380,
+          "breakdown": {
+            "troopBase": 211,
+            "base": 18,
+            "main": 151
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "enemy-mid"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "enemy-back",
+          "name": "木桩大营",
+          "position": "大营",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "no_attack_target",
+          "unitId": "enemy-back",
+          "name": "木桩大营",
+          "reason": "攻击距离 2 内无存活敌军"
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "enemy-back"
+        },
+        {
+          "type": "round_end",
+          "round": 2,
+          "myTroops": [
+            9239,
+            9415,
+            10000
+          ],
+          "enemyTroops": [
+            4417,
+            10000,
+            10000
+          ],
+          "myWounded": [
+            670,
+            519,
+            0
+          ],
+          "enemyWounded": [
+            4966,
+            0,
+            0
+          ],
+          "myDead": [
+            91,
+            66,
+            0
+          ],
+          "enemyDead": [
+            617,
+            0,
+            0
+          ]
+        },
+        {
+          "type": "round_start",
+          "round": 3,
+          "turnOrder": [
+            "t2a",
+            "t2b",
+            "t2c",
+            "enemy-front",
+            "enemy-mid",
+            "enemy-back"
+          ]
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "t2a",
+          "name": "突进将",
+          "position": "前锋",
+          "phase": "active_skill"
+        },
+        {
+          "type": "skill_trigger",
+          "unitId": "t2a",
+          "skillId": "tujin",
+          "skillName": "突进",
+          "success": false,
+          "rate": 25,
+          "baseRate": 25,
+          "morale": 100
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "t2a",
+          "name": "突进将",
+          "position": "前锋",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "t2a",
+          "targetId": "enemy-mid",
+          "distance": 2,
+          "damage": 601,
+          "breakdown": {
+            "troopBase": 203,
+            "base": 61,
+            "main": 337
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "t2a"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "t2b",
+          "name": "凿穿将",
+          "position": "中军",
+          "phase": "active_skill"
+        },
+        {
+          "type": "skill_trigger",
+          "unitId": "t2b",
+          "skillId": "zaochuan",
+          "skillName": "凿穿",
+          "success": false,
+          "rate": 25,
+          "baseRate": 25,
+          "morale": 100
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "t2b",
+          "name": "凿穿将",
+          "position": "中军",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "t2b",
+          "targetId": "enemy-front",
+          "distance": 2,
+          "damage": 586,
           "breakdown": {
             "troopBase": 205,
-            "base": 59,
+            "base": 64,
             "main": 317
           },
           "modifiers": {
@@ -2380,11 +2143,11 @@
           "sourceId": "enemy-front",
           "targetId": "t2b",
           "distance": 2,
-          "damage": 174,
+          "damage": 222,
           "breakdown": {
-            "troopBase": 81,
-            "base": 21,
-            "main": 72
+            "troopBase": 111,
+            "base": 20,
+            "main": 91
           },
           "modifiers": {
             "caused": [],
@@ -2408,10 +2171,280 @@
           "sourceId": "enemy-mid",
           "targetId": "t2a",
           "distance": 2,
-          "damage": 366,
+          "damage": 374,
+          "breakdown": {
+            "troopBase": 205,
+            "base": 20,
+            "main": 149
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "enemy-mid"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "enemy-back",
+          "name": "木桩大营",
+          "position": "大营",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "no_attack_target",
+          "unitId": "enemy-back",
+          "name": "木桩大营",
+          "reason": "攻击距离 2 内无存活敌军"
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "enemy-back"
+        },
+        {
+          "type": "round_end",
+          "round": 3,
+          "myTroops": [
+            8865,
+            9193,
+            10000
+          ],
+          "enemyTroops": [
+            3278,
+            9399,
+            10000
+          ],
+          "myWounded": [
+            921,
+            668,
+            0
+          ],
+          "enemyWounded": [
+            5730,
+            403,
+            0
+          ],
+          "myDead": [
+            214,
+            139,
+            0
+          ],
+          "enemyDead": [
+            992,
+            198,
+            0
+          ]
+        },
+        {
+          "type": "round_start",
+          "round": 4,
+          "turnOrder": [
+            "t2a",
+            "t2b",
+            "t2c",
+            "enemy-front",
+            "enemy-mid",
+            "enemy-back"
+          ]
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "t2a",
+          "name": "突进将",
+          "position": "前锋",
+          "phase": "active_skill"
+        },
+        {
+          "type": "skill_trigger",
+          "unitId": "t2a",
+          "skillId": "tujin",
+          "skillName": "突进",
+          "success": false,
+          "rate": 25,
+          "baseRate": 25,
+          "morale": 100
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "t2a",
+          "name": "突进将",
+          "position": "前锋",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "t2a",
+          "targetId": "enemy-mid",
+          "distance": 2,
+          "damage": 600,
+          "breakdown": {
+            "troopBase": 200,
+            "base": 67,
+            "main": 333
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "t2a"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "t2b",
+          "name": "凿穿将",
+          "position": "中军",
+          "phase": "active_skill"
+        },
+        {
+          "type": "skill_trigger",
+          "unitId": "t2b",
+          "skillId": "zaochuan",
+          "skillName": "凿穿",
+          "success": true,
+          "rate": 25,
+          "baseRate": 25,
+          "morale": 100
+        },
+        {
+          "type": "skill_target",
+          "unitId": "t2b",
+          "skillId": "zaochuan",
+          "targetIds": [
+            "enemy-front"
+          ]
+        },
+        {
+          "type": "skill_cast",
+          "unitId": "t2b",
+          "skillId": "zaochuan",
+          "skillName": "凿穿"
+        },
+        {
+          "type": "damage",
+          "sourceId": "t2b",
+          "targetId": "enemy-front",
+          "skillId": "zaochuan",
+          "skillName": "凿穿",
+          "damageType": "physical",
+          "damage": 712,
+          "breakdown": {
+            "troopBase": 203,
+            "base": 84,
+            "main": 425
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "t2b",
+          "name": "凿穿将",
+          "position": "中军",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "t2b",
+          "targetId": "enemy-front",
+          "distance": 2,
+          "damage": 570,
+          "breakdown": {
+            "troopBase": 203,
+            "base": 52,
+            "main": 315
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "t2b"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "t2c",
+          "name": "无战法将",
+          "position": "大营",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "t2c",
+          "targetId": "enemy-front",
+          "distance": 3,
+          "damage": 550,
+          "breakdown": {
+            "troopBase": 211,
+            "base": 46,
+            "main": 293
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "t2c"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "enemy-front",
+          "name": "木桩前锋",
+          "position": "前锋",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "enemy-front",
+          "targetId": "t2a",
+          "distance": 1,
+          "damage": 138,
+          "breakdown": {
+            "troopBase": 59,
+            "base": 19,
+            "main": 60
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "enemy-front"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "enemy-mid",
+          "name": "木桩中军",
+          "position": "中军",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "enemy-mid",
+          "targetId": "t2a",
+          "distance": 2,
+          "damage": 367,
           "breakdown": {
             "troopBase": 199,
-            "base": 21,
+            "base": 22,
             "main": 146
           },
           "modifiers": {
@@ -2445,33 +2478,33 @@
           "type": "round_end",
           "round": 4,
           "myTroops": [
-            8205,
-            9245,
+            8360,
+            9193,
             10000
           ],
           "enemyTroops": [
-            2135,
+            1446,
             8799,
             10000
           ],
           "myWounded": [
-            1354,
-            575,
+            1189,
+            668,
             0
           ],
           "enemyWounded": [
-            5973,
-            890,
+            6700,
+            721,
             0
           ],
           "myDead": [
-            441,
-            180,
+            451,
+            139,
             0
           ],
           "enemyDead": [
-            1892,
-            311,
+            1854,
+            480,
             0
           ]
         },
@@ -2499,43 +2532,10 @@
           "unitId": "t2a",
           "skillId": "tujin",
           "skillName": "突进",
-          "success": true,
+          "success": false,
           "rate": 25,
           "baseRate": 25,
           "morale": 100
-        },
-        {
-          "type": "skill_target",
-          "unitId": "t2a",
-          "skillId": "tujin",
-          "targetIds": [
-            "enemy-front"
-          ]
-        },
-        {
-          "type": "skill_cast",
-          "unitId": "t2a",
-          "skillId": "tujin",
-          "skillName": "突进"
-        },
-        {
-          "type": "damage",
-          "sourceId": "t2a",
-          "targetId": "enemy-front",
-          "skillId": "tujin",
-          "skillName": "突进",
-          "damageType": "physical",
-          "damage": 635,
-          "breakdown": {
-            "troopBase": 192,
-            "base": 68,
-            "main": 375
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": []
-          }
         },
         {
           "type": "unit_act_start",
@@ -2547,13 +2547,13 @@
         {
           "type": "attack_hit",
           "sourceId": "t2a",
-          "targetId": "enemy-front",
-          "distance": 1,
-          "damage": 581,
+          "targetId": "enemy-mid",
+          "distance": 2,
+          "damage": 585,
           "breakdown": {
-            "troopBase": 192,
+            "troopBase": 194,
             "base": 63,
-            "main": 326
+            "main": 328
           },
           "modifiers": {
             "caused": [],
@@ -2594,11 +2594,11 @@
           "sourceId": "t2b",
           "targetId": "enemy-front",
           "distance": 2,
-          "damage": 584,
+          "damage": 572,
           "breakdown": {
-            "troopBase": 204,
-            "base": 64,
-            "main": 316
+            "troopBase": 203,
+            "base": 54,
+            "main": 315
           },
           "modifiers": {
             "caused": [],
@@ -2622,11 +2622,220 @@
           "sourceId": "t2c",
           "targetId": "enemy-front",
           "distance": 3,
-          "damage": 335,
+          "damage": 556,
           "breakdown": {
             "troopBase": 211,
-            "base": 55,
+            "base": 52,
             "main": 293
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "t2c"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "enemy-front",
+          "name": "木桩前锋",
+          "position": "前锋",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "enemy-front",
+          "targetId": "t2a",
+          "distance": 1,
+          "damage": 54,
+          "breakdown": {
+            "troopBase": 15,
+            "base": 22,
+            "main": 17
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "enemy-front"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "enemy-mid",
+          "name": "木桩中军",
+          "position": "中军",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "enemy-mid",
+          "targetId": "t2a",
+          "distance": 2,
+          "damage": 358,
+          "breakdown": {
+            "troopBase": 193,
+            "base": 22,
+            "main": 143
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "enemy-mid"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "enemy-back",
+          "name": "木桩大营",
+          "position": "大营",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "no_attack_target",
+          "unitId": "enemy-back",
+          "name": "木桩大营",
+          "reason": "攻击距离 2 内无存活敌军"
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "enemy-back"
+        },
+        {
+          "type": "round_end",
+          "round": 5,
+          "myTroops": [
+            7948,
+            9193,
+            10000
+          ],
+          "enemyTroops": [
+            318,
+            8214,
+            10000
+          ],
+          "myWounded": [
+            1350,
+            668,
+            0
+          ],
+          "enemyWounded": [
+            7140,
+            949,
+            0
+          ],
+          "myDead": [
+            702,
+            139,
+            0
+          ],
+          "enemyDead": [
+            2542,
+            837,
+            0
+          ]
+        },
+        {
+          "type": "round_start",
+          "round": 6,
+          "turnOrder": [
+            "t2a",
+            "t2b",
+            "t2c",
+            "enemy-front",
+            "enemy-mid",
+            "enemy-back"
+          ]
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "t2a",
+          "name": "突进将",
+          "position": "前锋",
+          "phase": "active_skill"
+        },
+        {
+          "type": "skill_trigger",
+          "unitId": "t2a",
+          "skillId": "tujin",
+          "skillName": "突进",
+          "success": false,
+          "rate": 25,
+          "baseRate": 25,
+          "morale": 100
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "t2a",
+          "name": "突进将",
+          "position": "前锋",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "t2a",
+          "targetId": "enemy-mid",
+          "distance": 2,
+          "damage": 583,
+          "breakdown": {
+            "troopBase": 189,
+            "base": 71,
+            "main": 323
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "t2a"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "t2b",
+          "name": "凿穿将",
+          "position": "中军",
+          "phase": "active_skill"
+        },
+        {
+          "type": "skill_trigger",
+          "unitId": "t2b",
+          "skillId": "zaochuan",
+          "skillName": "凿穿",
+          "success": false,
+          "rate": 25,
+          "baseRate": 25,
+          "morale": 100
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "t2b",
+          "name": "凿穿将",
+          "position": "中军",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "t2b",
+          "targetId": "enemy-front",
+          "distance": 2,
+          "damage": 318,
+          "breakdown": {
+            "troopBase": 203,
+            "base": 59,
+            "main": 315
           },
           "modifiers": {
             "caused": [],
@@ -2642,6 +2851,34 @@
         },
         {
           "type": "unit_act_end",
+          "unitId": "t2b"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "t2c",
+          "name": "无战法将",
+          "position": "大营",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "t2c",
+          "targetId": "enemy-mid",
+          "distance": 3,
+          "damage": 554,
+          "breakdown": {
+            "troopBase": 211,
+            "base": 50,
+            "main": 293
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
+        },
+        {
+          "type": "unit_act_end",
           "unitId": "t2c"
         },
         {
@@ -2654,13 +2891,13 @@
         {
           "type": "attack_hit",
           "sourceId": "enemy-mid",
-          "targetId": "t2b",
-          "distance": 2,
-          "damage": 353,
+          "targetId": "t2a",
+          "distance": 1,
+          "damage": 338,
           "breakdown": {
-            "troopBase": 199,
-            "base": 19,
-            "main": 135
+            "troopBase": 179,
+            "base": 23,
+            "main": 136
           },
           "modifiers": {
             "caused": [],
@@ -2702,41 +2939,41 @@
         },
         {
           "type": "round_end",
-          "round": 5,
+          "round": 6,
           "myTroops": [
-            7821,
-            8892,
+            7226,
+            9193,
             10000
           ],
           "enemyTroops": [
             0,
-            8799,
+            7077,
             10000
           ],
           "myWounded": [
-            1504,
-            713,
+            1530,
+            668,
             0
           ],
           "enemyWounded": [
-            6807,
-            890,
+            7219,
+            1233,
             0
           ],
           "myDead": [
-            675,
-            395,
+            1244,
+            139,
             0
           ],
           "enemyDead": [
-            3193,
-            311,
+            2781,
+            1690,
             0
           ]
         },
         {
           "type": "round_start",
-          "round": 6,
+          "round": 7,
           "turnOrder": [
             "t2a",
             "t2b",
@@ -2757,10 +2994,43 @@
           "unitId": "t2a",
           "skillId": "tujin",
           "skillName": "突进",
-          "success": false,
+          "success": true,
           "rate": 25,
           "baseRate": 25,
           "morale": 100
+        },
+        {
+          "type": "skill_target",
+          "unitId": "t2a",
+          "skillId": "tujin",
+          "targetIds": [
+            "enemy-mid"
+          ]
+        },
+        {
+          "type": "skill_cast",
+          "unitId": "t2a",
+          "skillId": "tujin",
+          "skillName": "突进"
+        },
+        {
+          "type": "damage",
+          "sourceId": "t2a",
+          "targetId": "enemy-mid",
+          "skillId": "tujin",
+          "skillName": "突进",
+          "damageType": "physical",
+          "damage": 616,
+          "breakdown": {
+            "troopBase": 181,
+            "base": 75,
+            "main": 360
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
         },
         {
           "type": "unit_act_start",
@@ -2772,13 +3042,13 @@
         {
           "type": "attack_hit",
           "sourceId": "t2a",
-          "targetId": "enemy-back",
-          "distance": 2,
+          "targetId": "enemy-mid",
+          "distance": 1,
           "damage": 569,
           "breakdown": {
-            "troopBase": 188,
-            "base": 60,
-            "main": 321
+            "troopBase": 181,
+            "base": 75,
+            "main": 313
           },
           "modifiers": {
             "caused": [],
@@ -2802,10 +3072,43 @@
           "unitId": "t2b",
           "skillId": "zaochuan",
           "skillName": "凿穿",
-          "success": false,
+          "success": true,
           "rate": 25,
           "baseRate": 25,
           "morale": 100
+        },
+        {
+          "type": "skill_target",
+          "unitId": "t2b",
+          "skillId": "zaochuan",
+          "targetIds": [
+            "enemy-mid"
+          ]
+        },
+        {
+          "type": "skill_cast",
+          "unitId": "t2b",
+          "skillId": "zaochuan",
+          "skillName": "凿穿"
+        },
+        {
+          "type": "damage",
+          "sourceId": "t2b",
+          "targetId": "enemy-mid",
+          "skillId": "zaochuan",
+          "skillName": "凿穿",
+          "damageType": "physical",
+          "damage": 710,
+          "breakdown": {
+            "troopBase": 203,
+            "base": 82,
+            "main": 425
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
         },
         {
           "type": "unit_act_start",
@@ -2819,11 +3122,11 @@
           "sourceId": "t2b",
           "targetId": "enemy-mid",
           "distance": 2,
-          "damage": 578,
+          "damage": 573,
           "breakdown": {
-            "troopBase": 200,
-            "base": 66,
-            "main": 312
+            "troopBase": 203,
+            "base": 55,
+            "main": 315
           },
           "modifiers": {
             "caused": [],
@@ -2847,10 +3150,295 @@
           "sourceId": "t2c",
           "targetId": "enemy-mid",
           "distance": 3,
-          "damage": 559,
+          "damage": 557,
           "breakdown": {
             "troopBase": 211,
-            "base": 55,
+            "base": 53,
+            "main": 293
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "t2c"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "enemy-mid",
+          "name": "木桩中军",
+          "position": "中军",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "enemy-mid",
+          "targetId": "t2a",
+          "distance": 1,
+          "damage": 260,
+          "breakdown": {
+            "troopBase": 129,
+            "base": 22,
+            "main": 109
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "enemy-mid"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "enemy-back",
+          "name": "木桩大营",
+          "position": "大营",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "enemy-back",
+          "targetId": "t2a",
+          "distance": 2,
+          "damage": 384,
+          "breakdown": {
+            "troopBase": 211,
+            "base": 22,
+            "main": 151
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "enemy-back"
+        },
+        {
+          "type": "round_end",
+          "round": 7,
+          "myTroops": [
+            6582,
+            9193,
+            10000
+          ],
+          "enemyTroops": [
+            0,
+            4052,
+            10000
+          ],
+          "myWounded": [
+            1601,
+            668,
+            0
+          ],
+          "enemyWounded": [
+            7219,
+            1566,
+            0
+          ],
+          "myDead": [
+            1817,
+            139,
+            0
+          ],
+          "enemyDead": [
+            2781,
+            4382,
+            0
+          ]
+        },
+        {
+          "type": "round_start",
+          "round": 8,
+          "turnOrder": [
+            "t2a",
+            "t2b",
+            "t2c",
+            "enemy-mid",
+            "enemy-back"
+          ]
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "t2a",
+          "name": "突进将",
+          "position": "前锋",
+          "phase": "active_skill"
+        },
+        {
+          "type": "skill_trigger",
+          "unitId": "t2a",
+          "skillId": "tujin",
+          "skillName": "突进",
+          "success": true,
+          "rate": 25,
+          "baseRate": 25,
+          "morale": 100
+        },
+        {
+          "type": "skill_target",
+          "unitId": "t2a",
+          "skillId": "tujin",
+          "targetIds": [
+            "enemy-mid"
+          ]
+        },
+        {
+          "type": "skill_cast",
+          "unitId": "t2a",
+          "skillId": "tujin",
+          "skillName": "突进"
+        },
+        {
+          "type": "damage",
+          "sourceId": "t2a",
+          "targetId": "enemy-mid",
+          "skillId": "tujin",
+          "skillName": "突进",
+          "damageType": "physical",
+          "damage": 589,
+          "breakdown": {
+            "troopBase": 172,
+            "base": 68,
+            "main": 349
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "t2a",
+          "name": "突进将",
+          "position": "前锋",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "t2a",
+          "targetId": "enemy-back",
+          "distance": 2,
+          "damage": 551,
+          "breakdown": {
+            "troopBase": 172,
+            "base": 75,
+            "main": 304
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "t2a"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "t2b",
+          "name": "凿穿将",
+          "position": "中军",
+          "phase": "active_skill"
+        },
+        {
+          "type": "skill_trigger",
+          "unitId": "t2b",
+          "skillId": "zaochuan",
+          "skillName": "凿穿",
+          "success": true,
+          "rate": 25,
+          "baseRate": 25,
+          "morale": 100
+        },
+        {
+          "type": "skill_target",
+          "unitId": "t2b",
+          "skillId": "zaochuan",
+          "targetIds": [
+            "enemy-mid"
+          ]
+        },
+        {
+          "type": "skill_cast",
+          "unitId": "t2b",
+          "skillId": "zaochuan",
+          "skillName": "凿穿"
+        },
+        {
+          "type": "damage",
+          "sourceId": "t2b",
+          "targetId": "enemy-mid",
+          "skillId": "zaochuan",
+          "skillName": "凿穿",
+          "damageType": "physical",
+          "damage": 703,
+          "breakdown": {
+            "troopBase": 203,
+            "base": 75,
+            "main": 425
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "t2b",
+          "name": "凿穿将",
+          "position": "中军",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "t2b",
+          "targetId": "enemy-mid",
+          "distance": 2,
+          "damage": 580,
+          "breakdown": {
+            "troopBase": 203,
+            "base": 62,
+            "main": 315
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": []
+          }
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "t2b"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "t2c",
+          "name": "无战法将",
+          "position": "大营",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "t2c",
+          "targetId": "enemy-mid",
+          "distance": 3,
+          "damage": 552,
+          "breakdown": {
+            "troopBase": 211,
+            "base": 48,
             "main": 293
           },
           "modifiers": {
@@ -2875,11 +3463,11 @@
           "sourceId": "enemy-mid",
           "targetId": "t2b",
           "distance": 2,
-          "damage": 337,
+          "damage": 147,
           "breakdown": {
-            "troopBase": 186,
-            "base": 21,
-            "main": 130
+            "troopBase": 65,
+            "base": 22,
+            "main": 60
           },
           "modifiers": {
             "caused": [],
@@ -2903,10 +3491,10 @@
           "sourceId": "enemy-back",
           "targetId": "t2a",
           "distance": 2,
-          "damage": 375,
+          "damage": 374,
           "breakdown": {
-            "troopBase": 205,
-            "base": 21,
+            "troopBase": 206,
+            "base": 19,
             "main": 149
           },
           "modifiers": {
@@ -2921,474 +3509,36 @@
         },
         {
           "type": "round_end",
-          "round": 6,
-          "myTroops": [
-            7446,
-            8555,
-            10000
-          ],
-          "enemyTroops": [
-            0,
-            7662,
-            9431
-          ],
-          "myWounded": [
-            1598,
-            797,
-            0
-          ],
-          "enemyWounded": [
-            6807,
-            1174,
-            142
-          ],
-          "myDead": [
-            956,
-            648,
-            0
-          ],
-          "enemyDead": [
-            3193,
-            1164,
-            427
-          ]
-        },
-        {
-          "type": "round_start",
-          "round": 7,
-          "turnOrder": [
-            "t2a",
-            "t2b",
-            "t2c",
-            "enemy-mid",
-            "enemy-back"
-          ]
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "t2a",
-          "name": "突进将",
-          "position": "前锋",
-          "phase": "active_skill"
-        },
-        {
-          "type": "skill_trigger",
-          "unitId": "t2a",
-          "skillId": "tujin",
-          "skillName": "突进",
-          "success": false,
-          "rate": 25,
-          "baseRate": 25,
-          "morale": 100
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "t2a",
-          "name": "突进将",
-          "position": "前锋",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "t2a",
-          "targetId": "enemy-back",
-          "distance": 2,
-          "damage": 572,
-          "breakdown": {
-            "troopBase": 183,
-            "base": 73,
-            "main": 316
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": []
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "t2a"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "t2b",
-          "name": "凿穿将",
-          "position": "中军",
-          "phase": "active_skill"
-        },
-        {
-          "type": "skill_trigger",
-          "unitId": "t2b",
-          "skillId": "zaochuan",
-          "skillName": "凿穿",
-          "success": false,
-          "rate": 25,
-          "baseRate": 25,
-          "morale": 100
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "t2b",
-          "name": "凿穿将",
-          "position": "中军",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "t2b",
-          "targetId": "enemy-mid",
-          "distance": 2,
-          "damage": 567,
-          "breakdown": {
-            "troopBase": 196,
-            "base": 62,
-            "main": 309
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": []
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "t2b"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "t2c",
-          "name": "无战法将",
-          "position": "大营",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "t2c",
-          "targetId": "enemy-mid",
-          "distance": 3,
-          "damage": 553,
-          "breakdown": {
-            "troopBase": 211,
-            "base": 49,
-            "main": 293
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": []
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "t2c"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "enemy-mid",
-          "name": "木桩中军",
-          "position": "中军",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "enemy-mid",
-          "targetId": "t2b",
-          "distance": 2,
-          "damage": 313,
-          "breakdown": {
-            "troopBase": 171,
-            "base": 19,
-            "main": 123
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": []
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "enemy-mid"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "enemy-back",
-          "name": "木桩大营",
-          "position": "大营",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "enemy-back",
-          "targetId": "t2a",
-          "distance": 2,
-          "damage": 368,
-          "breakdown": {
-            "troopBase": 200,
-            "base": 22,
-            "main": 146
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": []
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "enemy-back"
-        },
-        {
-          "type": "round_end",
-          "round": 7,
-          "myTroops": [
-            7078,
-            8242,
-            10000
-          ],
-          "enemyTroops": [
-            0,
-            6542,
-            8859
-          ],
-          "myWounded": [
-            1638,
-            831,
-            0
-          ],
-          "enemyWounded": [
-            6807,
-            1297,
-            205
-          ],
-          "myDead": [
-            1284,
-            927,
-            0
-          ],
-          "enemyDead": [
-            3193,
-            2161,
-            936
-          ]
-        },
-        {
-          "type": "round_start",
-          "round": 8,
-          "turnOrder": [
-            "t2a",
-            "t2b",
-            "t2c",
-            "enemy-mid",
-            "enemy-back"
-          ]
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "t2a",
-          "name": "突进将",
-          "position": "前锋",
-          "phase": "active_skill"
-        },
-        {
-          "type": "skill_trigger",
-          "unitId": "t2a",
-          "skillId": "tujin",
-          "skillName": "突进",
-          "success": false,
-          "rate": 25,
-          "baseRate": 25,
-          "morale": 100
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "t2a",
-          "name": "突进将",
-          "position": "前锋",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "t2a",
-          "targetId": "enemy-mid",
-          "distance": 1,
-          "damage": 550,
-          "breakdown": {
-            "troopBase": 179,
-            "base": 60,
-            "main": 311
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": []
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "t2a"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "t2b",
-          "name": "凿穿将",
-          "position": "中军",
-          "phase": "active_skill"
-        },
-        {
-          "type": "skill_trigger",
-          "unitId": "t2b",
-          "skillId": "zaochuan",
-          "skillName": "凿穿",
-          "success": false,
-          "rate": 25,
-          "baseRate": 25,
-          "morale": 100
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "t2b",
-          "name": "凿穿将",
-          "position": "中军",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "t2b",
-          "targetId": "enemy-mid",
-          "distance": 2,
-          "damage": 558,
-          "breakdown": {
-            "troopBase": 193,
-            "base": 60,
-            "main": 305
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": []
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "t2b"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "t2c",
-          "name": "无战法将",
-          "position": "大营",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "t2c",
-          "targetId": "enemy-mid",
-          "distance": 3,
-          "damage": 556,
-          "breakdown": {
-            "troopBase": 211,
-            "base": 52,
-            "main": 293
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": []
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "t2c"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "enemy-mid",
-          "name": "木桩中军",
-          "position": "中军",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "enemy-mid",
-          "targetId": "t2a",
-          "distance": 1,
-          "damage": 287,
-          "breakdown": {
-            "troopBase": 145,
-            "base": 23,
-            "main": 119
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": []
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "enemy-mid"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "enemy-back",
-          "name": "木桩大营",
-          "position": "大营",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "enemy-back",
-          "targetId": "t2a",
-          "distance": 2,
-          "damage": 367,
-          "breakdown": {
-            "troopBase": 200,
-            "base": 21,
-            "main": 146
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": []
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "enemy-back"
-        },
-        {
-          "type": "round_end",
           "round": 8,
           "myTroops": [
-            6424,
-            8242,
+            6208,
+            9046,
             10000
           ],
           "enemyTroops": [
             0,
-            4878,
-            8859
+            1628,
+            9449
           ],
           "myWounded": [
-            1638,
-            831,
+            1601,
+            668,
             0
           ],
           "enemyWounded": [
-            6807,
-            1297,
-            205
+            7219,
+            1566,
+            0
           ],
           "myDead": [
-            1938,
-            927,
+            2191,
+            286,
             0
           ],
           "enemyDead": [
-            3193,
-            3825,
-            936
+            2781,
+            6806,
+            551
           ]
         },
         {
@@ -3396,14 +3546,14 @@
           "result": "draw",
           "rounds": 8,
           "myTroops": [
-            6424,
-            8242,
+            6208,
+            9046,
             10000
           ],
           "enemyTroops": [
             0,
-            4878,
-            8859
+            1628,
+            9449
           ]
         }
       ]

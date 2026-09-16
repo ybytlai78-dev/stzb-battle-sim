@@ -209,12 +209,18 @@ function bindHeroFilter(host: HTMLElement, sel: HeroFilter, redraw: () => void):
   });
 }
 
-/** 战法信息摘要 */
+/**
+ * 战法信息摘要芯片。
+ * 准备主动用 `prepareTurns ?? 1`，避免长坂之吼等 2 回合准备被写成「1回合准备」。
+ */
 export function skillMeta(s: Skill): string {
   const parts: string[] = [];
-  if (s.type === 'active' && s.prepare) parts.push('1回合准备');
+  if (s.type === 'active' && s.prepare) parts.push(`${s.prepareTurns ?? 1}回合准备`);
   parts.push(`距离${s.range}`);
-  if (s.type === 'active' || s.type === 'pursuit') parts.push(`发动率${Math.round(s.triggerRate * 100)}%`);
+  if (s.type === 'active' || s.type === 'pursuit') {
+    const tr = Array.isArray(s.triggerRate) ? s.triggerRate[0] : s.triggerRate;
+    parts.push(`发动率${Math.round(tr * 100)}%`);
+  }
   if (s.type === 'command') {
     const c = s as Extract<Skill, { type: 'command' }>;
     if (c.phase === 'prep') parts.push('一类指挥');

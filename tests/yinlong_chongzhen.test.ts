@@ -114,8 +114,8 @@ describe('银龙冲阵（赵云·主动：随机两次攻击 + 首次目标受�
   });
 
   it('随机单体两次攻击（每次独立判断）：可打中不同目标；首次攻击的目标挂受击增伤（受攻击缩放）', () => {
-    // int 序列：第一次选目标 = e2(下标1)，伤害系数；第二次选目标 = e3(下标2)，伤害系数
-    const { ctx, zhaoyun } = field(stubRng({ intSeq: [1, 0, 2, 0] }));
+    // int 序列：战法层 skill_target 消耗首位；第一刀选 e2(下标1)+伤害系数；第二刀选 e3(下标2)+伤害系数
+    const { ctx, zhaoyun } = field(stubRng({ intSeq: [0, 1, 0, 2, 0] }));
     actUnit(ctx, zhaoyun);
 
     const dmg = zyDamage(ctx);

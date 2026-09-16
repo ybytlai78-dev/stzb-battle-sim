@@ -151,8 +151,8 @@ describe('伐谋（A 主动：敌军单体策略 209% + 攻击谋略降 45）', 
     const report = run(activeTeam('famou'));
     expect(casts(report, '伐谋').length).toBeGreaterThan(0);
     const d = damage(report, '伐谋', 'strategy');
-    expect(d.length).toBeGreaterThan(0);
-    expect(new Set(d.map((e) => e.targetId)).size).toBe(1);
+    expect(d.length).toBe(casts(report, '伐谋').length);
+    expect(d.every((e) => e.targetId.startsWith('enemy'))).toBe(true);
   });
 
   it('使目标攻击与谋略属性下降', () => {
@@ -479,8 +479,8 @@ describe('车悬（B 准备：敌军单体兵刃 355%）', () => {
     const report = run(activeTeam('chexuan'));
     expect(casts(report, '车悬').length).toBeGreaterThan(0);
     const d = damage(report, '车悬', 'physical');
-    expect(d.length).toBeGreaterThan(0);
-    expect(new Set(d.map((e) => e.targetId)).size).toBe(1);
+    expect(d.length).toBe(casts(report, '车悬').length);
+    expect(d.every((e) => e.targetId.startsWith('enemy'))).toBe(true);
   });
 });
 

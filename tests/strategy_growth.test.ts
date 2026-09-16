@@ -83,7 +83,7 @@ function extractGrowths(skill: Skill): Record<string, number[]> {
     (found[key] ??= []).push(rate);
   };
   for (const o of collectOutputs(skill)) {
-    if (o.kind === 'strategy_damage' && o.strategyScaled) push('strategy_damage', o.growthRate);
+    if (o.kind === 'strategy_damage' && o.strategyScaled && o.growthRate !== undefined) push('strategy_damage', o.growthRate);
     if (o.kind === 'heal' && o.strategyScaled) push('heal', o.growthRate);
     if (o.kind === 'grant_damage_boost') push('grant_damage_boost', o.growthRate);
     if (o.kind === 'inflict_status') {

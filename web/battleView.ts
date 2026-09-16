@@ -471,7 +471,9 @@ function renderEvents(
           add(ev.success ? 'good' : 'dim', `${who}【${ev.skillName}】当前生效几率为${ev.rate}%`);
         } else {
           const s = SKILL_REGISTRY[ev.skillId];
-          const base = s && (s.type === 'active' || s.type === 'pursuit') ? `（基础发动率 ${Math.round(s.triggerRate * 100)}%）` : '';
+          const tr = s && (s.type === 'active' || s.type === 'pursuit') ? s.triggerRate : undefined;
+          const trNum = tr == null ? undefined : Array.isArray(tr) ? tr[0] : tr;
+          const base = trNum != null ? `（基础发动率 ${Math.round(trNum * 100)}%）` : '';
           add(ev.success ? 'good' : 'dim',
             `战法「${ev.skillName}」判定：${ev.success ? '发动' : '未发动'} <span class="sub">${base}</span>`);
         }

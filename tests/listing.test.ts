@@ -70,3 +70,30 @@ describe('暂时下架名单', () => {
     }
   });
 });
+
+/**
+ * 率土「敌军/友军单体」= 距离内均匀随机。引擎 `single` 是最近优先，登记表不应再出现。
+ * @param value 战法或输出树
+ * @param path 点分路径
+ */
+function singleTargetPaths(value: unknown, path: string): string[] {
+  if (Array.isArray(value)) {
+    return value.flatMap((v, i) => singleTargetPaths(v, `${path}[${i}]`));
+  }
+  if (value && typeof value === 'object') {
+    const rec = value as Record<string, unknown>;
+    const here = rec.targetMode === 'single' ? [path] : [];
+    return here.concat(Object.entries(rec).flatMap(([k, v]) => singleTargetPaths(v, `${path}.${k}`)));
+  }
+  return [];
+}
+
+describe('单体目标口径', () => {
+  it('SKILL_REGISTRY 不再使用 targetMode:single（最近）', () => {
+    const hits: string[] = [];
+    for (const [id, skill] of Object.entries(SKILL_REGISTRY)) {
+      hits.push(...singleTargetPaths(skill, id));
+    }
+    expect(hits).toEqual([]);
+  });
+});

@@ -95,8 +95,14 @@ export type SkillOutput =
       /**
        * 借友军出手（怀德畏威）：用谋略最低友军的攻击/兵力/造成侧增伤结算物理伤害。
        * 友军不耗行动、不受混乱拦截；杀伤统计 creditToId 归施法者。缺省为施法者自己。
+       * `'recipient'` = 以每个通过兵种过滤的目标为攻击者，按其攻击/兵力/造成侧增减伤，
+       * 对距离 `range`（缺省战法 range）内敌军单体打物理；杀伤 sourceId 为该单位。
        */
-      attacker?: 'lowest_strategy_ally';
+      attacker?: 'lowest_strategy_ally' | 'recipient';
+      /** 代打选敌距离（疏数骑兵 3）；缺省 skill.range */
+      range?: number;
+      /** 只对这些兵种的当前目标池结算 */
+      troopTypes?: TroopType[];
       /** 当前回合 ≥ 此值才结算（宣威再战第 4 回合起） */
       startRound?: number;
       /** 当前回合 ≤ 此值才结算（宣威再战前 3 回合） */
@@ -113,12 +119,26 @@ export type SkillOutput =
       repeats?: number | [number, number];
       /** 独立发动率（先声夺人第三段 60%）；士气修正后判定，与 inflict_status.chance 同口径 */
       chance?: number;
+      /**
+       * 本段打出后连锁：当前概率 `p = chance`；`p > 0` 时按施法者士气 `moraleTriggerRate(p)`，
+       * 成功则在战法距离内独立 `random_single` 再打同一段（循环驱动，递归调用时去掉 chain），然后 `p -= decay`。
+       */
+      chain?: { chance: number; decay: number };
+      /** 为 true 时本次结算不加算兵种克制 −30% */
+      ignoresTroopCounter?: boolean;
+    }
+  | {
+      kind: 'chance_group';
+      /** 基础发动率 0~1，走施法者士气修正；成功才执行内层全部 output */
+      chance: number;
+      outputs: SkillOutput[];
     }
   | {
       kind: 'strategy_damage';
       rate: number;
       strategyScaled: boolean;
-      growthRate: number;
+      /** strategyScaled 且 growthRate === undefined 时不缩放、用基值 */
+      growthRate?: number;
       ignoresEvasion?: boolean;
       target?: 'self';
       targetMode?: 'single' | 'random_single' | 'group' | 'all';
@@ -130,6 +150,18 @@ export type SkillOutput =
       chance?: number;
       /** 仅对带这些状态之一的目标生效（运筹决胜：混乱 / 暴走） */
       requireStatuses?: StatusType[];
+      /**
+       * 本段打出后连锁：当前概率 `p = chance`；`p > 0` 时按施法者士气 `moraleTriggerRate(p)`，
+       * 成功则在战法距离内独立 `random_single` 再打同一段（循环驱动，递归调用时去掉 chain），然后 `p -= decay`。
+       */
+      chain?: { chance: number; decay: number };
+      /**
+       * 本段选敌距离（不攻每回合策略 5）。缺省 `skill.range`。
+       * 与 physical_damage.range 同口径。
+       */
+      range?: number;
+      /** 选目标时无视战法距离（对称 physical_damage.ignoreRange） */
+      ignoreRange?: boolean;
     }
   | {
       kind: 'positional_physical_damage';
@@ -138,6 +170,8 @@ export type SkillOutput =
       rate: number | [number, number];
       /** self=施法者；fastest_ally=速度最高的友军单体（不耗行动、不受混乱） */
       source: 'self' | 'fastest_ally';
+      /** 为 true 时本次结算不加算兵种克制 −30% */
+      ignoresTroopCounter?: boolean;
     }
   | {
       kind: 'inflict_status';
@@ -151,6 +185,11 @@ export type SkillOutput =
       targetMode?: 'single' | 'random_single' | 'group' | 'all';
       /** 从友军池排除施法者（「自身 + 友军单体」的友军段：奇佐鬼谋 / 黄天余音） */
       excludeSelf?: boolean;
+      /**
+       * status 为数组时：true = 对同一目标施加全部状态（黄天余音友军四维）；
+       * 缺省仍随机选 1 个（奇佐鬼谋控制）。
+       */
+      applyAll?: boolean;
       /**
        * 独立发动率（运筹决胜暴走 30%），缺省必中。
        * 仅 `roundTrigger:'before_active'` 的二类指挥按此逐段判定。
@@ -181,8 +220,14 @@ export type SkillOutput =
         /** 是否波及目标相邻单位 */
         adjacent: boolean;
       };
+      /** 只对这些兵种的当前目标池结算 */
+      troopTypes?: TroopType[];
+      /**
+       * 有值时忽略战法整体目标，改为选这些站位上仍存活的敌军（落首箭混乱打大营）。缺员则跳过。
+       */
+      positions?: Position[];
     }
-  | { kind: 'remove_debuffs'; target?: 'self' }
+  | { kind: 'remove_debuffs'; target?: 'self'; troopTypes?: TroopType[] }
   | { kind: 'grant_evasion'; stacks: number; target?: 'self' }
   | {
       kind: 'heal';
@@ -226,6 +271,8 @@ export type SkillOutput =
        */
       direction?: 'caused' | 'taken';
       target?: 'self';
+      /** 只对这些兵种的当前目标池结算 */
+      troopTypes?: TroopType[];
     }
   /**
    * 按目标生效士气分支（盛气横凌）：
@@ -250,7 +297,7 @@ export type SkillOutput =
 
 /** 状态施加模板 */
 export type CreateStatus =
-  | { type: 'confusion'; duration: number }
+  | { type: 'confusion'; duration: number | [number, number] }
   | { type: 'rampage'; duration: number; /** 待下次行动才生效（青丘媚祸），避免挂上即控、重复刷新永控 */ pendingNextAct?: boolean }
   | { type: 'cowardice'; duration: number }
   | { type: 'hesitation'; duration: number }
@@ -262,15 +309,18 @@ export type CreateStatus =
   | { type: 'defense_buff'; amount: number; duration: number; strategyScaled?: boolean; growthRate?: number; percent?: boolean }
   | { type: 'strategy_buff'; amount: number; duration: number; strategyScaled?: boolean; growthRate?: number; percent?: boolean }
   | { type: 'speed_buff'; amount: number; duration: number; strategyScaled?: boolean; growthRate?: number; percent?: boolean }
-  | { type: 'damage_reduce'; rate: number; duration: number; strategyScaled?: boolean; growthRate?: number; /** 按 8 份衰减（谋议宏图）：准备阶段 8/8，每回合开始 -1/8 */ decayEighths?: number }
+  | { type: 'damage_reduce'; rate: number; duration: number; strategyScaled?: boolean; /** 受攻击缩放（对称字段）；growthRate === undefined 时不缩放、用基值 */ attackScaled?: boolean; growthRate?: number; /** 按 8 份衰减（谋议宏图）：准备阶段 8/8，每回合开始 -1/8 */ decayEighths?: number; /** 伤害来源过滤：basic=普攻 / skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省物理+策略都吃 */ damageType?: 'physical' | 'strategy' }
   /** direction：'caused'=自身造成伤害提高/降低（血溅黄砂、强势）；'taken'=自身受到伤害提高/降低（神兵天降、名士在野）。缺省 'taken'。
    *  stacks：叠层计数（带上限的增减伤，银龙冲阵），同战法累加时 +1
    *  strategyScaled=true 且给 growthRate 时（密谋定蜀每次发动 +5% 受谋略）：rate 为谋略 80 时的基础值，实际数值按 scaledValue 缩放
    *  defenseScaled=true（当敌制决 +8%）：公式同受谋略，属性换生效防御
    *  speedScaled=true（攻其不备 +11.6%）：受速度缩放；growthRate === undefined 时不缩放、用基值
-   *  charges：次数型「下一次攻击」，有值时按攻击输出次数消耗，不按回合递减（青丘媚祸 charges:1）
+   *  charges：次数型。direction:'caused' 时按攻击者打出消耗（青丘媚祸）；
+   *  direction:'taken' 时按受击方吃到匹配伤害后消耗（文伐下一次受到策略），不按回合递减
+   *  attackScaled=true（万箭 −50% / 恃强 −30%）：受攻击缩放；growthRate === undefined 时不缩放、用基值
+   *  decayFifths：按 N 份衰减（恃强 5）：挂上时满额，每次受到匹配伤害且实际扣兵 > 0 则 −1 份，rate = baseRate × fifths/N
    *  chargesStack：同战法重复施加时累加 rate（七步释嫌）；缺省不叠加（青丘媚祸） */
-  | { type: 'damage_boost'; rate: number; duration: number; direction?: 'caused' | 'taken'; stacks?: number; strategyScaled?: boolean; /** 受防御缩放（当敌制决 +8%，公式同受谋略，属性换生效防御） */ defenseScaled?: boolean; /** 受速度缩放（攻其不备 +11.6%）；growthRate === undefined 时不缩放、用基值 */ speedScaled?: boolean; growthRate?: number; charges?: number; chargesStack?: boolean }
+  | { type: 'damage_boost'; rate: number; duration: number; direction?: 'caused' | 'taken'; stacks?: number; /** 同战法同过滤维叠层达到此上限后不再加 rate；文德椒房 3 */ maxStacks?: number; strategyScaled?: boolean; /** 受防御缩放（当敌制决 +8%，公式同受谋略，属性换生效防御） */ defenseScaled?: boolean; /** 受速度缩放（攻其不备 +11.6%）；growthRate === undefined 时不缩放、用基值 */ speedScaled?: boolean; /** 受攻击缩放（万箭齐发 −50%、恃强淬锋 −30% / +3.4%）；growthRate === undefined 时不缩放、用基值 */ attackScaled?: boolean; growthRate?: number; charges?: number; chargesStack?: boolean; /** 按 N 份衰减（恃强淬锋 5）：挂上满额，每次匹配受击实际扣兵后 −1 份 */ decayFifths?: number; /** 伤害来源过滤：basic=普攻 / skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省物理+策略都吃 */ damageType?: 'physical' | 'strategy' }
   /**
    * 发动率提升。rate 为小数（1.2 = +120% / ×2.2）。
    * skillTypes：只对这些战法类型生效（动如雷震仅追击）；缺省主动+追击都吃（难知如阴）。
@@ -287,7 +337,7 @@ export type CreateStatus =
   | { type: 'curse'; duration: number; rate: number; growthRate: number; sourceStrategy?: number }
   /** 引燃标记（火势风威）：携带者受到下一次伤害时额外引发一次燃烧（rate% 受谋略），触发后移除 */
   | { type: 'ignite'; duration: number; rate: number; growthRate: number; sourceStrategy?: number }
-  | { type: 'split'; duration: number; rate: number }
+  | { type: 'split'; duration: number; rate: number; /** 次数型分兵（鱼鳞）：有值时按攻击输出次数消耗，不按回合递减 */ charges?: number; /** 受谋略缩放（鱼鳞） */ strategyScaled?: boolean }
   | { type: 'jump_prep'; duration: number; rate: number }
   | { type: 'taunt'; duration: number; targetId: string }
   /** 反击资格（反击之策）：携带者被普攻实际扣兵后，对来源打 rate% 物理。不消耗。rate 与 physical_damage 同口径（100=100%） */
@@ -319,12 +369,17 @@ interface BaseSkill {
   type: SkillType;
   /** 战法有效距离 */
   range: number;
-  /** 发动率 0~1（指挥/被动为 1） */
-  triggerRate: number;
+  /** 发动率 0~1（指挥/被动为 1）；`[0.5, 1]` = 每次判定均匀随机 50%–100%（烽火覆周） */
+  triggerRate: number | [number, number];
   /** 效果标签：冲突判定用（含伤害时永不与其他效果冲突） */
   tags: EffectTag[];
   /** group 模式目标数（仅 targetMode:'group' 有效，缺省 2）；`[2,3]` = 50% 概率 2 目标 / 50% 概率 3 目标（辕门射戟） */
   groupCount?: number | [number, number];
+  /**
+   * 开场上阵单位的 troopType 集合必须 ⊆ 此列表，否则本战法整次不生效（疏数弓+骑）。
+   * 读部署名单（不论 alive）；战斗中不再复查。
+   */
+  teamTroopFilter?: TroopType[];
 }
 
 /** 普通主动战法 */
@@ -337,11 +392,17 @@ export interface SimpleActiveSkill extends BaseSkill {
   output: SkillOutput[];
 }
 
-/** 1 回合准备主动战法 */
+/** 准备主动战法 */
 export interface PreparedActiveSkill extends BaseSkill {
   type: 'active';
   prepare: true;
-  targetMode: 'all' | 'group' | 'single';
+  /**
+   * 准备回合数。缺省 1（现有 1 回合准备战法零改动）。
+   * 进入准备时 `prepareLeft = prepareTurns ?? 1`；下一行动 `prepareLeft > 1` 则再减 1 并继续准备。
+   */
+  prepareTurns?: number;
+  /** 含 `random_single`：率土「敌军/友军单体」为距离内均匀随机，不是最近优先 */
+  targetMode: 'all' | 'group' | 'single' | 'random_single';
   /** 目标池覆盖：'enemy'=敌军、'ally'=友军。缺省按效果启发式推断 */
   targetSide?: 'enemy' | 'ally';
   output: SkillOutput[];
@@ -365,9 +426,10 @@ export interface CommandSkill extends BaseSkill {
    * - on_act：武将行动时判定（奇兵拒北「每回合行动时」）
    * - before_active：每次试图发动主动战法前判定（运筹决胜）；准备完成释放 / 混乱 / 犹豫不触发
    * - ally_act：我军全体发动普攻 / 试图发动主动或追击时发动（七步释嫌）；施法者阵亡不触发
+   * - after_first_active：本回合首次主动战法实际释放成功后判定（文德椒房）；进入准备不算，准备完成释放算；每次按战法距离 / groupCount 重选目标
    * 一类指挥无需此字段（准备阶段已释放一次）。
    */
-  roundTrigger?: 'on_act' | 'before_active' | 'ally_act';
+  roundTrigger?: 'on_act' | 'before_active' | 'ally_act' | 'after_first_active';
   /**
    * 二类指挥·友军行动累计（七步释嫌）：每次 ally_act 发动后 +1，每达到 count 次再执行 output。
    * 恢复类 output 按施法者当前兵力实时结算（二类指挥）。
@@ -469,6 +531,8 @@ export interface CommandSkill extends BaseSkill {
     output: SkillOutput[];
     startRound?: number;
     endRound?: number;
+    /** 仅奇数回合执行（鱼鳞） */
+    oddRounds?: boolean;
   };
   /**
    * 受击触发（盲侯奋勇/陷储立齐/缓师徐持）：准备阶段只登记，不立刻结算 output。
@@ -580,6 +644,30 @@ export interface PassiveSkill extends BaseSkill {
    * 友军受到的物理伤害在结算前将目标改为自己（伤害计算/规避/受击均视自己为受击者）。
    */
   redirectAllyPhysical?: { rounds: number; positions: Position[] };
+  /**
+   * 每回合行动阶段、在主动/普攻之前执行（火兽冲锋 50% 刀）。
+   * `timing:'battle_start'` 的开战 `output` 仍只在准备阶段走一次；本字段不在 battle_start 触发。
+   */
+  roundStartRepeat?: {
+    output: SkillOutput[];
+    startRound?: number;
+    endRound?: number;
+    oddRounds?: boolean;
+  };
+  /**
+   * 自身造成物理伤害叠层（恃强淬锋 +3.4%/层）。
+   * onRoundStart：tickRoundStartStatuses 给持有者 +1 层（不要走 roundStartRepeat，那是行动阶段）。
+   * onDealPhysical：持有者造成普攻/战法物理/分兵/反击且实际扣兵后 +1 层。
+   * 层数走 damage_boost stacks + sameSource 累加，到 maxStacks 停止。
+   */
+  selfPhysBoost?: {
+    perStack: number;
+    maxStacks: number;
+    duration: number;
+    attackScaled?: boolean;
+    onRoundStart?: boolean;
+    onDealPhysical?: boolean;
+  };
   output: SkillOutput[];
 }
 
@@ -767,8 +855,8 @@ export type Status =
   | { type: 'defense_buff'; amount: number; percent?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   | { type: 'strategy_buff'; amount: number; percent?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   | { type: 'speed_buff'; amount: number; percent?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
-  | { type: 'damage_reduce'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; /** 当前剩余份数（谋议宏图 8→7→…）；无此字段则不按 1/8 衰减 */ eighths?: number; /** 8/8 时的满额减伤率，衰减时 rate = baseRate × eighths/8 */ baseRate?: number }
-  | { type: 'damage_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; direction: 'caused' | 'taken'; sourceUnitId?: string; /** 叠层计数（带上限的增减伤，银龙冲阵最多 3 层）；无上限时不设置 */ stacks?: number; /** 次数型下一次攻击（青丘媚祸） */ charges?: number }
+  | { type: 'damage_reduce'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; /** 当前剩余份数（谋议宏图 8→7→…）；无此字段则不按 1/8 衰减 */ eighths?: number; /** 8/8 时的满额减伤率，衰减时 rate = baseRate × eighths/8 */ baseRate?: number; /** 伤害来源过滤：basic=普攻 / skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省物理+策略都吃 */ damageType?: 'physical' | 'strategy' }
+  | { type: 'damage_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; direction: 'caused' | 'taken'; sourceUnitId?: string; /** 叠层计数（带上限的增减伤，银龙冲阵最多 3 层）；无上限时不设置 */ stacks?: number; /** 次数型下一次攻击（青丘媚祸） */ charges?: number; /** 当前剩余份数（恃强淬锋 5→4→…）；无此字段则不按 1/5 衰减 */ fifths?: number; /** fifths 满额时的 rate，衰减时 rate = baseRate × fifths / 初始份数 */ baseRate?: number; /** decayFifths 挂上时的满额份数（恃强 5），衰减公式分母 */ fifthsBase?: number; /** 伤害来源过滤：basic=普攻 / skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省物理+策略都吃 */ damageType?: 'physical' | 'strategy' }
   | { type: 'trigger_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; skillTypes?: SkillType[]; additive?: boolean }
   | { type: 'insight'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'siege'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
@@ -787,7 +875,7 @@ export type Status =
    * 未触发时持续到战斗结束（remaining 缺省 999）。
    */
   | { type: 'ignite'; remaining: number; rate: number; sourceStrategy: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; stored?: DotStoredDamage }
-  | { type: 'split'; remaining: number; rate: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'split'; remaining: number; rate: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; /** 次数型分兵（鱼鳞）：有值时按攻击输出次数消耗，不按回合递减 */ charges?: number; /** 受谋略缩放（鱼鳞） */ strategyScaled?: boolean }
   | { type: 'jump_prep'; remaining: number; rate: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'taunt'; remaining: number; targetId: string; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'counter'; remaining: number; rate: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
@@ -828,6 +916,10 @@ export interface UnitState {
   preparingSkillId: string | null;
   /** 本回合是否已行动完毕（缓师徐持「已行动的敌军」）。回合开始清 false，unit_act_end 置 true */
   hasActedThisRound?: boolean;
+  /** 剩余准备行动次数。缺省 null / 未设 = 非准备。进入准备时 = prepareTurns??1 */
+  prepareLeft?: number | null;
+  /** 本回合是否已有一次主动战法实际释放成功。回合开始清 false */
+  firstActiveSucceededThisRound?: boolean;
   /**
    * 部队加成合计点数（阵营/称号/兵种，准备阶段阵容步写入）。
    * 缺省视为四维 0；不走状态冲突。

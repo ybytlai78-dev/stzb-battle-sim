@@ -97,7 +97,10 @@ export function runBattle(config: BattleConfig): BattleReport {
     const roundStartEv: BattleEvent = { type: 'round_start', round };
     events.push(roundStartEv);
     ctx.currentRound = round;
-    for (const u of [...myTeam, ...enemyTeam]) u.hasActedThisRound = false;
+    for (const u of [...myTeam, ...enemyTeam]) {
+      u.hasActedThisRound = false;
+      u.firstActiveSucceededThisRound = false;
+    }
 
     // 一类指挥回合前准备阶段（谋议宏图）：减伤按 1/8 衰减 + 士气叠层，再进入 delayedOutput / 单位行动
     tickRoundStartStatuses(ctx);
@@ -179,6 +182,7 @@ function toUnitStates(generals: General[], side: 'my' | 'enemy'): UnitState[] {
     isPreparing: false,
     preparingSkillId: null,
     hasActedThisRound: false,
+    prepareLeft: null,
   }));
 }
 

@@ -164,8 +164,8 @@ describe('奔袭（C 主动：敌军单体兵刃 225%）', () => {
   it('发动后对敌军单体造成攻击伤害', () => {
     const report = runUntilCast('benxi', '奔袭');
     const d = damage(report, '奔袭', 'physical');
-    expect(d.length).toBeGreaterThan(0);
-    expect(new Set(d.map((e) => e.targetId)).size).toBe(1);
+    expect(d.length).toBe(casts(report, '奔袭').length);
+    expect(d.every((e) => e.targetId.startsWith('enemy'))).toBe(true);
   });
 });
 

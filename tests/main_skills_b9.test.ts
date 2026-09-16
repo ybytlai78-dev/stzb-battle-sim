@@ -203,7 +203,7 @@ describe('黄天余音（张宁，主动：吸取敌军单体全属性 26 附加
     expect(s.type === 'active' && s.prepare === false).toBe(true);
     expect(s.triggerRate).toBe(1); // 用户确认：100% 发动
     const act = s as Extract<typeof s, { type: 'active' }>;
-    expect(act.targetMode === 'single' && act.targetSide === 'enemy').toBe(true);
+    expect(act.targetMode === 'random_single' && act.targetSide === 'enemy').toBe(true);
   });
 
   it('吸取敌军单体全属性（-26 减益）+ 附加自身与友军单体，目标池分离', () => {
@@ -244,5 +244,35 @@ describe('黄天余音（张宁，主动：吸取敌军单体全属性 26 附加
     expect(enemy.every((e) => e.detail.includes('降低了67('))).toBe(true);
     expect(self.every((e) => e.detail.includes('提高了67('))).toBe(true);
     expect(ally.every((e) => e.detail.includes('提高了80('))).toBe(true);
+  });
+
+  it('只选两个目标：一个敌军吸四维、一个友军加四维（不含自身），多种子下不是最近锁死', () => {
+    const STATS = ['attack_buff', 'defense_buff', 'strategy_buff', 'speed_buff'] as const;
+    const allyIds = new Set<string>();
+    const enemyIds = new Set<string>();
+    for (let seed = 1; seed <= 24; seed++) {
+      const report = run(fullTeam(zhangningAt(80)), seed, 1);
+      expect(casts(report, '黄天余音').length).toBeGreaterThan(0);
+      const allySet = new Set<string>();
+      const enemySet = new Set<string>();
+      for (const st of STATS) {
+        const evs = inflicted(report, st);
+        const enemies = evs.filter((e) => e.unitId.startsWith('enemy')).map((e) => e.unitId);
+        const allies = evs
+          .filter((e) => !e.unitId.startsWith('enemy') && e.unitId !== 'h474')
+          .map((e) => e.unitId);
+        expect(enemies, `${st} 敌军`).toHaveLength(1);
+        expect(allies, `${st} 友军`).toHaveLength(1);
+        enemySet.add(enemies[0]);
+        allySet.add(allies[0]);
+      }
+      expect(enemySet.size, '敌军四维同一人').toBe(1);
+      expect(allySet.size, '友军四维同一人').toBe(1);
+      enemyIds.add([...enemySet][0]);
+      allyIds.add([...allySet][0]);
+    }
+    expect(enemyIds.size).toBeGreaterThan(1);
+    expect(allyIds.size).toBeGreaterThan(1);
+    expect([...allyIds].every((id) => id !== 'h474')).toBe(true);
   });
 });

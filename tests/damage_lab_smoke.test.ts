@@ -6,7 +6,8 @@
  */
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { emptyEditor, emptySlot, type EditorHandlers, type EditorState } from '../web/teamEditor';
+import { emptyEditor, emptySlot, skillMeta, type EditorHandlers, type EditorState } from '../web/teamEditor';
+import { SKILL_REGISTRY } from '../src/data/skills';
 import { HEROES, avatarSrc, portraitSrc } from '../web/heroes';
 import {
   mountDamageLab,
@@ -377,5 +378,11 @@ describe('伤害测试实验室（主站模块 v2）', () => {
       const all = [...g.activeSkillIds, ...g.passiveSkillIds, ...g.commandSkillIds, ...g.pursuitSkillIds];
       expect(all.sort()).toEqual([...skillIds].sort());
     }
+  });
+
+  it('skillMeta：长坂之吼为 2 回合准备；缺省 prepareTurns 仍为 1', () => {
+    expect(skillMeta(SKILL_REGISTRY.changban_zhihou)).toContain('2回合准备');
+    expect(skillMeta(SKILL_REGISTRY.changban_zhihou)).not.toContain('1回合准备');
+    expect(skillMeta(SKILL_REGISTRY.xuanwu_fuliu)).toContain('1回合准备');
   });
 });

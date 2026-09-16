@@ -306,7 +306,7 @@ describe('收拢（D 主动：友军单体休整 2 回合）', () => {
 
   it('单体目标，恢复率 82%', () => {
     const s = SKILL_REGISTRY['shoulong'];
-    expect(s.type === 'active' && s.targetMode === 'single').toBe(true);
+    expect(s.type === 'active' && s.targetMode === 'random_single').toBe(true);
     const rest = s.output.find((o) => o.kind === 'inflict_status');
     expect(rest?.kind === 'inflict_status' && !Array.isArray(rest.status) && rest.status.type === 'rest' && rest.status.rate).toBe(82);
   });

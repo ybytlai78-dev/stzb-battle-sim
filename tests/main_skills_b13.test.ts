@@ -77,7 +77,7 @@ describe('献刀七星（汉·曹操，主动 30%：单体猛攻 275% + 速度 -
       expect(s.prepare).toBe(false);
       expect(s.triggerRate).toBe(0.3);
       expect(s.range).toBe(2);
-      expect(s.targetMode).toBe('single');
+      expect(s.targetMode).toBe('random_single');
     }
     expect(s.tags).toEqual(['damage', 'debuff_speed']);
   });

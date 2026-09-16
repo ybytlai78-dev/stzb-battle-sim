@@ -305,7 +305,7 @@
     "growthDefense": 1.37,
     "growthStrategy": 0.4,
     "growthSpeed": 2.61,
-    "mainSkillId": "",
+    "mainSkillId": "luoshou_jian",
     "mainSkillName": "落首箭",
     "skillDesc": "1回合准备，对敌军单体发动一次猛攻（伤害率300.0%），并对敌军大营再度发动一次攻击（伤害率180.0%），同时使敌军大营陷入混乱状态，持续1回合-2回合"
   },
@@ -855,7 +855,7 @@
     "growthDefense": 1.85,
     "growthStrategy": 2,
     "growthSpeed": 2.04,
-    "mainSkillId": "",
+    "mainSkillId": "hubu_guanyou",
     "mainSkillName": "虎步关右",
     "skillDesc": "使自身首次造成的攻击伤害提高70.0%（受速度属性影响）"
   },
@@ -1097,7 +1097,7 @@
     "growthDefense": 1.13,
     "growthStrategy": 0.5,
     "growthSpeed": 2.67,
-    "mainSkillId": "",
+    "mainSkillId": "changban_zhihou",
     "mainSkillName": "长坂之吼",
     "skillDesc": "2回合准备，对敌军群体2-3目标发动一次无视兵种相克的猛烈攻击（伤害率450.0%）"
   },
@@ -2287,7 +2287,7 @@
     "growthDefense": 1.01,
     "growthStrategy": 0.32,
     "growthSpeed": 1.24,
-    "mainSkillId": "",
+    "mainSkillId": "huoshou_chongfeng",
     "mainSkillName": "火兽冲锋",
     "skillDesc": "使自身进行普通攻击时的伤害提高80.0%，每回合有50.0%的几率对敌军单体发动一次攻击（伤害率160.0%），并使自身下一次普通攻击所造成的伤害额外提高160.0%"
   },
@@ -2331,7 +2331,7 @@
     "growthDefense": 1.07,
     "growthStrategy": 1.53,
     "growthSpeed": 1.1,
-    "mainSkillId": "",
+    "mainSkillId": "fenghuo_fuzhou",
     "mainSkillName": "烽火覆周",
     "skillDesc": "对敌军单体发动一次火攻（伤害率95.0%，受谋略属性影响），烽火覆周每次发动火攻后有60.0%概率再次发动火攻，此概率每次降低20%，每次目标独立判定，战法结束后此概率重置"
   },
@@ -2441,7 +2441,7 @@
     "growthDefense": 1.61,
     "growthStrategy": 1.35,
     "growthSpeed": 0.96,
-    "mainSkillId": "",
+    "mainSkillId": "wende_jiaofang",
     "mainSkillName": "文德椒房",
     "skillDesc": "战斗中，每回合自身首次发动主动战法后，使我军群体进行策略攻击时的伤害提升10.0%（受谋略属性影响），此效果最多可叠加3次"
   },

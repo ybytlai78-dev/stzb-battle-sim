@@ -19,6 +19,9 @@ export const OFFLINE_MAIN_SKILLS: Record<string, string> = {
   bailou_duwu: '伤害降低 26% 成长未确认（取基值）',
   biyue: '防御 -29 成长未确认',
   shangshun_fani: '策略反击 180% 成长未确认（恢复 65%/0.325 已确认）',
+  fenghuo_fuzhou: '火攻 95% 谋略成长未确认',
+  hubu_guanyou: '首次攻击 +70% 速度成长未确认',
+  wende_jiaofang: '策略增伤 10% 谋略成长未确认',
 };
 
 /**

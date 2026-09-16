@@ -14,7 +14,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 1,
     triggerRate: 0.25,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['damage'],
     output: [{ kind: 'physical_damage', rate: 115 }],
   },
@@ -26,7 +26,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 2,
     triggerRate: 0.25,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['damage'],
     output: [{ kind: 'physical_damage', rate: 135 }],
   },
@@ -192,7 +192,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 5,
     triggerRate: 0.5,
-    targetMode: 'single',
+    targetMode: 'random_single',
     targetSide: 'enemy',
     tags: ['damage', 'damage_boost'],
     output: [
@@ -408,7 +408,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 1,
     triggerRate: 0.4,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['damage', 'confusion'],
     output: [
       { kind: 'physical_damage', rate: 355 },
@@ -504,7 +504,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 3,
     triggerRate: 0.35,
-    targetMode: 'single',
+    targetMode: 'random_single',
     targetSide: 'enemy',
     tags: ['damage', 'confusion'],
     output: [
@@ -525,7 +525,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['strategy_buff', 'confusion', 'rampage', 'cowardice', 'hesitation'],
     output: [
       { kind: 'inflict_status', status: { type: 'strategy_buff', amount: 22, duration: 2 }, targetSide: 'self' },
-      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: 22, duration: 2 }, targetSide: 'ally', targetMode: 'single', excludeSelf: true },
+      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: 22, duration: 2 }, targetSide: 'ally', targetMode: 'random_single', excludeSelf: true },
       { kind: 'inflict_status', status: [
         { type: 'confusion', duration: 2 },
         { type: 'rampage', duration: 2 },
@@ -684,7 +684,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 2,
     triggerRate: 0.3,
-    targetMode: 'single',
+    targetMode: 'random_single',
     targetSide: 'enemy',
     tags: ['damage', 'debuff_speed'],
     output: [
@@ -1200,7 +1200,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     roundTrigger: 'on_act',
     range: 4,
     triggerRate: 1,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['damage', 'split'],
     output: [
       { kind: 'inflict_status', status: { type: 'split', duration: 1, rate: 60 }, target: 'self' },
@@ -1251,7 +1251,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 4,
     triggerRate: 0.4,
-    targetMode: 'single',
+    targetMode: 'random_single',
     targetSide: 'ally',
     tags: ['immunity', 'heal'],
     output: [
@@ -1670,12 +1670,12 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: true,
     range: 4,
     triggerRate: 0.5,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['damage', 'debuff_attack', 'debuff_defense', 'debuff_strategy'],
     output: [
-      { kind: 'strategy_damage', rate: 178, strategyScaled: true, growthRate: 1.85, targetMode: 'single' },
-      { kind: 'strategy_damage', rate: 178, strategyScaled: true, growthRate: 1.85, targetMode: 'single' },
-      { kind: 'strategy_damage', rate: 178, strategyScaled: true, growthRate: 1.85, targetMode: 'single' },
+      { kind: 'strategy_damage', rate: 178, strategyScaled: true, growthRate: 1.85, targetMode: 'random_single' },
+      { kind: 'strategy_damage', rate: 178, strategyScaled: true, growthRate: 1.85, targetMode: 'random_single' },
+      { kind: 'strategy_damage', rate: 178, strategyScaled: true, growthRate: 1.85, targetMode: 'random_single' },
       { kind: 'inflict_status', status: { type: 'attack_buff', amount: -18, duration: 2 } },
       { kind: 'inflict_status', status: { type: 'defense_buff', amount: -18, duration: 2 } },
       { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -18, duration: 2 } },
@@ -1701,7 +1701,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 3,
     triggerRate: 0.4,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['damage', 'debuff_attack', 'debuff_strategy'],
     output: [
       { kind: 'strategy_damage', rate: 209, strategyScaled: true, growthRate: 2.175 },
@@ -1732,11 +1732,11 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 3,
     triggerRate: 0.4,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['damage'],
     output: [
-      { kind: 'physical_damage', rate: 180, targetMode: 'single' },
-      { kind: 'strategy_damage', rate: 143, strategyScaled: true, growthRate: 1.0, targetMode: 'single' },
+      { kind: 'physical_damage', rate: 180, targetMode: 'random_single' },
+      { kind: 'strategy_damage', rate: 143, strategyScaled: true, growthRate: 1.0, targetMode: 'random_single' },
     ],
   },
   /** 敛众定气（A 主动）：移除我军全体的有害效果，立即恢复一定兵力（85%）。50% 几率免疫围困未建模 */
@@ -1779,7 +1779,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 4,
     triggerRate: 0.35,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['damage', 'confusion'],
     output: [
       { kind: 'strategy_damage', rate: 148, strategyScaled: true, growthRate: 1.35 },
@@ -1794,7 +1794,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 4,
     triggerRate: 0.35,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['damage', 'rampage'],
     output: [
       { kind: 'strategy_damage', rate: 155, strategyScaled: true, growthRate: 1.5 },
@@ -1855,7 +1855,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 4,
     triggerRate: 0.3,
-    targetMode: 'single',
+    targetMode: 'random_single',
     targetSide: 'enemy',
     tags: ['taunt', 'buff_defense', 'buff_strategy'],
     output: [
@@ -1913,7 +1913,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 3,
     triggerRate: 0.25,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['damage', 'confusion'],
     output: [
       { kind: 'physical_damage', rate: 170 },
@@ -1958,7 +1958,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 3,
     triggerRate: 0.35,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['damage', 'debuff_attack'],
     output: [
       { kind: 'physical_damage', rate: 214 },
@@ -1973,7 +1973,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 3,
     triggerRate: 0.25,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['damage', 'rampage'],
     output: [
       { kind: 'physical_damage', rate: 180 },
@@ -2003,7 +2003,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: true,
     range: 3,
     triggerRate: 0.4,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['damage'],
     output: [{ kind: 'physical_damage', rate: 355 }],
   },
@@ -2030,7 +2030,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 4,
     triggerRate: 0.45,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['damage'],
     output: [{ kind: 'strategy_damage', rate: 105.2, strategyScaled: true, growthRate: 0.7 }],
   },
@@ -2042,7 +2042,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 3,
     triggerRate: 0.3,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['cowardice'],
     output: [{ kind: 'inflict_status', status: { type: 'cowardice', duration: 2 } }],
   },
@@ -2054,7 +2054,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 3,
     triggerRate: 0.3,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['damage', 'damage_boost'],
     output: [
       { kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.3, duration: 1, direction: 'caused' }, target: 'self' },
@@ -2082,7 +2082,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 3,
     triggerRate: 0.3,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['hesitation'],
     output: [{ kind: 'inflict_status', status: { type: 'hesitation', duration: 2 } }],
   },
@@ -2094,7 +2094,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 4,
     triggerRate: 0.3,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['damage'],
     output: [{ kind: 'physical_damage', rate: 225 }],
   },
@@ -2142,7 +2142,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 4,
     triggerRate: 0.3,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['panic'],
     output: [{ kind: 'inflict_status', status: { type: 'panic', duration: 2, rate: 125, growthRate: 1.0 } }],
   },
@@ -2211,7 +2211,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 2,
     triggerRate: 0.3,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['rampage'],
     output: [{ kind: 'inflict_status', status: { type: 'rampage', duration: 1 } }],
   },
@@ -2223,7 +2223,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 3,
     triggerRate: 0.25,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['damage', 'heal'],
     output: [
       { kind: 'physical_damage', rate: 170 },
@@ -2316,7 +2316,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 2,
     triggerRate: 0.3,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['confusion'],
     output: [{ kind: 'inflict_status', status: { type: 'confusion', duration: 1 } }],
   },
@@ -2328,7 +2328,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 4,
     triggerRate: 0.45,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['damage'],
     output: [{ kind: 'strategy_damage', rate: 165, strategyScaled: true, growthRate: 1.75 }],
   },
@@ -2454,7 +2454,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 2,
     triggerRate: 0.25,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['damage', 'debuff_defense'],
     output: [
       { kind: 'physical_damage', rate: 105 },
@@ -2469,7 +2469,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 3,
     triggerRate: 0.35,
-    targetMode: 'single',
+    targetMode: 'random_single',
     targetSide: 'ally',
     tags: ['heal'],
     output: [{ kind: 'heal', rate: 108, strategyScaled: true, growthRate: 0.7 }],
@@ -2506,7 +2506,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 2,
     triggerRate: 0.3,
-    targetMode: 'single',
+    targetMode: 'random_single',
     targetSide: 'enemy',
     tags: ['taunt', 'debuff_attack'],
     output: [
@@ -2535,7 +2535,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 2,
     triggerRate: 0.35,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['immunity', 'damage'],
     output: [
       { kind: 'remove_debuffs', target: 'self' },
@@ -2550,7 +2550,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 4,
     triggerRate: 0.25,
-    targetMode: 'single',
+    targetMode: 'random_single',
     tags: ['damage', 'debuff_attack'],
     output: [
       { kind: 'physical_damage', rate: 110 },
@@ -2596,7 +2596,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     ],
   },
   /** 黄天余音（张宁主战法·主动）：吸取敌军单体 26 全属性（受谋略，成长率 0.20/点）并附加于自身与友军单体，持续 1 回合。
-   *  先按当前谋略结算吸取/自身，再按补给后的谋略结算队友（输出顺序：敌 → 自身 → 友军）。 */
+   *  先按当前谋略结算吸取/自身，再按补给后的谋略结算队友（输出顺序：敌 → 自身 → 友军）。
+   *  敌军随机单体吸四维、友军随机单体加四维（各只选 1 人，applyAll）。 */
   huangtian_yuyin: {
     id: 'huangtian_yuyin',
     name: '黄天余音',
@@ -2604,22 +2605,44 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 4,
     triggerRate: 1,
-    targetMode: 'single',
+    targetMode: 'random_single',
     targetSide: 'enemy',
     tags: ['attack_buff', 'defense_buff', 'strategy_buff', 'speed_buff'],
     output: [
-      { kind: 'inflict_status', status: { type: 'attack_buff', amount: -26, duration: 1, strategyScaled: true, growthRate: 0.2 } },
-      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -26, duration: 1, strategyScaled: true, growthRate: 0.2 } },
-      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -26, duration: 1, strategyScaled: true, growthRate: 0.2 } },
-      { kind: 'inflict_status', status: { type: 'speed_buff', amount: -26, duration: 1, strategyScaled: true, growthRate: 0.2 } },
-      { kind: 'inflict_status', status: { type: 'attack_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 }, target: 'self' },
-      { kind: 'inflict_status', status: { type: 'defense_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 }, target: 'self' },
-      { kind: 'inflict_status', status: { type: 'speed_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 }, target: 'self' },
-      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 }, target: 'self' },
-      { kind: 'inflict_status', status: { type: 'attack_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 }, targetSide: 'ally', targetMode: 'single', excludeSelf: true },
-      { kind: 'inflict_status', status: { type: 'defense_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 }, targetSide: 'ally', targetMode: 'single', excludeSelf: true },
-      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 }, targetSide: 'ally', targetMode: 'single', excludeSelf: true },
-      { kind: 'inflict_status', status: { type: 'speed_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 }, targetSide: 'ally', targetMode: 'single', excludeSelf: true },
+      {
+        kind: 'inflict_status',
+        applyAll: true,
+        status: [
+          { type: 'attack_buff', amount: -26, duration: 1, strategyScaled: true, growthRate: 0.2 },
+          { type: 'defense_buff', amount: -26, duration: 1, strategyScaled: true, growthRate: 0.2 },
+          { type: 'strategy_buff', amount: -26, duration: 1, strategyScaled: true, growthRate: 0.2 },
+          { type: 'speed_buff', amount: -26, duration: 1, strategyScaled: true, growthRate: 0.2 },
+        ],
+      },
+      {
+        kind: 'inflict_status',
+        target: 'self',
+        applyAll: true,
+        status: [
+          { type: 'attack_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 },
+          { type: 'defense_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 },
+          { type: 'speed_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 },
+          { type: 'strategy_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 },
+        ],
+      },
+      {
+        kind: 'inflict_status',
+        targetSide: 'ally',
+        targetMode: 'random_single',
+        excludeSelf: true,
+        applyAll: true,
+        status: [
+          { type: 'attack_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 },
+          { type: 'defense_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 },
+          { type: 'strategy_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 },
+          { type: 'speed_buff', amount: 26, duration: 1, strategyScaled: true, growthRate: 0.2 },
+        ],
+      },
     ],
   },
   /** 母仪浮梦（何太后主战法·一类指挥）：战斗开始后使我军全体首次受击规避（1 层）；
@@ -2820,7 +2843,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: false,
     range: 3,
     triggerRate: 0.35,
-    targetMode: 'single',
+    targetMode: 'random_single',
     targetSide: 'ally',
     tags: ['heal'],
     output: [
@@ -2847,7 +2870,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         strategyScaled: true,
         growthRate: 1.375,
         targetSide: 'ally',
-        targetMode: 'single',
+        targetMode: 'random_single',
         excludeSelf: true,
       },
     ],
@@ -2862,7 +2885,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     prepare: true,
     range: 3,
     triggerRate: 0.45,
-    targetMode: 'single',
+    targetMode: 'random_single',
     targetSide: 'ally',
     tags: ['heal'],
     output: [
@@ -2893,7 +2916,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         strategyScaled: true,
         growthRate: 1.175,
         targetSide: 'ally',
-        targetMode: 'single',
+        targetMode: 'random_single',
         excludeSelf: true,
       },
     ],
@@ -3314,7 +3337,587 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     output: [
       { kind: 'inflict_status', chance: 0.6, status: { type: 'combo', duration: 1 }, target: 'self' },
       { kind: 'inflict_status', chance: 0.6, status: { type: 'split', rate: 70, duration: 1 }, target: 'self' },
-      { kind: 'physical_damage', chance: 0.6, rate: 110, targetMode: 'single' },
+      { kind: 'physical_damage', chance: 0.6, rate: 110, targetMode: 'random_single' },
     ],
+  },
+
+  // ─── 拆解通用 B+ 第二阶段兵种阵型 ───
+
+  /**
+   * 方圆（B 一类指挥）：战斗中使我军全体步兵普攻造成伤害降低 20%，主动、追击战法伤害提高 16.8%（受防御基值，无成长率）。
+   */
+  fangyuan: {
+    id: 'fangyuan',
+    name: '方圆',
+    type: 'command',
+    phase: 'prep',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 3,
+    targetSide: 'ally',
+    tags: ['damage_boost'],
+    output: [
+      {
+        kind: 'inflict_status',
+        troopTypes: ['infantry'],
+        status: { type: 'damage_boost', rate: -0.2, duration: 999, direction: 'caused', damageSource: 'basic' },
+      },
+      {
+        kind: 'inflict_status',
+        troopTypes: ['infantry'],
+        status: {
+          type: 'damage_boost',
+          rate: 0.168,
+          duration: 999,
+          direction: 'caused',
+          damageSource: 'skill',
+          skillTypes: ['active', 'pursuit'],
+          defenseScaled: true,
+        },
+      },
+    ],
+  },
+  /**
+   * 疏数（B 一类指挥）：仅弓+骑阵容生效。弓兵防御 +50，骑兵每回合 40% 对距离 3 敌军单体代打物理 100%。基值无成长率。
+   */
+  shushu: {
+    id: 'shushu',
+    name: '疏数',
+    type: 'command',
+    phase: 'prep',
+    range: 2,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 3,
+    targetSide: 'ally',
+    tags: ['buff_defense', 'damage'],
+    teamTroopFilter: ['archer', 'cavalry'],
+    output: [
+      {
+        kind: 'inflict_status',
+        troopTypes: ['archer'],
+        status: { type: 'defense_buff', amount: 50, duration: 999 },
+      },
+    ],
+    roundStartRepeat: {
+      output: [
+        {
+          kind: 'physical_damage',
+          rate: 100,
+          attacker: 'recipient',
+          troopTypes: ['cavalry'],
+          chance: 0.4,
+          range: 3,
+          targetMode: 'random_single',
+        },
+      ],
+    },
+  },
+  /**
+   * 衡轭（B 一类指挥）：仅骑+步阵容生效。骑兵谋略 +50，步兵普攻造成伤害提升 50%。基值无成长率。
+   */
+  henge: {
+    id: 'henge',
+    name: '衡轭',
+    type: 'command',
+    phase: 'prep',
+    range: 2,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 3,
+    targetSide: 'ally',
+    tags: ['buff_strategy', 'damage_boost'],
+    teamTroopFilter: ['cavalry', 'infantry'],
+    output: [
+      {
+        kind: 'inflict_status',
+        troopTypes: ['cavalry'],
+        status: { type: 'strategy_buff', amount: 50, duration: 999 },
+      },
+      {
+        kind: 'inflict_status',
+        troopTypes: ['infantry'],
+        status: { type: 'damage_boost', rate: 0.5, duration: 999, direction: 'caused', damageSource: 'basic' },
+      },
+    ],
+  },
+  /**
+   * 锋矢（B 一类指挥）：我军全体骑兵普攻造成伤害降低 25%，发动主动战法伤害提高 18%（受速度基值，无成长率；不含追击）。
+   */
+  fengshi: {
+    id: 'fengshi',
+    name: '锋矢',
+    type: 'command',
+    phase: 'prep',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 3,
+    targetSide: 'ally',
+    tags: ['damage_boost'],
+    output: [
+      {
+        kind: 'inflict_status',
+        troopTypes: ['cavalry'],
+        status: { type: 'damage_boost', rate: -0.25, duration: 999, direction: 'caused', damageSource: 'basic' },
+      },
+      {
+        kind: 'inflict_status',
+        troopTypes: ['cavalry'],
+        status: {
+          type: 'damage_boost',
+          rate: 0.18,
+          duration: 999,
+          direction: 'caused',
+          damageSource: 'skill',
+          skillTypes: ['active'],
+          speedScaled: true,
+        },
+      },
+    ],
+  },
+  /**
+   * 鱼鳞（B 一类指挥）：仅步+弓阵容生效。步兵防御 +50，弓兵受策略伤害降低 35%。基值无成长率。
+   */
+  yulin: {
+    id: 'yulin',
+    name: '鱼鳞',
+    type: 'command',
+    phase: 'prep',
+    range: 2,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 3,
+    targetSide: 'ally',
+    tags: ['buff_defense', 'damage_boost'],
+    teamTroopFilter: ['infantry', 'archer'],
+    output: [
+      {
+        kind: 'inflict_status',
+        troopTypes: ['infantry'],
+        status: { type: 'defense_buff', amount: 50, duration: 999 },
+      },
+      {
+        kind: 'inflict_status',
+        troopTypes: ['archer'],
+        status: { type: 'damage_boost', rate: -0.35, duration: 999, direction: 'taken', damageType: 'strategy' },
+      },
+    ],
+  },
+  /**
+   * 鹤翼（B 一类指挥）：第 1/3/5/7 回合弓兵分兵 49%（受谋略基值，无成长率），同时普攻造成伤害降低 20%，持续 1 回合。
+   */
+  heyi: {
+    id: 'heyi',
+    name: '鹤翼',
+    type: 'command',
+    phase: 'prep',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 3,
+    targetSide: 'ally',
+    tags: ['split', 'damage_boost'],
+    output: [],
+    roundStartRepeat: {
+      oddRounds: true,
+      output: [
+        {
+          kind: 'inflict_status',
+          troopTypes: ['archer'],
+          status: { type: 'split', rate: 49, duration: 1, strategyScaled: true },
+        },
+        {
+          kind: 'inflict_status',
+          troopTypes: ['archer'],
+          status: { type: 'damage_boost', rate: -0.2, duration: 1, direction: 'caused', damageSource: 'basic' },
+        },
+      ],
+    },
+  },
+  /**
+   * 白刃（A 一类指挥）：前 3 回合敌我全体策略造成伤害降低 35%；我军骑/步防御 +45；第 4 回合起骑/步攻击 +45 持续 3 回合。基值无成长率。
+   */
+  bairen: {
+    id: 'bairen',
+    name: '白刃',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 3,
+    targetSide: 'ally',
+    tags: ['damage_boost', 'buff_defense', 'buff_attack'],
+    output: [
+      {
+        kind: 'inflict_status',
+        targetSide: 'ally',
+        targetMode: 'all',
+        status: { type: 'damage_boost', rate: -0.35, duration: 3, direction: 'caused', damageType: 'strategy' },
+      },
+      {
+        kind: 'inflict_status',
+        targetSide: 'enemy',
+        targetMode: 'all',
+        status: { type: 'damage_boost', rate: -0.35, duration: 3, direction: 'caused', damageType: 'strategy' },
+      },
+      {
+        kind: 'inflict_status',
+        troopTypes: ['cavalry', 'infantry'],
+        status: { type: 'defense_buff', amount: 45, duration: 3 },
+      },
+    ],
+    roundStartRepeat: {
+      startRound: 4,
+      endRound: 4,
+      output: [
+        {
+          kind: 'inflict_status',
+          troopTypes: ['cavalry', 'infantry'],
+          status: { type: 'attack_buff', amount: 45, duration: 3 },
+        },
+      ],
+    },
+  },
+  /**
+   * 全军突击（A 主动 35% 距离 4）：移除我军骑/步有害效果，对敌军单体物理 145%，并使骑/步接下来 2 次攻击伤害提高 28%（受谋略基值，无成长率）。
+   */
+  quanjun_tuji: {
+    id: 'quanjun_tuji',
+    name: '全军突击',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.35,
+    targetMode: 'group',
+    groupCount: 3,
+    targetSide: 'ally',
+    tags: ['immunity', 'damage', 'damage_boost'],
+    output: [
+      { kind: 'remove_debuffs', troopTypes: ['cavalry', 'infantry'] },
+      { kind: 'physical_damage', rate: 145, targetMode: 'random_single' },
+      {
+        kind: 'inflict_status',
+        troopTypes: ['cavalry', 'infantry'],
+        status: { type: 'damage_boost', rate: 0.28, duration: 999, direction: 'caused', charges: 2, strategyScaled: true },
+      },
+    ],
+  },
+  /**
+   * 飒沓如星（B 主动 40% 距离 2）：友军群体 2 中骑兵普攻造成伤害提升 36%（受谋略基值，无成长率）持续 2 回合，下 2 次普攻分兵 55%（不受谋略）。
+   */
+  sata_ruxing: {
+    id: 'sata_ruxing',
+    name: '飒沓如星',
+    type: 'active',
+    prepare: false,
+    range: 2,
+    triggerRate: 0.4,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'ally',
+    tags: ['damage_boost', 'split'],
+    output: [
+      {
+        kind: 'inflict_status',
+        troopTypes: ['cavalry'],
+        status: {
+          type: 'damage_boost',
+          rate: 0.36,
+          duration: 2,
+          direction: 'caused',
+          damageSource: 'basic',
+          strategyScaled: true,
+        },
+      },
+      {
+        kind: 'inflict_status',
+        troopTypes: ['cavalry'],
+        status: { type: 'split', rate: 55, duration: 999, charges: 2 },
+      },
+    ],
+  },
+  /**
+   * 落首箭（沙摩柯 h524·准备主动 40% 距离 5）：前半口径。对敌军随机单体物理 300%，并对大营再攻 180% + 混乱 1–2 回合（无受击增伤）。
+   */
+  luoshou_jian: {
+    id: 'luoshou_jian',
+    name: '落首箭',
+    type: 'active',
+    prepare: true,
+    range: 5,
+    triggerRate: 0.4,
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['damage', 'confusion'],
+    output: [
+      { kind: 'physical_damage', rate: 300 },
+      { kind: 'positional_physical_damage', positions: ['大营'], rate: 180, source: 'self' },
+      { kind: 'inflict_status', positions: ['大营'], status: { type: 'confusion', duration: [1, 2] } },
+    ],
+  },
+  /**
+   * 长坂之吼（张飞 h22·准备主动 75% 距离 4）：前半口径。2 回合准备，敌军群体 2–3 目标物理 450%，无视兵种相克（非三次单体）。
+   */
+  changban_zhihou: {
+    id: 'changban_zhihou',
+    name: '长坂之吼',
+    type: 'active',
+    prepare: true,
+    prepareTurns: 2,
+    range: 4,
+    triggerRate: 0.75,
+    targetMode: 'group',
+    groupCount: [2, 3],
+    tags: ['damage'],
+    output: [{ kind: 'physical_damage', rate: 450, ignoresTroopCounter: true }],
+  },
+  /**
+   * 烽火覆周（褒姒 h376·主动 50%–100% 距离 5）：火攻 95% 受谋略但无 growthRate（取基值）；连锁 60% 每次 −20%。
+   */
+  fenghuo_fuzhou: {
+    id: 'fenghuo_fuzhou',
+    name: '烽火覆周',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: [0.5, 1],
+    targetMode: 'random_single',
+    tags: ['damage'],
+    output: [{
+      kind: 'strategy_damage',
+      rate: 95,
+      strategyScaled: true,
+      chain: { chance: 0.6, decay: 0.2 },
+    }],
+  },
+  /**
+   * 虎步关右（夏侯渊 h435·主动 120% 距离 1）：前半口径。自身首次攻击伤害 +70% 受速度但无 growthRate（取基值），charges 1（无主动战法叠层）。
+   */
+  hubu_guanyou: {
+    id: 'hubu_guanyou',
+    name: '虎步关右',
+    type: 'active',
+    prepare: false,
+    range: 1,
+    triggerRate: 1.2,
+    targetMode: 'self',
+    targetSide: 'ally',
+    tags: ['damage_boost'],
+    output: [{
+      kind: 'inflict_status',
+      target: 'self',
+      status: {
+        type: 'damage_boost',
+        rate: 0.7,
+        duration: 999,
+        direction: 'caused',
+        charges: 1,
+        speedScaled: true,
+        damageType: 'physical',
+      },
+    }],
+  },
+  /**
+   * 火兽冲锋（祝融夫人 h494·被动）：开战普攻造成伤害 +80%；每回合行动阶段 50% 对敌军单体物理 160% 且下一次普攻 +160%（charges 1）。
+   */
+  huoshou_chongfeng: {
+    id: 'huoshou_chongfeng',
+    name: '火兽冲锋',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 4,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['damage', 'damage_boost'],
+    output: [{
+      kind: 'inflict_status',
+      target: 'self',
+      status: {
+        type: 'damage_boost',
+        rate: 0.8,
+        duration: 999,
+        direction: 'caused',
+        damageSource: 'basic',
+      },
+    }],
+    roundStartRepeat: {
+      output: [{
+        kind: 'chance_group',
+        chance: 0.5,
+        outputs: [
+          { kind: 'physical_damage', rate: 160, targetMode: 'random_single' },
+          {
+            kind: 'inflict_status',
+            target: 'self',
+            status: {
+              type: 'damage_boost',
+              rate: 1.6,
+              duration: 999,
+              direction: 'caused',
+              charges: 1,
+              damageSource: 'basic',
+            },
+          },
+        ],
+      }],
+    },
+  },
+  /**
+   * 文德椒房（郭皇后 h655·二类指挥）：每回合首次主动实际释放后，我军群体 2 策略造成伤害 +10% 受谋略但无 growthRate（取基值），最多 3 层。
+   */
+  wende_jiaofang: {
+    id: 'wende_jiaofang',
+    name: '文德椒房',
+    type: 'command',
+    phase: 'round',
+    roundTrigger: 'after_first_active',
+    range: 2,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'ally',
+    tags: ['damage_boost'],
+    output: [{
+      kind: 'inflict_status',
+      status: {
+        type: 'damage_boost',
+        rate: 0.1,
+        duration: 999,
+        direction: 'caused',
+        damageType: 'strategy',
+        strategyScaled: true,
+        stacks: 1,
+        maxStacks: 3,
+      },
+    }],
+  },
+  /**
+   * 万箭齐发（A 主动 35% 距离 5）：敌军群体 2 物理 150%；目标策略造成伤害 −50%（受攻击，无成长率）持续 1 回合（行动中施加 duration 2）。
+   */
+  wanjian_qifa: {
+    id: 'wanjian_qifa',
+    name: '万箭齐发',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.35,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage', 'damage_boost'],
+    output: [
+      { kind: 'physical_damage', rate: 150 },
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'damage_boost',
+          rate: -0.5,
+          duration: 2,
+          direction: 'caused',
+          damageType: 'strategy',
+          attackScaled: true,
+        },
+      },
+    ],
+  },
+  /**
+   * 文伐（B 追击 20%–40%）：对攻击目标策略 228%（受谋略 2.1%/点），再使其下一次受到策略攻击伤害 +20%（taken charges 1，无成长率）。
+   */
+  wenfa: {
+    id: 'wenfa',
+    name: '文伐',
+    type: 'pursuit',
+    range: 0,
+    triggerRate: [0.2, 0.4],
+    tags: ['damage', 'damage_boost'],
+    output: [
+      { kind: 'strategy_damage', rate: 228, strategyScaled: true, growthRate: 2.1 },
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'damage_boost',
+          rate: 0.2,
+          duration: 999,
+          direction: 'taken',
+          damageType: 'strategy',
+          charges: 1,
+        },
+      },
+    ],
+  },
+  /**
+   * 不攻（S 一类指挥）：自身整场怯战 + 策略造成 +25%；每回合开始后对距离 5 敌军单体策略 83%（满级基值，无成长率）。
+   */
+  bugong: {
+    id: 'bugong',
+    name: '不攻',
+    type: 'command',
+    phase: 'prep',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['cowardice', 'damage_boost', 'damage'],
+    output: [
+      { kind: 'inflict_status', status: { type: 'cowardice', duration: 999 } },
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'damage_boost',
+          rate: 0.25,
+          duration: 999,
+          direction: 'caused',
+          damageType: 'strategy',
+        },
+      },
+    ],
+    roundStartRepeat: {
+      output: [
+        {
+          kind: 'strategy_damage',
+          rate: 83,
+          strategyScaled: true,
+          targetMode: 'random_single',
+          range: 5,
+        },
+      ],
+    },
+  },
+  /**
+   * 恃强淬锋（A 被动）：受策略伤害 −30%（受攻击，无成长率）五份衰减；回合开始或每次造成物理伤害 +3.4%/层（受攻击，无成长率），最多 12 层至战斗结束。
+   */
+  shiqiang_cuifeng: {
+    id: 'shiqiang_cuifeng',
+    name: '恃强淬锋',
+    type: 'passive',
+    triggerRate: 1,
+    timing: 'battle_start',
+    range: 1,
+    targetMode: 'self',
+    tags: ['damage_boost'],
+    output: [
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'damage_boost',
+          rate: -0.3,
+          duration: 999,
+          direction: 'taken',
+          damageType: 'strategy',
+          attackScaled: true,
+          decayFifths: 5,
+        },
+      },
+    ],
+    selfPhysBoost: {
+      perStack: 0.034,
+      maxStacks: 12,
+      duration: 999,
+      attackScaled: true,
+      onRoundStart: true,
+      onDealPhysical: true,
+    },
   },
 };
