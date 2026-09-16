@@ -965,7 +965,7 @@
     "growthDefense": 2.03,
     "growthStrategy": 0.69,
     "growthSpeed": 1.35,
-    "mainSkillId": "",
+    "mainSkillId": "lingming_fuchen",
     "mainSkillName": "令明负榇",
     "skillDesc": "战斗开始后前3回合，每回合使我军群体骑兵及步兵攻击造成的伤害提高6.0%，该效果可叠加3次，持续直到战斗结束，第4回合起进入分兵状态（伤害率50.0%，受速度属性影响），持续直到战斗结束"
   },

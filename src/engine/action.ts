@@ -383,6 +383,12 @@ export function triggerDelayedOutputs(ctx: CombatContext, round: number): void {
         });
         applyDamage(ctx, target, d.damage, caster, damageType, 'skill');
       }
+    } else if (caster) {
+      // 非伤害类延迟输出（令明负榇：第 4 回合起进入分兵状态）→ 对锁定目标执行 output
+      const aliveTargets = l.targets.filter((t) => t.alive);
+      if (aliveTargets.length > 0) {
+        executeSkillOutputs(ctx, caster, skill, aliveTargets, skill.delayedOutput.output);
+      }
     }
   }
 }

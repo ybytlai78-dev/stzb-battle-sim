@@ -742,6 +742,47 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+  /**
+   * 令明负榇（庞德主战法·一类指挥）：战斗开始后前 3 回合，每回合使我军群体（有效距离内 2 目标）
+   * 骑兵及步兵攻击造成的伤害提高 6%（同战法累加，满 3 层 18% 停止），持续直到战斗结束；
+   * 第 4 回合起进入分兵状态（伤害率 50%），持续直到战斗结束。
+   * 官方：指挥 A，有效距离 4（来源 scripts/skill_extra.json + dateyuan 调研）。
+   * 「受速度属性影响」成长率未确认 → 留空（split 不给缩放，按基值）。
+   * 引擎配套：delayedOutput 新增「非伤害输出」分支（此前只能打伤害），本战法为首个用例。
+   */
+  lingming_fuchen: {
+    id: 'lingming_fuchen',
+    name: '令明负榇',
+    type: 'command',
+    phase: 'prep',
+    range: 4,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'ally',
+    retainAfterDeath: true,
+    tags: ['damage_boost', 'split'],
+    roundRepeat: { startRound: 1, endRound: 3, rate: 1 },
+    delayedOutput: {
+      atRound: 4,
+      targetMode: 'group',
+      output: [{ kind: 'inflict_status', status: { type: 'split', duration: 999, rate: 50 } }],
+    },
+    output: [
+      {
+        kind: 'inflict_status',
+        troopTypes: ['cavalry', 'infantry'],
+        status: {
+          type: 'damage_boost',
+          rate: 0.06,
+          duration: 999,
+          direction: 'caused',
+          stacks: 1,
+          maxStacks: 3,
+        },
+      },
+    ],
+  },
   /** 魏武之泽（曹丕主战法）：主动战法，40%，我军群体免疫怯战，普通攻击与追击伤害提高 15%（受谋略影响），每回合可两次普攻，持续 2 回合。免疫怯战暂未建模 */
   weiwu_zhi_ze: {
     id: 'weiwu_zhi_ze',
