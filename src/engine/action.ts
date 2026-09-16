@@ -1585,6 +1585,10 @@ export function inflictStatus(
     type === 'attack_buff' || type === 'defense_buff' ||
     type === 'strategy_buff' || type === 'speed_buff';
   const incomingSign = sameTypeUsesSign ? conflictSign(statusValue(create)) : undefined;
+  // 增减伤「分类键」（大类|小类）：分类不同的增伤/减伤是**不同效果**，各自共存进加算池，
+  // 不得被判同类取较高吞掉（用户口径 2026-09-16：【攻击伤害提高】+【主动战法伤害提高】直接相加）。
+  // 非增减伤一律 undefined → 不进这道闸门，属性类/控制类行为不变。
+  const incomingClass = createClassKey(create);
   const sameType = target.statuses.find(
     (s) =>
       s.type !== 'first_aid' &&
@@ -1592,6 +1596,7 @@ export function inflictStatus(
       s.type === type &&
       s.sourceSkillType === sourceSkillType &&
       s.sourceSkillId !== sourceSkillId &&
+      (incomingClass === undefined || statusClassKey(s) === incomingClass) &&
       (boostDir === undefined || !('direction' in s) || s.direction === boostDir) &&
       (incomingSign === undefined || conflictSign(statusValue(s)) === incomingSign)
   );
@@ -1680,8 +1685,10 @@ export function inflictStatus(
       });
       return;
     }
-    // 增减伤（damage_boost）：同类型不同战法**同号冲突、数值取较高替换**（用户确认——大赏三军 30% 与
-    // 奋疾先登叠层同为指挥增伤互相冲突替换，不叠加）。奋疾先登自身的层数计数与满层触发攻击
+    // 增减伤（damage_boost）：**同分类键 + 同类型不同战法**才冲突、数值取较高替换（用户确认——大赏三军 30% 与
+    // 奋疾先登叠层同为指挥增伤互相冲突替换，不叠加）。分类键（大类|小类，见 damageClassKey）不同 →
+    // 两者在 sameType 查找阶段就已错过，走下方「不同类型各自共存」新增独立实例、进同一加算池。
+    // 奋疾先登自身的层数计数与满层触发攻击
     // 独立于增伤状态冲突（actLayerCounters 战法级计数），层照叠、满 5 层照砍。
     // 银龙冲阵等带 stacks 上限的增减伤各自独立计数（施加方自行封顶）。
     // **正负号相反（增伤 vs 减伤，如无心恋战 -30% 与奋疾先登叠层 +32%）不冲突、各自共存**，
@@ -1764,6 +1771,52 @@ function damageKindText(t?: 'physical' | 'strategy'): string {
   if (t === 'physical') return '攻击伤害';
   if (t === 'strategy') return '策略攻击伤害';
   return '伤害';
+}
+
+/**
+ * 增伤/减伤「分类键」（用户口径 2026-09-16）= `大类|小类`：
+ *
+ * - **大类**（伤害类型维）：`全域`（无限定，官方措辞「造成的伤害提高」）｜`攻击`（damageType physical）
+ *   ｜`谋略`（damageType strategy）
+ * - **小类**（战法来源维）：`普通`（damageSource basic，官方措辞「普通攻击伤害提高」）｜
+ *   `主动` / `追击` / `指挥`（skillTypes，可多值，官方措辞「×战法伤害提高」）｜`无`
+ *
+ * 规则：**分类键不同 → 各自共存、进同一加算池**（buffMult 单一总和模型天然加算）；
+ * 分类键相同 **且来源战法类型相同** → 冲突、数值取较高。全域是独立一类，
+ * 与攻击/谋略大类、与四个小类都能叠加（血溅黄砂 +120% 全域 与 虎步关右 +70% 攻击 → +190%）。
+ *
+ * 依据：官方战法库措辞分布（造成的伤害提高 21 条 / 攻击伤害提高 5 / 策略伤害提高 1 /
+ * 主动战法伤害提高 23 / 追击 8 / 指挥 1 / 普通攻击 10），分类必须照官方措辞切，不得合并。
+ */
+export function damageClassKey(s: {
+  damageType?: 'physical' | 'strategy';
+  damageSource?: 'basic' | 'skill';
+  skillTypes?: SkillType[];
+}): string {
+  const major = s.damageType === 'physical' ? '攻击' : s.damageType === 'strategy' ? '谋略' : '全域';
+  // 小类优先级：普攻（damageSource basic）> 具体战法类型（skillTypes，可多值）> 战法通类（只有 damageSource skill）
+  // > 无限制。三种「来源维」互不混淆：全伤害提高 ≠ 战法伤害提高 ≠ 普通攻击伤害提高。
+  const minor =
+    s.damageSource === 'basic'
+      ? '普通'
+      : s.skillTypes && s.skillTypes.length > 0
+        ? [...s.skillTypes].sort().map(skillTypeName).join('/')
+        : s.damageSource === 'skill'
+          ? '战法'
+          : '无';
+  return `${major}|${minor}`;
+}
+
+/** 状态实例的分类键；非增减伤返回 undefined（不参与分类判定）。 */
+function statusClassKey(s: Status): string | undefined {
+  if (s.type !== 'damage_boost' && s.type !== 'damage_reduce') return undefined;
+  return damageClassKey(s);
+}
+
+/** 新施加效果的分类键；非增减伤返回 undefined。 */
+function createClassKey(c: CreateStatus): string | undefined {
+  if (c.type !== 'damage_boost' && c.type !== 'damage_reduce') return undefined;
+  return damageClassKey(c);
 }
 
 function sameDamageBoostFilter(existing: Status, incoming: CreateStatus): boolean {
