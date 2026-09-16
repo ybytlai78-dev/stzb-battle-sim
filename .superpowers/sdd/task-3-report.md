@@ -1,102 +1,103 @@
-# Task 3 报告：统计页（图二骨架 + 行序）
+# Task 3 Report: decayFifths + selfPhysBoost + 输出级 range
 
-**状态：** DONE  
-**Commits：** none（按要求未 git commit）
+## What you implemented
 
-## 做了什么
+在 `src/engine/types.ts` / `src/engine/action.ts` 落地 Task 1 类型契约的结算（不改 `skills.ts`、不登录万箭/文伐/不攻/恃强）：
 
-将 `createStatsView` 从 HTML `<table>` +「详情」弹窗改成套2 `.st-page` 骨架：
+1. **`Status.damage_boost.fifthsBase`**：挂上时满额份数（分母冻结）。`fifths = fifthsBase = create.decayFifths`，`baseRate = create.rate`。
+2. **`inflictStatus` 推状态**：`decayEighths` 旁拷贝 `fifths` / `fifthsBase` / `baseRate`。`damage_boost` detail 有 `decayFifths` 时覆盖为「剩余 N/N」。
+3. **`decayFifthsOnHit`**（未导出）：`actual > 0` 时在 `consumeTakenCharges` 之后；`statusMatchesHit` 才 −1；`fifths <= 0` 移除并 `status_expired`；否则 `rate = baseRate * fifths / fifthsBase`。`tickRoundStartStatuses` **不对 fifths 做回合衰减**（仍只衰减 eighths）。
+4. **`applySelfPhysBoost`**（未导出）：给持有者叠 1 层 caused physical `damage_boost`（`stacks:1` + `maxStacks`）。`tickRoundStartStatuses` 在 eighths 之后、`lockedCommands` 之前走 `onRoundStart`；`applyDamage` 在物理实际扣兵后走 `onDealPhysical`。
+5. **`maxStacks` 封顶**：`inflictStatus` sameSource 已有文德椒房闸（`stacks >= create.maxStacks` 则 return），与 brief 等价，未重复插入。
+6. **`outRange`**：`physical_damage` / `strategy_damage` 的 `ignoreRange` → Infinity，否则 `out.range ?? skill.range`。`physical_damage.attacker === 'recipient'` 仍用内部 `atkRange`（疏数未改）。
 
-- 根仍是 `.stats-view`，内嵌 `.st-page`：左轨竖排「武将统计 / 战法统计」（默认 `data-stats="skill"` `.is-on`）
-- 行序：红 大营→中军→前锋，再蓝 前锋→中军→大营（缺槽过滤）
-- 每行 `.st-row`（`min-height: 50px`，头像列 44px）：`.pos-tag` + `.hcard`（`avatarSrc`）+ `.sk-row` 四列或 `.sh-row` 三占比
-- 四列：普攻 `attackCount`/`attackDamage`；主战法与两携带走既有 `columnOrder` + `SkillStat`；恢复与杀伤同行，恢复 `var(--color-green)`；空携带 — / 0；品级 `grade s|a|b`
-- 点击「武将统计」用 `computeContributionShares` 画 `.sh-row`（伤害/恢复/控制），删除 `openSharePanel` / `.st-detail-btn`
-- 口径注释改 JSDoc（次数 = skill_cast，杀伤 `creditToId`，恢复归属施法者）
-- 未改 `src/engine/**`、demo HTML、`createBattleView`
+未用 `PassiveSkill.roundStartRepeat` 做恃强回合开始叠层。无 commit。
 
-## TDD 证据
+## What you tested and test results
 
-### RED（先改断言，实现前）
-
-命令：
-
-```bash
-npx vitest run web/smoke.test.ts -t "选将 → 开始模拟"
-```
-
-输出（节选）：
-
-```
- ❯ web/smoke.test.ts (20 tests | 1 failed | 19 skipped) 987ms
-   × Web 战斗模拟器冒烟 > 选将 → 开始模拟 → 默认简略战报，可切换统计/战报详情 985ms
-     → expected <table><thead>…(1)</thead>
-…(1)</table> to be falsy
-
- FAIL  web/smoke.test.ts > Web 战斗模拟器冒烟 > 选将 → 开始模拟 → 默认简略战报，可切换统计/战报详情
-AssertionError: expected <table>…</table> to be falsy
- ❯ web/smoke.test.ts:260:42
-    260|     expect(stats.querySelector('table')).toBeFalsy();
-```
-
-符合预期：当时 DOM 仍是 `<table>`。
-
-### GREEN（实现后）
-
-实现后第一次跑：行序已是红三站位 + 蓝缺槽，但 `pickHeroIntoSlot('blue', 0)` 实际是**大营**（注释写「前锋」）。为对齐任务卡 verbatim 标签 `['大营', '中军', '前锋', '前锋']`，该测蓝魏延改为 slot 2（前锋）。
-
-命令：
-
-```bash
-npx vitest run web/smoke.test.ts -t "选将 → 开始模拟"
-```
-
-```
- ✓ web/smoke.test.ts (20 tests | 19 skipped) 932ms
-   ✓ Web 战斗模拟器冒烟 > 选将 → 开始模拟 → 默认简略战报，可切换统计/战报详情 930ms
-
- Test Files  1 passed (1)
-      Tests  1 passed | 19 skipped (20)
-```
-
-全文件 + 实验室：
-
-```bash
-npx vitest run web/smoke.test.ts tests/damage_lab_smoke.test.ts
-npx tsc --noEmit
-```
-
-```
- ✓ tests/damage_lab_smoke.test.ts (13 tests) 1171ms
- ✓ web/smoke.test.ts (20 tests) 3312ms
- Test Files  2 passed (2)
-      Tests  33 passed (33)
-```
-
-tsc clean。
-
-## 改动文件
-
-| 文件 | 变更 |
+| 命令 | 结果 |
 |------|------|
-| `web/smoke.test.ts` | 统计段改查 `.st-row` / `.pos-tag` / rail；普攻+次数改 `.sk-row`；魏延放入蓝前锋；详情 tab 断言未动 |
-| `tests/damage_lab_smoke.test.ts` | 统计段改新骨架（无 modal）；未重做三栏布局 |
-| `web/battleSummary.ts` | 重写 `createStatsView`；删除 `openSharePanel` |
-| `web/styles.css` | 移植 `.st-page`/`.st-row`/`.sk-row`/`.sh-row`/`.pos-tag`/`.hcard`；`--color-line` 别名 |
-| `web/mobile.css` | 横屏 `.st-row { min-height: 50px; }` + 44px 头像列 |
+| `npx vitest run tests/attack_scale.test.ts`（实现前 RED） | **FAIL** 3 failed / 8 passed |
+| `npx vitest run tests/attack_scale.test.ts tests/troop_filter.test.ts`（实现后 GREEN） | **PASS** 27 passed（11 + 16） |
+| `npx tsc --noEmit` | **PASS**（exit 0） |
 
-## 验收核对
+未跑全量 / golden（任务卡未要求）。
 
-- [x] `.stats-view` 内无 `<table>`，有 `.st-page`
-- [x] 默认 skill；点击 hero 出 `.sh-row`（伤害/恢复/控制，非弹窗）
-- [x] 行序红大营→中军→前锋，蓝前锋→中军→大营
-- [x] `.st-row { min-height: 50px; }`，未对行设 `min-height: 0`
-- [x] 品级 `grade s/a/b`；普攻无品级；空槽 — / 0
-- [x] 恢复与杀伤同行，绿色 `--color-green`
-- [x] 口径 JSDoc 保留
-- [x] TDD RED 后 GREEN
-- [x] 未改 engine / demo / `createBattleView`
+## TDD Evidence
 
-## 给测试子代理
+### RED
 
-跑 `npx vitest run web/smoke.test.ts tests/damage_lab_smoke.test.ts`。目视统计页：左轨竖排、六行（或缺槽后更少）不压叠、默认战法四列、点「武将统计」换占比条。详情页 `.stats-table` 仍在 `createBattleView` 内，不要当回归失败。
+Command: `npx vitest run tests/attack_scale.test.ts`
+
+Output (exit 1):
+
+```
+ ❯ tests/attack_scale.test.ts (11 tests | 3 failed) 19ms
+   × decayFifths > 五次匹配策略扣兵后移除：30→24→18→12→6→0 7ms
+     → expected undefined to be 5 // Object.is equality
+   × decayFifths > 物理受击不衰减策略 fifths 1ms
+     → expected undefined to be 5 // Object.is equality
+   × selfPhysBoost > 回合开始 +1 层；造成物理扣兵后再 +1；封顶 12 1ms
+     → expected undefined to be 'damage_boost'
+
+ Test Files  1 failed (1)
+      Tests  3 failed | 8 passed (11)
+```
+
+与 brief 部分一致：fifths 未拷贝（undefined）；selfPhysBoost 回合开始未叠层。Task 2 的 7 测仍过。
+
+**偏离：** `strategy_damage.range` 在 RED 已过。前锋↔前锋实时距离为 1，战法 `range: 1` 已能打中敌军前锋，无法用该用例证明输出级 `range: 5`。仍按 brief 改了 `outRange`。
+
+### GREEN
+
+Command: `npx vitest run tests/attack_scale.test.ts tests/troop_filter.test.ts`
+
+Output (exit 0):
+
+```
+ ✓ tests/attack_scale.test.ts (11 tests) 14ms
+ ✓ tests/troop_filter.test.ts (16 tests) 18ms
+
+ Test Files  2 passed (2)
+      Tests  27 passed (27)
+```
+
+Command: `npx tsc --noEmit`
+
+Output: exit 0（无诊断）。
+
+## Files changed
+
+- `src/engine/types.ts`（`fifthsBase`）
+- `src/engine/action.ts`
+- `tests/attack_scale.test.ts`（追加 describe，未删 Task 2）
+- `.tasks/task-3-decay-fifths/status.json`
+
+未改 `src/data/skills.ts`。无 commit。
+
+## Self-review findings
+
+- 衰减分母用冻结的 `fifthsBase`，避免 `fifths/(fifths+1)` 二次衰减错误（5→4 用 4/5，再 3/5 而非 3/4）。
+- JSDoc 中文；`decayFifthsOnHit` / `applySelfPhysBoost` 未导出；无 `Math.random`。
+- 疏数 recipient `atkRange = out.range ?? skill.range` 未动。
+- selfPhysBoost 测 brief 用 `layer()!` 二次调用无法收窄 `Status` 联合，tsc 失败。改为每次把 `layer()` 赋给局部变量再 `if (s?.type === 'damage_boost')`，断言不变。
+- 输出级 range 缺「大营目标 / 距离>1」的 RED 用例；建议 Task 4 不攻测把敌军放中军或大营。
+
+## Gap fix: strategy_damage.range��2026-09-16��
+
+### Problem
+ԭ����˫������ǰ�� �� ʵʱ���� 1��`skill.range: 1` ���ܴ��У�`range: 5` ������ RED �׶��Ѽ��̡�
+
+### Fix�����⣬δ�����棩
+- �о�Ŀ���Ϊ `��Ӫ`��
+- �� 1v1 ʱ˫�� liveRank ��Ϊ 0��������ѹ�� 1�����ҷ���ǰ��+�о�ռλ��ʩ���߷� `��Ӫ`���Եо���Ӫʵʱ���� = 3��
+- ���� `range: 5` �����в����˺������������ `range`������ `skill.range: 1`�������� `test_bg` �����˺���
+
+### Results
+| ���� | ��� |
+|------|------|
+| `npx vitest run tests/attack_scale.test.ts -t "strategy_damage.range"` | **PASS** 2 passed / 10 skipped |
+| `npx vitest run tests/attack_scale.test.ts tests/troop_filter.test.ts` | **PASS** 28 passed��12 + 16�� |
+| `npx tsc --noEmit` | **PASS**��exit 0�� |
+
+Engine change: **��**��`outRange` ����ȷ���������Բ�಼�ã���

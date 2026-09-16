@@ -1,0 +1,9 @@
+{
+  "task_id": "task-1-types-increment",
+  "status": "done",
+  "summary": "types.ts 受攻击缩放类型增量完成：CreateStatus attackScaled/decayFifths、Status damage_boost fifths/baseRate、strategy_damage range/ignoreRange、PassiveSkill selfPhysBoost；tsc PASS",
+  "files_changed": ["src/engine/types.ts"],
+  "tests_run": ["npx tsc --noEmit (PASS)"],
+  "blockers": [],
+  "updated_at": "2026-09-16"
+}

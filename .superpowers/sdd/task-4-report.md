@@ -1,76 +1,33 @@
-# Task 4 报告：详情页（图三三栏 + 现有事件文案）
+# Task 4 报告：四张战法入库
 
-**状态：** DONE  
-**Commits：** none（按要求未 git commit）
+## 状态
 
-## 做了什么
+**DONE** — 未 git commit。`npx tsc --noEmit` PASS。`npx vitest run tests/attack_scale.test.ts` 12/12 PASS。未跑 `build_heroes_seed.mjs`。
 
-把 `createBattleView` 外壳从「round-nav + 双列兵力 + 通栏 event-stream + 底表」换成图三三栏，**事件字符串口径未改**：
+## 实现摘要
 
-- 根仍是 `.battle-view`；其上保留紧凑 `.result-banner`（smoke / 历史详情）
-- `.dv`：`aside.dv-turns`（`battle_start.turnOrder`，缺则 my+enemy 配置序，`avatarSrc`）+ `section.dv-mid`（`.dv-head` 第 N 回合 / 回合前阶段 + `.dv-log.scroll-quiet.event-stream`）+ `aside.dv-rail`（详/简、上/下、始/1…N `.rtab`、播）
-- 去掉顶栏 `.round-nav`、`.troops-wrap`、底栏 `.stats-table`（统计已有独立 tab）
-- `unit_act_start`：`.act-group[data-unit-id]` + 组头右侧兵力（`troopsAt` 按 unitId）+ `.act-body` 包事件行；「简」= `.dv.is-simple .act-body { display:none }`
-- 点左列头像：`dv-log.scrollTop` 对齐对应组（不用 `scrollIntoView`）；无组则 no-op
-- 播/停间隔仍 900ms；`.dmg-link` / `.dmg-popup` 仍挂 `.ev.dmg-mod`
-- smoke 详情段改为断言 `.dv` / `.dv-turns` / `.dv-rail`，去掉 `.troop-row` / `.stats-table`
+按 brief 字面量入库四张通用战法，并追加 `SKILL_ID_BY_NAME` 映射。因 `SKILL_REGISTRY` / 映射表在 `sata_ruxing` 之后已有五星战法（落首箭～文德椒房），四张新战法追加在**对象末尾**（`wende_jiaofang` 之后、闭合 `};` 之前），未插入五星条目之间、未改动既有五星定义。
 
-未改 `src/engine/**`、demo HTML。
+| id | 中文名 | 类型要点 |
+|----|--------|----------|
+| `wanjian_qifa` | 万箭齐发 | A 主动；群体 2 物理 150% + 策略 caused −50% attackScaled duration 2 |
+| `wenfa` | 文伐 | B 追击；策略 228%（2.1%/点）+ taken strategy +20% charges 1 |
+| `bugong` | 不攻 | S 一类指挥；怯战 + 策略 caused +25%；`roundStartRepeat` 距离 5 单体策略 83% |
+| `shiqiang_cuifeng` | 恃强淬锋 | A 被动 battle_start；taken strategy −30% attackScaled decayFifths 5 + `selfPhysBoost` 12 层 |
 
-## TDD 证据
+`scripts/build_heroes_seed.mjs` 在 `文德椒房` 后追加四行中文名→id，未执行种子脚本。
 
-### 基线（改外壳前）
+## 自检
 
-命令：
+- `npx tsc --noEmit` → PASS（exit 0）
+- `npx vitest run tests/attack_scale.test.ts` → 12 passed
 
-```bash
-npx vitest run web/damageModifier.test.ts
-```
+## 未做
 
-输出：
+- 未 git commit
+- 未跑 `node scripts/build_heroes_seed.mjs` / `seed_db.mjs`
+- 未改 Web 描述/品级 JSON（本任务卡未要求）
 
-```
- ✓ web/damageModifier.test.ts (11 tests) 306ms
+## Concerns
 
- Test Files  1 passed (1)
-      Tests  11 passed (11)
-   Start at  19:15:44
-   Duration  2.89s
-```
-
-符合预期：改前 PASS。
-
-### GREEN（实现后）
-
-```bash
-npx vitest run web/damageModifier.test.ts
-npx vitest run web/smoke.test.ts -t "选将 → 开始模拟"
-npx vitest run web/smoke.test.ts
-npx vitest run tests/damage_lab_smoke.test.ts
-npx tsc --noEmit
-```
-
-```
- ✓ web/damageModifier.test.ts (11 tests) 249ms
- ✓ web/smoke.test.ts 选将 → 开始模拟 914ms
- ✓ web/smoke.test.ts (20 tests) 3631ms
- ✓ tests/damage_lab_smoke.test.ts (13 tests) 816ms
- tsc --noEmit → clean
-```
-
-增减伤选择器 `.ev.dmg-mod` / `.dmg-link` / `.dmg-popup` / `.act-group .ev` 与文案均仍匹配。历史 `.hist-detail .event-stream` 靠 `dv-log` 的 `event-stream` 别名通过。
-
-## 改动文件
-
-| 文件 | 变更 |
-|------|------|
-| `web/battleView.ts` | 三栏外壳；组头兵力 / `data-unit-id` / `.act-body`；删兵力列与底表 |
-| `web/styles.css` | `.dv` 网格 `48px minmax(0,1fr) 32px`；`.dv-turns` overflow hidden + padding-right 8px |
-| `web/mobile.css` | 横屏三栏压缩；竖屏 `.dv` min-height |
-| `web/smoke.test.ts` | 详情段断言 `.dv` / `.dv-turns` / `.dv-rail` |
-
-## 关注点
-
-- 旧 `.round-nav` / `.troops-wrap` / `.stats-table` CSS 仍留在 `styles.css`（无 DOM 再引用）
-- jsdom 下 `getBoundingClientRect` 多为 0，左列滚动对齐未做像素级断言
-- 组头去掉 `.dot`（与品级圆点 class 冲突）；事件行文案未动
+无。引擎字段（attackScaled / charges / decayFifths / selfPhysBoost / roundStartRepeat）由 Task 1–3 已落地；本任务仅数据入库。

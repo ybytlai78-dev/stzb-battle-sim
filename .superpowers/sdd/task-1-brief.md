@@ -1,82 +1,95 @@
-### Task 1: CSS token 与全局皮肤
+### Task 1: 类型增量
 
 **Files:**
-- Modify: `web/styles.css`（文件顶部 `:root` 与 `body` 背景）
-- Test: `web/smoke.test.ts`（冒烟仍能 `initApp`；本任务不断言色值）
+- Modify: `src/engine/types.ts`
 
 **Interfaces:**
-- Consumes: 现有 `--bg` / `--gold` 等旧名（全文件仍大量引用）
-- Produces: 新 token 与旧名并存一层 alias，避免一次改 2000 行
+- Consumes: `CreateStatus` 的 `damage_boost` / `damage_reduce`；`Status` 的同两项；`SkillOutput` 的 `strategy_damage`；`PassiveSkill`
+- Produces: 下方字段。本任务不改 `action.ts`。`triggerRate` 已是区间，保持不动。
 
-- [ ] **Step 1: 在 `:root` 增加套2 token，并把旧名指过去**
+- [ ] **Step 1: `CreateStatus` 加 `attackScaled` / `decayFifths`**
 
-在 `web/styles.css` 现有 `:root` **追加**（不要先删旧名）：
+`damage_reduce`（约 300 行）在 `speedScaled` 不存在于减伤、现有 `strategyScaled` 旁追加 `attackScaled?: boolean`：
 
-```css
-:root {
-  /* 旧名保留，值改成套2 */
-  --bg: #12100f;
-  --panel: #1c1817;
-  --panel-2: #241f1d;
-  --text: #eeeae4;
-  --text-dim: #8a827c;
-  --gold: #c49a36;
-  --red: #8f2c2c;
-  --blue: #2a4a7c;
-  --green: #3a6b4a;
-  --color-bg: var(--bg);
-  --color-surface: var(--panel);
-  --color-surface-2: var(--panel-2);
-  --color-text: var(--text);
-  --color-text-muted: var(--text-dim);
-  --color-crimson: var(--red);
-  --color-gold: var(--gold);
-  --color-green: var(--green);
-  --color-blue: var(--blue);
-  --color-grade-s: #d989a0;
-  --color-grade-a: #4a7ab0;
-  --color-grade-b: #4e8a62;
-  --color-scroll: color-mix(in srgb, var(--text-dim) 28%, var(--bg));
-  --card-accent: 2px solid var(--red);
-  --radius: 8px;
-}
+```ts
+  | { type: 'damage_reduce'; rate: number; duration: number; strategyScaled?: boolean; /** 受攻击缩放（对称字段）；growthRate === undefined 时不缩放、用基值 */ attackScaled?: boolean; growthRate?: number; /** 按 8 份衰减（谋议宏图）：准备阶段 8/8，每回合开始 -1/8 */ decayEighths?: number; /** 伤害来源过滤：basic=普攻 / skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省物理+策略都吃 */ damageType?: 'physical' | 'strategy' }
 ```
 
-卡片类（`.slot`、`.hero-card`、`.modal`）把「左侧粗色条」改成 `border-bottom: var(--card-accent)`。`.st-hero img` / `.tavatar` / `.act-avatar` 保持圆裁 + `object-position: 50% 18%`。
+`damage_boost`（约 308 行）在 `speedScaled` 后追加 `attackScaled`，在 `chargesStack` 语义旁注明 taken charges，并加 `decayFifths`：
 
-品级点：现有金/红/蓝改成 `.grade.s` / `.dot.s` 用 `--color-grade-*`。
+把现有 JSDoc 里「charges：次数型「下一次攻击」」改成：
 
-细滚动条工具类：
-
-```css
-.scroll-quiet {
-  overflow-x: hidden;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: var(--color-scroll) transparent;
-}
-.scroll-quiet::-webkit-scrollbar { width: 4px; }
-.scroll-quiet::-webkit-scrollbar-track { background: transparent; }
-.scroll-quiet::-webkit-scrollbar-thumb {
-  background: var(--color-scroll);
-  border-radius: 4px;
-}
+```
+ *  charges：次数型。direction:'caused' 时按攻击者打出消耗（青丘媚祸）；
+ *  direction:'taken' 时按受击方吃到匹配伤害后消耗（文伐下一次受到策略），不按回合递减
+ *  attackScaled=true（万箭 −50% / 恃强 −30%）：受攻击缩放；growthRate === undefined 时不缩放、用基值
+ *  decayFifths：按 N 份衰减（恃强 5）：挂上时满额，每次受到匹配伤害且实际扣兵 > 0 则 −1 份，rate = baseRate × fifths/N
 ```
 
-- [ ] **Step 2: 跑冒烟确认没把 DOM 测挂**
+字段本身在 `speedScaled?: boolean` 后插入：
 
-Run: `npx vitest run web/smoke.test.ts`
+```ts
+    /** 受攻击缩放（万箭齐发 −50%、恃强淬锋 −30% / +3.4%）；growthRate === undefined 时不缩放、用基值 */
+    attackScaled?: boolean;
+```
 
-Expected: PASS（本任务不应改 DOM 结构）。
+在 `chargesStack?: boolean` 后插入：
 
-## Global Constraints（本任务同样遵守）
+```ts
+    /** 按 N 份衰减（恃强淬锋 5）：挂上满额，每次匹配受击实际扣兵后 −1 份 */
+    decayFifths?: number;
+```
 
-- 视觉真理：`design-demos/02-workbench.html`；spec：`docs/superpowers/specs/2026-09-09-战斗模拟器前端ui-design.md` 的「验收后锁定」。
-- 不要实现套1 沙盘，不要读它当布局参考。
-- 不要改 `src/engine/**`；禁止 `Math.random` 进引擎。
-- 伤害实验室布局不重做；仅允许 CSS token 继承。
-- 颜色一律 `var(--color-*)`，禁止组件里裸 hex（inline SVG 除外）。本任务只改 CSS token/皮肤，不要为了这条去改 TS。
-- 品级：S `#d989a0` / A `#4a7ab0` / B `#4e8a62`。
-- JSDoc 中文。
-- **不要 git commit**（除非用户本会话明确要求）；跳过所有 Commit 步骤。本工作区不是 git 仓库。
-- 不要改 `design-demos/02-workbench.html`。
+- [ ] **Step 2: `Status` 拷贝 `fifths` / `baseRate`（damage_boost）**
+
+`Status` 的 `damage_boost`（约 829 行）追加：
+
+```ts
+    /** 当前剩余份数（恃强淬锋 5→4→…）；无此字段则不按 1/5 衰减 */
+    fifths?: number;
+    /** fifths 满额时的 rate，衰减时 rate = baseRate × fifths / 初始份数 */
+    baseRate?: number;
+```
+
+`damage_reduce` 的 `Status` **不必**加 `fifths`（本批恃强走 taken `damage_boost`）。`CreateStatus.attackScaled` 施加时写入已缩放的 `rate`，`Status` **不必**存 `attackScaled`。
+
+- [ ] **Step 3: `strategy_damage` 加 `range`；`PassiveSkill` 加 `selfPhysBoost`**
+
+`strategy_damage`（约 137 行）在 `chain` 后追加：
+
+```ts
+      /**
+       * 本段选敌距离（不攻每回合策略 5）。缺省 `skill.range`。
+       * 与 physical_damage.range 同口径。
+       */
+      range?: number;
+      /** 选目标时无视战法距离（对称 physical_damage.ignoreRange） */
+      ignoreRange?: boolean;
+```
+
+`PassiveSkill`（约 641 行 `roundStartRepeat` 之后、`output` 之前）追加：
+
+```ts
+  /**
+   * 自身造成物理伤害叠层（恃强淬锋 +3.4%/层）。
+   * onRoundStart：tickRoundStartStatuses 给持有者 +1 层（不要走 roundStartRepeat，那是行动阶段）。
+   * onDealPhysical：持有者造成普攻/战法物理/分兵/反击且实际扣兵后 +1 层。
+   * 层数走 damage_boost stacks + sameSource 累加，到 maxStacks 停止。
+   */
+  selfPhysBoost?: {
+    perStack: number;
+    maxStacks: number;
+    duration: number;
+    attackScaled?: boolean;
+    onRoundStart?: boolean;
+    onDealPhysical?: boolean;
+  };
+```
+
+- [ ] **Step 4: `npx tsc --noEmit`**
+
+Expected: PASS（只加可选字段）。
+
+跳过 Commit。
+
+---

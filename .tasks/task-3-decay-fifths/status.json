@@ -1,0 +1,17 @@
+{
+  "task_id": "task-3-decay-fifths",
+  "status": "done",
+  "summary": "Fix strategy_damage.range gap: foe at 大营 + live-distance formation (my 前锋/中军 + caster 大营, dist=3); add negative case without output range. Engine unchanged. 2+28 tests PASS, tsc PASS",
+  "files_changed": [
+    "tests/attack_scale.test.ts",
+    ".superpowers/sdd/task-3-report.md",
+    ".tasks/task-3-decay-fifths/status.json"
+  ],
+  "tests_run": [
+    "npx vitest run tests/attack_scale.test.ts -t \"strategy_damage.range\" (PASS 2)",
+    "npx vitest run tests/attack_scale.test.ts tests/troop_filter.test.ts (PASS 28)",
+    "npx tsc --noEmit (PASS)"
+  ],
+  "blockers": [],
+  "updated_at": "2026-09-16"
+}

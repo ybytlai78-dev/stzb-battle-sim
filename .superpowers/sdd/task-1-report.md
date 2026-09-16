@@ -1,57 +1,47 @@
-# Task 1 Report: CSS token 与全局皮肤
+# Task 1 Report: 类型增量
 
-## What was implemented
+## What you implemented
 
-仅改 `web/styles.css`：
+仅修改 `src/engine/types.ts`，按 brief 逐字段插入可选类型（未改 `action.ts` / `skills.ts` / 测试 / Web）：
 
-1. **`:root` 套2 色值**
-   - 旧名保留：`--bg` / `--panel` / `--panel-2` / `--text` / `--text-dim` / `--gold` / `--red` / `--blue` / `--green` 值改为套2
-   - 未删未改的旧名：`--panel-3`、`--line`、`--line-strong`、`--gold-bright`、`--ink`、`--text-weak`、字体、spacing 等原样保留
-   - 追加 `--color-*` 别名、`--color-grade-s|a|b`、`--color-scroll`、`--card-accent`、`--radius`
+1. **`CreateStatus.damage_reduce`**：在 `strategyScaled` 旁追加 `attackScaled?: boolean`（受攻击缩放对称字段）。
+2. **`CreateStatus.damage_boost`**：
+   - JSDoc 更新：`charges` 区分 caused/taken 消耗语义；补充 `attackScaled` / `decayFifths` 说明。
+   - 字段：`speedScaled` 后加 `attackScaled?: boolean`；`chargesStack` 后加 `decayFifths?: number`。
+3. **`Status.damage_boost`**：追加运行时衰减态 `fifths?: number`、`baseRate?: number`。  
+   - 未加 `fifthsBase`（Task 3）。  
+   - `Status.damage_reduce` 未加 `fifths`（本批恃强走 taken boost）。  
+   - `Status` 未存 `attackScaled`（施加时写入已缩放 `rate`）。
+4. **`strategy_damage`**：`chain` 后追加 `range?: number`、`ignoreRange?: boolean`。
+5. **`PassiveSkill`**：`roundStartRepeat` 与 `output` 之间追加 `selfPhysBoost?`（perStack / maxStacks / duration / attackScaled / onRoundStart / onDealPhysical）。
 
-2. **`body` 背景**
-   - 去掉旧鎏金/蓝光径向渐变，改为 `background: var(--color-surface)`（对齐 `02-workbench.html`）
+`BaseSkill.triggerRate` 未改动（已是 `number | [number, number]`）。
 
-3. **卡片底边强调**
-   - `.slot` / `.hero-card` / `.modal` 增加 `border-bottom: var(--card-accent)`（未做左侧色条）
+## What you tested and test results
 
-4. **品级**
-   - `.grade.grade-s|a|b` 色值映射到 `--color-grade-*`（去掉旧粉/蓝裸 hex）
-   - 新增 `.grade.s|a|b` 与 `.dot` / `.dot.s|a|b`
+| 命令 | 结果 |
+|------|------|
+| `npx tsc --noEmit` | **PASS**（exit 0） |
 
-5. **`.scroll-quiet` 细滚动条工具类**（按 brief 原文）
+无单元测试改动（任务卡规定 types-only，测试由测试子代理负责）。
 
-6. **未改动**：`.st-hero img` / `.tavatar` / `.act-avatar` 圆裁 + `object-position: 50% 18%`；未改 TS / demo / engine
+## TDD Evidence
 
-## What was tested
-
-```
-npx vitest run web/smoke.test.ts
-```
-
-结果：**20/20 PASS**（约 5.45s）
-
-```
- ✓ web/smoke.test.ts (20 tests) 2928ms
- Test Files  1 passed (1)
-      Tests  20 passed (20)
-```
-
-本任务未改断言、不断言色值。
+- Task 1 为纯类型增量，RED 不要求。
+- 验证命令：`npx tsc --noEmit` → PASS（可选字段，现有调用方无需适配）。
 
 ## Files changed
 
-- `web/styles.css`
-- `.tasks/task-1-css-token/status.json`（任务状态）
-- `.superpowers/sdd/task-1-report.md`（本报告）
+- `src/engine/types.ts`
 
 ## Self-review findings
 
-- 验收项均满足：旧名+别名并存、卡片底边、品级双类名、滚动条工具类、头像裁切未回退、smoke 绿。
-- `.slot:hover` / `.slot.empty` / `.slot.drag-over` 会改写 `border-color` / `border-style`，空槽与 hover 时底边绯红强调可能被盖住；brief 只要求在基类加 `border-bottom`，未要求改派生状态。若视觉上不理想，后续切片可在派生规则里再次声明 `border-bottom: var(--card-accent)`。
-- 全文件仍有大量组件级裸 hex（如 header 渐变）；按约束本任务只做 token/皮肤入口，不扫全文件。
+- 所有新增字段均为 optional，与「Expected: PASS」一致。
+- JSDoc 为中文，字段文案与 brief 逐字对齐。
+- 未触碰 `fifthsBase`、`action.ts`、`skills.ts`、测试、Web。
+- `triggerRate` 保持不动。
+- `Status.damage_boost` 已有 `fifths`/`baseRate`；`damage_reduce` 既有 `eighths`/`baseRate`（谋议）未误改。
 
-## Issues / concerns
+## Issues or concerns
 
-- 无阻断项。
-- 上述 `.slot` 派生态底边可能被覆盖：轻微视觉 concern，不阻塞 Task 2+。
+无阻塞项。后续 Task 2+ 需在 `action.ts` 落地 `attackScaled` / `decayFifths`→`fifths` 衰减 / `strategy_damage.range` / `selfPhysBoost` 结算逻辑；本任务仅提供类型契约。

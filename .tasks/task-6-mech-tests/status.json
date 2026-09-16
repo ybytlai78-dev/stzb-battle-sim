@@ -1,0 +1,26 @@
+{
+  "task_id": "task-6-mech-tests",
+  "status": "done",
+  "summary": "prepared_timing 按 prepareTurns 泛化；长坂之吼 2 回合准备不再误断言；樊渊泅囚仍为 1 回合",
+  "files_changed": [
+    "tests/prepared_timing.test.ts",
+    ".superpowers/sdd/task-6-report.md",
+    ".tasks/task-6-mech-tests/status.json"
+  ],
+  "tests_run": [
+    "npx vitest run tests/prepared_timing.test.ts tests/main_skills_b20.test.ts (66 passed: 35 + 31)"
+  ],
+  "acceptance_check": {
+    "assertPreparedTiming 接受 prepareTurns 缺省 1": "通过",
+    "释放回合 = r + prepareTurns": "通过",
+    "8 回合上限 floor(8/(prepareTurns+1))": "通过",
+    "PREPARED_SKILLS 传 s.prepareTurns ?? 1": "通过",
+    "樊渊泅囚行为不变": "通过",
+    "未改引擎数值": "通过",
+    "vitest prepared_timing + b20 全绿": "通过",
+    "未 git commit": "通过"
+  },
+  "blockers": [],
+  "next_handoff": "prepared_timing 已按 prepareTurns 泛化；npx vitest run tests/prepared_timing.test.ts tests/main_skills_b20.test.ts → 66 passed。查 ②③ 时不必再当引擎回归。",
+  "updated_at": "2026-09-16"
+}

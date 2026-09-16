@@ -1,0 +1,26 @@
+{
+  "task_id": "task-4-charges",
+  "status": "done",
+  "summary": "charges 维 / maxStacks / after_first_active / 被动 roundStartRepeat 已落地；b20 13/13 PASS；未 git commit",
+  "files_changed": [
+    "src/engine/action.ts",
+    "tests/main_skills_b20.test.ts"
+  ],
+  "tests_run": [
+    "npx vitest run tests/main_skills_b20.test.ts (RED 5 failed → GREEN 13/13)",
+    "npx vitest run tests/main_skills_b15.test.ts tests/main_skills_b17.test.ts tests/attack_scale.test.ts tests/conflict.test.ts tests/troop_filter.test.ts (44 passed)",
+    "npx tsc --noEmit (pre-existing errors in tests/attack_scale.test.ts, not this task)"
+  ],
+  "acceptance_check": {
+    "无 charges 的 basic +0.8 与 charges:1 的 basic +1.6 是两条": "通过",
+    "maxStacks 叠到 3 后 rate 停在 0.3": "通过",
+    "进入准备不叠层；准备完成释放才叠 2 友军": "通过",
+    "battle_start output 只开战一次；roundStartRepeat 行动阶段再跑": "通过",
+    "physical charges 不被策略伤害消耗": "通过",
+    "未实现 Task 5 六张战法": "通过",
+    "未 git commit": "通过",
+    "tsc --noEmit": "跳过及原因：本任务文件干净；既有 tests/attack_scale.test.ts Status 收窄错误"
+  },
+  "blockers": [],
+  "updated_at": "2026-09-16"
+}

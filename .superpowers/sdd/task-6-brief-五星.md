@@ -17,7 +17,7 @@
 
 **长坂之吼** ②：真实 `changban_zhihou` 走 2 回合准备时序（可复用 Task 2 的 round 递增）。③：步兵载体打骑兵目标，伤害事件 `modifiers.reduce` 无 `troop_counter`。
 
-**烽火覆周** ②：把 `chain.chance` 改成 `1`、`decay` 改成 `0.5`（或 0.2 但 chance=1 会打 60/40/20 三段），`triggerRate` 改成 `1`；断言 `strategy` damage > 1 段。③：谋略 80 vs 200 的 `breakdown` 相同（无 growthRate）。
+**烽火覆周** ②：把 `chain.chance` 改成 `1`、`decay` 改成 `0.5`（或 0.2 但 chance=1 会打 60/40/20 三段），`triggerRate` 改成 `1`；断言 `strategy` damage > 1 段。③：谋略 80 vs 200 的 **伤害率**相同（无 growthRate）。比较 `breakdown.main`，不要比整份 breakdown（谋略基础仍随施法者谋略变）。
 
 **虎步关右** ②：强制发动后自身有 `charges:1`、`rate:0.7`、`damageType:'physical'`；打出一次物理（普攻或物理战法）后 charges 消失。③：策略伤害不消耗、也不吃这 70%（`modifiers.caused` 无 0.7）。
 
@@ -28,7 +28,7 @@
 - [ ] **Step 2: 跑测试确认失败或补实现缺口**
 
 Run: `npx vitest run tests/main_skills_b20.test.ts`
-Expected: 装配已过；机制测若失败，只允许修引擎缺口（例如 `positional_physical_damage` 在主动 `executeSkillOutputs` 未走），禁止改 spec 数值。
+Expected: 装配已过；机制测若失败，只允许修引擎缺口，禁止改 spec 数值。
 
 - [ ] **Step 3: 修到全绿**
 
@@ -40,28 +40,6 @@ Expected: 每战法 ≥3 条全绿。
 Run: `npx tsc --noEmit && npx vitest run`
 Expected: 全绿。golden 无误伤则不要删 `tests/__snapshots__/golden.json`。
 
+若全量 suite 只因并行会话的 `tests/attack_scale.test.ts` 失败，标 DONE_WITH_CONCERNS；**b20 必须全绿**。
+
 跳过 Commit。
-
----
-
-## Spec 覆盖自检
-
-| Spec 条目 | 任务 |
-|-----------|------|
-| 2 回合准备 / `prepareLeft` | Task 1–2 |
-| 发动率区间 | Task 1–2、Task 5 烽火覆周 |
-| `ignoresTroopCounter` | Task 1、3、5、6 长坂之吼 |
-| `chain` 60→40→20 士气 | Task 1、3、5、6 |
-| `chance_group` | Task 1、3、4、5 火兽 |
-| `after_first_active` 重选 / 准备不算 | Task 1、4、6 文德椒房 |
-| 混乱 `duration:[1,2]` 与 `positions` 大营 | Task 1、3、5、6 落首箭 |
-| charges 维共存 + maxStacks | Task 1、4 |
-| `growthRate` 缺省不缩放 | Task 3、5、6 |
-| 六战法字面量 + 三下架 + 三不上架 | Task 5 |
-| 每战法 ≥3 测 | Task 5 装配 + Task 6 |
-| 不用后半拼接 / 不挂燃烧 / 不编造成长 | Global + Task 5–6 |
-| 不 commit | 每任务跳过 |
-
-## 占位符扫描
-
-无 TBD / 「类似 Task N」；测试与战法字面量已写出。

@@ -1,83 +1,334 @@
-### Task 2: 战报页铬架（去顶栏、页签进底栏）
+### Task 2: attackScaled 结算 + taken 受击消耗 charges
 
 **Files:**
-- Modify: `web/main.ts` 的 `renderBattleView`
-- Modify: `web/styles.css`（`.report-nav` → 底栏）
-- Modify: `web/mobile.css`（横屏底栏高度）
-- Test: `web/smoke.test.ts` 中「选将 → 开始模拟 → 默认简略战报」
+- Modify: `src/engine/action.ts`（`executeSkillOutputs` 的 `inflict_status` 缩放分支约 2872 行；`consumeAttackCharges` 约 2388 行；`applyDamage` 约 3718 行；`inflictStatus` sameSource 约 1578 行）
+- Create: `tests/attack_scale.test.ts`
 
 **Interfaces:**
-- Consumes: `createBattleSummary` / `createStatsView` / `createBattleView`
-- Produces: 战报根节点结构：
+- Consumes: `CreateStatus.attackScaled`；`damage_boost.charges` + `direction:'taken'`
+- Produces: 无 `growthRate` 的 `attackScaled` 用原 rate；taken charges 在策略受击实际扣兵后消耗、当次仍计入；`consumeAttackCharges` **只扣** `direction === 'caused'`
 
-```html
-<div class="report-view">
-  <div class="report-body"><!-- 简略 | 统计 | 详情 --></div>
-  <footer class="report-dock">
-    <button class="btn ghost btn-back">← 返回配将</button>
-    <nav class="report-tabs">
-      <button data-mode="summary">简略</button>
-      <button data-mode="stats">统计</button>
-      <button data-mode="detail">详情</button>
-    </nav>
-    <button class="btn ghost">复用队伍</button>
-    <button class="btn primary">再打一场</button>
-  </footer>
-</div>
-```
+- [ ] **Step 1: 写失败测试**
 
-不要再渲染 `.report-nav` 在顶部。`header.app`（配将顶栏：战报/战法/伤害测试）在战报页可选择隐藏标题行，但顶栏三个 `nav-link` 仍要能用——若横屏高度紧，用 CSS 把 `header.app` 在 `.report-view` 出现时 `display:none`，历史入口改走底栏不需要；**保留 `header.app` 可见会再吃 34px**。套2 原型战报页是整页无品牌顶栏。落地时：`#app.report-open header.app { display: none }`，在 `renderBattleView` 给 `#app` 加 class `report-open`，返回配将时去掉。
-
-- [ ] **Step 1: 改失败断言（导航从 `.report-nav` 改到底栏）**
-
-把 `web/smoke.test.ts` 该测里：
+`tests/attack_scale.test.ts` 完整拷贝 `tests/troop_filter.test.ts` 的 `dummyUnit` / `makeCtx`（含 `hasActedThisRound`）。再写：
 
 ```ts
-expect(document.querySelector('.report-nav')!.textContent).toContain('返回配将');
-const navBtn = (label: string) =>
-  Array.from(document.querySelectorAll('.report-nav .btn')).find((b) => b.textContent!.includes(label)) as HTMLElement;
+import { describe, it, expect } from 'vitest';
+import {
+  applyDamage,
+  inflictStatus,
+  triggerCommandSkills,
+  tickRoundStartStatuses,
+  type CombatContext,
+} from '../src/engine/action';
+import type { General, Position, Skill, UnitState } from '../src/engine/types';
+import { SKILL_REGISTRY } from '../src/data/skills';
+import { Rng } from '../src/engine/rng';
+
+// … dummyUnit / makeCtx 同 troop_filter.test.ts …
+
+describe('attackScaled', () => {
+  it('无 growthRate 用原 rate（万箭 −0.5）', () => {
+    const caster = dummyUnit('caster', '前锋', { attack: 200 });
+    const foe = dummyUnit('foe', '前锋', {}, 'enemy');
+    const ctx = makeCtx([caster], [foe]);
+    inflictStatus(
+      ctx,
+      foe,
+      {
+        type: 'damage_boost',
+        rate: -0.5,
+        duration: 2,
+        direction: 'caused',
+        damageType: 'strategy',
+        attackScaled: true,
+      },
+      'active',
+      'wanjian_qifa',
+      caster.general.id
+    );
+    const st = foe.statuses.find((s) => s.type === 'damage_boost');
+    expect(st?.type).toBe('damage_boost');
+    if (st?.type === 'damage_boost') expect(st.rate).toBe(-0.5);
+  });
+
+  it('有 growthRate 才按生效攻击缩放', () => {
+    const caster = dummyUnit('caster', '前锋', { attack: 180 });
+    const foe = dummyUnit('foe', '前锋', {}, 'enemy');
+    const ctx = makeCtx([caster], [foe]);
+    inflictStatus(
+      ctx,
+      foe,
+      {
+        type: 'damage_boost',
+        rate: -0.5,
+        duration: 2,
+        direction: 'caused',
+        attackScaled: true,
+        growthRate: 0.15,
+      },
+      'active',
+      'test_as',
+      caster.general.id
+    );
+    // 本任务：executeSkillOutputs 才缩放；直接 inflictStatus 仍写原 rate（与 speedScaled 直调路径一致）
+    const st = foe.statuses.find((s) => s.type === 'damage_boost');
+    expect(st?.type).toBe('damage_boost');
+    if (st?.type === 'damage_boost') expect(st.rate).toBe(-0.5);
+  });
+});
+
+describe('taken charges 受击消耗', () => {
+  it('策略受击实际扣兵后 charges 到 0 移除；当次仍计入', () => {
+    const atk = dummyUnit('atk', '前锋', { strategy: 200 });
+    const def = dummyUnit('def', '前锋', { troops: 10000 }, 'enemy');
+    def.troops = 10000;
+    const ctx = makeCtx([atk], [def]);
+    inflictStatus(
+      ctx,
+      def,
+      {
+        type: 'damage_boost',
+        rate: 0.2,
+        duration: 999,
+        direction: 'taken',
+        damageType: 'strategy',
+        charges: 1,
+      },
+      'pursuit',
+      'wenfa',
+      atk.general.id
+    );
+    expect(def.statuses.some((s) => s.type === 'damage_boost' && s.charges === 1)).toBe(true);
+    applyDamage(ctx, def, 100, atk, 'strategy', 'skill');
+    expect(def.statuses.filter((s) => s.type === 'damage_boost' && s.charges != null)).toHaveLength(0);
+    expect(def.troops).toBe(9900);
+  });
+
+  it('物理受击不扣策略 taken charges', () => {
+    const atk = dummyUnit('atk', '前锋');
+    const def = dummyUnit('def', '前锋', {}, 'enemy');
+    const ctx = makeCtx([atk], [def]);
+    inflictStatus(
+      ctx,
+      def,
+      {
+        type: 'damage_boost',
+        rate: 0.2,
+        duration: 999,
+        direction: 'taken',
+        damageType: 'strategy',
+        charges: 1,
+      },
+      'pursuit',
+      'wenfa',
+      atk.general.id
+    );
+    applyDamage(ctx, def, 100, atk, 'physical', 'basic');
+    const st = def.statuses.find((s) => s.type === 'damage_boost');
+    expect(st?.type).toBe('damage_boost');
+    if (st?.type === 'damage_boost') expect(st.charges).toBe(1);
+  });
+
+  it('目标自己打出物理不消耗身上的 taken charges', () => {
+    const unit = dummyUnit('u', '前锋');
+    const foe = dummyUnit('foe', '前锋', {}, 'enemy');
+    const ctx = makeCtx([unit], [foe]);
+    inflictStatus(
+      ctx,
+      unit,
+      {
+        type: 'damage_boost',
+        rate: 0.2,
+        duration: 999,
+        direction: 'taken',
+        damageType: 'strategy',
+        charges: 1,
+      },
+      'pursuit',
+      'wenfa',
+      unit.general.id
+    );
+    applyDamage(ctx, foe, 100, unit, 'physical', 'basic');
+    const st = unit.statuses.find((s) => s.type === 'damage_boost');
+    expect(st?.type).toBe('damage_boost');
+    if (st?.type === 'damage_boost') expect(st.charges).toBe(1);
+  });
+});
 ```
 
-改成：
+第三测依赖 `consumeAttackCharges` 不再误扣 taken：该测通过 `applyDamage` 源为单位自身、目标为敌军。`consumeAttackCharges` 在 `applyDamage` **之外**（普攻/战法输出后）调用，本测不经过它；另加一测用导出函数。`consumeAttackCharges` 未导出——不要导出。第三测改为：单位身上同时有 caused charges 与 taken charges 时，只通过 `applyDamage` 打物理给敌人，taken 仍在；caused 仍在（因为 `applyDamage` 不扣 caused）。再加：
 
 ```ts
-const dock = document.querySelector('.report-dock') as HTMLElement;
-expect(dock, '战报底栏应出现').toBeTruthy();
-expect(dock.textContent).toContain('返回配将');
-expect(dock.textContent).toContain('简略');
-expect(dock.textContent).toContain('统计');
-expect(dock.textContent).toContain('详情');
-expect(document.querySelector('.report-nav')).toBeFalsy();
-const navBtn = (label: string) =>
-  Array.from(dock.querySelectorAll('button')).find((b) => b.textContent!.includes(label)) as HTMLElement;
+  it('applyDamage 不扣攻击者 caused charges', () => {
+    const atk = dummyUnit('atk', '前锋');
+    const def = dummyUnit('def', '前锋', {}, 'enemy');
+    const ctx = makeCtx([atk], [def]);
+    inflictStatus(
+      ctx,
+      atk,
+      { type: 'damage_boost', rate: 0.28, duration: 999, direction: 'caused', charges: 2 },
+      'active',
+      'quanjun_tuji',
+      atk.general.id
+    );
+    applyDamage(ctx, def, 100, atk, 'physical', 'basic');
+    const st = atk.statuses.find((s) => s.type === 'damage_boost');
+    expect(st?.type).toBe('damage_boost');
+    if (st?.type === 'damage_boost') expect(st.charges).toBe(2);
+  });
 ```
 
-- [ ] **Step 2: 跑该测，确认 FAIL**
+`executeSkillOutputs` 缩放测：构造最小主动战法挂进 `ctx.skills`，用已导出的 `triggerActiveSkill`（若测试文件现有 import 没有则加上）：
 
-Run: `npx vitest run web/smoke.test.ts -t "选将 → 开始模拟"`
+```ts
+import { triggerActiveSkill } from '../src/engine/action';
 
-Expected: FAIL（找不到 `.report-dock`）。
+describe('attackScaled 经 executeSkillOutputs', () => {
+  it('无 growthRate 保持 −0.5；有 growthRate 按攻击缩放', () => {
+    const skill: Skill = {
+      id: 'test_as',
+      name: '测缩放',
+      type: 'active',
+      prepare: false,
+      range: 5,
+      triggerRate: 1,
+      targetMode: 'single',
+      tags: ['damage_boost'],
+      output: [
+        {
+          kind: 'inflict_status',
+          status: {
+            type: 'damage_boost',
+            rate: -0.5,
+            duration: 2,
+            direction: 'caused',
+            damageType: 'strategy',
+            attackScaled: true,
+          },
+        },
+      ],
+    };
+    const caster = dummyUnit('caster', '前锋', { attack: 80, activeSkillIds: ['test_as'], morale: 100 });
+    const foe = dummyUnit('foe', '前锋', {}, 'enemy');
+    const ctx = makeCtx([caster], [foe]);
+    ctx.skills.set('test_as', skill);
+    triggerActiveSkill(ctx, caster, skill, [foe], [caster], [foe]);
+    const st = foe.statuses.find((s) => s.type === 'damage_boost');
+    expect(st?.type).toBe('damage_boost');
+    if (st?.type === 'damage_boost') expect(st.rate).toBe(-0.5);
 
-- [ ] **Step 3: 改 `renderBattleView` 与 CSS**
+    const skill2: Skill = {
+      ...skill,
+      id: 'test_as2',
+      output: [
+        {
+          kind: 'inflict_status',
+          status: {
+            type: 'damage_boost',
+            rate: 0.08,
+            duration: 2,
+            direction: 'caused',
+            attackScaled: true,
+            growthRate: 0.026,
+          },
+        },
+      ],
+    };
+    const caster2 = dummyUnit('c2', '前锋', { attack: 180, activeSkillIds: ['test_as2'], morale: 100 });
+    const foe2 = dummyUnit('f2', '前锋', {}, 'enemy');
+    const ctx2 = makeCtx([caster2], [foe2]);
+    ctx2.skills.set('test_as2', skill2);
+    triggerActiveSkill(ctx2, caster2, skill2, [foe2], [caster2], [foe2]);
+    const st2 = foe2.statuses.find((s) => s.type === 'damage_boost');
+    expect(st2?.type).toBe('damage_boost');
+    if (st2?.type === 'damage_boost') {
+      // scaledValue(8, 0.026, 180) = 8 + 0.026*100 = 10.6 → roundRate 10 → /100 = 0.10
+      expect(st2.rate).toBeCloseTo(0.1, 5);
+    }
+  });
+});
+```
 
-`web/main.ts`：按上面 HTML 重排；`startBattle` 时 `app.classList.add('report-open')`；返回配将 / 复用队伍时 `remove`。
+`triggerActiveSkill` 若未导出：不要改成导出。改为对友军 `inflict_status` 走 `executeSkillOutputs`——检查 `action.ts`：`triggerActiveSkill` **已 export**（约 2944 行）。用它。
 
-「再打一场」= 清战报 DOM 后立刻再调现有 `startBattle()`（新种子，阵容保留）。
+- [ ] **Step 2: 跑测确认失败**
 
-- [ ] **Step 4: 再跑该测**
+Run: `npx vitest run tests/attack_scale.test.ts`
 
-Run: `npx vitest run web/smoke.test.ts -t "选将 → 开始模拟"`
+Expected: FAIL（taken 策略受击后 charges 仍为 1，或 attackScaled 有 growthRate 未缩放）。
 
-Expected: PASS（统计断言仍是旧表格，Task 3 再改）。
+- [ ] **Step 3: 实现**
 
-## Global Constraints
+**A. `executeSkillOutputs` `inflict_status`：** 在 `speedScaled` 分支之后、属性 buff 分支之前插入：
 
-- 视觉真理：`design-demos/02-workbench.html`；spec：`docs/superpowers/specs/2026-09-09-战斗模拟器前端ui-design.md` 的「验收后锁定」。
-- 不要实现套1 沙盘，不要读它当布局参考。
-- 不要改 `src/engine/**`；禁止 `Math.random` 进引擎。
-- 伤害实验室布局不重做；仅允许 CSS token 继承。
-- 颜色一律 `var(--color-*)`，禁止组件里裸 hex（inline SVG 除外）。
-- 战报页无「战斗模拟器」顶栏；简略/统计/详情在底栏中段。
-- JSDoc 中文。
-- **不要 git commit**；本工作区不是 git 仓库。
-- 不要改 `design-demos/02-workbench.html`。
+```ts
+          } else if (
+            (create.type === 'damage_boost' || create.type === 'damage_reduce') &&
+            create.attackScaled
+          ) {
+            /** 增减伤受攻击影响（万箭 −50%、恃强 −30%）；growthRate 缺省时不缩放、用基值 */
+            if (create.growthRate !== undefined) {
+              const sign = Math.sign(create.rate) || 1;
+              const scaled =
+                (roundRate(scaledValue(Math.abs(create.rate) * 100, create.growthRate, effectiveStat(caster, 'attack'))) /
+                  100) *
+                sign;
+              inflictStatus(ctx, t, { ...create, rate: scaled }, skill.type, skill.id, caster.general.id);
+            } else {
+              inflictStatus(ctx, t, create, skill.type, skill.id, caster.general.id);
+            }
+```
+
+对齐 `speedScaled`：百分比按绝对值缩放再恢复符号。
+
+**B. `consumeAttackCharges`：** 循环内加：
+
+```ts
+    if (s.direction === 'taken') continue;
+```
+
+只扣 caused（青丘 / 全军突击）。缺省 direction 在 Status 上是施加时写入的 `'taken'` 或 `'caused'`；`inflictStatus` 已写 `direction = create.direction ?? 'taken'`。
+
+**C. `applyDamage`：** 在 `target.troops -= actual` 与伤兵拆分之后、`triggerIgniteOnHurt` 之前（`actual > 0` 时）调用新函数：
+
+```ts
+/**
+ * 受击次数型 taken charges（文伐：下一次受到策略攻击）：
+ * 本次伤害已计入该层（damageBoosts 在 applyDamage 之前算完），扣兵后再 −1，到 0 移除。
+ * 物理受击不匹配 strategy taken，不消耗。
+ */
+function consumeTakenCharges(target: UnitState, hit: DamageHitContext): void {
+  for (const s of [...target.statuses]) {
+    if (s.type !== 'damage_boost' || s.direction !== 'taken' || s.charges == null) continue;
+    if (!statusMatchesHit(s, hit)) continue;
+    s.charges -= 1;
+    if (s.charges <= 0) target.statuses = target.statuses.filter((x) => x !== s);
+  }
+}
+```
+
+`applyDamage` 内：
+
+```ts
+  if (actual > 0) {
+    const hit: DamageHitContext = { damageSource, damageType };
+    consumeTakenCharges(target, hit);
+  }
+```
+
+`damageType` / `damageSource` 为 `applyDamage` 已有参数。规避导致提前 `return` 时不走这里。
+
+- [ ] **Step 4: 跑测确认通过**
+
+Run: `npx vitest run tests/attack_scale.test.ts`
+
+Expected: PASS。
+
+Run: `npx tsc --noEmit`
+
+Expected: PASS。
+
+跳过 Commit。
+
+---

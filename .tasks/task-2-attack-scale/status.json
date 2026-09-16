@@ -1,0 +1,17 @@
+{
+  "task_id": "task-2-attack-scale",
+  "status": "done",
+  "summary": "attackScaled 经 executeSkillOutputs 按生效攻击缩放（无 growthRate 用基值）；taken charges 在策略受击实际扣兵后消耗，consumeAttackCharges 只扣 caused。7 测 PASS，tsc PASS",
+  "files_changed": [
+    "src/engine/action.ts",
+    "tests/attack_scale.test.ts",
+    ".superpowers/sdd/task-2-report.md"
+  ],
+  "tests_run": [
+    "npx vitest run tests/attack_scale.test.ts (RED: 2 failed | 5 passed)",
+    "npx vitest run tests/attack_scale.test.ts (GREEN: 7 passed)",
+    "npx tsc --noEmit (PASS)"
+  ],
+  "blockers": [],
+  "updated_at": "2026-09-16"
+}

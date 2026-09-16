@@ -1,0 +1,25 @@
+{
+  "task_id": "task-3-chance-group",
+  "status": "done",
+  "summary": "chance_group / chain / ignoresTroopCounter / positions 混乱 / duration 区间已落地；b20 8/8 与 tsc 通过",
+  "files_changed": [
+    "src/engine/action.ts",
+    "tests/main_skills_b20.test.ts"
+  ],
+  "tests_run": [
+    "npx vitest run tests/main_skills_b20.test.ts",
+    "npx tsc --noEmit"
+  ],
+  "acceptance_check": {
+    "chance_group 成功执行内层、失败只发 skill_trigger success:false": "通过",
+    "chain chance 1 + decay 0.5 多于 1 段": "通过",
+    "strategyScaled 无 growthRate 伤害率基值 95": "通过",
+    "ignoresTroopCounter 无 troop_counter": "通过",
+    "positions 大营 + duration [1,2]": "通过",
+    "tsc --noEmit": "通过",
+    "未实现 Task 4": "通过",
+    "未 git commit": "通过"
+  },
+  "blockers": [],
+  "updated_at": "2026-09-16"
+}

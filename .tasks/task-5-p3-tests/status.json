@@ -1,0 +1,33 @@
+{
+  "task_id": "task-5-p3-tests",
+  "status": "blocked",
+  "summary": "p3 12 测 + classified/清点/gen_skill_data 已完成；tsc 与 golden 绿；全量 7 fail 来自五星 b20 未挂槽与长坂之吼 2 回合准备，非本任务文件",
+  "files_changed": [
+    "tests/universal_b_plus_p3.test.ts",
+    "scripts/_classified.json",
+    "docs/待补充机制清点.md",
+    "web/data/skill_grades.json",
+    "web/data/skill_desc.json",
+    ".superpowers/sdd/task-5-report.md"
+  ],
+  "tests_run": [
+    "npx vitest run tests/universal_b_plus_p3.test.ts tests/attack_scale.test.ts (24 passed)",
+    "npx tsc --noEmit (PASS)",
+    "npx vitest run (7 failed / 994 passed; golden 2/2 PASS)"
+  ],
+  "acceptance_check": {
+    "p3 每战法 3 测": "通过",
+    "p3 + attack_scale PASS": "通过",
+    "classified 四战法 implemented + 新增恃强淬锋": "通过",
+    "清点 60→57 且指定行更新": "通过",
+    "gen_skill_data 含四 id": "通过",
+    "npx tsc --noEmit": "通过",
+    "全量 vitest 0 failed": "未通过：7 fail 均属五星 b20/prepared_timing，非本任务 Files",
+    "golden 未删未重生": "通过",
+    "未 git commit": "通过"
+  },
+  "blockers": [
+    "全量 7 fail：main_skills_b20 六将未挂主战法；prepared_timing 长坂之吼 prepareTurns:2 不满足 1 回合准备时序。需五星计划处理，本任务卡未授权改这些文件。"
+  ],
+  "updated_at": "2026-09-16"
+}
