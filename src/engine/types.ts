@@ -372,6 +372,8 @@ export type CreateStatus =
   /** 反击资格（反击之策）：携带者被普攻实际扣兵后，对来源打 rate% 攻击。不消耗。rate 与 physical_damage 同口径（100=100%） */
   | { type: 'counter'; duration: number; rate: number }
   | { type: 'cover'; duration: number }
+  /** 先手（诸葛锦囊）：授予后 N 回合内该单位优先行动 */
+  | { type: 'priority'; duration: number }
   /** 持续型急救（皇裔流离/金匮要略）：受击时按几率触发恢复。
    *  healRate 为谋略 80 时的恢复率（受谋略缩放）；触发率与总生效次数走战法级计数器（grant_first_aid）；
    *  duration 缺省整场战斗（皇裔流离），金匮要略 duration 3（前 3 回合）；
@@ -411,6 +413,12 @@ interface BaseSkill {
    * 读部署名单（不论 alive）；战斗中不再复查。
    */
   teamTroopFilter?: TroopType[];
+  /**
+   * 重复施加奖励（诸葛锦囊「若发动时目标已有诸葛锦囊效果，则额外恢复目标一定兵力」）：
+   * 战法每次发动时逐目标判定，目标身上已带**本战法**施加的状态则追加结算这段 output；
+   * 该段内部结算不再触发 repeatBonus（执行路径带 skipRepeat 保护，防自递归）。
+   */
+  repeatBonus?: { output: SkillOutput[] };
 }
 
 /** 普通主动战法 */
@@ -895,7 +903,9 @@ export type StatusType =
   | 'rest'
   | 'morale_boost'
   | 'ignore_def'
-  | 'range_buff';
+  | 'range_buff'
+  /** 先手（诸葛锦囊）：行动排序时该单位优先出手 */
+  | 'priority';
 
 /** DoT（妖术/燃烧/恐慌）挂上时冻结的每次伤害（滞后触发）：
  *  伤害在「挂上时」结算并冻结——按当时的增伤合计（造成侧 + 受到侧）、施法者兵力、
@@ -951,6 +961,7 @@ export type Status =
   | { type: 'taunt'; remaining: number; targetId: string; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'counter'; remaining: number; rate: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   | { type: 'cover'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'priority'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   /**
    * 持续型急救（皇裔流离/金匮要略）：受击时按几率触发恢复。
    *  - remaining：持续回合计数——缺省 Infinity（整场战斗常驻，皇裔流离）；金匮要略 remaining=3（前 3 回合，回合末递减移除）

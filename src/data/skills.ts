@@ -1163,15 +1163,22 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     name: '诸葛锦囊',
     type: 'active',
     prepare: false,
-    range: 4,
-    triggerRate: 0.35,
-    targetMode: 'all',
+    range: 2,
+    triggerRate: 0.4,
+    targetMode: 'group',
     targetSide: 'ally',
-    tags: ['damage_reduce', 'damage_boost'],
+    groupCount: 3,
+    tags: ['damage_reduce', 'damage_boost', 'heal'],
     output: [
-      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.35, duration: 2, strategyScaled: true, growthRate: 0.25 } },
+      // ① 受策略攻击伤害降低 35%（受谋略，成长率 0.25）——版本 A 口径：仅策略轨
+      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.35, duration: 2, strategyScaled: true, growthRate: 0.25, damageType: 'strategy' } },
+      // ② 造成攻击/策略伤害提高 14%（实测不随谋略变 → growthRate 0）
       { kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.14, duration: 2, direction: 'caused', strategyScaled: true, growthRate: 0 } },
+      // ③ 自身获得先手 2 回合（priority 状态；主动战法授予型，区别于先驱突击的指挥 priorityRounds）
+      { kind: 'inflict_status', target: 'self', status: { type: 'priority', duration: 2 } },
     ],
+    // ④ 发动时目标已有诸葛锦囊效果 → 额外恢复该目标兵力（恢复率 150%，固定）
+    repeatBonus: { output: [{ kind: 'heal', rate: 150, strategyScaled: false, growthRate: 0 }] },
   },
   /** 不动如山（郝昭主战法·回合开始被动）：战斗中，每回合行动阶段移除自身所有有害效果，并使自身防御提高 100、谋略提高 25 */
   budong_rushan: {

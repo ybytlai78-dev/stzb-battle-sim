@@ -2683,6 +2683,7 @@ function statusName(type: StatusType): string {
     case 'taunt': return '挑衅';
     case 'counter': return '反击';
     case 'cover': return '援護';
+    case 'priority': return '先手';
     case 'first_aid': return '持续型急救';
     case 'rest': return '休整';
     case 'morale_boost': return '士气提高';
@@ -2870,8 +2871,19 @@ function executeSkillOutputs(
   caster: UnitState,
   skill: Skill,
   targets: UnitState[],
-  outputs?: SkillOutput[]
+  outputs?: SkillOutput[],
+  skipRepeat = false
 ): void {
+  // 重复施加奖励（诸葛锦囊「若发动时目标已有诸葛锦囊效果，则额外恢复目标一定兵力」）：
+  // 发动时逐目标判定——目标身上已带本战法施加的状态则追加结算 repeatBonus.output。
+  // skipRepeat 防自递归；在入口处按「每次发动」结算一次，不随 output 段数重复。
+  if (!skipRepeat && skill.repeatBonus && skill.repeatBonus.output.length > 0) {
+    for (const t of targets) {
+      if (!t.alive) continue;
+      if (!t.statuses.some((st) => st.sourceSkillId === skill.id)) continue;
+      executeSkillOutputs(ctx, caster, skill, [t], skill.repeatBonus.output, true);
+    }
+  }
   const list = outputs ?? skill.output;
   /** 上两段伤害输出的实际目标，供 onlyIfOverlapPrevious（怀德畏威重合混乱）取交集 */
   let prevDamageTargetIds: string[] = [];
