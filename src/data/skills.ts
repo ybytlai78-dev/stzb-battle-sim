@@ -990,6 +990,100 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+  /**
+   * 九伐中原（XP姜维主战法·被动）：自身每次发动主动战法后，对敌军群体发动一次攻击（伤害率 90%）
+   * 和一次策略攻击（伤害率 90%，受谋略属性影响），本场战斗共计可发动九次；
+   * 每回合开始时，自身造成所有伤害提升 5%（受谋略属性影响），可叠加，持续至战斗结束。
+   * 官方：被动 A，有效距离 5，目标「敌军群体」，可用兵种弓/步/骑（scripts/skill_extra.json id 200290）。
+   * 挂槽依据 dateyuan/hero_growth_verified.json「XP姜维（蜀·骑，hero_id 100806）→ 九伐中原」。
+   * 「受谋略属性影响」的策略伤害 90% 与每回合增伤 5% 成长率未确认 → 留空
+   * （strategyScaled 标记在、不给 growthRate → 引擎按基值不缩放）。
+   * 引擎配套：新增被动 `afterActive` 钩子（每次主动战法成功后触发 + maxTriggers 整场次数上限，
+   * 计数走 ctx.afterActiveCounters），与二类指挥 after_first_active（仅本回合首次）区分。
+   * ⚠️ 「敌军群体」官方未写目标数 → 按惯例取 2 目标（groupCount: 2）。
+   */
+  jiufa_zhongyuan: {
+    id: 'jiufa_zhongyuan',
+    name: '九伐中原',
+    type: 'passive',
+    range: 5,
+    triggerRate: 1,
+    timing: 'round_start',
+    targetMode: 'self',
+    tags: ['damage', 'damage_boost'],
+    afterActive: {
+      maxTriggers: 9,
+      output: [
+        { kind: 'physical_damage', rate: 90, targetMode: 'group', groupCount: 2 },
+        { kind: 'strategy_damage', rate: 90, strategyScaled: true, targetMode: 'group', groupCount: 2 },
+      ],
+    },
+    output: [
+      // 每回合开始：自身造成所有伤害 +5%（受谋略，成长率未确认 → 留空），可叠加、持续至战斗结束
+      {
+        kind: 'inflict_status',
+        target: 'self',
+        status: {
+          type: 'damage_boost',
+          rate: 0.05,
+          duration: 999,
+          direction: 'caused',
+          stacks: 1,
+          strategyScaled: true,
+        },
+      },
+    ],
+  },
+  /**
+   * 巧音唤蝶（大乔主战法·主动）：对敌军群体发动一次策略攻击（伤害率 176%，受谋略属性影响），
+   * 并使其陷入燃烧状态——当目标兵力高于初始兵力 50% 时受到一次策略伤害（伤害率 86%，受谋略属性影响），
+   * 持续 1 回合；同时使我军群体恢复一定兵力（恢复率 161%，受谋略属性影响），并使其进入休整状态——
+   * 当目标兵力低于初始兵力 50% 时恢复一定兵力（恢复率 82%，受谋略属性影响），持续 1 回合。
+   * 官方：主动 S，有效距离 5，发动率 35%，目标「敌军群体（有效距离内 2 个目标）」，可用兵种步
+   * （scripts/skill_extra.json）。「受谋略属性影响」各项成长率未确认 → 留空
+   * （strategyScaled 标记在、不给 growthRate → 引擎按基值不缩放）。
+   * 引擎配套：兵力阈值条件 troopRatio —— 段级（`heal.troopRatio`）与状态级（`burning` / `rest` 的 troopRatio，
+   * 在 tickDots / tickRests 跳结算时按携带者当前兵力判定）。
+   */
+  qiaoyin_huandie: {
+    id: 'qiaoyin_huandie',
+    name: '巧音唤蝶',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.35,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage', 'burning', 'heal', 'rest'],
+    output: [
+      // ① 敌军群体策略攻击 176%（受谋略，成长率未确认 → 留空）
+      { kind: 'strategy_damage', rate: 176, strategyScaled: true },
+      // ② 燃烧状态（1 回合）：兵力高于初始 50% 时才跳伤 86%（受谋略，成长率留空）
+      {
+        kind: 'inflict_status',
+        status: { type: 'burning', duration: 1, rate: 86, growthRate: 0, troopRatio: { above: 50 } },
+      },
+      // ③ 我军群体恢复 161%（受谋略，成长率留空）
+      {
+        kind: 'heal',
+        rate: 161,
+        strategyScaled: true,
+        growthRate: 0,
+        targetSide: 'ally',
+        targetMode: 'group',
+        groupCount: 2,
+      },
+      // ④ 休整状态（1 回合）：兵力低于初始 50% 时才跳恢复 82%（受谋略，成长率留空）
+      {
+        kind: 'inflict_status',
+        targetSide: 'ally',
+        targetMode: 'group',
+        groupCount: 2,
+        status: { type: 'rest', duration: 1, rate: 82, growthRate: 0, strategyScaled: true, troopRatio: { below: 50 } },
+      },
+    ],
+  },
   /** 魏武之泽（曹丕主战法）：主动战法，40%，我军群体免疫怯战，普通攻击与追击伤害提高 15%（受谋略影响），每回合可两次普攻，持续 2 回合。免疫怯战暂未建模 */
   weiwu_zhi_ze: {
     id: 'weiwu_zhi_ze',
@@ -3354,6 +3448,75 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         targetMode: 'random_single',
       },
     ],
+  },
+
+  // ─── 批量19：谋谟帷幄（贾诩）／持玺兴兵（卫子夫）───
+
+  /**
+   * 谋谟帷幄（贾诩主战法·二类指挥 S）：我军全体（含施法者自己）每次试图发动主动战法前，
+   * 由施法者按 60% 判定，命中则对敌军单体发动一次策略攻击（171%，受谋略）。
+   * 同时当**本次发动者**兵力低于其初始兵力 60% 时，其每回合首次试图发动主动时会额外发动一次
+   * 策略攻击（76%，受谋略）——追加段独立判定，沿用同一 60%。
+   * 「每回合首次」按「回合 × 战法 × 施法者 × 发动者」去重（oncePerRoundPerTarget）。
+   * 官方未写「受谋略属性影响」的具体成长率 → 留空（strategyScaled 标记在、growthRate 取 0，按基值不缩放）。
+   * 引擎配套机制：roundTrigger 'ally_before_active' + extraByTroopRatio。
+   */
+  moumou_weiwo: {
+    id: 'moumou_weiwo',
+    name: '谋谟帷幄',
+    type: 'command',
+    phase: 'round',
+    roundTrigger: 'ally_before_active',
+    oncePerRoundPerTarget: true,
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['damage'],
+    extraByTroopRatio: {
+      cond: { below: 60 },
+      output: [
+        { kind: 'strategy_damage', rate: 76, strategyScaled: true, growthRate: 0, targetMode: 'random_single', chance: 0.6 },
+      ],
+    },
+    output: [
+      { kind: 'strategy_damage', rate: 171, strategyScaled: true, growthRate: 0, targetMode: 'random_single', chance: 0.6 },
+    ],
+  },
+
+  /**
+   * 持玺兴兵（卫子夫主战法·指挥 A）：友军全体（含自己）受到伤害后，若其兵力低于初始兵力 50%，
+   * 为其恢复兵力（200%，受谋略）并提升其攻击、谋略属性 30 点，同时**施法者自身**攻击、谋略各下降 30 点，
+   * 持续至战斗结束（duration 999）；该效果整场共可触发 3 次。
+   * 官方未写「受谋略属性影响」的具体成长率 → 留空（strategyScaled 标记在、growthRate 取 0，按基值不缩放）。
+   * 引擎配套机制：onHurt.troopRatio（受伤者兵力阈值）+ onHurt.maxTriggers（整场次数上限）+ onHurt.selfOutput（施法者自身落点）。
+   */
+  chixi_xingbing: {
+    id: 'chixi_xingbing',
+    name: '持玺兴兵',
+    type: 'command',
+    phase: 'prep',
+    range: 2,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['heal', 'buff_attack', 'buff_strategy', 'debuff_attack', 'debuff_strategy'],
+    onHurt: {
+      victim: 'ally',
+      troopRatio: { below: 50 },
+      maxTriggers: 3,
+      applyTo: 'victim',
+      output: [
+        { kind: 'heal', rate: 200, strategyScaled: true, growthRate: 0 },
+        { kind: 'inflict_status', status: { type: 'attack_buff', amount: 30, duration: 999 } },
+        { kind: 'inflict_status', status: { type: 'strategy_buff', amount: 30, duration: 999 } },
+      ],
+      selfOutput: [
+        { kind: 'inflict_status', status: { type: 'attack_buff', amount: -30, duration: 999 } },
+        { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -30, duration: 999 } },
+      ],
+    },
+    output: [],
   },
 
   // ─── 批量18：怀德畏威（司马昭）───
