@@ -22,6 +22,14 @@ export const OFFLINE_MAIN_SKILLS: Record<string, string> = {
   fenghuo_fuzhou: '火攻 95% 谋略成长未确认',
   hubu_guanyou: '首次攻击 +70% 速度成长未确认',
   wende_jiaofang: '策略增伤 10% 谋略成长未确认',
+  // ─── 2026-09-16 补登记：以下 5 个主战法已实现但「受谋略」成长率未确认 ───
+  // 官方描述只写「受谋略属性影响」而未给成长系数，引擎按基值不缩放（strategyScaled 在、growthRate 缺/0），
+  // 与真实游戏偏差随谋略增大 → 按本表口径先行下架，待用 scripts/derive_growth_rate.mjs 反解确认后移出。
+  lieying_shouxian: '四维 +29.2 受谋略成长未确认（按基值不缩放）',
+  jiufa_zhongyuan: '策略伤害 90% / 每回合增伤 5% 受谋略成长未确认（按基值不缩放）',
+  qiaoyin_huandie: '策略伤害 176% / 燃烧 86% / 恢复 161% / 休整 82% 受谋略成长未确认（按基值不缩放）',
+  moumou_weiwo: '策略伤害 171% / 追加 76% 受谋略成长未确认（按基值不缩放）',
+  chixi_xingbing: '恢复 200% 受谋略成长未确认（按基值不缩放）',
 };
 
 /**
@@ -60,6 +68,11 @@ export const OFFLINE_LEARNABLE_SKILLS: Record<string, string> = {
   qianggong_bingfa: '攻击 +28 成长未确认（取基值）',
   suzhan_bingfa: '速度 +28 成长未确认（取基值）',
   youdi: '攻击 -39 成长未确认（取基值）',
+  // ─── 2026-09-16 补登记：以下 4 个通用战法「受谋略」成长率未确认 ───
+  heyi: '受谋略成长未确认（按基值不缩放）',
+  quanjun_tuji: '受谋略成长未确认（按基值不缩放）',
+  sata_ruxing: '受谋略成长未确认（按基值不缩放）',
+  bugong: '受谋略成长未确认（按基值不缩放）',
 };
 
 /**
