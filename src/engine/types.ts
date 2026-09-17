@@ -14,6 +14,15 @@ export type TargetMode = 'single' | 'random_single' | 'group' | 'all' | 'self';
 
 export type DamageType = 'physical' | 'strategy';
 
+/**
+ * 兵力阈值条件（troopRatio）：按「当前兵力 / 初始兵力（maxTroops）× 100」判定。
+ *  - below：兵力百分比**低于**此值才满足（持玺兴兵「若其兵力低于初始兵力的 50%」）
+ *  - above：**高于**此值才满足（巧音唤蝶「当目标兵力高于初始兵力 50% 时」）
+ * 两者同时给出时须同时满足。段级用于一次性输出（heal / strategy_damage），
+ * 状态级用于持续效果（燃烧 DoT / 休整跳恢复）——见 action.ts troopRatioMatches。
+ */
+export type TroopRatioCond = { below?: number; above?: number };
+
 export type Side = 'my' | 'enemy';
 
 /** 战法效果标签（冲突判定用）：先判同类型，再判除「伤害」外标签冲突 */
@@ -163,6 +172,8 @@ export type SkillOutput =
       range?: number;
       /** 选目标时无视战法距离（对称 physical_damage.ignoreRange） */
       ignoreRange?: boolean;
+      /** 兵力阈值条件：不满足的目标不结算本段（持玺兴兵「兵力低于 50% 才恢复」） */
+      troopRatio?: TroopRatioCond;
     }
   | {
       kind: 'positional_physical_damage';
@@ -184,6 +195,8 @@ export type SkillOutput =
       targetSide?: 'enemy' | 'ally' | 'self';
       /** 单输出目标模式覆盖：按战法距离重选目标（配合 targetSide 使用） */
       targetMode?: 'single' | 'random_single' | 'group' | 'all';
+      /** 输出级 group 目标数（仅 targetMode:'group'，缺省 2）——巧音唤蝶「我军群体」 */
+      groupCount?: number | [number, number];
       /** 从友军池排除施法者（「自身 + 友军单体」的友军段：奇佐鬼谋 / 黄天余音） */
       excludeSelf?: boolean;
       /**
@@ -246,8 +259,12 @@ export type SkillOutput =
       targetSide?: 'enemy' | 'ally' | 'self';
       /** 配合 targetSide 重选目标；random_single = 距离内均匀随机（三军之众每次独立判定） */
       targetMode?: 'single' | 'random_single' | 'group' | 'all';
+      /** 输出级 group 目标数（仅 targetMode:'group'，缺省 2）——巧音唤蝶「我军群体」 */
+      groupCount?: number | [number, number];
       /** 从友军池排除施法者（「自身及友军单体」的友军段：合流 / 利兵谋胜） */
       excludeSelf?: boolean;
+      /** 兵力阈值条件：不满足的目标不结算本段（巧音唤蝶「兵力低于 50% 时恢复 82%」） */
+      troopRatio?: TroopRatioCond;
     }
   | {
       kind: 'grant_first_aid';
@@ -342,9 +359,9 @@ export type CreateStatus =
   | { type: 'trigger_boost'; rate: number; duration: number; skillTypes?: SkillType[]; /** 仅 false 生效：退回乘算；缺省加法 */ additive?: boolean }
   | { type: 'insight'; duration: number }
   | { type: 'siege'; duration: number }
-  | { type: 'sorcery'; duration: number; rate: number; growthRate: number; sourceStrategy?: number }
-  | { type: 'burning'; duration: number; rate: number; growthRate: number; sourceStrategy?: number }
-  | { type: 'panic'; duration: number; rate: number; growthRate: number; sourceStrategy?: number }
+  | { type: 'sorcery'; duration: number; rate: number; growthRate: number; sourceStrategy?: number; troopRatio?: TroopRatioCond }
+  | { type: 'burning'; duration: number; rate: number; growthRate: number; sourceStrategy?: number; troopRatio?: TroopRatioCond }
+  | { type: 'panic'; duration: number; rate: number; growthRate: number; sourceStrategy?: number; troopRatio?: TroopRatioCond }
   /** 妖术诅咒（密谋定蜀）：携带者试图发动追击战法时触发一次妖术伤害（rate% 受谋略），持续 2 回合 */
   | { type: 'curse'; duration: number; rate: number; growthRate: number; sourceStrategy?: number }
   /** 引燃标记（火势风威）：携带者受到下一次伤害时额外引发一次燃烧（rate% 受谋略），触发后移除 */
@@ -367,7 +384,7 @@ export type CreateStatus =
    * 同类型不同战法取每次恢复值较高者替换（大明州：休整效果互相刷新）。
    * startRound：第 N 回合起才跳恢复（重整旗鼓/援军秘策 = 5）。
    */
-  | { type: 'rest'; rate: number; growthRate: number; duration: number; startRound?: number; strategyScaled?: boolean }
+  | { type: 'rest'; rate: number; growthRate: number; duration: number; startRound?: number; strategyScaled?: boolean; troopRatio?: TroopRatioCond }
   /** 士气提高（谋议宏图）：amount 为士气点数；同战法累加，不同指挥战法冲突取较高 */
   | { type: 'morale_boost'; amount: number; duration: number }
   /** 无视防御比例（0.6 = 60%），自身攻击时目标防御 × (1 − rate) */
@@ -443,7 +460,24 @@ export interface CommandSkill extends BaseSkill {
    * - after_first_active：本回合首次主动战法实际释放成功后判定（文德椒房）；进入准备不算，准备完成释放算；每次按战法距离 / groupCount 重选目标
    * 一类指挥无需此字段（准备阶段已释放一次）。
    */
-  roundTrigger?: 'on_act' | 'before_active' | 'ally_act' | 'after_first_active';
+  roundTrigger?: 'on_act' | 'before_active' | 'ally_before_active' | 'ally_act' | 'after_first_active';
+  /**
+   * 二类指挥·友军监听试图发动主动（谋谟帷幄）：
+   * 我军全体**每次试图发动主动战法前**，由存活施法者按 triggerRate 判定一次（含施法者自己发动时）。
+   * 与 before_active（只看携带者自己）区分；准备完成释放 / 混乱 / 犹豫不进入判定。
+   * 配合 oncePerRoundPerTarget 实现「其每回合首次试图发动主动战法时」。
+   */
+  oncePerRoundPerTarget?: boolean;
+  /**
+   * 发动者兵力阈值追加段（谋谟帷幄）：
+   * 当**本次试图发动主动的单位**兵力满足 cond 时，额外再按 chance 判定一次并结算 output
+   * （官方面板：「我军全体各自低于初始兵力 60% 时，其每回合首次试图发动主动战法时会额外发动一次策略攻击」）。
+   */
+  extraByTroopRatio?: {
+    cond: TroopRatioCond;
+    /** 追加段：逐 output 按各自 `chance` 独立判定，缺省 1（必发） */
+    output: SkillOutput[];
+  };
   /**
    * 二类指挥·友军行动累计（七步释嫌）：每次 ally_act 发动后 +1，每达到 count 次再执行 output。
    * 恢复类 output 按施法者当前兵力实时结算（二类指挥）。
@@ -572,6 +606,12 @@ export interface OnHurtConfig {
   rateGrowthRate?: number;
   /** 每单位每回合只触发一次（陷储立齐） */
   oncePerRound?: boolean;
+  /** 整场战斗该战法累计触发上限（持玺兴兵 3 次）；按「战法 × 施法者」计（ctx.hurtTriggerCounters） */
+  maxTriggers?: number;
+  /** 受伤者兵力阈值条件（持玺兴兵：「若其兵力低于初始兵力 50%」） */
+  troopRatio?: TroopRatioCond;
+  /** 触发成功时额外对**施法者自身**结算的 output（持玺兴兵：自身攻击 / 谋略属性下降 30） */
+  selfOutput?: SkillOutput[];
   /**
    * 该单位首次受击时必定触发，且额外触发 1 次（疮痍累身：「首次受到伤害时该效果必定触发且额外触发 1 次」）。
    * 首次按「战法 × 施法者 × 受击者」记录（ctx.hurtFirstKeys）。
@@ -675,10 +715,10 @@ export interface PassiveSkill extends BaseSkill {
   };
   /**
    * 自身造成攻击伤害叠层（恃强淬锋 +3.4%/层）。
-   * onRoundStart：tickRoundStartStatuses 给持有者 +1 层（不要走 roundStartRepeat，那是行动阶段）。
-   * onDealPhysical：持有者造成普攻/战法攻击/分兵/反击且实际扣兵后 +1 层。
-   * 层数走 damage_boost stacks + sameSource 累加，到 maxStacks 停止。
-   */
+  * onRoundStart：tickRoundStartStatuses 给持有者 +1 层（不要走 roundStartRepeat，那是行动阶段）。
+  * onDealPhysical：持有者造成普攻/战法攻击/分兵/反击且实际扣兵后 +1 层。
+  * 层数走 damage_boost stacks + sameSource 累加，到 maxStacks 停止。
+  */
   selfPhysBoost?: {
     perStack: number;
     maxStacks: number;
@@ -687,6 +727,14 @@ export interface PassiveSkill extends BaseSkill {
     onRoundStart?: boolean;
     onDealPhysical?: boolean;
   };
+  /**
+   * 每次成功发动主动战法后触发（九伐中原「自身发动主动战法后…本场战斗共计可发动九次」）。
+   * 与二类指挥 `roundTrigger:'after_first_active'` 的区别：后者只在本回合**首次**主动成功后触发，
+   * 本钩子**每次**主动战法成功都触发；maxTriggers 为整场战斗的发动次数上限
+   * （计数走 `ctx.afterActiveCounters`，键 `${casterId}:${skillId}`，整场累计不随回合重置）。
+   * output 段建议带 targetMode（如 'group'）按战法距离重选目标。
+   */
+  afterActive?: { output: SkillOutput[]; maxTriggers?: number };
   output: SkillOutput[];
 }
 
@@ -883,9 +931,9 @@ export type Status =
   | { type: 'trigger_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; skillTypes?: SkillType[]; additive?: boolean }
   | { type: 'insight'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'siege'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
-  | { type: 'sorcery'; remaining: number; rate: number; sourceStrategy: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; stored?: DotStoredDamage }
-  | { type: 'burning'; remaining: number; rate: number; sourceStrategy: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; stored?: DotStoredDamage }
-  | { type: 'panic'; remaining: number; rate: number; sourceStrategy: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; stored?: DotStoredDamage }
+  | { type: 'sorcery'; remaining: number; rate: number; sourceStrategy: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; stored?: DotStoredDamage; troopRatio?: TroopRatioCond }
+  | { type: 'burning'; remaining: number; rate: number; sourceStrategy: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; stored?: DotStoredDamage; troopRatio?: TroopRatioCond }
+  | { type: 'panic'; remaining: number; rate: number; sourceStrategy: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; stored?: DotStoredDamage; troopRatio?: TroopRatioCond }
   /**
    * 妖术诅咒（密谋定蜀）：携带者「试图发动追击战法」时（进入追击判定，无论发动率结果），
    * 立即受到一次妖术诅咒伤害（rate% 受谋略，挂上时冻结 stored 滞后触发，同 DoT），
@@ -917,7 +965,7 @@ export type Status =
    * remaining = 剩余跳次数（只在跳恢复时递减，不走回合末/行动开始递减）。
    * startRound：当前回合 < 此值则本行动不跳。
    */
-  | { type: 'rest'; remaining: number; healAmount: number; startRound: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
+  | { type: 'rest'; remaining: number; healAmount: number; startRound: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; troopRatio?: TroopRatioCond }
   | { type: 'morale_boost'; amount: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   | { type: 'ignore_def'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   /** 攻击距离提高（帝临回光）：普攻可达距离上限 +amount（target.ts attackRangeOf 求和） */

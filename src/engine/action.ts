@@ -21,6 +21,7 @@ import type {
   Status,
   StatusType,
   TroopType,
+  TroopRatioCond,
   UnitState,
   WoundedMortalityConfig,
 } from './types';
@@ -145,6 +146,22 @@ export interface CombatContext {
    * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
    */
   allyActCounters?: Map<string, number>;
+  /**
+   * 被动「发动主动战法后」计数（九伐中原）：key `${casterId}:${skillId}` → 已发动次数（整场累计）。
+   * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
+   */
+  afterActiveCounters?: Map<string, number>;
+  /**
+   * 二类指挥·友军监听试图发动主动（谋谟帷幄）：key `${round}:${skillId}:${casterId}:${actorId}` → 已判定，
+   * 保证「其每回合首次试图发动主动战法时」对每个发动者只走一次。
+   * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
+   */
+  beforeActiveOnceKeys?: Set<string>;
+  /**
+   * 受击触发整场次数上限（持玺兴兵）：key `${casterId}:${skillId}` → 已触发次数（整场累计，不随回合重置）。
+   * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
+   */
+  hurtTriggerCounters?: Map<string, number>;
 }
 
 /** 持续型急救战法级计数器（皇裔流离/金匮要略）：一个战法一个实例，全队共享。
@@ -533,6 +550,94 @@ export function triggerBeforeActiveCommands(ctx: CombatContext, unit: UnitState)
     });
     executeSkillOutputs(ctx, unit, skill, [], passed);
   }
+  // 友军监听试图发动主动（谋谟帷幄）：我军全体每次试图发动主动前，由 ally_before_active 指挥判定
+  triggerAllyBeforeActiveCommands(ctx, unit);
+}
+
+/**
+ * 二类指挥·友军监听试图发动主动（谋谟帷幄）：
+* 我军全体（含施法者自己）每次试图发动主动战法前，场上存活的 `ally_before_active` 指挥按 triggerRate 判定一次，
+* 命中则对敌军按 skill.output 结算；`oncePerRoundPerTarget` 实现「其每回合首次」，
+* `extraByTroopRatio` 在**发动者**兵力满足阈值时追加一段独立判定（低于初始兵力 60% 额外策略攻击）。
+* 施法者阵亡不触发（二类指挥看实时数据）。
+*/
+export function triggerAllyBeforeActiveCommands(ctx: CombatContext, actor: UnitState): void {
+const team = actor.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+for (const caster of team) {
+  if (!caster.alive) continue;
+  for (const id of caster.general.commandSkillIds) {
+    const skill = resolveSkill(ctx, id);
+    if (skill?.type !== 'command' || skill.phase !== 'round') continue;
+    if (skill.roundTrigger !== 'ally_before_active') continue;
+
+    if (skill.oncePerRoundPerTarget) {
+      ctx.beforeActiveOnceKeys ??= new Set();
+      const onceKey = `${ctx.currentRound}:${skill.id}:${caster.general.id}:${actor.general.id}`;
+      if (ctx.beforeActiveOnceKeys.has(onceKey)) continue;
+      ctx.beforeActiveOnceKeys.add(onceKey);
+    }
+
+    const morale = effectiveMorale(caster);
+    // 主段：逐 output 按各自 chance 独立判定（沿用 before_active 惯例；缺省必发）
+    const passed: SkillOutput[] = [];
+    for (const out of skill.output) {
+      const chance = 'chance' in out && out.chance != null ? out.chance : 1;
+      const rate = moraleTriggerRate(morale, chance);
+      const success = ctx.rng.chance(rate);
+      ctx.events.push({
+        type: 'skill_trigger',
+        unitId: caster.general.id,
+        targetId: actor.general.id,
+        skillId: skill.id,
+        skillName: skill.name,
+        success,
+        rate: Math.round(rate * 100),
+        baseRate: Math.round(chance * 100),
+        morale,
+      });
+      if (success) passed.push(out);
+    }
+    if (passed.length > 0) {
+      ctx.events.push({
+        type: 'skill_cast',
+        unitId: caster.general.id,
+        skillId: skill.id,
+        skillName: skill.name,
+      });
+      executeSkillOutputs(ctx, caster, skill, [], passed);
+    }
+
+    // 发动者兵力阈值追加段（谋谟帷幄：「我军全体各自低于初始兵力 60% 时…额外发动一次策略攻击」）
+    const extra = skill.extraByTroopRatio;
+    if (!extra || !troopRatioMatches(actor, extra.cond)) continue;
+    const exPassed: SkillOutput[] = [];
+    for (const out of extra.output) {
+      const chance = 'chance' in out && out.chance != null ? out.chance : 1;
+      const rate = moraleTriggerRate(morale, chance);
+      const success = ctx.rng.chance(rate);
+      ctx.events.push({
+        type: 'skill_trigger',
+        unitId: caster.general.id,
+        targetId: actor.general.id,
+        skillId: skill.id,
+        skillName: skill.name,
+        success,
+        rate: Math.round(rate * 100),
+        baseRate: Math.round(chance * 100),
+        morale,
+      });
+      if (success) exPassed.push(out);
+    }
+    if (exPassed.length === 0) continue;
+    ctx.events.push({
+      type: 'skill_cast',
+      unitId: caster.general.id,
+      skillId: skill.id,
+      skillName: skill.name,
+    });
+    executeSkillOutputs(ctx, caster, skill, [], exPassed);
+  }
+}
 }
 
 /**
@@ -1123,6 +1228,8 @@ function tickRests(ctx: CombatContext, unit: UnitState): void {
   for (const s of rests) {
     if (!unit.alive) return;
     if (ctx.currentRound < s.startRound) continue;
+    // 兵力阈值条件（巧音唤蝶休整「当目标兵力低于初始兵力 50% 时恢复」）：不满足则本次不跳恢复
+    if (s.troopRatio && !troopRatioMatches(unit, s.troopRatio)) continue;
     if (hasStatus(unit, 'siege')) {
       ctx.events.push({ type: 'siege_blocked', unitId: unit.general.id, skillId: s.sourceSkillId });
     } else {
@@ -1159,9 +1266,22 @@ function tickDots(ctx: CombatContext, unit: UnitState): void {
   for (const s of unit.statuses) {
     if (!DOT_TYPES.includes(s.type as StatusType)) continue;
     const dot = s as Extract<Status, { type: 'sorcery' | 'burning' | 'panic' }>;
+    // 兵力阈值条件（巧音唤蝶燃烧「当目标兵力高于初始兵力 50% 时受到一次策略伤害」）：不满足则本回合不跳伤
+    if (dot.troopRatio && !troopRatioMatches(unit, dot.troopRatio)) continue;
     dealDotDamage(ctx, unit, dot);
     if (!unit.alive) return;
   }
+}
+
+/**
+ * 兵力阈值判定（troopRatio）：当前兵力 / 初始兵力（maxTroops）× 100。
+ * below = 兵力百分比**低于**此值才满足；above = **高于**才满足；两者同时给出须同时满足。
+ */
+export function troopRatioMatches(target: UnitState, cond: TroopRatioCond): boolean {
+  const pct = (target.troops / target.general.maxTroops) * 100;
+  if (cond.below != null && !(pct < cond.below)) return false;
+  if (cond.above != null && !(pct > cond.above)) return false;
+  return true;
 }
 
 /** 分兵攻击：普攻命中后，对目标同队的相邻存活单位造成比例攻击伤害（无视攻击距离） */
@@ -2059,6 +2179,10 @@ function pushStatus(
     } as Status;
     // 挂上时结算（滞后触发）：冻结每次跳伤/拆解/增减伤归因
     if (stored) (status as { stored?: DotStoredDamage }).stored = stored;
+    // 兵力阈值条件（巧音唤蝶燃烧）：跳伤时按携带者当前兵力判定
+    if ('troopRatio' in create && create.troopRatio) {
+      (status as { troopRatio?: TroopRatioCond }).troopRatio = create.troopRatio;
+    }
     target.statuses.push(status);
     ctx.events.push({
       type: 'status_inflicted',
@@ -2108,6 +2232,7 @@ function pushStatus(
       sourceSkillType,
       sourceSkillId,
       sourceUnitId: casterId,
+      ...(restCreate.troopRatio ? { troopRatio: restCreate.troopRatio } : {}),
     });
     ctx.events.push({
       type: 'status_inflicted',
@@ -2834,8 +2959,21 @@ function executeSkillOutputs(
             : outSide === 'enemy'
               ? skillTargets(ctx, caster, enemies, skill.range, outSideMode ?? 'random_single')
               : outSide === 'ally'
-                ? skillTargets(ctx, caster, allyPool, skill.range, outSideMode ?? 'random_single')
+                ? skillTargets(
+                    ctx,
+                    caster,
+                    allyPool,
+                    skill.range,
+                    outSideMode ?? 'random_single',
+                    'groupCount' in out ? out.groupCount : undefined
+                  )
                 : targets;
+    // 兵力阈值条件（段级 troopRatio）：不满足的目标从本段目标池剔除
+    // （巧音唤蝶「兵力低于初始 50% 时恢复 82%」/ 持玺兴兵「兵力低于初始 50% 才恢复」）
+    if ('troopRatio' in out && out.troopRatio) {
+      const cond = out.troopRatio;
+      pool = pool.filter((t) => troopRatioMatches(t, cond));
+    }
     // 怀德畏威：混乱只打「友军随机单体攻击 ∩ 自身群体策略」重合目标，不再按战法整体目标重选
     if (out.kind === 'inflict_status' && out.onlyIfOverlapPrevious) {
       const overlap = new Set(lastDamageTargetIds.filter((id) => prevDamageTargetIds.includes(id)));
@@ -3479,6 +3617,7 @@ export function triggerActiveSkill(
 
   executeSkillWithTargets(ctx, unit, skill, enemies, allies, attackPool);
   triggerAfterFirstActiveCommands(ctx, unit);
+  triggerPassiveAfterActive(ctx, unit);
 }
 
 /** 准备完成的战法自动发动 */
@@ -3492,6 +3631,7 @@ function executePreparedSkill(
   const allies = unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
   executeSkillWithTargets(ctx, unit, skill, enemies, allies, attackPool);
   triggerAfterFirstActiveCommands(ctx, unit);
+  triggerPassiveAfterActive(ctx, unit);
 }
 
 /**
@@ -3520,6 +3660,36 @@ function triggerAfterFirstActiveCommands(ctx: CombatContext, unit: UnitState): v
       skillName: skill.name,
     });
     executeSkillOutputs(ctx, unit, skill, selected);
+  }
+}
+
+/**
+ * 被动「发动主动战法后」触发（九伐中原）：**每次**主动战法成功释放后结算（不限本回合首次，
+ * 与二类指挥 after_first_active 区分）。maxTriggers = 整场战斗可发动次数上限（九伐中原 9 次），
+ * 计数走战法级计数器 ctx.afterActiveCounters（整场累计、不随回合重置）。
+ * 目标池：交给 output 段的 targetMode 重选（缺省传入对侧全体存活作为兜底）。
+ */
+export function triggerPassiveAfterActive(ctx: CombatContext, unit: UnitState): void {
+  if (!unit.alive) return;
+  const enemies = unit.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
+  for (const id of unit.general.passiveSkillIds) {
+    const skill = resolveSkill(ctx, id);
+    if (skill?.type !== 'passive' || !skill.afterActive) continue;
+    const cfg = skill.afterActive;
+    if (cfg.maxTriggers != null) {
+      ctx.afterActiveCounters ??= new Map();
+      const key = `${unit.general.id}:${skill.id}`;
+      const used = ctx.afterActiveCounters.get(key) ?? 0;
+      if (used >= cfg.maxTriggers) continue;
+      ctx.afterActiveCounters.set(key, used + 1);
+    }
+    ctx.events.push({
+      type: 'skill_cast',
+      unitId: unit.general.id,
+      skillId: skill.id,
+      skillName: skill.name,
+    });
+    executeSkillOutputs(ctx, unit, skill, enemies, cfg.output);
   }
 }
 
@@ -4014,6 +4184,14 @@ function triggerOnHurt(
             if (ctx.hurtOnceKeys.has(key)) continue;
             ctx.hurtOnceKeys.add(key);
           }
+          // 兵力阈值（持玺兴兵：「若其兵力低于初始兵力 50%」）——判定受伤者实时兵力
+          if (cfg.troopRatio && !troopRatioMatches(victim, cfg.troopRatio)) continue;
+          // 整场触发次数上限（持玺兴兵：「该效果共可触发 3 次」）——按「战法 × 施法者」整场累计
+          if (cfg.maxTriggers != null) {
+            ctx.hurtTriggerCounters ??= new Map();
+            const tKey = `${caster.general.id}:${skill.id}`;
+            if ((ctx.hurtTriggerCounters.get(tKey) ?? 0) >= cfg.maxTriggers) continue;
+          }
           // 首次受击必触发，且额外触发 1 次（疮痍累身：
           // 「首次受到伤害时，该效果必定触发且额外触发1次」）
           let guaranteedFirst = false;
@@ -4044,6 +4222,11 @@ function triggerOnHurt(
               });
             }
             if (!hitOk) continue;
+            if (cfg.maxTriggers != null) {
+              ctx.hurtTriggerCounters ??= new Map();
+              const tKey = `${caster.general.id}:${skill.id}`;
+              ctx.hurtTriggerCounters.set(tKey, (ctx.hurtTriggerCounters.get(tKey) ?? 0) + 1);
+            }
             // 官方口径（疮痍累身）：自带 output 的受击战法在每次触发时先出一行
             // 「【周泰】执行来自【周泰】的【疮痍累身】效果！」——仅此类战法推送，
             // 盲侯/陷储/同仇等「output 落在战法整体」的既有受击战法事件流不变（零回归）
@@ -4068,6 +4251,10 @@ function triggerOnHurt(
               }
             } else {
               applyOnHurtEffect(ctx, caster, skill, cfg, victim, source);
+              // 施法者自身落点（持玺兴兵：「同时自身攻击、谋略属性下降 30」）
+              if (cfg.selfOutput && cfg.selfOutput.length > 0) {
+                executeSkillOutputs(ctx, caster, skill, [caster], cfg.selfOutput);
+              }
             }
           }
         }
