@@ -43,6 +43,7 @@ export type EffectTag =
   | 'damage_reduce'
   | 'damage_boost' // 增减伤：造成伤害提高（大赏三军）/受到伤害提高（神兵天降）
   | 'insight' // 洞察：免疫混乱/怯战/暴走/犹豫
+  | 'cowardice_immune' // 免疫怯战（魏武之泽：我军群体免疫怯战）
   | 'siege' // 围困：无法回复兵力
   | 'sorcery' // 妖术：有害DoT，行动时损失兵力
   | 'burning' // 燃烧：有害DoT，行动时损失兵力
@@ -358,6 +359,8 @@ export type CreateStatus =
    */
   | { type: 'trigger_boost'; rate: number; duration: number; skillTypes?: SkillType[]; /** 仅 false 生效：退回乘算；缺省加法 */ additive?: boolean }
   | { type: 'insight'; duration: number }
+  /** 免疫怯战（魏武之泽）：持续期间无法被施加怯战 */
+  | { type: 'cowardice_immune'; duration: number }
   | { type: 'siege'; duration: number }
   | { type: 'sorcery'; duration: number; rate: number; growthRate: number; sourceStrategy?: number; troopRatio?: TroopRatioCond }
   | { type: 'burning'; duration: number; rate: number; growthRate: number; sourceStrategy?: number; troopRatio?: TroopRatioCond }
@@ -888,6 +891,7 @@ export type StatusType =
   | 'damage_boost'
   | 'trigger_boost'
   | 'insight'
+  | 'cowardice_immune'
   | 'siege'
   | 'sorcery'
   | 'burning'
@@ -940,6 +944,7 @@ export type Status =
   | { type: 'damage_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; direction: 'caused' | 'taken'; sourceUnitId?: string; /** 叠层计数（带上限的增减伤，银龙冲阵最多 3 层）；无上限时不设置 */ stacks?: number; /** 次数型下一次攻击（青丘媚祸） */ charges?: number; /** 当前剩余份数（恃强淬锋 5→4→…）；无此字段则不按 1/5 衰减 */ fifths?: number; /** fifths 满额时的 rate，衰减时 rate = baseRate × fifths / 初始份数 */ baseRate?: number; /** decayFifths 挂上时的满额份数（恃强 5），衰减公式分母 */ fifthsBase?: number; /** 当前剩余份数（虎豹督军 8→7→…，每回合前 −1；与 fifths 互斥） */ eighths?: number; /** 伤害来源过滤：basic=普攻（分类键小类「普通」）/ skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效（分类键小类「主动/追击/指挥」）；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省攻击+策略都吃（分类键「大类」，见 action.ts damageClassKey） */ damageType?: 'physical' | 'strategy' }
   | { type: 'trigger_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; skillTypes?: SkillType[]; additive?: boolean }
   | { type: 'insight'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'cowardice_immune'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'siege'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'sorcery'; remaining: number; rate: number; sourceStrategy: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; stored?: DotStoredDamage; troopRatio?: TroopRatioCond }
   | { type: 'burning'; remaining: number; rate: number; sourceStrategy: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; stored?: DotStoredDamage; troopRatio?: TroopRatioCond }
@@ -1193,6 +1198,7 @@ export type BattleEvent =
     }
   | { type: 'siege_blocked'; unitId: string; skillId: string }
   | { type: 'insight_blocked'; unitId: string; statusType: StatusType }
+  | { type: 'cowardice_immune_blocked'; unitId: string; statusType: StatusType }
   | {
       type: 'split_damage';
       sourceId: string;

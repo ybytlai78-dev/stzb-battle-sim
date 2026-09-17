@@ -1603,6 +1603,16 @@ export function inflictStatus(
     return;
   }
 
+  // 免疫怯战（魏武之泽）：只挡怯战、不挡其他控制；同样在施加前判定，免疫状态在则不施加
+  if (type === 'cowardice' && hasStatus(target, 'cowardice_immune')) {
+    ctx.events.push({
+      type: 'cowardice_immune_blocked',
+      unitId: target.general.id,
+      statusType: type,
+    });
+    return;
+  }
+
   // 持续型急救（皇裔流离/金匮要略）：同为指挥战法的持续型急救互斥——先施加者生效，后施加者被拒；
   // 不同战法类型（被动/主动/追击的急救）各自独立共存
   if (type === 'first_aid') {
@@ -2672,6 +2682,7 @@ function statusName(type: StatusType): string {
     case 'damage_boost': return '增伤';
     case 'trigger_boost': return '发动率提升';
     case 'insight': return '洞察';
+    case 'cowardice_immune': return '免疫怯战';
     case 'siege': return '围困';
     case 'sorcery': return '妖术';
     case 'burning': return '燃烧';

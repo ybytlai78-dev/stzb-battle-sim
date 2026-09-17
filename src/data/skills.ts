@@ -1088,12 +1088,13 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     ],
   },
   /**
-   * 魏武之泽（曹丕主战法）：主动战法，40%，我军群体免疫怯战（未建模），
+   * 魏武之泽（曹丕主战法）：主动战法，40%，我军群体免疫怯战（cowardice_immune，持续期间无法被施加怯战），
    * 普通攻击与追击战法造成的伤害提高 15%（受谋略，成长率 0.08/点），每回合可两次普攻，持续 2 回合。
    * 官方措辞「普通攻击和追击战法」→ 按 damageClassKey 拆**两条**分类键：
    *   `全域|普通`（damageSource basic）与 `全域|追击`（skillTypes ['pursuit']）——分类键不同 → 各自共存、进同一加算池。
    * 成长率 0.08 = 用户实测反解（谋略 197.6 → 24%；区间 [0.0757, 0.0842)，取窗口内较整值 0.08）。
-   * 免疫怯战暂未建模。
+   * 免疫怯战已建模（cowardice 施加前判定 hasStatus(target,'cowardice_immune') → 拦截并推
+   * `cowardice_immune_blocked` 事件；只挡怯战，不动混乱/暴走/犹豫——那是洞察的口径）。
    */
   weiwu_zhi_ze: {
     id: 'weiwu_zhi_ze',
@@ -1106,6 +1107,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     targetSide: 'ally',
     tags: ['combo', 'damage_boost'],
     output: [
+      { kind: 'inflict_status', status: { type: 'cowardice_immune', duration: 2 } },
       { kind: 'inflict_status', status: { type: 'combo', duration: 2 } },
       {
         kind: 'inflict_status',

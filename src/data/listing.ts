@@ -12,7 +12,6 @@ export const OFFLINE_MAIN_SKILLS: Record<string, string> = {
   tongchou_dikai: '每层 ±2% 成长 0.01 未确认',
   fushi_yehuo: '受击增伤 16% 成长 0.1 未确认（火攻/燃烧 0.95 已确认）',
   huangtian_dangli: '妖术 180% 成长 1.0 未确认',
-  weiwu_zhi_ze: '成长率已确认 0.08（普攻/追击两条分类键）；剩余机制缺口：免疫怯战未建模',
   minghui_tongtou: '恢复 168% 成长 1.0 未确认',
   hanyun_kuangye: '伤害降低 30% 成长未确认（取基值）',
   bailou_duwu: '伤害降低 26% 成长未确认（取基值）',
@@ -26,7 +25,7 @@ export const OFFLINE_MAIN_SKILLS: Record<string, string> = {
   // 与真实游戏偏差随谋略增大 → 按本表口径先行下架，待用 scripts/derive_growth_rate.mjs 反解确认后移出。
   jiufa_zhongyuan: '策略伤害 90% / 每回合增伤 5% 受谋略成长未确认（按基值不缩放）',
   qiaoyin_huandie: '策略伤害 176% / 燃烧 86% / 恢复 161% / 休整 82% 受谋略成长未确认（按基值不缩放）',
-  moumou_weiwo: '策略伤害 171% 段已确认 1.825；剩余：追加 76% 段成长未确认 + 伤害应按触发者谋略缩放（引擎现按施法者）',
+  moumou_weiwo: '策略伤害 171% 段已确认 1.825；剩余：追加 76% 段成长未确认（触发者属性口径已由引擎侧支持：监听类战法按触发者结算）',
   chixi_xingbing: '恢复 200% 受谋略成长未确认（按基值不缩放）',
 };
 
