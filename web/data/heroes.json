@@ -751,7 +751,7 @@
     "growthDefense": 1.45,
     "growthStrategy": 1.97,
     "growthSpeed": 1.25,
-    "mainSkillId": "",
+    "mainSkillId": "jiufa_zhongyuan",
     "mainSkillName": "九伐中原",
     "skillDesc": "自身发动主动战法后会对敌军群体发动一次攻击（伤害率90.0%）和策略攻击（伤害率90.0%，受谋略属性影响），本场战斗共计可发动九次；每回合开始时，自身造成所有伤害提升5.0%（受谋略属性影响），可叠加，持续至战斗结束"
   },
@@ -2225,7 +2225,7 @@
     "growthDefense": 1.77,
     "growthStrategy": 2.38,
     "growthSpeed": 0.7,
-    "mainSkillId": "",
+    "mainSkillId": "moumou_weiwo",
     "mainSkillName": "谋谟帷幄",
     "skillDesc": "自身及友军单体每回合首次试图发动主动战法时，有60.0%几率对敌军单体发动一次策略攻击（伤害率171.0%，受谋略属性影响）；同时当我军全体各自低于初始兵力的60%时，其每回合首次试图发动主动战法时会额外对敌军单体发动一次策略攻击（伤害率76.0%，受谋略属性影响）"
   },
@@ -2875,7 +2875,7 @@
     "growthDefense": 1.48,
     "growthStrategy": 1.75,
     "growthSpeed": 0.42,
-    "mainSkillId": "",
+    "mainSkillId": "chixi_xingbing",
     "mainSkillName": "持玺兴兵",
     "skillDesc": "在友军全体受到伤害后，若其兵力低于初始兵力的50%，为其恢复一定兵力（恢复率200.0%，受谋略属性影响）并提升其30.0的攻击、谋略属性，同时自身攻击、谋略属性下降30.0，持续至战斗结束。该效果共可触发3次"
   },
@@ -2919,7 +2919,7 @@
     "growthDefense": 1.86,
     "growthStrategy": 2,
     "growthSpeed": 0.68,
-    "mainSkillId": "",
+    "mainSkillId": "qiaoyin_huandie",
     "mainSkillName": "巧音唤蝶",
     "skillDesc": "对敌军群体发动一次策略攻击（伤害率176.0%，受谋略属性影响）并使其陷入燃烧状态，当目标兵力高于初始兵力50%时受到一次策略伤害（伤害率86.0%，受谋略属性影响），持续1回合；同时使我军群体恢复一定兵力（恢复率161.0%，受谋略属性影响），并使其进入休整状态，当目标兵力低于初始兵力50%时恢复一定兵力（恢复率82.0%，受谋略属性影响），持续1回合"
   },
