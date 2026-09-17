@@ -213,6 +213,9 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
     case 'insight_blocked':
       lines.push(`  ✦ ${ev.unitId} 洞察免疫了${statusName(ev.statusType)}效果`);
       break;
+    case 'cowardice_immune_blocked':
+      lines.push(`  ✦ ${ev.unitId} 免疫了${statusName(ev.statusType)}效果`);
+      break;
     case 'split_damage':
       lines.push(`  → 分兵溅射「${ev.targetId}」造成 ${fmt(ev.damage)}（${renderBreakdown(ev.breakdown)}）`);
       break;
@@ -257,6 +260,7 @@ function statusName(type: string): string {
     case 'damage_reduce': return '减伤';
     case 'morale_boost': return '士气提高';
     case 'insight': return '洞察';
+    case 'cowardice_immune': return '免疫怯战';
     case 'siege': return '围困';
     case 'sorcery': return '妖术';
     case 'burning': return '燃烧';
