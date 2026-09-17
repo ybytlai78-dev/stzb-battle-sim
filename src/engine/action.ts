@@ -604,7 +604,8 @@ for (const caster of team) {
         skillId: skill.id,
         skillName: skill.name,
       });
-      executeSkillOutputs(ctx, caster, skill, [], passed);
+      // 友军监听通例：伤害按触发者结算（actor），战报归属仍为携带者（caster）
+      executeSkillOutputs(ctx, caster, skill, [], passed, actor);
     }
 
     // 发动者兵力阈值追加段（谋谟帷幄：「我军全体各自低于初始兵力 60% 时…额外发动一次策略攻击」）
@@ -635,7 +636,7 @@ for (const caster of team) {
       skillId: skill.id,
       skillName: skill.name,
     });
-    executeSkillOutputs(ctx, caster, skill, [], exPassed);
+    executeSkillOutputs(ctx, caster, skill, [], exPassed, actor);
   }
 }
 }
@@ -676,7 +677,7 @@ export function triggerAllyActCommands(ctx: CombatContext, actor: UnitState): vo
         skillId: skill.id,
         skillName: skill.name,
       });
-      executeSkillOutputs(ctx, caster, skill, []);
+      executeSkillOutputs(ctx, caster, skill, [], skill.output, actor);
 
       ctx.allyActCounters = ctx.allyActCounters ?? new Map();
       const key = `${caster.general.id}:${skill.id}`;
@@ -690,7 +691,7 @@ export function triggerAllyActCommands(ctx: CombatContext, actor: UnitState): vo
           skillId: skill.id,
           skillName: skill.name,
         });
-        executeSkillOutputs(ctx, caster, skill, [], skill.allyActEvery.output);
+        executeSkillOutputs(ctx, caster, skill, [], skill.allyActEvery.output, actor);
       }
     }
   }
@@ -2870,9 +2871,17 @@ function executeSkillOutputs(
   caster: UnitState,
   skill: Skill,
   targets: UnitState[],
-  outputs?: SkillOutput[]
+  outputs?: SkillOutput[],
+  /**
+   * 结算属性来源（监听类通例）：友军行动触发的战法（ally_act / ally_before_active），
+   * 伤害按**触发者**的谋略/攻击/兵力与增减伤结算，而战报归属（unitId）仍是战法携带者。
+   * 缺省 = caster（既有调用全部零回归）；after_first_active / afterActive 的触发者本就是携带者，无需传。
+   */
+  statSource?: UnitState
 ): void {
   const list = outputs ?? skill.output;
+  /** 属性/兵力/增减伤的读取来源；缺省与施法者同体（旧口径） */
+  const statU = statSource ?? caster;
   /** 上两段伤害输出的实际目标，供 onlyIfOverlapPrevious（怀德畏威重合混乱）取交集 */
   let prevDamageTargetIds: string[] = [];
   let lastDamageTargetIds: string[] = [];
@@ -3217,26 +3226,26 @@ function executeSkillOutputs(
           if (out.requireStatuses?.length && !out.requireStatuses.some((st) => hasStatus(t, st))) continue;
           selectedIds.push(t.general.id);
           // 常驻伤害前叠层（持节镇西）：施法者叠谋略、受击者叠防御
-          triggerStackBuff(ctx, caster, t, 'strategy');
+          triggerStackBuff(ctx, statU, t, 'strategy');
           // 规避：默认免疫一次伤害；ignoresEvasion 时无视
-          if (!out.ignoresEvasion && consumeEvasion(ctx, t, caster.general.id)) continue;
+          if (!out.ignoresEvasion && consumeEvasion(ctx, t, statU.general.id)) continue;
           // 叠层后再读生效谋略（与攻击伤害先叠攻击再读 effectiveStat 对齐；
           // 群体逐目标叠层，每段伤害吃到截至本目标的全部层）
-          const effStrategy = effectiveStat(caster, 'strategy');
+          const effStrategy = effectiveStat(statU, 'strategy');
           let rate = out.rate;
           if (out.strategyScaled && out.growthRate !== undefined) {
             rate = roundRate(scaledValue(out.rate, out.growthRate, effStrategy));
           }
           const hit: DamageHitContext = { damageSource: 'skill', damageType: 'strategy', skillType: skill.type };
-          const { causedMult, takenMult } = damageBoosts(ctx, caster, t, hit);
-          const reduce = sumReduce(t, hit) + troopCounterReduceOf(caster, t);
+          const { causedMult, takenMult } = damageBoosts(ctx, statU, t, hit);
+          const reduce = sumReduce(t, hit) + troopCounterReduceOf(statU, t);
           const { damage, breakdown } = calcDamage(
             {
               damageType: 'strategy',
               rate,
-              attackerAttack: caster.general.attack,
+              attackerAttack: statU.general.attack,
               attackerStrategy: effStrategy,
-              attackerTroops: caster.troops,
+              attackerTroops: statU.troops,
               targetDefense: t.general.defense,
               targetStrategy: t.general.strategy,
               mult: buffMult(causedMult, takenMult, reduce),
