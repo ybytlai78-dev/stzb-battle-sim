@@ -5,7 +5,8 @@
  *  - 命名 xp_jiangwei /「XP姜维」
  *  - 互斥：XP 卡不入互斥组（姜维 ↔ XP姜维 可同队）
  *  - 画像：官方 470×592 水印档缺失 → 用 card_medium 240×348（同 h807 先例）
- *  - 主战法【九伐中原】已实现（jiufa_zhongyuan）→ 挂槽上架；「受谋略」成长率仍未确认 → 数值留空用基值
+ *  - 主战法【九伐中原】已实现（jiufa_zhongyuan）→ 挂槽；但其「受谋略」成长率未确认
+ *    → 按 listing.ts 口径下架（引擎按基值不缩放），待 scripts/derive_growth_rate.mjs 反解确认后上架
  */
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -44,7 +45,7 @@ describe('XP姜维（姜维·蜀·骑 · hero_id 100806）入库', () => {
     expect(rec.growthSpeed).toBe(1.25);
   });
 
-  it('主战法九伐中原：已实现（挂槽 + 上架）+ 官方文案入库', () => {
+  it('主战法九伐中原：已实现（挂槽，受谋略未确认 → 下架）+ 官方文案入库', () => {
     const rec = HERO_RECORDS['xp_jiangwei'];
     expect(rec.mainSkillId).toBe('jiufa_zhongyuan');
     expect(rec.mainSkillName).toBe('九伐中原');
@@ -52,7 +53,9 @@ describe('XP姜维（姜维·蜀·骑 · hero_id 100806）入库', () => {
     expect(rec.skillDesc).toContain('受谋略属性影响');
     expect(rec.skillDesc).toContain('共计可发动九次');
     expect(rec.skillDesc).toContain('提升5.0%');
-    expect(isHeroListed(rec)).toBe(true); // 主战法已实现 → 入池（受谋略成长率未确认 → 数值留空用基值）
+    // 主战法已实现，但「受谋略」成长率未确认 → 按 listing.ts 口径下架（登记于 OFFLINE_MAIN_SKILLS）
+    // 待 scripts/derive_growth_rate.mjs 反解出 growthRate 后移出该名单再上架
+    expect(isHeroListed(rec)).toBe(false);
   });
 
   it('XP 卡不入互斥组（姜维 ↔ XP姜维 可同队）', () => {
