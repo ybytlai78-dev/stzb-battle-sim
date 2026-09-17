@@ -1,7 +1,8 @@
 /**
  * 虎豹督军（曹纯·魏·骑 主战法）：一类指挥，我军群体（有效距离内 2–3 目标，各 50%）
- * 进行攻击的伤害提高 50%，该效果每回合开始时减少 1/8（准备阶段 8/8，第 1 回合前 7/8，
- * 同谋议宏图口径；「受攻击属性影响」成长率未确认 → 留空、按基值不缩放）。
+ * 进行攻击的伤害提高 50%，该效果每回合开始时减少 1/8。
+ * 8 份衰减时点（用户口径 2026-09-17）：**第 1 回合 8/8** → 第 2 回合 7/8 → … → 第 8 回合 1/8（第 9 回合移除）。
+ * 「受攻击属性影响」成长率 = 0.25/点（用户实测：攻击 277.8 → 99%、266 → 96%）。
  *
  * 引擎新增：`damage_boost` 支持 `decayEighths`（此前仅 `damage_reduce` 有）。
  */
@@ -110,8 +111,8 @@ describe('虎豹督军（曹纯，一类指挥：我军群体增伤 50%，每回
     expect(s.tags).toEqual(expect.arrayContaining(['damage_boost']));
   });
 
-  it('机制：准备阶段我军群体挂 8/8 增伤 50%；第 1 回合前衰减为 7/8（44%）', () => {
-    const report = run(caoTeam(), 1, 1);
+  it('机制：准备阶段挂 8/8 增伤 73%（曹纯 40 级攻击 173）；第 1 回合保持 8/8，第 2 回合起衰减', () => {
+    const report = run(caoTeam(), 1, 2);
     expect(report.events.filter((e) => e.type === 'skill_cast' && e.skillName === '虎豹督军')).toHaveLength(1);
 
     const prepEnd = report.events.findIndex((e) => e.type === 'preparation_end');
@@ -121,29 +122,44 @@ describe('虎豹督军（曹纯，一类指挥：我军群体增伤 50%，每回
     // 我军群体 2–3 目标（groupCount [2,3] 各 50%）
     expect(prep.length).toBeGreaterThanOrEqual(2);
     expect(prep.length).toBeLessThanOrEqual(3);
-    expect(prep.every((e) => e.detail.includes('提高 50%') && e.detail.includes('剩余 8/8'))).toBe(true);
+    // 攻击 173 → 50 + 0.25×(173−80) = 73.25 → 八舍九入 73%（受攻击成长率 0.25，用户实测）
+    expect(prep.every((e) => e.detail.includes('提高 73%') && e.detail.includes('剩余 8/8'))).toBe(true);
 
     const r1 = report.events.findIndex((e) => e.type === 'round_start' && e.round === 1);
+    const r2 = report.events.findIndex((e) => e.type === 'round_start' && e.round === 2);
+    // 用户口径 2026-09-17：第 1 回合不衰减（8/8）
+    expect(
+      report.events.some(
+        (e, i) => i > r1 && i < r2 && e.type === 'status_inflicted' && e.statusType === 'damage_boost'
+      )
+    ).toBe(false);
+
     const decayed = report.events.find(
       (e, i): e is Inflicted =>
-        i > r1 && e.type === 'status_inflicted' && e.statusType === 'damage_boost' && e.detail.includes('剩余 7/8')
+        i > r2 && e.type === 'status_inflicted' && e.statusType === 'damage_boost' && e.detail.includes('剩余 7/8')
     );
     expect(decayed).toBeDefined();
-    expect(decayed!.detail).toContain('提高 44%'); // 0.5 × 7/8 = 0.4375 → 44%
+    expect(decayed!.detail).toContain('提高 64%'); // 0.73 × 7/8 = 0.63875 → 64%
   });
 
-  it('数值：衰减序列 8/8 → 1/8 后移除，且 rate 按份数等比缩放', () => {
+  it('数值：第 1 回合 8/8 → 第 8 回合 1/8（第 9 回合才移除），rate 按份数等比缩放', () => {
     const report = run(caoTeam(), 1, 8);
     const details = boostEvents(report.events).map((e) => e.detail);
-    expect(details.some((d) => d.includes('剩余 7/8'))).toBe(true);
+    expect(details.some((d) => d.includes('剩余 8/8'))).toBe(true);
     expect(details.some((d) => d.includes('剩余 1/8'))).toBe(true);
+    // 8 回合内不会到期移除：1/8 落在第 8 回合，移除发生在第 9 回合
     expect(
       report.events.some((e) => e.type === 'status_expired' && e.statusType === 'damage_boost')
-    ).toBe(true);
+    ).toBe(false);
 
-    // 单元级：8/8 挂上后连续 tick 6 次 → 剩余 2/8（rate = 50% × 2/8 = 12.5% → 13%）
+    // 单元级：第 1 回合不衰减 → 第 2..8 回合各 −1/8 → 第 9 回合移除
     const unit = makeUnit(dummy('unit', '大营'));
     const ctx = makeCtx([unit]);
+    const st = () => unit.statuses.find((s) => s.type === 'damage_boost');
+    const eighths = () => {
+      const s = st();
+      return s && 'eighths' in s ? s.eighths : undefined;
+    };
     inflictStatus(ctx, unit, {
       type: 'damage_boost',
       rate: 0.5,
@@ -152,9 +168,18 @@ describe('虎豹督军（曹纯，一类指挥：我军群体增伤 50%，每回
       attackScaled: true,
       decayEighths: 8,
     }, 'command', 'hubao_dujun');
-    for (let i = 0; i < 6; i++) tickRoundStartStatuses(ctx);
-    const st = unit.statuses.find((s) => s.type === 'damage_boost');
-    expect(st && 'eighths' in st ? st.eighths : undefined).toBe(2);
-    expect(st && 'eighths' in st ? st.rate : undefined).toBeCloseTo(0.125, 6);
+    expect(eighths()).toBe(8);
+    ctx.currentRound = 1;
+    tickRoundStartStatuses(ctx);
+    expect(eighths()).toBe(8); // 第 1 回合保持满额
+    for (let r = 2; r <= 8; r++) {
+      ctx.currentRound = r;
+      tickRoundStartStatuses(ctx);
+    }
+    expect(eighths()).toBe(1);
+    expect(st() && st()!.type === 'damage_boost' ? st()!.rate : undefined).toBeCloseTo(0.5 * (1 / 8), 8);
+    ctx.currentRound = 9;
+    tickRoundStartStatuses(ctx);
+    expect(st()).toBeUndefined();
   });
 });

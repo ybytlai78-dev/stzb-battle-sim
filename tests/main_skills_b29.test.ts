@@ -153,8 +153,9 @@ describe('谋谟帷幄（贾诩，二类指挥：友军监听试图发动主动�
     expect(main.kind === 'strategy_damage' && main.rate).toBe(171);
     expect(main.kind === 'strategy_damage' && main.chance).toBe(0.6);
     expect(extra?.kind === 'strategy_damage' && extra.rate).toBe(76);
-    // 「受谋略」成长率官方未给 → 留空（取 0，按基值不缩放）
-    expect(main.kind === 'strategy_damage' && main.growthRate).toBe(0);
+    // 171% 段：实测反解已确认 1.825（4 点观测，与大明州 §6.2 表一致）
+    expect(main.kind === 'strategy_damage' && main.growthRate).toBe(1.825);
+    // 追加 76% 段：尚无实测点 → 暂取 0（按基值不缩放），待补「兵力 < 初始 60%」观测
     expect(extra?.kind === 'strategy_damage' && extra.growthRate).toBe(0);
   });
 

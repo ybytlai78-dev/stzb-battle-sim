@@ -40,9 +40,8 @@ describe('批量补入 · 普通卡（按官网面板）', () => {
     expect(r.troopType).toBe('infantry');
     expect(r.cost).toBe(2.5);
     expect(r.mainSkillName).toBe('列营守险');
-    // 列营守险已实现（feat/mechanic-and-skills），但其「四维 +29.2」的受谋略成长率未确认
-    // → 按 listing.ts 口径仍下架（登记于 OFFLINE_MAIN_SKILLS），待反解确认后上架
-    expect(isHeroListed(r)).toBe(false);
+    // 列营守险四维「受谋略」成长率已实测确认 0.115/点（谋略 195 → +42.4）→ 上架（h74 与 XP姜维 均上架）
+    expect(isHeroListed(r)).toBe(true);
   });
 
   it('冯嫽 h812（原被 SKIP 的空数据条目）已从官网补齐', () => {

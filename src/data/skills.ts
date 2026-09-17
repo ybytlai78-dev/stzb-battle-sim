@@ -664,8 +664,9 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
   },
   /**
    * 谋议宏图（司马炎主战法·一类指挥）：准备阶段对我军全体挂减伤 30%（受谋略，成长率 0.175/点）与士气 +8。
-   * 减伤按 8/8 计，每回合开始（含第 1 回合回合前）衰减 1/8；士气每回合开始再 +8（同战法累加）。
-   * 因准备阶段已释放：第 1 回合行动时减伤剩余 7/8、士气 +16；第 3 回合行动时减伤剩余 5/8、士气 +32。
+   * 减伤按 8/8 计；**第 1 回合保持 8/8**，从第 2 回合开始每回合回合前衰减 1/8（第 8 回合 1/8）。
+   * 士气每回合开始再 +8（同战法累加）。因准备阶段已释放：
+   * 第 1 回合行动时减伤剩余 8/8、士气 +8；第 2 回合减伤 7/8、士气 +16；第 3 回合减伤 6/8、士气 +24。
    * 不同指挥战法的士气提高冲突、数值取较高。
    */
   mouyi_hongtu: {
@@ -769,9 +770,11 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
   },
   /**
    * 虎豹督军（曹纯主战法·一类指挥）：战斗开始后首回合，使我军群体（有效距离内 2–3 目标，各 50%）
-   * 进行攻击的伤害提高 50%，该效果每回合开始时减少 1/8（准备阶段 8/8，第 1 回合前 7/8，同谋议宏图口径）。
+   * 进行攻击的伤害提高 50%，该效果每回合开始时减少 1/8。
+   * 8 份衰减时点（用户口径 2026-09-17）：**第 1 回合 8/8** → 第 2 回合 7/8 → … → 第 8 回合 1/8（同谋议宏图）。
    * 官方：指挥 A，有效距离 3（网易技能库 200739；来源 dateyuan/七将主战法调研.md §3.1）。
-   * 「受攻击属性影响」成长率未确认 → 留空（attackScaled 不给 growthRate，引擎按基值不缩放）。
+   * 「受攻击属性影响」成长率 = **0.25/点**（用户实测 2026-09-17：攻击 277.8 → 满层 99%、攻击 266 → 96%；
+   * 反解区间 [0.24722, 0.25215)，0.25 = 基值/200 即 +200 攻击翻倍）。
    * 「进行攻击的伤害」沿用既有口径（大赏三军 / 强势 / 冲锋同为不过滤伤害类型）。
    */
   hubao_dujun: {
@@ -789,7 +792,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     output: [
       {
         kind: 'inflict_status',
-        status: { type: 'damage_boost', rate: 0.5, duration: 999, direction: 'caused', attackScaled: true, decayEighths: 8 },
+        status: { type: 'damage_boost', rate: 0.5, duration: 999, direction: 'caused', attackScaled: true, growthRate: 0.25, decayEighths: 8 },
       },
     ],
   },
@@ -955,15 +958,15 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     targetSide: 'ally',
     tags: ['attack_buff', 'defense_buff', 'strategy_buff', 'speed_buff', 'evasion'],
     output: [
-      // ① 我军全体四维 +29.2（受谋略，成长率未确认 → 留空）
+      // ① 我军全体四维 +29.2（受谋略，成长率 0.115/点；用户实测：谋略 195 → +42.4）
       {
         kind: 'inflict_status',
         applyAll: true,
         status: [
-          { type: 'attack_buff', amount: 29.2, duration: 2, strategyScaled: true },
-          { type: 'defense_buff', amount: 29.2, duration: 2, strategyScaled: true },
-          { type: 'strategy_buff', amount: 29.2, duration: 2, strategyScaled: true },
-          { type: 'speed_buff', amount: 29.2, duration: 2, strategyScaled: true },
+          { type: 'attack_buff', amount: 29.2, duration: 2, strategyScaled: true, growthRate: 0.115 },
+          { type: 'defense_buff', amount: 29.2, duration: 2, strategyScaled: true, growthRate: 0.115 },
+          { type: 'strategy_buff', amount: 29.2, duration: 2, strategyScaled: true, growthRate: 0.115 },
+          { type: 'speed_buff', amount: 29.2, duration: 2, strategyScaled: true, growthRate: 0.115 },
         ],
       },
       // ② 士气分支（按施法者自身）：高昂 → 规避给我军全体；否则友军全体（不含自身）
@@ -1084,7 +1087,14 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
-  /** 魏武之泽（曹丕主战法）：主动战法，40%，我军群体免疫怯战，普通攻击与追击伤害提高 15%（受谋略影响），每回合可两次普攻，持续 2 回合。免疫怯战暂未建模 */
+  /**
+   * 魏武之泽（曹丕主战法）：主动战法，40%，我军群体免疫怯战（未建模），
+   * 普通攻击与追击战法造成的伤害提高 15%（受谋略，成长率 0.08/点），每回合可两次普攻，持续 2 回合。
+   * 官方措辞「普通攻击和追击战法」→ 按 damageClassKey 拆**两条**分类键：
+   *   `全域|普通`（damageSource basic）与 `全域|追击`（skillTypes ['pursuit']）——分类键不同 → 各自共存、进同一加算池。
+   * 成长率 0.08 = 用户实测反解（谋略 197.6 → 24%；区间 [0.0757, 0.0842)，取窗口内较整值 0.08）。
+   * 免疫怯战暂未建模。
+   */
   weiwu_zhi_ze: {
     id: 'weiwu_zhi_ze',
     name: '魏武之泽',
@@ -1097,7 +1107,22 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['combo', 'damage_boost'],
     output: [
       { kind: 'inflict_status', status: { type: 'combo', duration: 2 } },
-      { kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.15, duration: 2, direction: 'caused' } },
+      {
+        kind: 'inflict_status',
+        status: { type: 'damage_boost', rate: 0.15, duration: 2, direction: 'caused', damageSource: 'basic', strategyScaled: true, growthRate: 0.08 },
+      },
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'damage_boost',
+          rate: 0.15,
+          duration: 2,
+          direction: 'caused',
+          skillTypes: ['pursuit'],
+          strategyScaled: true,
+          growthRate: 0.08,
+        },
+      },
     ],
   },
   /** 强势（张春华主战法）：主动战法，40%，使敌军群体进行攻击时的伤害降低 48%（受谋略，成长率 0.225/点），并使其陷入犹豫状态，无法发动主动战法，持续 2 回合 */
@@ -1126,7 +1151,13 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['damage'],
     output: [{ kind: 'physical_damage', rate: 240 }],
   },
-  /** 诸葛锦囊（诸葛亮主战法）：使我军全体受到攻击和策略攻击的伤害降低 35%（受谋略影响），并使其进行攻击和策略攻击时的伤害提高 14%（受谋略影响），持续 2 回合（受谋略影响取基值）。自身先手暂未建模 */
+  /**
+   * 诸葛锦囊（诸葛亮主战法·主动 35%）：我军全体减伤 35%（受谋略，成长率 0.25/点）、
+   * 增伤 14%（受谋略但**实测不随谋略变** → growthRate 0），持续 2 回合。
+   * 成长率来源：用户实测（谋略 373.1 → 减伤 108%、增伤 14%）——
+   * 减伤反解区间 [0.24872, 0.25213)，取整候选 0.25（翻倍阈值 140 谋略）。
+   * ⚠️ 官方描述另有「自身获得先手」「目标已有该效果时额外恢复 150%」两条，引擎未建模。
+   */
   zhuge_jinnang: {
     id: 'zhuge_jinnang',
     name: '诸葛锦囊',
@@ -1138,8 +1169,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     targetSide: 'ally',
     tags: ['damage_reduce', 'damage_boost'],
     output: [
-      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.35, duration: 2 } },
-      { kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.14, duration: 2, direction: 'caused' } },
+      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.35, duration: 2, strategyScaled: true, growthRate: 0.25 } },
+      { kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.14, duration: 2, direction: 'caused', strategyScaled: true, growthRate: 0 } },
     ],
   },
   /** 不动如山（郝昭主战法·回合开始被动）：战斗中，每回合行动阶段移除自身所有有害效果，并使自身防御提高 100、谋略提高 25 */
@@ -1292,7 +1323,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     retainAfterDeath: true,
     roundRepeat: { startRound: 1, endRound: 3, rate: 0.7 },
     initialOutput: [
-      { kind: 'inflict_status', status: { type: 'speed_buff', amount: 41, duration: 3, strategyScaled: true, growthRate: 0.1 } },
+      // 速度 +41（受谋略，成长率 0.075/点；用户实测：谋略 153.5 → 46.5、158.4 → 46.9）
+      { kind: 'inflict_status', status: { type: 'speed_buff', amount: 41, duration: 3, strategyScaled: true, growthRate: 0.075 } },
     ],
     tags: ['combo', 'speed_buff'],
     output: [{ kind: 'inflict_status', status: { type: 'combo', duration: 1 } }],
@@ -3454,12 +3486,15 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
 
   /**
    * 谋谟帷幄（贾诩主战法·二类指挥 S）：我军全体（含施法者自己）每次试图发动主动战法前，
-   * 由施法者按 60% 判定，命中则对敌军单体发动一次策略攻击（171%，受谋略）。
+   * 由施法者按 60% 判定，命中则对敌军单体发动一次策略攻击（171%，受谋略，**成长率 1.825/点** 已实测确认）。
    * 同时当**本次发动者**兵力低于其初始兵力 60% 时，其每回合首次试图发动主动时会额外发动一次
    * 策略攻击（76%，受谋略）——追加段独立判定，沿用同一 60%。
    * 「每回合首次」按「回合 × 战法 × 施法者 × 发动者」去重（oncePerRoundPerTarget）。
-   * 官方未写「受谋略属性影响」的具体成长率 → 留空（strategyScaled 标记在、growthRate 取 0，按基值不缩放）。
    * 引擎配套机制：roundTrigger 'ally_before_active' + extraByTroopRatio。
+   * 成长率来源：用户实测 4 点（330 谋略/7228 兵/+42%/目标 302.1 → 1111 等）反解区间 [1.819, 1.826)，
+   * 与《谋略战法受谋略成长调研.md》§6.2 大明州表「谋谟帷幄 171 / 1.825」逐位一致。
+   * ⚠️ 未确认：①追加 76% 段受谋略成长率（暂 0，取基值）；②伤害按**触发者自身**谋略缩放
+   *   （实测：330 谋略的队友触发按 330 算、贾诩自身按 319.7 算），引擎现按施法者缩放 → 待 mechanic 树改。
    */
   moumou_weiwo: {
     id: 'moumou_weiwo',
@@ -3480,7 +3515,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       ],
     },
     output: [
-      { kind: 'strategy_damage', rate: 171, strategyScaled: true, growthRate: 0, targetMode: 'random_single', chance: 0.6 },
+      { kind: 'strategy_damage', rate: 171, strategyScaled: true, growthRate: 1.825, targetMode: 'random_single', chance: 0.6 },
     ],
   },
 

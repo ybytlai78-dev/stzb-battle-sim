@@ -5,15 +5,14 @@
 
 /** 主战法有未确认的「受谋略」成长（含取基值）→ 携带该主战法的武将下架 */
 export const OFFLINE_MAIN_SKILLS: Record<string, string> = {
-  qiji_rufeng: '速度 +41 成长 0.1 未确认',
   qingqiu_meihuo: '伤害降低 24% 成长 0.15 未确认',
   mimou_dingshu: '减伤/自身增伤成长未确认（恐慌 143%/1.125、诅咒 1.225 已确认）',
   huanshi_xuchi: '触发率 50% 成长 0.15 未确认',
-  zhuge_jinnang: '减伤 35% / 增伤 14% 成长未确认（取基值）',
+  zhuge_jinnang: '成长率已确认（减伤 0.25 / 增伤 0）；剩余机制缺口：先手、重复触发额外恢复未建模',
   tongchou_dikai: '每层 ±2% 成长 0.01 未确认',
   fushi_yehuo: '受击增伤 16% 成长 0.1 未确认（火攻/燃烧 0.95 已确认）',
   huangtian_dangli: '妖术 180% 成长 1.0 未确认',
-  weiwu_zhi_ze: '增伤 15% 成长未确认（取基值）',
+  weiwu_zhi_ze: '成长率已确认 0.08（普攻/追击两条分类键）；剩余机制缺口：免疫怯战未建模',
   minghui_tongtou: '恢复 168% 成长 1.0 未确认',
   hanyun_kuangye: '伤害降低 30% 成长未确认（取基值）',
   bailou_duwu: '伤害降低 26% 成长未确认（取基值）',
@@ -22,13 +21,12 @@ export const OFFLINE_MAIN_SKILLS: Record<string, string> = {
   fenghuo_fuzhou: '火攻 95% 谋略成长未确认',
   hubu_guanyou: '首次攻击 +70% 速度成长未确认',
   wende_jiaofang: '策略增伤 10% 谋略成长未确认',
-  // ─── 2026-09-16 补登记：以下 5 个主战法已实现但「受谋略」成长率未确认 ───
+  // ─── 2026-09-16 补登记：以下 4 个主战法已实现但「受谋略」成长率未确认 ───
   // 官方描述只写「受谋略属性影响」而未给成长系数，引擎按基值不缩放（strategyScaled 在、growthRate 缺/0），
   // 与真实游戏偏差随谋略增大 → 按本表口径先行下架，待用 scripts/derive_growth_rate.mjs 反解确认后移出。
-  lieying_shouxian: '四维 +29.2 受谋略成长未确认（按基值不缩放）',
   jiufa_zhongyuan: '策略伤害 90% / 每回合增伤 5% 受谋略成长未确认（按基值不缩放）',
   qiaoyin_huandie: '策略伤害 176% / 燃烧 86% / 恢复 161% / 休整 82% 受谋略成长未确认（按基值不缩放）',
-  moumou_weiwo: '策略伤害 171% / 追加 76% 受谋略成长未确认（按基值不缩放）',
+  moumou_weiwo: '策略伤害 171% 段已确认 1.825；剩余：追加 76% 段成长未确认 + 伤害应按触发者谋略缩放（引擎现按施法者）',
   chixi_xingbing: '恢复 200% 受谋略成长未确认（按基值不缩放）',
 };
 

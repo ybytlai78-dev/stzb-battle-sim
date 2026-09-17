@@ -168,18 +168,24 @@ describe('列营守险（SP姜维，主动：我军全体四维 + 概率规避 +
     expect(s.tags).toEqual(expect.arrayContaining(ATTRS.concat(['evasion'])));
   });
 
-  it('发动后我军全体四维 +29.2（12 条 = 四维 × 3 人，含施法者自身）', () => {
+  it('发动后我军全体四维提高（按施法者谋略缩放；12 条 = 四维 × 3 人，含施法者自身）', () => {
     const ctx = castOnce();
     const buffs = ctx.events.filter(
       (e): e is Inflicted =>
         e.type === 'status_inflicted' && ATTRS.includes(e.statusType)
     );
     expect(buffs).toHaveLength(12);
-    expect(buffs.every((e) => e.detail.includes('29'))).toBe(true);
+    // 引擎按「生效谋略」实时取值（同一次发动内会自我叠加）：
+    //   sp 的攻/防/谋三条按谋略 100 算（29.2+0.115×20 = 31.5 → 32）；
+    //   其谋略 buff 随即生效（132）→ sp 的速度条与友军那 8 条按 132 算（29.2+0.115×52 = 35.18 → 35）。
+    // ⚠️ 是否改为「战法发动瞬间快照施法者谋略」待用户拍板；游戏显示 1 位小数（42.4）口径亦待拍板。
+    const details = buffs.map((e) => e.detail);
+    expect(details.filter((d) => d.includes('提高了32')).length).toBe(3);
+    expect(details.filter((d) => d.includes('提高了35')).length).toBe(9);
     expect([...new Set(buffs.map((e) => e.unitId))].sort()).toEqual(['a1', 'a2', 'sp']);
   });
 
-  it('四维「受谋略属性影响」成长率未确认 → 留空（有 strategyScaled 标记、无 growthRate，按基值 29.2）', () => {
+  it('四维「受谋略属性影响」成长率 0.115/点（用户实测：谋略 195 → +42.4；基值 29.2 @ 谋略 80）', () => {
     const s = SKILL_REGISTRY['lieying_shouxian'];
     const seg = s.output.find((o) => o.kind === 'inflict_status' && Array.isArray(o.status));
     expect(seg).toBeTruthy();
@@ -187,11 +193,13 @@ describe('列营守险（SP姜维，主动：我军全体四维 + 概率规避 +
       expect(seg.status).toHaveLength(4);
       for (const st of seg.status) {
         expect('strategyScaled' in st && st.strategyScaled).toBe(true);
-        expect('growthRate' in st).toBe(false);
+        expect('growthRate' in st && st.growthRate).toBe(0.115);
         expect('amount' in st && st.amount).toBe(29.2);
         expect('duration' in st && st.duration).toBe(2);
       }
     }
+    // 实测点复算：谋略 195 → 29.2 + 0.115×115 = 42.425 → 游戏显示 42.4（1 位小数）
+    expect(Math.round((29.2 + 0.115 * (195 - 80)) * 10) / 10).toBe(42.4);
   });
 
   it('概率规避挂上：50% 共 3 次机会（evade_chance）', () => {

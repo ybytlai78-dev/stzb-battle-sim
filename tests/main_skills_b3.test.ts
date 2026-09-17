@@ -6,7 +6,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { runBattle } from '../src/engine/combat';
 import { actUnit, inflictStatus, type CombatContext } from '../src/engine/action';
-import type { BattleEvent, General, Position, Skill, UnitState } from '../src/engine/types';
+import type { BattleEvent, CreateStatus, General, Position, Skill, UnitState } from '../src/engine/types';
 import type { Rng } from '../src/engine/rng';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import { initHeroDB, HERO_REGISTRY, withSkills, level40 } from '../src/data/heroes';
@@ -283,7 +283,7 @@ function makeFixedChanceCtx(next: number): CombatContext {
   };
 }
 
-describe('魏武之泽（曹丕，主动 40%：我军群体连击 + 追击伤害提升 15%，持续 2 回合）', () => {
+describe('魏武之泽（曹丕，主动 40%：我军群体连击 + 普攻/追击伤害提升 15%（受谋略，成长 0.08），持续 2 回合）', () => {
   it('主战法挂入主动槽（曹丕），发动率 40%', () => {
     const g = hero('h25');
     expect(g.name).toBe('曹丕');
@@ -307,11 +307,25 @@ describe('魏武之泽（曹丕，主动 40%：我军群体连击 + 追击伤害
     expect(inflicted(report, 'combo')[0].detail).toContain('2 回合');
   });
 
-  it('我军群体获得追击伤害提升（damage_boost，15%）', () => {
+  it('我军群体获得普攻/追击两条伤害提升（damage_boost，按谋略缩放：曹丕谋略 180 → 23%）', () => {
     const report = run(fullTeam(withSkills(level40(hero('h25'), { strategy: 40 }), { activeSkillIds: ['weiwu_zhi_ze'] })), 1);
     expect(distinctTargets(report, 'damage_boost')).toBeGreaterThanOrEqual(2);
     expect(distinctTargets(report, 'damage_boost')).toBeLessThanOrEqual(3);
-    expect(inflicted(report, 'damage_boost')[0].detail).toContain('造成的伤害提高 15%');
+    // 15 + 0.08×(180−80) = 23
+    expect(inflicted(report, 'damage_boost')[0].detail).toContain('造成的伤害提高 23%');
+    // 每个目标两条（全域|普通 + 全域|追击），不合并
+    expect(inflicted(report, 'damage_boost').length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('普攻 / 追击拆两条分类键：damageSource basic 与 skillTypes pursuit，成长率同 0.08', () => {
+    const s = SKILL_REGISTRY['weiwu_zhi_ze'];
+    const statuses = s.output
+      .flatMap((o) => (o.kind === 'inflict_status' ? (Array.isArray(o.status) ? o.status : [o.status]) : []))
+      .filter((st): st is Extract<CreateStatus, { type: 'damage_boost' }> => st.type === 'damage_boost');
+    expect(statuses).toHaveLength(2);
+    expect(statuses.some((st) => st.damageSource === 'basic')).toBe(true);
+    expect(statuses.some((st) => st.skillTypes?.includes('pursuit'))).toBe(true);
+    expect(statuses.every((st) => st.strategyScaled === true && st.growthRate === 0.08)).toBe(true);
   });
 });
 
@@ -374,14 +388,14 @@ describe('诸葛锦囊（诸葛亮，主动 35%：我军全体减伤 35% + 增�
     expect('targetSide' in s && s.targetSide === 'ally').toBe(true);
   });
 
-  it('我军全体获得减伤 35%（damage_reduce）', () => {
+  it('我军全体获得减伤 80%（damage_reduce，按谋略缩放：诸葛亮谋略 260 → 35 + 0.25×180 = 80）', () => {
     const report = run(fullTeam(withSkills(level40(hero('h17'), { strategy: 40 }), { activeSkillIds: ['zhuge_jinnang'] })), 1);
     expect(casts(report, '诸葛锦囊').length).toBeGreaterThan(0);
     expect(distinctTargets(report, 'damage_reduce')).toBe(3);
-    expect(inflicted(report, 'damage_reduce')[0].detail).toContain('0.35');
+    expect(inflicted(report, 'damage_reduce')[0].detail).toContain('0.8');
   });
 
-  it('我军全体获得增伤 14%（damage_boost）', () => {
+  it('我军全体获得增伤 14%（damage_boost，受谋略但实测不缩放 → growthRate 0）', () => {
     const report = run(fullTeam(withSkills(level40(hero('h17'), { strategy: 40 }), { activeSkillIds: ['zhuge_jinnang'] })), 1);
     expect(distinctTargets(report, 'damage_boost')).toBe(3);
     expect(inflicted(report, 'damage_boost')[0].detail).toContain('造成的伤害提高 14%');

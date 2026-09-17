@@ -55,10 +55,22 @@ const CONFIRMED: Record<string, Record<string, number>> = {
   liehuo_fenzhou: { burning: 1.35, detonate: 2.26 },
   /** 用户确认（2026-09-15）：赏顺伐逆恢复 65% 成长 0.325；反击 180% 仍取基值不进本表 */
   shangshun_fani: { heal: 0.325 },
+  /** 用户实测反解（2026-09-17，游戏内实读；见《速度战法受速度成长调研.md》与各战法注释） */
+  dongru_leizhen: { damage_boost: 0.2532 },
+  weiwu_zhi_ze: { damage_boost: 0.08 },
+  zhuge_jinnang: { damage_reduce: 0.25, damage_boost: 0 },
+  lieying_shouxian: { attack_buff: 0.115, defense_buff: 0.115, strategy_buff: 0.115, speed_buff: 0.115 },
+  qiji_rufeng: { speed_buff: 0.075 },
+  moumou_weiwo: { strategy_damage: 1.825 },
+  hubao_dujun: { damage_boost: 0.25 },
 };
 
 function collectOutputs(skill: Skill): SkillOutput[] {
   const out = [...skill.output];
+  // 一类指挥的准备阶段输出（其疾如风的速度 buff 在这里）
+  if (skill.type === 'command' && skill.initialOutput) {
+    out.push(...skill.initialOutput);
+  }
   if (skill.type === 'command' && skill.delayedOutput) {
     out.push(...skill.delayedOutput.output);
   }
@@ -94,6 +106,12 @@ function extractGrowths(skill: Skill): Record<string, number[]> {
         if (st.type === 'panic' || st.type === 'burning' || st.type === 'sorcery' || st.type === 'curse' || st.type === 'ignite') {
           push(st.type, st.growthRate);
         }
+        // 缩放维不限谋略：速度（其疾如风）/ 攻击 / 防御 类同样进本表
+        const scaledFlag =
+          ('strategyScaled' in st && st.strategyScaled === true) ||
+          ('speedScaled' in st && st.speedScaled === true) ||
+          ('attackScaled' in st && st.attackScaled === true) ||
+          ('defenseScaled' in st && st.defenseScaled === true);
         if (
           (st.type === 'damage_reduce' ||
             st.type === 'damage_boost' ||
@@ -101,7 +119,8 @@ function extractGrowths(skill: Skill): Record<string, number[]> {
             st.type === 'defense_buff' ||
             st.type === 'strategy_buff' ||
             st.type === 'speed_buff') &&
-          st.strategyScaled &&
+          scaledFlag &&
+          'growthRate' in st &&
           st.growthRate !== undefined
         ) {
           push(st.type, st.growthRate);

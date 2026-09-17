@@ -2379,13 +2379,16 @@ export function tickStatuses(ctx: CombatContext, units: UnitState[]): void {
 /**
  * 回合前准备阶段（谋议宏图 / 恃强淬锋）：`round_start` 之后、单位行动之前。
  * 1. 带 `eighths` 的减伤/增伤（谋议宏图 / 虎豹督军）衰减 1/8（≤0 则移除）；**不对 fifths 做回合衰减**
+ *    ⚠️ 时点（用户口径 2026-09-17）：**第 1 回合保持满额 8/8**，从第 2 回合开始每回合 −1/8（第 8 回合 1/8）。
+ *    此前实现是「准备阶段 8/8 → 第 1 回合开始即 7/8」，整体早了一回合。
  * 2. 被动 `selfPhysBoost.onRoundStart` 给持有者叠 1 层造成攻击伤害提高
  * 3. 一类指挥 `roundStartRepeat` 对锁定目标再结算（士气叠层，同战法累加）
  */
 export function tickRoundStartStatuses(ctx: CombatContext): void {
+  const decayEighthsNow = ctx.currentRound !== 1; // 第 1 回合不衰减（保 8/8）
   const units = [...ctx.myTeam, ...ctx.enemyTeam];
   for (const unit of units) {
-    if (!unit.alive) continue;
+    if (!unit.alive || !decayEighthsNow) continue;
     for (const s of [...unit.statuses]) {
       if ((s.type !== 'damage_reduce' && s.type !== 'damage_boost') || s.eighths === undefined || s.baseRate === undefined) continue;
       s.eighths -= 1;

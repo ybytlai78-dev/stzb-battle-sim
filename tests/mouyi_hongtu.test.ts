@@ -1,8 +1,9 @@
 /**
  * 谋议宏图（司马炎·一类指挥）
  * 准备阶段释放一次，我军全体获得减伤 + 士气提高：
- *  - 减伤按 8/8 挂上，每到正式回合的回合前准备阶段衰减 1/8（第 1 回合前剩余 7/8）
- *  - 士气 +8 同战法可叠加（准备阶段 +8，第 1 回合前再 +8 → 16；第 3 回合前共 4 次 → +32）
+ *  - 减伤按 8/8 挂上；**第 1 回合保持 8/8**，第 2 回合起每回合回合前衰减 1/8（第 8 回合 1/8、第 9 回合移除）
+ *    （用户口径 2026-09-17 修正：此前实现为「第 1 回合前即 7/8」，整体早了一回合）
+ *  - 士气 +8 同战法可叠加（准备阶段 +8，第 1 回合 +8 → 16；第 3 回合共 4 次 → +32）
  *  - 不同指挥战法的士气提高冲突，数值取较高
  */
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -102,12 +103,13 @@ describe('谋议宏图（司马炎，一类指挥：全军减伤 8/8 衰减 + �
     expect(s.tags).toEqual(expect.arrayContaining(['damage_reduce', 'morale_boost']));
   });
 
-  it('机制：准备阶段全军挂减伤 8/8 与士气 +8；第 1 回合前减伤剩余 7/8、士气叠到 16', () => {
-    const report = run(simayanTeam(), 1, 1);
+  it('机制：准备阶段全军挂减伤 8/8 与士气 +8；第 1 回合减伤仍 8/8（不衰减）、士气叠到 16；第 2 回合减伤 7/8', () => {
+    const report = run(simayanTeam(), 1, 2);
     expect(report.events.filter((e) => e.type === 'skill_cast' && e.skillName === '谋议宏图')).toHaveLength(1);
 
     const prepEnd = report.events.findIndex((e) => e.type === 'preparation_end');
     const r1 = report.events.findIndex((e) => e.type === 'round_start' && e.round === 1);
+    const r2 = report.events.findIndex((e) => e.type === 'round_start' && e.round === 2);
     const prepReduces = report.events.filter(
       (e, i): e is Extract<BattleEvent, { type: 'status_inflicted' }> =>
         i < prepEnd && e.type === 'status_inflicted' && e.statusType === 'damage_reduce'
@@ -121,24 +123,37 @@ describe('谋议宏图（司马炎，一类指挥：全军减伤 8/8 衰减 + �
     expect(prepReduces.every((e) => e.detail.includes('剩余 8/8'))).toBe(true);
     expect(prepMorale.every((e) => e.detail.includes('8'))).toBe(true);
 
-    const r1Reduces = report.events.filter(
-      (e, i): e is Extract<BattleEvent, { type: 'status_inflicted' }> =>
-        i > r1 && e.type === 'status_inflicted' && e.statusType === 'damage_reduce' && e.detail.includes('剩余 7/8')
-    );
+    // 用户口径 2026-09-17：第 1 回合保持 8/8（不衰减）
+    expect(
+      report.events.some(
+        (e, i) => i > r1 && i < r2 && e.type === 'status_inflicted' && e.statusType === 'damage_reduce'
+      )
+    ).toBe(false);
+
     const r1Morale = report.events.filter(
       (e, i): e is Extract<BattleEvent, { type: 'status_inflicted' }> =>
-        i > r1 && e.type === 'status_inflicted' && e.statusType === 'morale_boost' && e.detail.includes('16')
+        i > r1 && i < r2 && e.type === 'status_inflicted' && e.statusType === 'morale_boost' && e.detail.includes('16')
     );
-    expect(r1Reduces).toHaveLength(3);
     expect(r1Morale).toHaveLength(3);
+
+    const r2Reduces = report.events.filter(
+      (e, i): e is Extract<BattleEvent, { type: 'status_inflicted' }> =>
+        i > r2 && e.type === 'status_inflicted' && e.statusType === 'damage_reduce' && e.detail.includes('剩余 7/8')
+    );
+    const r2Morale = report.events.filter(
+      (e, i): e is Extract<BattleEvent, { type: 'status_inflicted' }> =>
+        i > r2 && e.type === 'status_inflicted' && e.statusType === 'morale_boost' && e.detail.includes('24')
+    );
+    expect(r2Reduces).toHaveLength(3);
+    expect(r2Morale).toHaveLength(3);
   });
 
-  it('数值：第 3 回合前减伤剩余 5/8、士气 +32；同战法士气可叠、不同指挥取较高；减伤受谋略缩放', () => {
+  it('数值：第 3 回合减伤剩余 6/8、士气 +32；同战法士气可叠、不同指挥取较高；减伤受谋略缩放', () => {
     const report = run(simayanTeam(), 1, 3);
     const r3 = report.events.findIndex((e) => e.type === 'round_start' && e.round === 3);
     const r3Reduces = report.events.filter(
       (e, i): e is Extract<BattleEvent, { type: 'status_inflicted' }> =>
-        i > r3 && e.type === 'status_inflicted' && e.statusType === 'damage_reduce' && e.detail.includes('剩余 5/8')
+        i > r3 && e.type === 'status_inflicted' && e.statusType === 'damage_reduce' && e.detail.includes('剩余 6/8')
     );
     const r3Morale = report.events.filter(
       (e, i): e is Extract<BattleEvent, { type: 'status_inflicted' }> =>
@@ -174,7 +189,7 @@ describe('谋议宏图（司马炎，一类指挥：全军减伤 8/8 衰减 + �
 });
 
 describe('谋议宏图回合前衰减（单元）', () => {
-  it('tickRoundStartStatuses 将 8/8 减伤衰减为 7/8 并叠士气', () => {
+  it('tickRoundStartStatuses：第 1 回合不衰减（保持 8/8 并叠士气）；第 2 回合起 7/8 并叠到 16', () => {
     const u = makeUnit('a');
     const ctx = makeCtx([u]);
     ctx.currentRound = 0;
@@ -194,9 +209,15 @@ describe('谋议宏图回合前衰减（单元）', () => {
     });
     ctx.currentRound = 1;
     tickRoundStartStatuses(ctx);
+    // 第 1 回合：减伤保持满额 8/8（用户口径 2026-09-17），士气照常叠到 16
+    expect(getStatus(u, 'damage_reduce')!.eighths).toBe(8);
+    expect(getStatus(u, 'morale_boost')!.amount).toBe(16);
+
+    ctx.currentRound = 2;
+    tickRoundStartStatuses(ctx);
     const reduce = getStatus(u, 'damage_reduce')!;
     expect(reduce.eighths).toBe(7);
     expect(reduce.rate).toBeCloseTo(0.3 * (7 / 8), 8);
-    expect(getStatus(u, 'morale_boost')!.amount).toBe(16);
+    expect(getStatus(u, 'morale_boost')!.amount).toBe(24);
   });
 });
