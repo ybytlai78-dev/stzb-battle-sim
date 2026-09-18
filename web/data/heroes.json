@@ -1631,7 +1631,7 @@
     "growthDefense": 2,
     "growthStrategy": 0.73,
     "growthSpeed": 0.54,
-    "mainSkillId": "",
+    "mainSkillId": "rengong_jiangjun",
     "mainSkillName": "人公将军",
     "skillDesc": "战斗前4回合，使我军全体的防御属性提高60.0，并使我军前锋、中军受到普通攻击时会进行反击（伤害率75.0%），在此期间，敌方武将存在妖术效果时造成的攻击伤害降低20.0%"
   },

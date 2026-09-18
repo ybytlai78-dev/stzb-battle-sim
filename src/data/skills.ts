@@ -4718,4 +4718,52 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       ],
     },
   },
+
+  /**
+   * 人公将军（张梁·群步 h557·指挥 B）：距离 3，我军全体 / 我军群体（官方 targetShow「我军群体（有效距离内 3 个目标）」）。
+   * 战斗前 4 回合：使我军全体防御属性提高 60；使我军前锋、中军受到普通攻击时会进行反击（伤害率 75%）；
+   * 在此期间，敌方武将存在妖术效果时造成的攻击伤害降低 20%。
+   * 官方：scripts/skill_extra.json id 200795（指挥 B / 距离 3 / 我军群体 3 目标 / 步；
+   * 满级 60 防御 + 反击 75% + 减伤 20%，1 级 30 / 37.5% / 10%）。
+   * 全文无「受 XX 属性影响」→ 无成长率留空问题、不登记下架（**张梁上架**）。
+   * 引擎配套：**新增 `damage_reduce.requireSelfStatus`（条件减伤）** —— 仅当携带者自身带该状态时本减伤才生效，
+   *   在 sumReduce / collectDamageModifiers 按携带者**当前**状态实时判定（人公将军：仅对带「妖术」的敌军生效）。
+   * 其余全部既有：一类指挥（准备阶段施加一次）/ 防御属性点数 buff / `counter` 反击资格（受普攻实际扣兵后反击来源）/
+   *   inflict_status 的 positions 站位筛选（怀橘遗亲先例）。
+   */
+  rengong_jiangjun: {
+    id: 'rengong_jiangjun',
+    name: '人公将军',
+    type: 'command',
+    phase: 'prep',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['defense_buff', 'counter', 'damage_reduce'],
+    output: [
+      // ① 前 4 回合：我军全体防御 +60
+      { kind: 'inflict_status', status: { type: 'defense_buff', amount: 60, duration: 4 } },
+      // ② 前 4 回合：我军前锋 / 中军 受普攻时反击 75%
+      {
+        kind: 'inflict_status',
+        targetSide: 'ally',
+        positions: ['前锋', '中军'],
+        status: { type: 'counter', duration: 4, rate: 75 },
+      },
+      // ③ 前 4 回合：带「妖术」效果的敌军造成的攻击伤害 −20%（条件减伤，按携带者当前状态实时判定）
+      {
+        kind: 'inflict_status',
+        targetSide: 'enemy',
+        targetMode: 'all',
+        status: {
+          type: 'damage_reduce',
+          rate: 0.2,
+          duration: 4,
+          damageType: 'physical',
+          requireSelfStatus: 'sorcery',
+        },
+      },
+    ],
+  },
 };

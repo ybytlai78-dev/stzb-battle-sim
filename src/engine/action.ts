@@ -2221,6 +2221,10 @@ function pushStatus(
     if (type === 'damage_boost' && 'dotTypes' in create && create.dotTypes != null) {
       (push as { dotTypes?: DotType[] }).dotTypes = create.dotTypes;
     }
+    // 条件减伤（人公将军）：仅当携带者自身带该状态时生效
+    if (type === 'damage_reduce' && 'requireSelfStatus' in create && create.requireSelfStatus != null) {
+      (push as { requireSelfStatus?: StatusType }).requireSelfStatus = create.requireSelfStatus;
+    }
     // 谋议宏图减伤 / 虎豹督军增伤按 8/8 衰减：冻结满额率为 baseRate
     if ((type === 'damage_reduce' || type === 'damage_boost') && 'decayEighths' in create && create.decayEighths) {
       (push as { eighths?: number }).eighths = create.decayEighths;
@@ -2701,10 +2705,14 @@ export function statusMatchesHit(
   return true;
 }
 
-/** 受击方减伤合计；hit 过滤后仍走 formulas.sumRates，不改其签名。 */
+/** 受击方减伤合计；hit 过滤后仍走 formulas.sumRates，不改其签名。
+ *  条件减伤（人公将军）：`requireSelfStatus` 未满足时本减伤不生效（按**携带者当前**状态实时判定）。 */
 function sumReduce(target: UnitState, hit?: DamageHitContext): number {
   const list = target.statuses.filter(
-    (s) => s.type === 'damage_reduce' && statusMatchesHit(s, hit)
+    (s) =>
+      s.type === 'damage_reduce' &&
+      statusMatchesHit(s, hit) &&
+      (!('requireSelfStatus' in s) || !s.requireSelfStatus || hasStatus(target, s.requireSelfStatus))
   );
   return sumRates(list, 'damage_reduce');
 }
@@ -2772,7 +2780,12 @@ function collectDamageModifiers(
         .map((s) => toSrc(s, 'taken'))
     : [];
   const reduce = target.statuses
-    .filter((s): s is Extract<Status, { type: 'damage_reduce' }> => s.type === 'damage_reduce' && statusMatchesHit(s, hit))
+    .filter(
+      (s): s is Extract<Status, { type: 'damage_reduce' }> =>
+        s.type === 'damage_reduce' &&
+        statusMatchesHit(s, hit) &&
+        (!s.requireSelfStatus || hasStatus(target, s.requireSelfStatus))
+    )
     .map((s) => toSrc(s, 'reduce'));
   const cr = troopCounterReduceOf(source, target);
   if (cr > 0 && !opts?.ignoresTroopCounter) {
