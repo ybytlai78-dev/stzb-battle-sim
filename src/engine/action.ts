@@ -165,6 +165,13 @@ export interface CombatContext {
    */
   skillDamageCounters?: Map<string, number>;
   /**
+   * 全队累计伤害计数（徽言龙凤）：key `${casterId}:${skillId}` → 该战法视角下「本侧已造成伤害次数」。
+   * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
+   */
+  teamDamageCounters?: Map<string, number>;
+  /** 全队累计伤害门槛已激活标记（徽言龙凤）：键同 teamDamageCounters */
+  teamThresholdActive?: Set<string>;
+  /**
    * 二类指挥·友军监听试图发动主动（谋谟帷幄）：key `${round}:${skillId}:${casterId}:${actorId}` → 已判定，
    * 保证「其每回合首次试图发动主动战法时」对每个发动者只走一次。
    * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
@@ -423,6 +430,31 @@ export function triggerOnAttrChange(
       executeSkillOutputs(ctx, caster, l.skill, [target], rule.output);
       if (!caster.alive) break;
     }
+  }
+}
+
+/**
+ * 全队累计伤害门槛（徽言龙凤）：本侧单位每造成 1 次伤害（实际扣兵 > 0）计数 +1，
+ * 达到 `count` 时**激活**该战法 —— 立即对锁定目标结算激活段 output，并允许其 roundStartRepeat 开始执行。
+ * 计数与激活标记按「战法 × 施法者」记（ctx.teamDamageCounters / ctx.teamThresholdActive）。
+ */
+function noteTeamDamage(ctx: CombatContext, source: UnitState): void {
+  for (const l of [...ctx.lockedCommands]) {
+    const cfg = l.skill.type === 'command' ? l.skill.teamDamageThreshold : undefined;
+    if (!cfg) continue;
+    const caster = castUnit(ctx, l.casterId);
+    if (!caster || caster.side !== source.side) continue;
+    const key = `${l.casterId}:${l.skill.id}`;
+    if (ctx.teamThresholdActive?.has(key)) continue;
+    ctx.teamDamageCounters ??= new Map();
+    const n = (ctx.teamDamageCounters.get(key) ?? 0) + 1;
+    ctx.teamDamageCounters.set(key, n);
+    if (n < cfg.count) continue;
+    ctx.teamThresholdActive ??= new Set();
+    ctx.teamThresholdActive.add(key);
+    if (!caster.alive && !l.skill.retainAfterDeath) continue;
+    const targets = l.targets.filter((t) => t.alive);
+    if (targets.length > 0) executeSkillOutputs(ctx, caster, l.skill, targets, cfg.output);
   }
 }
 
@@ -2634,6 +2666,13 @@ export function tickRoundStartStatuses(ctx: CombatContext): void {
   for (const locked of ctx.lockedCommands) {
     const skill = locked.skill;
     if (!skill.roundStartRepeat) continue;
+    // 全队累计伤害门槛（徽言龙凤）：未激活前整段不执行
+    if (
+      skill.teamDamageThreshold &&
+      !ctx.teamThresholdActive?.has(`${locked.casterId}:${skill.id}`)
+    ) {
+      continue;
+    }
     const rs = skill.roundStartRepeat;
     if (rs.startRound != null && ctx.currentRound < rs.startRound) continue;
     if (rs.endRound != null && ctx.currentRound > rs.endRound) continue;
@@ -3331,21 +3370,34 @@ function executeSkillOutputs(
               if (!t.alive) continue;
               riderAttacked = true;
               selectedIds.push(t.general.id);
-              triggerStackBuff(ctx, rider, t, 'physical');
+              // 代打伤害按代打者属性孰高定轨（徽言龙凤「由攻击或谋略属性中较高的属性决定」）：
+              // 生效攻击 > 生效谋略 → 攻击伤害（attackRate），否则策略伤害（strategyRate）
+              const byHigher = out.recipientDamageByHigherStat;
+              const useStrategy = byHigher
+                ? effectiveStat(rider, 'strategy') >= effectiveStat(rider, 'attack')
+                : false;
+              const damageType: DamageType = useStrategy ? 'strategy' : 'physical';
+              triggerStackBuff(ctx, rider, t, damageType);
               if (!out.ignoresEvasion && consumeEvasion(ctx, t, rider.general.id)) continue;
               const atk = effectiveStat(rider, 'attack');
-              const def = physicalTargetDefense(rider, t);
-              const hit: DamageHitContext = { damageSource: 'skill', damageType: 'physical', skillType: skill.type };
+              const def = useStrategy ? t.general.defense : physicalTargetDefense(rider, t);
+              const hit: DamageHitContext = { damageSource: 'skill', damageType, skillType: skill.type };
               const { causedMult, takenMult } = damageBoosts(ctx, rider, t, hit);
               const counterReduce = out.ignoresTroopCounter ? 0 : troopCounterReduceOf(rider, t);
               const reduce = sumReduce(t, hit) + counterReduce;
-              const rate = Array.isArray(out.rate) ? ctx.rng.intInclusive(out.rate[0], out.rate[1]) : out.rate;
+              const rate = byHigher
+                ? useStrategy
+                  ? byHigher.strategyRate
+                  : byHigher.attackRate
+                : Array.isArray(out.rate)
+                  ? ctx.rng.intInclusive(out.rate[0], out.rate[1])
+                  : out.rate;
               const { damage, breakdown } = calcDamage(
                 {
-                  damageType: 'physical',
+                  damageType,
                   rate,
                   attackerAttack: atk,
-                  attackerStrategy: rider.general.strategy,
+                  attackerStrategy: effectiveStat(rider, 'strategy'),
                   attackerTroops: rider.troops,
                   targetDefense: def,
                   targetStrategy: t.general.strategy,
@@ -3360,12 +3412,12 @@ function executeSkillOutputs(
                 targetId: t.general.id,
                 skillId: skill.id,
                 skillName: skill.name,
-                damageType: 'physical',
+                damageType,
                 damage: capped,
                 breakdown,
                 modifiers: collectDamageModifiers(ctx, rider, t, true, hit, { ignoresTroopCounter: out.ignoresTroopCounter }),
               });
-              applyDamage(ctx, t, capped, rider, 'physical', 'skill');
+              applyDamage(ctx, t, capped, rider, damageType, 'skill');
             }
             if (riderAttacked) consumeAttackCharges(ctx, rider, { damageSource: 'skill', damageType: 'physical', skillType: skill.type });
           }
@@ -4798,6 +4850,8 @@ export function applyDamage(
   }
   if (actual > 0) {
     const hit: DamageHitContext = { damageSource, damageType };
+    // 全队累计伤害门槛（徽言龙凤）：本侧造成伤害即计数，达到门槛激活光环
+    if (source) noteTeamDamage(ctx, source);
     consumeTakenCharges(target, hit);
     decayFifthsOnHit(ctx, target, hit);
     if (source && damageType === 'physical') {

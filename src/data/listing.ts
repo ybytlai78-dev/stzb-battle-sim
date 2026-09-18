@@ -34,6 +34,7 @@ export const OFFLINE_MAIN_SKILLS: Record<string, string> = {
   quanzhu_weiyi: 'DoT 伤害提升 20% / 策略伤害 197% 受谋略成长未确认（按基值不缩放）',
   juxian_jueji: '恢复 60% / 策略伤害 100% 受谋略成长未确认（按基值不缩放）',
   qixu_rulin: '相邻跳伤比例 15% + 每回合 +5% 受谋略成长未确认（按基值不缩放）',
+  huiyan_longfeng: '士气 10 / 每回合增伤 7% / 策略伤害 120% 受谋略成长未确认（按基值不缩放）',
 };
 
 /**

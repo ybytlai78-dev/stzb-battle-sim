@@ -125,6 +125,13 @@ export type SkillOutput =
        * 四世三公「对敌军防御最低单体发动一次攻击」）；缺省按 targetMode + 战法距离选。
        */
       targetPick?: 'lowest_defense';
+      /**
+       * 代打伤害按代打者自身属性孰高定轨（徽言龙凤「每回合行动时有 60% 几率对随机敌军单体造成 1 次
+       * 攻击伤害（伤害率 150%）或策略攻击伤害（伤害率 120%），由攻击或谋略属性中较高的属性决定」）：
+       * 设置后**忽略 `rate`**，逐代打者判断其生效攻击 > 生效谋略 → 用 attackRate（攻击伤害），
+       * 否则用 strategyRate（策略伤害）；配合 `attacker:'recipient'` + `chance`（逐代打者各判一次）。
+       */
+      recipientDamageByHigherStat?: { attackRate: number; strategyRate: number };
       /** 代打选敌距离（疏数骑兵 3）；缺省 skill.range */
       range?: number;
       /** 只对这些兵种的当前目标池结算 */
@@ -673,6 +680,16 @@ export interface CommandSkill extends BaseSkill {
     perRound: number;
     strategyScaled?: boolean;
     growthRate?: number;
+  };
+  /**
+   * 全队累计伤害门槛（徽言龙凤「友军全体共计造成 6 次伤害后，使友军全体获得以下效果」）：
+   * 与施法者同侧单位累计造成 `count` 次伤害（实际扣兵 > 0）后**激活**本战法 ——
+   * 立即对锁定目标结算 `output`，并**启用**本战法的 `roundStartRepeat`（激活前不执行）。
+   * 计数走 `ctx.teamDamageCounters`（键 `${casterId}:${skillId}`），激活标记走 `ctx.teamThresholdActive`。
+   */
+  teamDamageThreshold?: {
+    count: number;
+    output: SkillOutput[];
   };
   output: SkillOutput[];
 }

@@ -4835,4 +4835,66 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     output: [],
     strategyAdjacentBonus: { baseRate: 15, perRound: 5, strategyScaled: true },
   },
+
+  /**
+   * 徽言龙凤（司马徽·群步 h811·指挥 S）：距离 5，友军全体。
+   * 友军全体共计造成 6 次伤害后，使友军全体获得：士气提升 10（受谋略属性影响）；
+   * 每回合行动时造成的所有伤害提升 7%（受谋略属性影响），可叠加；
+   * 每回合行动时有 60% 的几率对随机敌军单体造成 1 次攻击伤害（伤害率 150%）或策略攻击伤害
+   * （伤害率 120%，受谋略属性影响），由攻击或谋略属性中较高的属性决定。
+   * 官方：scripts/skill_extra.json id 200294（指挥 S / 距离 5 / 友军全体 / 弓步骑；
+   * 1 级 士气 5 / 增伤 3.5% / 攻击 100% / 策略 60%）。
+   * 成长率：士气、增伤、策略伤害三处「受谋略属性影响」均未确认 → 留空（增伤 strategyScaled 在、
+   * 不给 growthRate = 基值；策略伤害率按下表基值直接用）→ 登记 OFFLINE_MAIN_SKILLS（司马徽下架）。
+   * 引擎配套：
+   *  ① **新增 `CommandSkill.teamDamageThreshold`（全队累计伤害门槛）** —— 本侧累计造成 N 次伤害后激活，
+   *     立即结算激活段 output，并**启用**该战法的 roundStartRepeat（激活前不执行）；
+   *  ② **新增 `physical_damage.recipientDamageByHigherStat`（代打伤害按代打者属性孰高定轨）** ——
+   *     配合既有 `attacker:'recipient'` + `chance`（逐代打者各判一次）实现「每回合每个友军各 60% 一次，
+   *     由该友军自己攻击/谋略孰高决定打攻击还是策略」。
+   * 口径：③ 的 60% 由 recipient 路径**逐友军**各判一次（每回合每人一次）；伤害取该友军自己的面板。
+   */
+  huiyan_longfeng: {
+    id: 'huiyan_longfeng',
+    name: '徽言龙凤',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['morale_boost', 'damage_boost', 'damage'],
+    output: [],
+    teamDamageThreshold: {
+      count: 6,
+      // 激活瞬间：友军全体士气 +10（受谋略未确认 → 基值 10）
+      output: [{ kind: 'inflict_status', status: { type: 'morale_boost', amount: 10, duration: 999 } }],
+    },
+    roundStartRepeat: {
+      output: [
+        // 每回合行动时：造成所有伤害 +7%（受谋略，成长率留空），可叠加
+        {
+          kind: 'inflict_status',
+          status: {
+            type: 'damage_boost',
+            rate: 0.07,
+            duration: 1,
+            direction: 'caused',
+            strategyScaled: true,
+            stacks: 1,
+          },
+        },
+        // 每回合行动时：每名友军各 60% → 随机敌军单体，按自身攻击/谋略孰高打攻击 150% 或策略 120%
+        {
+          kind: 'physical_damage',
+          rate: 0,
+          attacker: 'recipient',
+          recipientDamageByHigherStat: { attackRate: 150, strategyRate: 120 },
+          chance: 0.6,
+          targetMode: 'random_single',
+          range: 5,
+        },
+      ],
+    },
+  },
 };

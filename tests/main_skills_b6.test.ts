@@ -119,8 +119,8 @@ describe('复誓业火（周姬，主动：敌军群体策略伤害提高 16% + 
   });
 });
 
-describe('司马徽·群（h811，徽言龙凤暂不实装）', () => {
-  it('入库为 h811，阵营群，面板对齐官网 100811，主战法空槽', () => {
+describe('司马徽·群（h811，徽言龙凤已实装：受谋略成长未确认 → 下架）', () => {
+  it('入库为 h811，阵营群，面板对齐官网 100811，徽言龙凤已挂槽', () => {
     expect(HERO_REGISTRY['h354']).toBeUndefined();
     const g = hero('h811');
     expect(g.name).toBe('司马徽');
@@ -128,10 +128,11 @@ describe('司马徽·群（h811，徽言龙凤暂不实装）', () => {
     expect(g.cost).toBe(3);
     expect(g.attackRange).toBe(2);
     expect(g.troopType).toBe('infantry');
-    expect(g.commandSkillIds).toEqual([]);
+    expect(g.commandSkillIds).toEqual(['huiyan_longfeng']); // 主战法（指挥）挂入指挥槽
     expect(g.commandSkillIds).not.toContain('mingshi_zaiye');
     const rec = HERO_RECORDS['h811'];
-    expect(rec.mainSkillId).toBe('');
+    // 2026-09-18 实现：徽言龙凤挂槽（士气/增伤/策略伤害受谋略成长未确认 → 仍在 OFFLINE 名单，下架）
+    expect(rec.mainSkillId).toBe('huiyan_longfeng');
     expect(rec.mainSkillName).toBe('徽言龙凤');
     expect(rec.skillDesc).toContain('友军全体共计造成6次伤害后');
     expect(rec.baseAttack).toBe(55);
