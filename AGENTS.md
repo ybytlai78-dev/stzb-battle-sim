@@ -45,13 +45,14 @@ npx tsc --noEmit                    # 类型检查（strict）
 
 | 数据 | 文件 | 权威文档 |
 |------|------|----------|
-| 可学习战法（数值/类型/距离/发动率/目标） | `src/data/skills.ts` | `通用战法调研.md` |
-| 武将面板值 / 攻击距离 | `src/data/heroes.ts` | `武将数据调研.md` |
-| 伤害公式 | `src/engine/formulas.ts` | `战斗伤害公式调研.md` + `谋略战法受谋略成长调研.md` |
+| 可学习战法（数值/类型/距离/发动率/目标） | `src/data/skills.ts` | `dateyuan/通用战法调研.md` |
+| 武将面板值 / 攻击距离 | `src/data/heroes.ts` | `dateyuan/武将数据调研.md` |
+| 伤害公式 | `src/engine/formulas.ts` | `dateyuan/战斗伤害公式调研.md` + `dateyuan/谋略战法受谋略成长调研.md` |
+| **兵力恢复公式（§四：恢复率 + 恢复值，含 `calcHealAmount`）** | `src/engine/formulas.ts` | `dateyuan/战斗伤害公式调研.md` §四 |
 | **待补充机制清点（88 个 skipped 通用战法按缺失机制分组）** | `docs/待补充机制清点.md` | 由 `scripts/seed_universal_skills.mjs` 的 `mechanism_key` 联动 DB `skills.mechanism_key` 列 |
 | **下架武将 / 战法清单（58 个下架武将 + 31 个下架战法的卡点、缺失机制分布）** | `docs/下架武将清单.md` | 由 `npx tsx scripts/gen_offline_report.mts` 按 `listing.ts` 口径生成 |
 
-根目录 `战斗系统设计文档.md` 是决策记录与整体设计（v0.1 起步，现引擎已超出其范围：指挥/被动/追击/状态/冲突已实现）。
+`dateyuan/战斗系统设计文档.md` 是决策记录与整体设计（v0.1 起步，现引擎已超出其范围：指挥/被动/追击/状态/冲突已实现）。
 
 ## 引擎架构（读多个文件才能拼出全貌）
 
@@ -321,7 +322,7 @@ npx tsc --noEmit                    # 类型检查（strict）
 > 生成物（`web/data/*.json`、`scripts/seed_heroes.sql`）随提交入库；受属性缩放的段成长率留空
 > （`strategyScaled`/`attackScaled` 标记在，可选字段不写、必填字段给 0）并登记 `OFFLINE_MAIN_SKILLS`。
 
-### 已完成 11 个（§1.2 10 个 + §1.3 1 个）
+### 已完成 18 个（§1.2 10 个 + §1.3 1 个 + 歧义澄清后 7 个）
 
 | 武将 | 战法 | 新机制（引擎字段） | 上线 |
 |---|---|---|---|
@@ -336,15 +337,49 @@ npx tsc --noEmit                    # 类型检查（strict）
 | 袁绍·汉 h6 | 四世三公 | `attackerPick` / `targetPick` | **上架** |
 | 司马懿·晋 h807 | 其徐如林 | `strategyAdjacentBonus` | 下架 |
 | 司马徽 h811 | 徽言龙凤 | `teamDamageThreshold` + `recipientDamageByHigherStat` | 下架 |
+| 司马懿·魏 h472 | 破凰 | `sorcery.onHurt`/`charges`（受击触发妖术 + 次数上限）+ 输出段 `detonate_sorcery_marks`（自引用引爆） | 下架 |
+| 甘宁 h34 | 侵掠如火 | `PassiveSkill.priorityRounds`（被动先手）/ `trigger_boost.attackSkillsOnly` / `attackProcBoost`（进行攻击概率增伤） | **上架** |
+| 杜预 h705 | 三军夺帅 | `PassiveSkill.afterAct`（普攻/主动/追击后钩子）+ `inflict_status.sameTargetsAsLastDamage` | 下架 |
+| 马岱 h615 | 奉令护蜀 | `PassiveSkill.allyActStacks` + 状态 `pending_stacks`（下次普攻增伤 / 下次受击减伤，触发即清空全部层数） | 下架 |
+| 张宝 h562 | 地公将军 | `inflict_status.requireAnyPrevDamageTargetStatus`（整段条件开关）+ 复用 `sameTargetsAsLastDamage` | 下架 |
+| 陆抗 h574 | 西陵克晋 | `physical_damage.attacker:'highest_attack_ally'` / `strategy_damage.attacker:'highest_strategy_ally'` + `healSource`（代打者按自身兵力立即恢复） | 下架 |
+| 吕姬 h634 | 缚父临危 | `inflict_status.targetPick`（`highest_attack_ally` / `ally_named` 按名匹配）+ `damage_boost.attackOnly` + 状态 `ignore_evasion` | **上架** |
 
-计数：已实现主战法 **99**（基线 88），上架池 67 → **72**（`docs/下架武将清单.md` 重新生成口径：未实现 62 / 卡成长率下架 27 / 上架 72）；
-测试 91 files/1121 → **102 files/1188**。
+计数：已实现主战法 **106**（基线 88）；上架池 67 → **74**（`docs/下架武将清单.md` 重生成口径：
+未实现 **55** / 卡成长率下架 **32** / 上架 **74**；待实现分档「补 1 个」**6** / 「需多个」4 / 「需调研」45；缺失机制 13 类）；
+测试 91 files/1121 → **109 files/1232**。本批 7 将提交：`e919d1b`(破凰) `a5c1dfe`(侵掠如火) `b0a9896`(三军夺帅)
+`b6f555f`(奉令护蜀) `2e3f495`(地公将军) `f791b8c`(西陵克晋) `bbba8df`(缚父临危)。
 
-### 待用户确认的 7 处歧义（未确认前不得动手）
+### 7 处歧义已全部澄清（2026-09-18 用户逐条确认，勿再重复询问）
 
-`破凰`（描述引用了「由破凰带来的剩余妖术」但全文没有施加妖术的句子）·`侵掠如火`（「进行攻击」范围 + 攻击类过滤）·
-`三军夺帅`（两句之间的「或」是否随机）·`奉令护蜀`（可叠加 5 次是否逐次消耗）·`地公将军`（「友军群体」是 2 还是 3 目标）·
-`西陵克晋`（「各自恢复一定兵力」无数值）·`缚父临危`（「友军中吕布」命中哪张卡）。
+- **破凰**：「由破凰带来的剩余妖术」= **本战法自身**此前施加的条件妖术剩余次数（先引爆剩余次数，再挂新的 3 次）；主目标取两版拼接描述的**第一版**「敌军单体」。
+- **侵掠如火**：「进行攻击」= 普通攻击 / 物理主动战法 / 追击战法。
+- **三军夺帅**：两句之间的「或」= 每次触发 **50/50 随机**（复用 `random_pick`）。
+- **奉令护蜀**：层数上限 5；伤害段与减伤段**各自**在对应时机（普攻打出后 / 首次受击实际扣兵后）**清空全部层数**，减伤也 ×层数。
+- **地公将军**：「友军群体」= 有效距离内 **2 个目标**；「妖术效果」= `sorcery`（妖术）| `curse`（妖术诅咒）。
+- **西陵克晋**：见下方联网查证结论。
+- **缚父临危**：「友军中吕布」按**武将名**匹配（h3 汉骑 / h479 群弓 SP 两张都算，队里没有则空转）；「无视规避」覆盖**任意伤害类型**。
+
+### 本批 4 处「推定 · 待复核」口径（改动成本都极低）
+
+1. **奉令护蜀**「任意友军」**不含施法者自身**（理由：官方对含己场景用「我军全体」，如皇裔流离；含己会导致「自己普攻清空后立刻被自己补 1 层」）
+   → 切换 = `triggerAllyActStacks` 里去掉 `if (holder === actor) continue;`
+2. **地公将军**友军段 **`excludeSelf`**（理由：原文「**额外**附加属性至自身」表明自身不在「友军群体」内）→ 切换 = 删掉该段 `excludeSelf: true`
+3. **西陵克晋恢复率取基值 100%**（9000 兵力 = 216）；官方攻略称「9000 兵力单口**最大**恢复量在 **300 左右**」→ 若复核为 300，改两处 `healSource.rate`
+4. **西陵克晋 50%** 按「**一次判定、两段同时结算**」实现（官方技能文本只有一处「每回合有 50.0% 的几率使…，…」）
+   → 若实际为两段各自独立 50%，把两段包进 `chance_group(chance: 0.5)`
+
+### 西陵克晋（陆抗 h574）联网查证结论 — 2026-09-18
+
+来源：[官方技能库 200824](https://stzb.163.com/m/skilllist/200824.html)（原文**未给恢复率**）·
+[官方攻略「西陵克晋加持马超」](https://stzb.163.com/strategy/zfxq/2019/10/09/21006_836478.html)（[17173 转载同文](https://news.17173.com/z/stzb/content/12302019/113840864.shtml)）·
+[知乎《率土秘卷一：恢复效果》](https://zhuanlan.zhihu.com/p/454193204) · 仓库权威文档 `dateyuan/战斗伤害公式调研.md` §四。
+
+- 属于 **Ⅱ 类指挥**（每回合行动判定；被混乱/犹豫仍执行）→ `phase:'round'` + `roundTrigger:'on_act'`；
+- 伤害由**代打者（被施加效果的友军，可能是陆抗自己）自身属性**决定，并吃该友军自己的增伤（如马超【血溅黄沙】+120%）；
+- 恢复为**立即型急救**：与任何恢复类战法不冲突，「恢复量与任何属性无关，仅由武将执行时的自身兵力决定」→
+  走既有 `calcHealAmount(代打者当前兵力, rate)`；官方未给恢复率 → 取基值 100%（见上「待复核」第 3 条）；
+- 目标为距离 4 以内敌军**单体**（攻略明确，官方技能文本未写「单体」）。
 
 ### 剩余可做（§1.2 另 6 个，均为大机制）
 
@@ -359,4 +394,14 @@ npx tsc --noEmit                    # 类型检查（strict）
 - 一类指挥若 `output: []` 且走「普通一类指挥直接执行」分支，须在条件里追加自己的新字段
   （已加：`delayedOutputs` / `onAttrChange` / `strategyAdjacentBonus`）——否则监听型指挥会误走通用分支。
 - 单测替换 `ctx.skills` 里的战法定义**必须早于** `triggerCommandSkills`（锁定的是注册时的实例）。
-- 本轮新增的 effect/status 标签：`EffectTag` 补了 `'retaliate'`、`'counter'`；`DotType` 独立成类型。
+- 新增 effect/status 标签：`EffectTag` 补了 `'retaliate'`、`'counter'`；`DotType` 独立成类型；
+  本批又补 `StatusType`：`'pending_stacks'`、`'ignore_evasion'`（两者都**不按回合递减**，两个 tick 函数须显式跳过）。
+- **`runBattle` 收的是 `General[]`，不是 `UnitState[]`**——传错时报的是 `troopBonus.ts: keys is not iterable`（极具误导性）。
+- **伤害断言必须扣掉 `troopBase`**：`calcDamage` 的兵力基础**不乘 mult**；且 `base` 含 `atkBaseRandomCoeff(rng)`，
+  所以「同种子跑两次比大小」只在**两次 RNG 消耗完全一致**时成立（掷点类效果会破坏它——用「rate 0 的同消耗对照」）。
+- **兵种相克 −30% 会污染伤害倍数断言**（步兵攻骑兵）；对照实验用同兵种消除该维。
+- 新增机制若只加进 `types.ts` 而漏了 `pushStatus` 的字段拷贝，会被**静默忽略**（本批 `attackOnly` 就踩过一次，
+  策略伤害被误增伤 30% 才发现）——`CreateStatus` 加字段后务必同步 `pushStatus` + `sameDamageBoostFilter`。
+- 工作树里 **`.git` 是指针文件**（不是目录），临时提交信息文件要写到仓库根目录再删。
+- PowerShell 传中文 + 嵌套引号的 `node -e` 脚本会被转义破坏（本批踩了两次）——改用 edit 工具或按行号精确改写。
+
