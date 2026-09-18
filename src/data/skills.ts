@@ -4460,4 +4460,63 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+
+  /**
+   * 威震河朔（袁绍·群弓 h670·主动 A）：发动率 70%，距离 5，敌军群体（有效距离内 2 个目标）。
+   * ① 对敌军群体发动一次攻击（伤害率 200%）；
+   * ② 使自身与友军单体的主动战法伤害提升 20%（受攻击属性影响），持续 2 回合；
+   * ③ 此战法每发动一次，其发动率降低 10%。
+   * 官方：主动 A / 70% / 距离 5 / 敌军群体 2 / 弓（scripts/skill_extra.json id 200947）。
+   * 官网该条为「攻击版 + 策略版」两段拼接，按仓库口径**只用前半**（攻击 200% + 受**攻击** 20%），
+   * 与 web/data/heroes.json h670 清洗后描述一致（策略版 240% / 受谋略 24% 不实现）。
+   * 受攻击的 20% 成长率未确认 → 留空（attackScaled: true 且不给 growthRate → 不缩放、用基值）。
+   * 引擎配套：**新增 `triggerRateDecayPerCast`（主动战法发动率递减）** —— 每次成功发动后基础发动率
+   * −0.1（可叠、最低 0），结算顺序 = 基础率 − 递减 + trigger_boost → × 士气；计数走 ctx.skillCastCounters。
+   * 其余（群体攻击 / 「自身 + 友军单体」/ damage_boost 的 skillTypes 过滤）均为既有能力。
+   */
+  weizhen_heshuo: {
+    id: 'weizhen_heshuo',
+    name: '威震河朔',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.7,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage', 'damage_boost'],
+    triggerRateDecayPerCast: 0.1,
+    output: [
+      // ① 敌军群体 2 目标：攻击 200%
+      { kind: 'physical_damage', rate: 200 },
+      // ② 自身：造成主动战法伤害 +20%（受攻击，成长率留空），2 回合
+      {
+        kind: 'inflict_status',
+        targetSide: 'self',
+        status: {
+          type: 'damage_boost',
+          rate: 0.2,
+          duration: 2,
+          direction: 'caused',
+          skillTypes: ['active'],
+          attackScaled: true,
+        },
+      },
+      // ③ 友军单体（不含自身）：同款 +20%
+      {
+        kind: 'inflict_status',
+        targetSide: 'ally',
+        targetMode: 'random_single',
+        excludeSelf: true,
+        status: {
+          type: 'damage_boost',
+          rate: 0.2,
+          duration: 2,
+          direction: 'caused',
+          skillTypes: ['active'],
+          attackScaled: true,
+        },
+      },
+    ],
+  },
 };

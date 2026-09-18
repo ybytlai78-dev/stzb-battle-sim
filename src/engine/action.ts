@@ -152,6 +152,12 @@ export interface CombatContext {
    */
   afterActiveCounters?: Map<string, number>;
   /**
+   * 主动战法成功发动计数（发动率递减：威震河朔）：key `${casterId}:${skillId}` → 已发动次数（整场累计）。
+   * 每次实际释放（含准备完成释放）后 +1，用于把基础发动率按 `triggerRateDecayPerCast` 递减。
+   * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
+   */
+  skillCastCounters?: Map<string, number>;
+  /**
    * 二类指挥·友军监听试图发动主动（谋谟帷幄）：key `${round}:${skillId}:${casterId}:${actorId}` → 已判定，
    * 保证「其每回合首次试图发动主动战法时」对每个发动者只走一次。
    * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
@@ -3608,9 +3614,13 @@ export function triggerActiveSkill(
   // 七步释嫌等：进入主动发动率判定即「试图发动」
   triggerAllyActCommands(ctx, unit);
   if (!unit.alive) return;
-  // 发动率提升：乘算（难知如阴）或加算封顶（动如雷震），再乘士气系数
+  // 发动率递减（威震河朔）：每次成功发动后基础率 −decay，可叠、最低 0（在 trigger_boost 与士气之前）
+  const decayPerCast = skill.triggerRateDecayPerCast ?? 0;
+  const castCount = decayPerCast > 0 ? (ctx.skillCastCounters?.get(`${unit.general.id}:${skill.id}`) ?? 0) : 0;
   const rolled = rollTriggerRate(ctx.rng, skill.triggerRate);
-  const base = boostedBaseRate(unit, 'active', rolled);
+  const decayed = decayPerCast > 0 ? Math.max(0, rolled - decayPerCast * castCount) : rolled;
+  // 发动率提升：乘算（难知如阴）或加算封顶（动如雷震），再乘士气系数
+  const base = boostedBaseRate(unit, 'active', decayed);
   const morale = effectiveMorale(unit);
   const rate = moraleTriggerRate(morale, base);
   const success = ctx.rng.chance(rate);
@@ -3741,6 +3751,12 @@ function executeSkillWithTargets(
   if (skill.type === 'pursuit') {
     // 追击战法由普攻命中触发，不在此处理
     return;
+  }
+  // 发动率递减计数：本战法实际释放一次（威力上即「发动一次」，准备主动在释放时计一次）
+  if (skill.triggerRateDecayPerCast) {
+    ctx.skillCastCounters ??= new Map();
+    const key = `${unit.general.id}:${skill.id}`;
+    ctx.skillCastCounters.set(key, (ctx.skillCastCounters.get(key) ?? 0) + 1);
   }
 
   const targetMode = skill.targetMode;

@@ -29,6 +29,7 @@ export const OFFLINE_MAIN_SKILLS: Record<string, string> = {
   chixi_xingbing: '恢复 200% 受谋略成长未确认（按基值不缩放）',
   // ─── 2026-09-18 批量31：下架武将清单 §1.2「补 1 个机制」逐个实现 ───
   jiding_shanyue: '恐慌 134% / 恢复 98% 受谋略成长未确认（按基值不缩放）',
+  weizhen_heshuo: '主动战法伤害提升 20% 受攻击成长未确认（攻击 200% 固定不缩放）',
 };
 
 /**

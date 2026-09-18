@@ -547,7 +547,7 @@
     "growthDefense": 1.15,
     "growthStrategy": 1.53,
     "growthSpeed": 1.23,
-    "mainSkillId": "",
+    "mainSkillId": "weizhen_heshuo",
     "mainSkillName": "威震河朔",
     "skillDesc": "对敌军群体发动一次攻击（伤害率200.0%），使自身与友军单体的主动战法伤害提升20.0%（受攻击属性影响），持续2回合。此战法每发动一次，其发动率降低10.0%"
   },

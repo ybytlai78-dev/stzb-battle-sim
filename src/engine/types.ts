@@ -422,6 +422,14 @@ interface BaseSkill {
    * 该段内部结算不再触发 repeatBonus（执行路径带 skipRepeat 保护，防自递归）。
    */
   repeatBonus?: { output: SkillOutput[] };
+  /**
+   * 主动战法发动率递减（威震河朔「此战法每发动一次，其发动率降低 10.0%」）：
+   * 每次**成功发动**后，本战法基础发动率 −N（小数，0.1 = −10%），可叠加、最低 0；
+   * 结算顺序 = 基础率（区间先抽）− 递减 + trigger_boost 加算 → × 士气系数。
+   * 计数走 `ctx.skillCastCounters`（键 `${casterId}:${skillId}`，整场累计不随回合重置）。
+   * 仅主动战法有意义；准备主动按「释放」计一次（进入准备不计）。
+   */
+  triggerRateDecayPerCast?: number;
 }
 
 /** 普通主动战法 */
