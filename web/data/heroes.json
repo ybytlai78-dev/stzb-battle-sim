@@ -217,7 +217,7 @@
     "growthDefense": 1.94,
     "growthStrategy": 2.87,
     "growthSpeed": 0.54,
-    "mainSkillId": "",
+    "mainSkillId": "qixu_rulin",
     "mainSkillName": "其徐如林",
     "skillDesc": "我军全体在正式回合后施加的策略伤害，在生效时会对目标相邻的敌军额外造成一次策略伤害（伤害率为原伤害率的15.0%，受谋略属性影响），此比例每回合结束时额外提升5.0%（受谋略属性影响），可叠加，持续至战斗结束"
   },

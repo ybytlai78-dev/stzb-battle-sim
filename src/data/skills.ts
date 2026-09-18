@@ -4808,4 +4808,31 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+
+  /**
+   * 其徐如林（司马懿·晋步 h807·指挥 S）：距离 5，我军全体。
+   * 我军全体在正式回合后施加的策略伤害，在生效时会对目标相邻的敌军额外造成一次策略伤害
+   * （伤害率为原伤害率的 15%），此比例每回合结束时额外提升 5%，可叠加，持续至战斗结束。
+   * 官方：scripts/skill_extra.json id 200282（指挥 S / 距离 5 / 我军全体 / 弓步骑；1 级 7.5% / 2.5%）。
+   * 成长率：两处「受谋略属性影响」均未确认 → 留空（strategyScaled 在、不给 growthRate → 按基值不缩放）；
+   * 登记 OFFLINE_MAIN_SKILLS（武将暂下架）。
+   * 引擎配套：**新增 `CommandSkill.strategyAdjacentBonus`（策略伤害相邻跳伤光环）** ——
+   *   本侧单位造成**策略伤害输出段**生效后，对目标同侧相邻单位额外结算一次策略伤害
+   *   （伤害率 = 原伤害率 × (baseRate + perRound × (当前回合 − 1))）；额外伤害沿用原伤害造成者的
+   *   攻击/兵力/增减伤口径，事件 skillId 记为其徐如林，直接构造 damage 事件（不递归触发本光环）。
+   *   覆盖范围：策略伤害输出段；DoT 跳伤 / 分兵 / 引燃暂不触发（如需再补）。
+   */
+  qixu_rulin: {
+    id: 'qixu_rulin',
+    name: '其徐如林',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['damage'],
+    output: [],
+    strategyAdjacentBonus: { baseRate: 15, perRound: 5, strategyScaled: true },
+  },
 };

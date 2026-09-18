@@ -331,7 +331,14 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
     // 普通一类指挥（无 roundRepeat/delayedOutput/delayedOutputs/onHurt）：直接执行一次（先驱/避其锋芒/共饮）
     // onHurt 战法准备阶段只登记，output 留到受击时结算（盲侯反击 / 缓师 debuff）
     // onAttrChange 战法准备阶段只登记，output 留到属性升降前结算（举贤决机）
-    if (!skill.roundRepeat && !skill.delayedOutput && !skill.delayedOutputs && !skill.onHurt && !skill.onAttrChange) {
+    if (
+      !skill.roundRepeat &&
+      !skill.delayedOutput &&
+      !skill.delayedOutputs &&
+      !skill.onHurt &&
+      !skill.onAttrChange &&
+      !skill.strategyAdjacentBonus
+    ) {
       executeSkillOutputs(ctx, unit, skill, targets);
     }
   }
@@ -415,6 +422,75 @@ export function triggerOnAttrChange(
       if (!success) continue;
       executeSkillOutputs(ctx, caster, l.skill, [target], rule.output);
       if (!caster.alive) break;
+    }
+  }
+}
+
+/**
+ * 其徐如林：**本侧**单位造成策略伤害生效后，对目标**同侧相邻**单位额外造成一次策略伤害
+ * （伤害率 = 原伤害率 × 当前比例；比例 = baseRate + perRound × (当前回合 - 1)，可叠至战斗结束）。
+ *  - 光环注册于 `ctx.lockedCommands`（一类指挥）；仅覆盖与施法者**同侧**的伤害来源，施法者阵亡即失效。
+ *  - 额外伤害由**原伤害的造成者**结算（沿用其攻击/兵力/增减伤口径），战报 skillId / skillName 记为其徐如林。
+ *  - 直接构造 damage 事件（不经 strategy_damage 输出分支）→ 不会递归触发本光环。
+ */
+function triggerStrategyAdjacentBonus(
+  ctx: CombatContext,
+  source: UnitState,
+  target: UnitState,
+  originalRate: number
+): void {
+  const auras = ctx.lockedCommands.filter(
+    (l): l is LockedCommand & { skill: CommandSkill } =>
+      l.skill.type === 'command' && !!l.skill.strategyAdjacentBonus
+  );
+  if (auras.length === 0) return;
+  const team = target.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+  const adjacents = adjacentUnits(target, team);
+  if (adjacents.length === 0) return;
+  for (const l of auras) {
+    const cfg = l.skill.strategyAdjacentBonus!;
+    const owner = castUnit(ctx, l.casterId);
+    if (!owner) continue;
+    if (!owner.alive && !l.skill.retainAfterDeath) continue;
+    if (owner.side !== source.side) continue; // 只覆盖「我军全体施加的策略伤害」
+    const scale = (v: number): number =>
+      cfg.strategyScaled && cfg.growthRate !== undefined
+        ? roundRate(scaledValue(v, cfg.growthRate, effectiveStat(owner, 'strategy')))
+        : v;
+    const ratioPct = scale(cfg.baseRate) + scale(cfg.perRound) * Math.max(0, ctx.currentRound - 1);
+    const rate = (originalRate * ratioPct) / 100;
+    for (const raw of adjacents) {
+      if (!raw.alive) continue;
+      triggerStackBuff(ctx, source, raw, 'strategy');
+      const hit: DamageHitContext = { damageSource: 'skill', damageType: 'strategy', skillType: l.skill.type };
+      const { causedMult, takenMult } = damageBoosts(ctx, source, raw, hit);
+      const reduce = sumReduce(raw, hit) + troopCounterReduceOf(source, raw);
+      const { damage, breakdown } = calcDamage(
+        {
+          damageType: 'strategy',
+          rate,
+          attackerAttack: source.general.attack,
+          attackerStrategy: effectiveStat(source, 'strategy'),
+          attackerTroops: source.troops,
+          targetDefense: raw.general.defense,
+          targetStrategy: raw.general.strategy,
+          mult: buffMult(causedMult, takenMult, reduce),
+        },
+        ctx.rng
+      );
+      const capped = applyTroopCap(damage, raw.troops);
+      ctx.events.push({
+        type: 'damage',
+        sourceId: source.general.id,
+        targetId: raw.general.id,
+        skillId: l.skill.id,
+        skillName: l.skill.name,
+        damageType: 'strategy',
+        damage: capped,
+        breakdown,
+        modifiers: collectDamageModifiers(ctx, source, raw, true, hit),
+      });
+      applyDamage(ctx, raw, capped, source, 'strategy', 'skill');
     }
   }
 }
@@ -3465,6 +3541,8 @@ function executeSkillOutputs(
             modifiers: collectDamageModifiers(ctx, caster, t, true, hit),
           });
           applyDamage(ctx, t, capped, caster, 'strategy', 'skill');
+          // 其徐如林：本侧施加的策略伤害生效后，对目标同侧相邻敌军额外造成一次策略伤害（原伤害率 × 比例）
+          if (capped > 0) triggerStrategyAdjacentBonus(ctx, caster, t, rate);
         }
         rememberDamageTargets(selectedIds);
         if (pool.some((t) => t.alive)) consumeAttackCharges(ctx, caster, { damageSource: 'skill', damageType: 'strategy', skillType: skill.type });

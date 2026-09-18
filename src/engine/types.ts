@@ -657,6 +657,23 @@ export interface CommandSkill extends BaseSkill {
    * 「每种属性单独计算」——攻击/防御/谋略/速度各是一个状态、各自独立判定一次。
    */
   onAttrChange?: Array<{ victim: 'ally' | 'enemy'; sign: 'up' | 'down'; rate: number; output: SkillOutput[] }>;
+  /**
+   * 策略伤害相邻跳伤（其徐如林「我军全体在正式回合后施加的策略伤害，在生效时会对目标相邻的敌军
+   * 额外造成一次策略伤害（伤害率为原伤害率的 15.0%），此比例每回合结束时额外提升 5.0%，可叠加，
+   * 持续至战斗结束」）：**本侧**单位造成**策略伤害输出段**生效后，对目标**同侧相邻**
+   * 单位额外结算一次策略伤害，伤害率 = 原伤害率 × 当前比例。
+   * 覆盖范围：`strategy_damage` 输出段（DoT 跳伤 / 分兵 / 引燃暂不触发）。
+   * 当前比例（百分点）= baseRate + perRound × (当前回合 - 1)；两者均「受谋略属性影响」——
+   * 给了 strategyScaled + growthRate 时按**光环施法者**谋略缩放（未确认 → 不给 growthRate，按基值）。
+   */
+  strategyAdjacentBonus?: {
+    /** 基础比例（百分点）：15 = 原伤害率的 15% */
+    baseRate: number;
+    /** 每回合结束时额外提升（百分点）：5（可叠加） */
+    perRound: number;
+    strategyScaled?: boolean;
+    growthRate?: number;
+  };
   output: SkillOutput[];
 }
 

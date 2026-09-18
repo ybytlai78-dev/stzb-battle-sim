@@ -135,6 +135,7 @@ const SKILL_ID_BY_NAME = {
   霸王渡江: 'bawang_dujiang',
   人公将军: 'rengong_jiangjun',
   四世三公: 'sishisan_gong',
+  其徐如林: 'qixu_rulin',
   万箭齐发: 'wanjian_qifa',
   文伐: 'wenfa',
   不攻: 'bugong',
