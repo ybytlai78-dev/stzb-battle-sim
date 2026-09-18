@@ -128,6 +128,7 @@ const SKILL_ID_BY_NAME = {
   文德椒房: 'wende_jiaofang',
   计定山越: 'jiding_shanyue',
   威震河朔: 'weizhen_heshuo',
+  匠心不竭: 'jiangxin_bujie',
   万箭齐发: 'wanjian_qifa',
   文伐: 'wenfa',
   不攻: 'bugong',

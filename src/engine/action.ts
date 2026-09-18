@@ -321,9 +321,9 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
       executeSkillOutputs(ctx, unit, skill, targets, skill.initialOutput);
     }
 
-    // 普通一类指挥（无 roundRepeat/delayedOutput/onHurt）：直接执行一次（先驱/避其锋芒/共饮）
+    // 普通一类指挥（无 roundRepeat/delayedOutput/delayedOutputs/onHurt）：直接执行一次（先驱/避其锋芒/共饮）
     // onHurt 战法准备阶段只登记，output 留到受击时结算（盲侯反击 / 缓师 debuff）
-    if (!skill.roundRepeat && !skill.delayedOutput && !skill.onHurt) {
+    if (!skill.roundRepeat && !skill.delayedOutput && !skill.delayedOutputs && !skill.onHurt) {
       executeSkillOutputs(ctx, unit, skill, targets);
     }
   }
@@ -369,53 +369,67 @@ export function triggerPreparedEffectOnAct(ctx: CombatContext, unit: UnitState):
   }
 }
 
-/** 一类指挥 delayedOutput：到 atRound 回合自动结算（白衣第3回合打出预先结算伤害）。
- *  战报口径（官方）：「【施法者】【战法】的效果使【目标】损失了X兵力(剩余)」+ 「【目标】的来自【施法者】【战法】的策略攻击伤害效果消失了」 */
+/** 一类指挥延迟结算：到 atRound 回合自动结算。
+ *  ① `delayedOutput`（单次、伤害预存）：白衣渡江第 3 回合打出预先结算的伤害。
+ *     战报口径（官方）：「【施法者】【战法】的效果使【目标】损失了X兵力(剩余)」+ 「【目标】的来自【施法者】【战法】的策略攻击伤害效果消失了」
+ *  ② `delayedOutputs`（多次、不预存）：匠心不竭第 1/3/5 回合分别对锁定目标施加恐慌 / 燃烧 / 妖术。 */
 export function triggerDelayedOutputs(ctx: CombatContext, round: number): void {
   for (const l of ctx.lockedCommands) {
     const { skill } = l;
-    if (skill.phase !== 'prep' || !skill.delayedOutput) continue;
-    if (round !== skill.delayedOutput.atRound) continue;
+    if (skill.phase !== 'prep') continue;
+    if (!skill.delayedOutput && !skill.delayedOutputs) continue;
     // 一类指挥施法者阵亡后效果仍存在（retainAfterDeath）或施法者存活
     const caster = ctx.myTeam.concat(ctx.enemyTeam).find((u) => u.general.id === l.casterId);
     if (caster && !caster.alive && !skill.retainAfterDeath) continue;
-    if (l.storedDamage && l.storedDamage.length > 0) {
-      // 用预先结算的伤害直接打出（不重新计算）。
-      // 注：持节镇西叠层已在准备阶段结算时触发一次（白衣=友军策略伤害），此处不重复叠层
-      const damageType: DamageType = skill.delayedOutput.output.some((o) => o.kind === 'strategy_damage')
-        ? 'strategy'
-        : 'physical';
-      for (const d of l.storedDamage) {
-        const target = ctx.myTeam.concat(ctx.enemyTeam).find((u) => u.general.id === d.targetId);
-        if (!target || !target.alive) continue;
-        const actual = Math.min(Math.max(0, d.damage), target.troops);
-        ctx.events.push({
-          type: 'damage',
-          sourceId: l.casterId,
-          targetId: target.general.id,
-          skillId: skill.id,
-          skillName: skill.name,
-          damageType,
-          damage: d.damage,
-          breakdown: d.breakdown,
-          delayedEffect: true,
-          afterTroops: target.troops - actual,
-        });
-        ctx.events.push({
-          type: 'stored_effect_expired',
-          unitId: target.general.id,
-          sourceId: l.casterId,
-          skillId: skill.id,
-          skillName: skill.name,
-          damageType,
-        });
-        applyDamage(ctx, target, d.damage, caster, damageType, 'skill');
+
+    if (skill.delayedOutput && round === skill.delayedOutput.atRound) {
+      if (l.storedDamage && l.storedDamage.length > 0) {
+        // 用预先结算的伤害直接打出（不重新计算）。
+        // 注：持节镇西叠层已在准备阶段结算时触发一次（白衣=友军策略伤害），此处不重复叠层
+        const damageType: DamageType = skill.delayedOutput.output.some((o) => o.kind === 'strategy_damage')
+          ? 'strategy'
+          : 'physical';
+        for (const d of l.storedDamage) {
+          const target = ctx.myTeam.concat(ctx.enemyTeam).find((u) => u.general.id === d.targetId);
+          if (!target || !target.alive) continue;
+          const actual = Math.min(Math.max(0, d.damage), target.troops);
+          ctx.events.push({
+            type: 'damage',
+            sourceId: l.casterId,
+            targetId: target.general.id,
+            skillId: skill.id,
+            skillName: skill.name,
+            damageType,
+            damage: d.damage,
+            breakdown: d.breakdown,
+            delayedEffect: true,
+            afterTroops: target.troops - actual,
+          });
+          ctx.events.push({
+            type: 'stored_effect_expired',
+            unitId: target.general.id,
+            sourceId: l.casterId,
+            skillId: skill.id,
+            skillName: skill.name,
+            damageType,
+          });
+          applyDamage(ctx, target, d.damage, caster, damageType, 'skill');
+        }
+      } else if (caster) {
+        // 非伤害类延迟输出（令明负榇：第 4 回合起进入分兵状态）→ 对锁定目标执行 output
+        const aliveTargets = l.targets.filter((t) => t.alive);
+        if (aliveTargets.length > 0) {
+          executeSkillOutputs(ctx, caster, skill, aliveTargets, skill.delayedOutput.output);
+        }
       }
-    } else if (caster) {
-      // 非伤害类延迟输出（令明负榇：第 4 回合起进入分兵状态）→ 对锁定目标执行 output
-      const aliveTargets = l.targets.filter((t) => t.alive);
-      if (aliveTargets.length > 0) {
-        executeSkillOutputs(ctx, caster, skill, aliveTargets, skill.delayedOutput.output);
+    }
+
+    // 多次分段延迟施加（匠心不竭：第 1 回合恐慌 / 第 3 回合燃烧 / 第 5 回合妖术）
+    if (skill.delayedOutputs && caster) {
+      for (const entry of skill.delayedOutputs) {
+        if (entry.atRound !== round) continue;
+        const aliveTargets = l.targets.filter((t) => t.alive);
+        if (aliveTargets.length > 0) executeSkillOutputs(ctx, caster, skill, aliveTargets, entry.output);
       }
     }
   }

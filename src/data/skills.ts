@@ -4519,4 +4519,46 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+
+  /**
+   * 匠心不竭（黄月英·蜀步 h20·指挥 A）：距离 6，敌军全体。
+   * 战斗开始后，使敌军全体从第 1、3、5 回合开始，逐渐陷入恐慌（伤害率 34%）、燃烧（41%）、妖术（44%）
+   * （均受谋略属性影响），每回合开始时损失一定兵力，持续直到战斗结束；所造成的伤害无视规避。
+   * 官方：scripts/skill_extra.json id 200020（满级 34%/41%/44%，1 级 17%/20.5%/22%）；
+   * targetShow「敌军群体（有效距离内 3 个目标）」——率土一队 3 人，与描述「敌军全体」等价，按 `all` 取目标
+   * （同黄天当立 / 白衣渡江的全体口径）。
+   * 成长率：「受谋略属性影响」三段均未确认 → 留空（DoT 的 growthRate 为必填字段，给 0 = 不缩放、用基值）。
+   * 引擎配套：**新增 `CommandSkill.delayedOutputs`（一类指挥多次分段延迟施加）** ——
+   *   第 atRound 回合开始、单位行动前，对准备阶段锁定的目标（存活者）执行该条目 output。
+   * 无视规避：引擎 DoT 伤害不走规避判定（规避只作用于攻击伤害），自动满足。
+   */
+  jiangxin_bujie: {
+    id: 'jiangxin_bujie',
+    name: '匠心不竭',
+    type: 'command',
+    phase: 'prep',
+    range: 6,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'enemy',
+    tags: ['panic', 'burning', 'sorcery'],
+    output: [],
+    delayedOutputs: [
+      // 第 1 回合起：恐慌 34%（受谋略，成长率留空），至战斗结束
+      {
+        atRound: 1,
+        output: [{ kind: 'inflict_status', status: { type: 'panic', duration: 999, rate: 34, growthRate: 0 } }],
+      },
+      // 第 3 回合起：燃烧 41%
+      {
+        atRound: 3,
+        output: [{ kind: 'inflict_status', status: { type: 'burning', duration: 999, rate: 41, growthRate: 0 } }],
+      },
+      // 第 5 回合起：妖术 44%
+      {
+        atRound: 5,
+        output: [{ kind: 'inflict_status', status: { type: 'sorcery', duration: 999, rate: 44, growthRate: 0 } }],
+      },
+    ],
+  },
 };

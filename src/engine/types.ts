@@ -518,6 +518,13 @@ export interface CommandSkill extends BaseSkill {
     targetMode?: 'single' | 'group' | 'all';
   };
   /**
+   * 一类指挥**多次分段延迟施加**（匠心不竭「使敌军全体从第 1、3、5 回合开始，逐渐陷入恐慌/燃烧/妖术」）：
+   * 每个条目在**第 atRound 回合开始、单位行动之前**，对准备阶段锁定的目标（存活者）执行一次该条目 output。
+   * 与 `delayedOutput` 的分工：后者单次且伤害预存（白衣/西乡/令明负榇），本字段用于多次、分段挂状态/施加效果。
+   * 目标不重选（沿用准备阶段锁定名单）——锁定者已阵亡则跳过该目标。
+   */
+  delayedOutputs?: Array<{ atRound: number; output: SkillOutput[] }>;
+  /**
    * 一类指挥准备阶段一次性效果（不参与 roundRepeat 每回合判定）：
    * 其疾如风「战斗开始后前3回合速度+41」在准备阶段无条件施加，连击则走 roundRepeat 每回合 70% 判定。
    * targetSide 沿用战法自身（其疾如风为 'ally' 全体）。

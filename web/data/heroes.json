@@ -3557,7 +3557,7 @@
     "growthDefense": 1.13,
     "growthStrategy": 1.9,
     "growthSpeed": 0.47,
-    "mainSkillId": "",
+    "mainSkillId": "jiangxin_bujie",
     "mainSkillName": "匠心不竭",
     "skillDesc": "战斗开始后，使敌军全体从第1、3、5回合开始，逐渐陷入恐慌（伤害率34.0%，受谋略属性影响）、燃烧（伤害率41.0%，受谋略属性影响）与妖术（伤害率44.0%，受谋略属性影响）的状态，每回合开始时损失一定兵力，持续直到战斗结束，所造成的伤害无视规避"
   }
