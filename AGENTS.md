@@ -337,7 +337,8 @@ npx tsc --noEmit                    # 类型检查（strict）
 | 司马懿·晋 h807 | 其徐如林 | `strategyAdjacentBonus` | 下架 |
 | 司马徽 h811 | 徽言龙凤 | `teamDamageThreshold` + `recipientDamageByHigherStat` | 下架 |
 
-计数：已实现主战法 **99**（基线 88），上架池 67 → 73；测试 91 files/1121 → **102 files/1188**。
+计数：已实现主战法 **99**（基线 88），上架池 67 → **72**（`docs/下架武将清单.md` 重新生成口径：未实现 62 / 卡成长率下架 27 / 上架 72）；
+测试 91 files/1121 → **102 files/1188**。
 
 ### 待用户确认的 7 处歧义（未确认前不得动手）
 
