@@ -69,11 +69,26 @@ function moraleTriggerRate(morale: number, baseRate: number): number {
  * `additive: false` 显式声明时才退回乘算；skillTypes 限定战法类型（动如雷震仅追击）；
  * 多种 trigger_boost 按施加顺序逐条相加叠加。
  */
-function boostedBaseRate(unit: UnitState, skillType: SkillType, baseRate: number): number {
+/** 「攻击类」战法：输出段（含 chance_group / random_pick 内层）含 physical_damage
+ *  （侵掠如火「攻击类主动战法发动率提升 20.0%」的过滤维） */
+function isAttackClassSkill(skill: Skill): boolean {
+  const walk = (outs: SkillOutput[]): boolean =>
+    outs.some((o) => {
+      if (o.kind === 'physical_damage') return true;
+      if (o.kind === 'chance_group') return walk(o.outputs);
+      if (o.kind === 'random_pick') return walk(o.options.flat());
+      return false;
+    });
+  return walk(skill.output);
+}
+
+function boostedBaseRate(unit: UnitState, skillType: SkillType, baseRate: number, skill?: Skill): number {
   let rate = baseRate;
   for (const s of unit.statuses) {
     if (s.type !== 'trigger_boost') continue;
     if (s.skillTypes && s.skillTypes.length > 0 && !s.skillTypes.includes(skillType)) continue;
+    // 攻击类过滤（侵掠如火）：只对输出含物理伤害的战法生效
+    if (s.attackSkillsOnly && (!skill || !isAttackClassSkill(skill))) continue;
     if (s.additive === false) rate *= 1 + s.rate;
     else rate += s.rate;
   }
@@ -1488,7 +1503,7 @@ function executeSplitAttack(
     if (consumeEvasion(ctx, adjTarget, unit.general.id)) continue;
     const atk = effectiveStat(unit, 'attack');
     const def = physicalTargetDefense(unit, adjTarget);
-    const hit: DamageHitContext = { damageSource: 'basic', damageType: 'physical' };
+    const hit: DamageHitContext = { damageSource: 'basic', damageType: 'physical', split: true };
     const { causedMult, takenMult } = damageBoosts(ctx, unit, adjTarget, hit);
     const reduce = sumReduce(adjTarget, hit) + troopCounterReduceOf(unit, adjTarget);
     const { damage, breakdown } = calcDamage(
@@ -2357,6 +2372,10 @@ function pushStatus(
     if (type === 'trigger_boost' && 'additive' in create && create.additive) {
       (push as { additive?: boolean }).additive = true;
     }
+    // 攻击类过滤（侵掠如火：只提升攻击类主动战法发动率）
+    if (type === 'trigger_boost' && 'attackSkillsOnly' in create && create.attackSkillsOnly) {
+      (push as { attackSkillsOnly?: boolean }).attackSkillsOnly = true;
+    }
     target.statuses.push(push);
     // 战报 detail：duration ≥ 999（战斗结束约定）→「持续至战斗结束」；
     // damage_boost 用百分数 + 语义化（0.08 → 「造成的伤害提高8%」；≤ -90% → 「造成的伤害大幅降低」）
@@ -2812,6 +2831,8 @@ export type DamageHitContext = {
   skillType?: SkillType;
   /** DoT 类型（仅 DoT 挂上时结算携带）：供 `dotTypes` 过滤维使用（全主诿异） */
   dotType?: DotType;
+  /** 分兵溅射伤害（普攻衍生）：不算「进行攻击」（侵掠如火概率增伤不吃分兵） */
+  split?: boolean;
 };
 
 /**
@@ -2852,6 +2873,29 @@ function sumReduce(target: UnitState, hit?: DamageHitContext): number {
  * 消费方：buffMult 按「单一总和」模型把两侧增伤与受击方减伤（damage_reduce）求和后 clamp 下限 10%。
  * @param hit 本次伤害上下文；缺省不过滤（旧调用保持原行为）
  */
+/** 「进行攻击」判定（侵掠如火口径）：普通攻击 / 物理主动战法 / 追击战法；
+ *  不含分兵溅射（split）、反击、指挥代打（skillType:'command'）与 DoT。 */
+function isAttackHitForProc(hit?: DamageHitContext): boolean {
+  if (!hit || hit.damageType !== 'physical' || hit.dotType || hit.split) return false;
+  if (hit.damageSource === 'basic') return true;
+  return hit.skillType === 'active' || hit.skillType === 'pursuit';
+}
+
+/** 进行攻击时概率增伤（侵掠如火）：按施法者被动 `attackProcBoost` 逐条掷一次，命中累加 rate。
+ *  官方未写受士气影响（非战法发动率，属效果几率）→ 按固定概率判定，不走 moraleTriggerRate。 */
+function attackProcBoostOf(ctx: CombatContext, source: UnitState, hit?: DamageHitContext): number {
+  if (!isAttackHitForProc(hit)) return 0;
+  let boost = 0;
+  for (const id of source.general.passiveSkillIds) {
+    const skill = resolveSkill(ctx, id);
+    if (skill?.type !== 'passive') continue;
+    const cfg = skill.attackProcBoost;
+    if (!cfg) continue;
+    if (ctx.rng.chance(cfg.chance)) boost += cfg.rate;
+  }
+  return boost;
+}
+
 function damageBoosts(
   ctx: CombatContext,
   source: UnitState,
@@ -2868,7 +2912,8 @@ function damageBoosts(
     'damage_boost',
     'taken'
   );
-  return { causedMult: 1 + causedBoost, takenMult: 1 + takenBoost };
+  // 被动概率增伤（侵掠如火）：命中则并入造成侧合计（数值体现在伤害本身，不进战报增减伤明细）
+  return { causedMult: 1 + causedBoost + attackProcBoostOf(ctx, source, hit), takenMult: 1 + takenBoost };
 }
 
 /**
@@ -3955,7 +4000,7 @@ export function triggerActiveSkill(
   const rolled = rollTriggerRate(ctx.rng, skill.triggerRate);
   const decayed = decayPerCast > 0 ? Math.max(0, rolled - decayPerCast * castCount) : rolled;
   // 发动率提升：乘算（难知如阴）或加算封顶（动如雷震），再乘士气系数
-  const base = boostedBaseRate(unit, 'active', decayed);
+  const base = boostedBaseRate(unit, 'active', decayed, skill);
   const morale = effectiveMorale(unit);
   const rate = moraleTriggerRate(morale, base);
   const success = ctx.rng.chance(rate);
@@ -4179,7 +4224,7 @@ function triggerPursuitSkill(
   if (!unit.alive) return;
   // 发动率提升：追击同样吃 trigger_boost（动如雷震仅追击加算 +100 个百分点）
   const rolled = rollTriggerRate(ctx.rng, skill.triggerRate);
-  const base = boostedBaseRate(unit, 'pursuit', rolled);
+  const base = boostedBaseRate(unit, 'pursuit', rolled, skill);
   const morale = effectiveMorale(unit);
   const rate = moraleTriggerRate(morale, base);
   const success = ctx.rng.chance(rate);

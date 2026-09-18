@@ -1917,7 +1917,7 @@
     "growthDefense": 1.92,
     "growthStrategy": 0.78,
     "growthSpeed": 0.67,
-    "mainSkillId": "",
+    "mainSkillId": "qinlue_ruhuo",
     "mainSkillName": "侵掠如火",
     "skillDesc": "在战斗中可以优先行动，攻击类主动战法发动率提升20.0%，进行攻击时有30.0%的几率使本次攻击伤害提高50.0%"
   },

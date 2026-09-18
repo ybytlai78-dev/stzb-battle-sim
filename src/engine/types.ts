@@ -393,7 +393,7 @@ export type CreateStatus =
    * 超过 100% 由发动率判定封顶为必定发动。
    * additive：仅 `false` 有意义——显式退回乘算 基础率 × (1+rate)。
    */
-  | { type: 'trigger_boost'; rate: number; duration: number; skillTypes?: SkillType[]; /** 仅 false 生效：退回乘算；缺省加法 */ additive?: boolean }
+  | { type: 'trigger_boost'; rate: number; duration: number; skillTypes?: SkillType[]; /** 仅 false 生效：退回乘算；缺省加法 */ additive?: boolean; /** 只对「攻击类」战法生效（输出段含物理伤害）——侵掠如火「攻击类主动战法发动率提升 20%」 */ attackSkillsOnly?: boolean }
   | { type: 'insight'; duration: number }
   /** 免疫怯战（魏武之泽）：持续期间无法被施加怯战 */
   | { type: 'cowardice_immune'; duration: number }
@@ -806,6 +806,19 @@ export interface PassiveSkill extends BaseSkill {
   targetMode: 'self' | 'all';
   /** 施法者阵亡后受击效果仍生效（同仇敌忾全队光环），缺省 false */
   retainAfterDeath?: boolean;
+  /**
+   * 被动先手（侵掠如火「在战斗中可以优先行动」）：前 N 回合优先行动，999 = 全程
+   * （与指挥 `priorityRounds` 同口径，见 combat.buildPriorityOrder）。
+   */
+  priorityRounds?: number;
+  /**
+   * 进行攻击时概率增伤（侵掠如火「进行攻击时有 30.0% 的几率使本次攻击伤害提高 50.0%」）：
+   * 每次「进行攻击」的**每个伤害对象**结算前掷一次 chance（消耗 RNG），命中则本次伤害 rate 提高；
+   * 不落状态、不参与增减伤冲突（数值体现在伤害本身，不进战报增减伤明细）。
+   * 口径（用户确认）：「进行攻击」= 普通攻击 / 物理主动战法 / 追击战法；
+   * 不含分兵溅射、反击、指挥代打（奇兵拒北）与 DoT。
+   */
+  attackProcBoost?: { chance: number; rate: number };
   /** 被动生效回合窗口（先声夺人 endRound:3）；battle_start 型不受此字段影响 */
   startRound?: number;
   endRound?: number;
@@ -1046,7 +1059,7 @@ export type Status =
   | { type: 'speed_buff'; amount: number; percent?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   | { type: 'damage_reduce'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; /** 当前剩余份数（谋议宏图 8→7→…）；无此字段则不按 1/8 衰减 */ eighths?: number; /** 8/8 时的满额减伤率，衰减时 rate = baseRate × eighths/8 */ baseRate?: number; /** 受击剩余份数（疮痍累身 12→11→…）；无此字段则不按受击衰减 */ fifths?: number; /** 受击份数初始值（疮痍累身 12） */ fifthsBase?: number; /** 伤害来源过滤：basic=普攻（分类键小类「普通」）/ skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效（分类键小类「主动/追击/指挥」）；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省攻击+策略都吃（分类键「大类」，见 action.ts damageClassKey） */ damageType?: 'physical' | 'strategy'; /** 只对这些 DoT 类型生效（全主诿异：被施加的燃烧/恐慌/妖术诅咒伤害提升 20%）；缺省不限（非 DoT 伤害也吃） */ dotTypes?: DotType[]; /** 条件减伤（人公将军「敌方武将存在妖术效果时造成的攻击伤害降低 20%」）：仅当**携带者自身**带该状态时本减伤才生效 */ requireSelfStatus?: StatusType }
   | { type: 'damage_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; direction: 'caused' | 'taken'; sourceUnitId?: string; /** 叠层计数（带上限的增减伤，银龙冲阵最多 3 层）；无上限时不设置 */ stacks?: number; /** 次数型下一次攻击（青丘媚祸） */ charges?: number; /** 当前剩余份数（恃强淬锋 5→4→…）；无此字段则不按 1/5 衰减 */ fifths?: number; /** fifths 满额时的 rate，衰减时 rate = baseRate × fifths / 初始份数 */ baseRate?: number; /** decayFifths 挂上时的满额份数（恃强 5），衰减公式分母 */ fifthsBase?: number; /** 当前剩余份数（虎豹督军 8→7→…，每回合前 −1；与 fifths 互斥） */ eighths?: number; /** 伤害来源过滤：basic=普攻（分类键小类「普通」）/ skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效（分类键小类「主动/追击/指挥」）；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省攻击+策略都吃（分类键「大类」，见 action.ts damageClassKey） */ damageType?: 'physical' | 'strategy'; /** 只对这些 DoT 类型生效（全主诿异：被施加的燃烧/恐慌/妖术诅咒伤害提升 20%）；缺省不限（非 DoT 伤害也吃） */ dotTypes?: DotType[] }
-  | { type: 'trigger_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; skillTypes?: SkillType[]; additive?: boolean }
+  | { type: 'trigger_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; skillTypes?: SkillType[]; additive?: boolean; attackSkillsOnly?: boolean }
   | { type: 'insight'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'cowardice_immune'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'siege'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }

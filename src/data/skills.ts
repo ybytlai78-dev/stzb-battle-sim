@@ -4937,4 +4937,47 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+  /**
+   * 侵掠如火（甘宁·吴步 h34·被动 A）：距离 1，目标自己。
+   * ① 在战斗中可以优先行动；
+   * ② 攻击类主动战法发动率提升 20.0%；
+   * ③ 进行攻击时有 30.0% 的几率使本次攻击伤害提高 50.0%。
+   * 官方：scripts/skill_extra.json id 200034（被动 A / 距离 1 / 自己 / 兵种步；1 级 10% / 25%）。
+   * 成长率：三段均无「受…属性影响」→ 无待确认成长率，**甘宁上架**（不登记 OFFLINE_MAIN_SKILLS）。
+   * 口径（用户确认）：
+   *  - ③「进行攻击」= 普通攻击 / 物理主动战法 / 追击战法；不含分兵溅射、反击、指挥代打（奇兵拒北）与 DoT；
+   *  - ③ 按「每个伤害对象各掷一次」，官方未写受士气影响（属效果几率、非战法发动率）→ 固定 30%，不走 moraleTriggerRate。
+   * 引擎配套：
+   *  ① `PassiveSkill.priorityRounds`（被动先手，原 `priorityRounds` 仅指挥战法支持），combat.buildPriorityOrder 同步识别；
+   *  ② `trigger_boost.attackSkillsOnly`（只提升「攻击类」战法发动率 = 输出段含物理伤害，含 chance_group / random_pick 内层）；
+   *  ③ `PassiveSkill.attackProcBoost`（进行攻击时概率增伤，见 action.attackProcBoostOf / isAttackHitForProc）。
+   */
+  qinlue_ruhuo: {
+    id: 'qinlue_ruhuo',
+    name: '侵掠如火',
+    type: 'passive',
+    range: 1,
+    triggerRate: 1,
+    timing: 'battle_start',
+    targetMode: 'self',
+    tags: ['damage_boost'],
+    // ① 全程先手（duration ≥ 999 / priorityRounds 999 = 战斗结束约定）
+    priorityRounds: 999,
+    // ③ 进行攻击时 30% 几率本次攻击伤害 +50%
+    attackProcBoost: { chance: 0.3, rate: 0.5 },
+    output: [
+      // ② 攻击类主动战法发动率 +20%（全程；只对输出含物理伤害的主动战法生效）
+      {
+        kind: 'inflict_status',
+        target: 'self',
+        status: {
+          type: 'trigger_boost',
+          rate: 0.2,
+          duration: 999,
+          skillTypes: ['active'],
+          attackSkillsOnly: true,
+        },
+      },
+    ],
+  },
 };

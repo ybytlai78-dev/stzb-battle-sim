@@ -203,12 +203,17 @@ export function buildPriorityOrder(
   skills: Map<string, Skill>
 ): UnitState[] {
   const inPriority = (u: UnitState): boolean =>
-    // 两种先手：① 指挥战法常驻（先驱突击前 N 回合）
+    // 三种先手：① 指挥战法常驻（先驱突击前 N 回合）
     // ② 主动战法发动后授予的 priority 状态（诸葛锦囊：自身先手 2 回合）
+    // ③ 被动先手（侵掠如火「在战斗中可以优先行动」，priorityRounds 999 = 全程）
     u.statuses.some((st) => st.type === 'priority') ||
     u.general.commandSkillIds.some((id) => {
       const s = skills.get(id);
       return s?.type === 'command' && s.priorityRounds !== undefined && round <= s.priorityRounds;
+    }) ||
+    u.general.passiveSkillIds.some((id) => {
+      const s = skills.get(id);
+      return s?.type === 'passive' && s.priorityRounds !== undefined && round <= s.priorityRounds;
     });
   const sortBySpeed = (a: UnitState, b: UnitState): number => {
     const sa = effectiveStat(a, 'speed');
