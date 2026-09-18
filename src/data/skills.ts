@@ -4766,4 +4766,46 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+
+  /**
+   * 四世三公（袁绍·汉步 h6·主动 B）：发动率 35%，距离 5，敌军单体。
+   * ① 使我军全体分别对距离 5 以内的敌军单体发动一次攻击（伤害率 150%），每次目标独立判定；
+   * ② 额外使我军攻击属性最高单体，对敌军防御最低单体发动一次攻击（伤害率 160%）。
+   * 官方：scripts/skill_extra.json id 200006（主动 B / 35% / 距离 5 / 敌军单体 / 步；1 级 75% / 80%）；
+   * 官网描述为两段拼接（前半重复两次）→ 清洗后取前半 + 额外段，与 web/data/heroes.json h6 一致。
+   * 全文无「受 XX 属性影响」→ 无成长率留空问题、不登记下架（**袁绍·汉上架**）。
+   * 引擎配套（2 个选目标/选代打者开关，均挂在既有 `attacker:'recipient'` 代打路径上）：
+   *  ① `physical_damage.attackerPick: 'highest_attack'`（只由我军攻击属性最高者出手）；
+   *  ② `physical_damage.targetPick: 'lowest_defense'`（直接取存活敌军中防御最低者，无视距离）。
+   * ① 段用 `attacker:'recipient'` + `targetMode:'random_single'`（我军全体各打一次、各自独立选目标）。
+   */
+  sishisan_gong: {
+    id: 'sishisan_gong',
+    name: '四世三公',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.35,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['damage'],
+    output: [
+      // ① 我军全体各自对距离 5 内敌军单体发动一次攻击 150%（每次独立选目标）
+      {
+        kind: 'physical_damage',
+        rate: 150,
+        attacker: 'recipient',
+        targetMode: 'random_single',
+        range: 5,
+      },
+      // ② 我军攻击属性最高单体 → 敌军防御最低单体，攻击 160%
+      {
+        kind: 'physical_damage',
+        rate: 160,
+        attacker: 'recipient',
+        attackerPick: 'highest_attack',
+        targetPick: 'lowest_defense',
+      },
+    ],
+  },
 };

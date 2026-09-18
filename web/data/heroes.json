@@ -2115,7 +2115,7 @@
     "growthDefense": 1.63,
     "growthStrategy": 1.05,
     "growthSpeed": 0.57,
-    "mainSkillId": "",
+    "mainSkillId": "sishisan_gong",
     "mainSkillName": "四世三公",
     "skillDesc": "使我军全体分别对距离5以内的敌军单体发动一次攻击（伤害率150.0%），每次目标独立判定，额外使我军攻击属性最高单体，对敌军防御最低单体发动一次攻击（伤害率160.0%）"
   },

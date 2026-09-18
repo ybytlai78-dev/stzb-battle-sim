@@ -115,6 +115,16 @@ export type SkillOutput =
        * 对距离 `range`（缺省战法 range）内敌军单体打攻击；杀伤 sourceId 为该单位。
        */
       attacker?: 'lowest_strategy_ally' | 'recipient';
+      /**
+       * 代打者挑选（配合 `attacker:'recipient'`）：`'highest_attack'` = 只取**我军攻击属性最高**的单体作为代打者
+       * （四世三公「额外使我军攻击属性最高单体…发动一次攻击」）；缺省 = 池内每名友军各打一次。
+       */
+      attackerPick?: 'highest_attack';
+      /**
+       * 选敌覆盖：`'lowest_defense'` = 直接取当前存活敌军中**防御属性最低**的单体（**无视距离**，
+       * 四世三公「对敌军防御最低单体发动一次攻击」）；缺省按 targetMode + 战法距离选。
+       */
+      targetPick?: 'lowest_defense';
       /** 代打选敌距离（疏数骑兵 3）；缺省 skill.range */
       range?: number;
       /** 只对这些兵种的当前目标池结算 */

@@ -3203,7 +3203,20 @@ function executeSkillOutputs(
         if (out.attacker === 'recipient') {
           const atkRange = out.range ?? skill.range;
           const selectedIds: string[] = [];
-          for (const rider of pool) {
+          // 代打者挑选：highest_attack = 只由我军攻击属性最高者出手（四世三公「额外…」段）
+          const riders =
+            out.attackerPick === 'highest_attack'
+              ? (() => {
+                  const alive = pool.filter((u) => u.alive);
+                  if (alive.length === 0) return [] as UnitState[];
+                  return [
+                    alive.reduce((best, u) =>
+                      effectiveStat(u, 'attack') > effectiveStat(best, 'attack') ? u : best
+                    ),
+                  ];
+                })()
+              : pool;
+          for (const rider of riders) {
             if (!rider.alive) continue;
             if (out.chance != null) {
               const morale = effectiveMorale(caster);
@@ -3222,7 +3235,19 @@ function executeSkillOutputs(
               });
               if (!success) continue;
             }
-            const foes = skillTargets(ctx, rider, enemies, atkRange, resolveCombatTargetMode(out.targetMode, 'random_single'));
+            // 选敌覆盖：lowest_defense = 直接取存活敌军中防御最低者（无视距离；四世三公「对敌军防御最低单体」段）
+            const foes =
+              out.targetPick === 'lowest_defense'
+                ? (() => {
+                    const alive = enemies.filter((e) => e.alive);
+                    if (alive.length === 0) return [] as UnitState[];
+                    return [
+                      alive.reduce((best, u) =>
+                        effectiveStat(u, 'defense') < effectiveStat(best, 'defense') ? u : best
+                      ),
+                    ];
+                  })()
+                : skillTargets(ctx, rider, enemies, atkRange, resolveCombatTargetMode(out.targetMode, 'random_single'));
             let riderAttacked = false;
             for (const raw of foes) {
               if (!raw.alive) continue;
