@@ -1181,6 +1181,60 @@ function lowestStrategyAlly(allies: UnitState[], exclude: UnitState): UnitState 
 }
 
 /**
+ * 指定属性**最高**的存活友军（西陵克晋：我军当前攻击 / 谋略属性最高的武将）。
+ * **含施法者自身**（官方：「也有可能施加给陆抗自己」）；并列时速度更高优先，再比站位（前锋 > 中军 > 大营）。
+ * 无存活友军时返回 undefined，调用方跳过该段。
+ */
+function highestStatAlly(allies: UnitState[], stat: 'attack' | 'strategy'): UnitState | undefined {
+  const alive = allies.filter((a) => a.alive);
+  if (alive.length === 0) return undefined;
+  return alive.reduce((best, cur) => {
+    const cs = effectiveStat(cur, stat);
+    const bs = effectiveStat(best, stat);
+    if (cs !== bs) return cs > bs ? cur : best;
+    const cspd = effectiveStat(cur, 'speed');
+    const bspd = effectiveStat(best, 'speed');
+    if (cspd !== bspd) return cspd > bspd ? cur : best;
+    return POSITION_INDEX[cur.general.position] < POSITION_INDEX[best.general.position] ? cur : best;
+  });
+}
+
+/**
+ * 代打者结算后恢复（西陵克晋「并各自恢复一定兵力」）：**立即型急救**——按**代打者当前兵力**走恢复公式，
+ * 不落状态、与任何恢复类战法不冲突；官方口径「恢复量与任何属性无关，仅由执行时自身兵力决定」。
+ * 恢复值 = calcHealAmount(代打者当前兵力, rate)；heal 事件按仓库口径归属**施法者**（战报统计到陆抗·西陵克晋）。
+ */
+function healDamageSource(
+  ctx: CombatContext,
+  skill: Skill,
+  caster: UnitState,
+  source: UnitState,
+  rate: number
+): void {
+  if (!source.alive || source.troops <= 0) return;
+  // 围困：无法回复兵力
+  if (hasStatus(source, 'siege')) {
+    ctx.events.push({ type: 'siege_blocked', unitId: source.general.id, skillId: skill.id });
+    return;
+  }
+  const amount = calcHealAmount(source.troops, rate);
+  const before = source.troops;
+  const healed = recoverTroops(ctx, source, amount);
+  if (healed > 0) {
+    ctx.events.push({
+      type: 'heal',
+      sourceId: caster.general.id,
+      targetId: source.general.id,
+      skillId: skill.id,
+      skillName: skill.name,
+      amount: healed,
+      before,
+      after: source.troops,
+    });
+  }
+}
+
+/**
  * 常驻伤害前叠层（持节镇西）：友军每次造成攻击伤害前 → 出手方叠攻击；造成策略伤害前 → 出手方叠谋略；
  * 受到伤害前 → 受击者叠防御。攻击/策略/DoT/诅咒/引燃均走此入口。
  * 只作用于持有者的友军（同侧，含持有者自身）。每层各自持续 1 回合（回合结束掉 1 层），至多 maxStacks 层；
@@ -3535,7 +3589,11 @@ function executeSkillOutputs(
           break;
         }
         const source =
-          out.attacker === 'lowest_strategy_ally' ? lowestStrategyAlly(allies, caster) : caster;
+          out.attacker === 'lowest_strategy_ally'
+            ? lowestStrategyAlly(allies, caster)
+            : out.attacker === 'highest_attack_ally'
+              ? highestStatAlly(allies, 'attack')
+              : caster;
         if (!source) {
           rememberDamageTargets([]);
           break;
@@ -3653,36 +3711,47 @@ function executeSkillOutputs(
         }
         rememberDamageTargets(selectedIds);
         if (attacked) consumeAttackCharges(ctx, source, { damageSource: 'skill', damageType: 'physical', skillType: skill.type });
+        // 西陵克晋：代打者结算后按自身当前兵力恢复（每次发动一段恢复一次，不随目标数叠加）
+        if (attacked && out.healSource) healDamageSource(ctx, skill, caster, source, out.healSource.rate);
         executeDamageChain(ctx, caster, skill, targets, out);
         break;
       }
       case 'strategy_damage': {
         const selectedIds: string[] = [];
+        // 代打者（西陵克晋）：我军当前谋略属性最高者出手；缺省 = statU（既有口径零回归）
+        const stratRider =
+          out.attacker === 'highest_strategy_ally' ? highestStatAlly(allies, 'strategy') : undefined;
+        if (out.attacker === 'highest_strategy_ally' && !stratRider) {
+          rememberDamageTargets([]);
+          break;
+        }
+        const stratSrc = stratRider ?? statU;
+        const stratActor = stratRider ?? caster;
         for (const t of pool) {
           if (!t.alive) continue;
           if (out.requireStatuses?.length && !out.requireStatuses.some((st) => hasStatus(t, st))) continue;
           selectedIds.push(t.general.id);
           // 常驻伤害前叠层（持节镇西）：施法者叠谋略、受击者叠防御
-          triggerStackBuff(ctx, statU, t, 'strategy');
+          triggerStackBuff(ctx, stratSrc, t, 'strategy');
           // 规避：默认免疫一次伤害；ignoresEvasion 时无视
-          if (!out.ignoresEvasion && consumeEvasion(ctx, t, statU.general.id)) continue;
+          if (!out.ignoresEvasion && consumeEvasion(ctx, t, stratSrc.general.id)) continue;
           // 叠层后再读生效谋略（与攻击伤害先叠攻击再读 effectiveStat 对齐；
           // 群体逐目标叠层，每段伤害吃到截至本目标的全部层）
-          const effStrategy = effectiveStat(statU, 'strategy');
+          const effStrategy = effectiveStat(stratSrc, 'strategy');
           let rate = out.rate;
           if (out.strategyScaled && out.growthRate !== undefined) {
             rate = roundRate(scaledValue(out.rate, out.growthRate, effStrategy));
           }
           const hit: DamageHitContext = { damageSource: 'skill', damageType: 'strategy', skillType: skill.type };
-          const { causedMult, takenMult } = damageBoosts(ctx, statU, t, hit);
-          const reduce = sumReduce(t, hit) + troopCounterReduceOf(statU, t);
+          const { causedMult, takenMult } = damageBoosts(ctx, stratSrc, t, hit);
+          const reduce = sumReduce(t, hit) + troopCounterReduceOf(stratSrc, t);
           const { damage, breakdown } = calcDamage(
             {
               damageType: 'strategy',
               rate,
-              attackerAttack: statU.general.attack,
+              attackerAttack: stratSrc.general.attack,
               attackerStrategy: effStrategy,
-              attackerTroops: statU.troops,
+              attackerTroops: stratSrc.troops,
               targetDefense: t.general.defense,
               targetStrategy: t.general.strategy,
               mult: buffMult(causedMult, takenMult, reduce),
@@ -3692,21 +3761,27 @@ function executeSkillOutputs(
           const capped = applyTroopCap(damage, t.troops);
           ctx.events.push({
             type: 'damage',
-            sourceId: caster.general.id,
+            sourceId: stratActor.general.id,
+            // 代打（西陵克晋）：杀伤统计归属施法者
+            creditToId: stratActor.general.id === caster.general.id ? undefined : caster.general.id,
             targetId: t.general.id,
             skillId: skill.id,
             skillName: skill.name,
             damageType: 'strategy',
             damage: capped,
             breakdown,
-            modifiers: collectDamageModifiers(ctx, caster, t, true, hit),
+            modifiers: collectDamageModifiers(ctx, stratSrc, t, true, hit),
           });
-          applyDamage(ctx, t, capped, caster, 'strategy', 'skill');
+          applyDamage(ctx, t, capped, stratActor, 'strategy', 'skill');
           // 其徐如林：本侧施加的策略伤害生效后，对目标同侧相邻敌军额外造成一次策略伤害（原伤害率 × 比例）
           if (capped > 0) triggerStrategyAdjacentBonus(ctx, caster, t, rate);
         }
         rememberDamageTargets(selectedIds);
-        if (pool.some((t) => t.alive)) consumeAttackCharges(ctx, caster, { damageSource: 'skill', damageType: 'strategy', skillType: skill.type });
+        if (pool.some((t) => t.alive)) consumeAttackCharges(ctx, stratActor, { damageSource: 'skill', damageType: 'strategy', skillType: skill.type });
+        // 西陵克晋：代打者结算后按自身当前兵力恢复（每次发动一段恢复一次，不随目标数叠加）
+        if (selectedIds.length > 0 && out.healSource) {
+          healDamageSource(ctx, skill, caster, stratActor, out.healSource.rate);
+        }
         executeDamageChain(ctx, caster, skill, targets, out);
         break;
       }

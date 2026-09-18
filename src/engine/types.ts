@@ -114,7 +114,13 @@ export type SkillOutput =
        * `'recipient'` = 以每个通过兵种过滤的目标为攻击者，按其攻击/兵力/造成侧增减伤，
        * 对距离 `range`（缺省战法 range）内敌军单体打攻击；杀伤 sourceId 为该单位。
        */
-      attacker?: 'lowest_strategy_ally' | 'recipient';
+      attacker?: 'lowest_strategy_ally' | 'recipient' | 'highest_attack_ally';
+      /**
+       * 代打者结算后按**代打者自身当前兵力**恢复（西陵克晋「并各自恢复一定兵力」）：
+       * 立即型急救（非状态，与恢复类战法不冲突），恢复量 = calcHealAmount(代打者当前兵力, rate)。
+       * 官方口径：恢复量与任何属性无关、仅由执行时自身兵力决定。
+       */
+      healSource?: { rate: number };
       /**
        * 代打者挑选（配合 `attacker:'recipient'`）：`'highest_attack'` = 只取**我军攻击属性最高**的单体作为代打者
        * （四世三公「额外使我军攻击属性最高单体…发动一次攻击」）；缺省 = 池内每名友军各打一次。
@@ -202,6 +208,14 @@ export type SkillOutput =
       ignoreRange?: boolean;
       /** 兵力阈值条件：不满足的目标不结算本段（持玺兴兵「兵力低于 50% 才恢复」） */
       troopRatio?: TroopRatioCond;
+      /**
+       * 代打者：`'highest_strategy_ally'` = 由我**当前谋略属性最高**的存活武将出手结算本段
+       * （西陵克晋「我军当前谋略属性最高的武将对距离 4 以内的敌军发动一次策略攻击」；
+       * 含施法者自身，官方「也有可能施加给陆抗自己」）。缺省 = 施法者自身（statSource 口径不变）。
+       */
+      attacker?: 'highest_strategy_ally';
+      /** 代打者结算后按**代打者自身当前兵力**恢复（西陵克晋「并各自恢复一定兵力」），同 physical_damage.healSource */
+      healSource?: { rate: number };
     }
   | {
       kind: 'positional_physical_damage';

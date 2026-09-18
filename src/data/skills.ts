@@ -5137,4 +5137,57 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+  /**
+   * 西陵克晋（陆抗·吴步 h574·指挥 S）：距离 4，目标自己，每回合 50% 几率。
+   * 战斗中，每回合有 50.0% 的几率使我军当前攻击属性最高的武将对距离 4 以内的敌军发动一次攻击（150%），
+   * 我军当前谋略属性最高的武将对距离 4 以内的敌军发动一次策略攻击（150%，受谋略属性影响），并各自恢复一定兵力。
+   * 官方：scripts/skill_extra.json id 200824（指挥 S / 距离 4 / 自己 / 兵种步；1 级 75%）。
+   * 官方攻略（stzb.163.com/strategy/zfxq/2019/10/09/21006_836478.html，17173 转载同文）补充口径：
+   *  - 属于 **Ⅱ 类指挥战法**、「战斗中执行效果类」→ 每回合行动时判定（混乱/犹豫不阻止执行）→ `phase:'round'`；
+   *  - 伤害由**被施加效果的友军（代打者）自身属性**决定，并吃代打者自己的增伤（如马超【血溅黄沙】+120%）；
+   *  - 恢复为**立即型急救**：与任何恢复类战法不冲突，「恢复量与任何属性无关，仅由武将执行时的自身兵力决定，
+   *    9000 兵力时单口最大恢复量在 300 左右」。
+   * 口径（本次认定，待复核）：官方技能文本只有**一处**「每回合有 50.0% 的几率使 …，…」（攻略分列 1./2. 只是列举）
+   *   → 50% 由二类指挥自身 `triggerRate` 承载（走士气），两段同时结算，**不再叠 chance_group**；
+   *   若实际为两段各自独立 50%，改动 = 把两段包进 chance_group(chance .5)。
+   * 恢复率：官方技能文本**未给**恢复率 → 取基值 100%（无缩放），恢复量 = calcHealAmount(代打者当前兵力, 100)；
+   *   9000 兵力 = 216。⚠️ 与攻略「9000 兵力约 300」有差距，已记入 OFFLINE 说明待复核。
+   * 成长率：谋略攻击 150% 段「受谋略属性影响」成长未确认 → 按基值（strategyScaled 在、growthRate 缺）
+   *   → 登记 OFFLINE_MAIN_SKILLS（陆抗下架）。
+   * 引擎配套：`physical_damage.attacker` 新增 `'highest_attack_ally'`、`strategy_damage.attacker` 新增
+   *   `'highest_strategy_ally'`（我军当前攻击 / 谋略最高者代打，**含施法者自身**——官方「也有可能施加给陆抗自己」），
+   *   两段新增 `healSource`（代打者按自身当前兵力立即恢复，heal 事件归属施法者）。
+   */
+  xiling_kejin: {
+    id: 'xiling_kejin',
+    name: '西陵克晋',
+    type: 'command',
+    phase: 'round',
+    roundTrigger: 'on_act',
+    range: 4,
+    triggerRate: 1,
+    // 二类指挥的固定 50% 发动率走 dynamicTriggerRate（CommandSkill.triggerRate 定型为 1；increment 0 = 恒定）
+    dynamicTriggerRate: { base: 0.5, increment: 0 },
+    targetMode: 'self',
+    tags: ['damage', 'heal'],
+    output: [
+      // ① 攻击最高友军（含自身）代打 150% + 按自身当前兵力恢复
+      {
+        kind: 'physical_damage',
+        rate: 150,
+        attacker: 'highest_attack_ally',
+        targetMode: 'random_single',
+        healSource: { rate: 100 },
+      },
+      // ② 谋略最高友军（含自身）代打策略 150%（受谋略未确认 → 基值）+ 按自身当前兵力恢复
+      {
+        kind: 'strategy_damage',
+        rate: 150,
+        strategyScaled: true,
+        attacker: 'highest_strategy_ally',
+        targetMode: 'random_single',
+        healSource: { rate: 100 },
+      },
+    ],
+  },
 };
