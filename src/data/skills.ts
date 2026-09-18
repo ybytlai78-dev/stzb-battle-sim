@@ -4980,4 +4980,62 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+  /**
+   * 三军夺帅（杜预·晋弓 h705·被动 S）：距离 5，目标自己。
+   * 自身每成功发动普通攻击、主动及追击战法后，随机二选一（用户确认「或」= 每次触发 50/50）：
+   *  ① 对距离 5 以内敌军单体发动一次攻击（180%）并使自身攻击属性提高 10；
+   *  ② 对敌军群体 2 目标发动一次策略攻击（100%，受谋略属性影响）并使目标谋略属性降低 5；
+   * 属性变化可叠加，持续到战斗结束。
+   * 官方：scripts/skill_extra.json id 200987（被动 S / 距离 5 / 自己 / 兵种弓；1 级 90% / 10 / 50% / 5）。
+   * 成长率：仅 ②「受谋略属性影响」→ 未确认，按基值（strategyScaled 在、growthRate 缺）→ 登记 OFFLINE_MAIN_SKILLS（杜预下架）。
+   * 引擎配套：
+   *  ① `PassiveSkill.afterAct`（成功发动普攻 / 主动 / 追击后触发，三种来源统一钩子）；
+   *  ② 复用既有 `random_pick`（count:1 + 两组 options）= 50/50 随机二选一；
+   *  ③ `inflict_status.sameTargetsAsLastDamage`（谋略 −5 打在 ② 策略段的同一批目标上，不重选）。
+   */
+  sanjun_duoshuai: {
+    id: 'sanjun_duoshuai',
+    name: '三军夺帅',
+    type: 'passive',
+    range: 5,
+    triggerRate: 1,
+    timing: 'battle_start',
+    targetMode: 'self',
+    tags: ['damage', 'attack_buff', 'debuff_strategy'],
+    output: [],
+    afterAct: {
+      output: [
+        {
+          kind: 'random_pick',
+          count: 1,
+          options: [
+            // ① 距离 5 以内敌军单体攻击 180% + 自身攻击 +10（同战法重复触发累加、持续到战斗结束）
+            [
+              { kind: 'physical_damage', rate: 180, targetMode: 'random_single' },
+              {
+                kind: 'inflict_status',
+                target: 'self',
+                status: { type: 'attack_buff', amount: 10, duration: 999 },
+              },
+            ],
+            // ② 敌军群体 2 目标策略攻击 100%（受谋略）+ 目标谋略 −5（同一批目标）
+            [
+              {
+                kind: 'strategy_damage',
+                rate: 100,
+                strategyScaled: true,
+                targetMode: 'group',
+                groupCount: 2,
+              },
+              {
+                kind: 'inflict_status',
+                sameTargetsAsLastDamage: true,
+                status: { type: 'strategy_buff', amount: -5, duration: 999 },
+              },
+            ],
+          ],
+        },
+      ],
+    },
+  },
 };

@@ -3330,6 +3330,12 @@ function executeSkillOutputs(
       const overlap = new Set(lastDamageTargetIds.filter((id) => prevDamageTargetIds.includes(id)));
       pool = ctx.myTeam.concat(ctx.enemyTeam).filter((u) => u.alive && overlap.has(u.general.id));
     }
+    // 三军夺帅 / 地公将军：本段状态打在**上一段伤害**的同一批命中目标上（不按本段 targetMode 重选）
+    if (out.kind === 'inflict_status' && out.sameTargetsAsLastDamage) {
+      pool = ctx.myTeam
+        .concat(ctx.enemyTeam)
+        .filter((u) => u.alive && lastDamageTargetIds.includes(u.general.id));
+    }
     if (out.kind === 'inflict_status' && out.positions && out.positions.length > 0) {
       // 阵营池：缺省敌军（落首箭混乱打大营）；targetSide:'ally' 时改按友军站位筛（怀橘遗亲：大营 / 前锋中军）
       const sidePool =
@@ -4045,6 +4051,8 @@ export function triggerActiveSkill(
   executeSkillWithTargets(ctx, unit, skill, enemies, allies, attackPool);
   triggerAfterFirstActiveCommands(ctx, unit);
   triggerPassiveAfterActive(ctx, unit);
+  // 三军夺帅：成功发动主动战法后触发
+  triggerPassiveAfterAct(ctx, unit);
 }
 
 /** 准备完成的战法自动发动 */
@@ -4059,6 +4067,8 @@ function executePreparedSkill(
   executeSkillWithTargets(ctx, unit, skill, enemies, allies, attackPool);
   triggerAfterFirstActiveCommands(ctx, unit);
   triggerPassiveAfterActive(ctx, unit);
+  // 三军夺帅：成功发动主动战法后触发
+  triggerPassiveAfterAct(ctx, unit);
 }
 
 /**
@@ -4087,6 +4097,28 @@ function triggerAfterFirstActiveCommands(ctx: CombatContext, unit: UnitState): v
       skillName: skill.name,
     });
     executeSkillOutputs(ctx, unit, skill, selected);
+  }
+}
+
+/**
+ * 被动「成功发动普通攻击 / 主动战法 / 追击战法后」触发（三军夺帅）：三种来源每次成功后各结算一次 output。
+ * 与 `triggerPassiveAfterActive`（仅主动战法）区分；无次数上限。
+ * 调用点：普攻（performNormalAttack）／主动释放（普通 + 准备完成）／追击成功释放。
+ * 注意：本钩子输出的伤害段**不再**回触发本钩子（只有三类「发动」动作会调用它），故无自递归。
+ */
+export function triggerPassiveAfterAct(ctx: CombatContext, unit: UnitState): void {
+  if (!unit.alive) return;
+  const enemies = unit.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
+  for (const id of unit.general.passiveSkillIds) {
+    const skill = resolveSkill(ctx, id);
+    if (skill?.type !== 'passive' || !skill.afterAct) continue;
+    ctx.events.push({
+      type: 'skill_cast',
+      unitId: unit.general.id,
+      skillId: skill.id,
+      skillName: skill.name,
+    });
+    executeSkillOutputs(ctx, unit, skill, enemies, skill.afterAct.output);
   }
 }
 
@@ -4253,6 +4285,8 @@ function triggerPursuitSkill(
     skillName: skill.name,
   });
   executeSkillOutputs(ctx, unit, skill, [hitTarget]);
+  // 三军夺帅：成功发动追击战法后触发
+  triggerPassiveAfterAct(ctx, unit);
 }
 
 // ─── 普通攻击 ───
@@ -4333,6 +4367,8 @@ function normalAttack(
   dealAttack(ctx, unit, target, distance);
   // 七步释嫌等：成功发动普通攻击（含规避命中）后触发
   triggerAllyActCommands(ctx, unit);
+  // 三军夺帅：成功发动普通攻击后触发
+  triggerPassiveAfterAct(ctx, unit);
   return target;
 }
 

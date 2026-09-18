@@ -437,7 +437,7 @@
     "growthDefense": 1.58,
     "growthStrategy": 2.29,
     "growthSpeed": 0.92,
-    "mainSkillId": "",
+    "mainSkillId": "sanjun_duoshuai",
     "mainSkillName": "三军夺帅",
     "skillDesc": "自身每成功发动普通攻击、主动及追击战法后，自身对距离5以内敌军单体发动一次攻击（伤害率180.0%）并使自身攻击属性提高10.0，或对敌军群体2目标发动一次策略攻击（伤害率100.0%，受谋略属性影响）并使目标谋略属性降低5.0，属性变化可叠加，持续到战斗结束"
   },

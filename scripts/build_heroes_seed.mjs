@@ -139,6 +139,7 @@ const SKILL_ID_BY_NAME = {
   徽言龙凤: 'huiyan_longfeng',
   破凰: 'po_huang',
   侵掠如火: 'qinlue_ruhuo',
+  三军夺帅: 'sanjun_duoshuai',
   万箭齐发: 'wanjian_qifa',
   文伐: 'wenfa',
   不攻: 'bugong',

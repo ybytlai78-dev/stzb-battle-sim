@@ -280,6 +280,12 @@ export type SkillOutput =
        * 配合 targetSide:'ally' 时改筛友军（怀橘遗亲：大营 / 前锋中军）。缺员则跳过。
        */
       positions?: Position[];
+      /**
+       * 沿用**上一段伤害输出**的实际命中目标（三军夺帅「并使目标谋略属性降低 5」；地公将军「吸取其属性」）：
+       * 为 true 时不再按本段 targetSide/targetMode 重选，直接取本战法上一段伤害的命中集
+       * （见 action.executeSkillOutputs 的 lastDamageTargetIds）。
+       */
+      sameTargetsAsLastDamage?: boolean;
     }
   | { kind: 'remove_debuffs'; target?: 'self'; troopTypes?: TroopType[] }
   | { kind: 'grant_evasion'; stacks: number; target?: 'self' }
@@ -862,6 +868,12 @@ export interface PassiveSkill extends BaseSkill {
    * output 段建议带 targetMode（如 'group'）按战法距离重选目标。
    */
   afterActive?: { output: SkillOutput[]; maxTriggers?: number };
+  /**
+   * 「成功发动普通攻击 / 主动战法 / 追击战法后」触发（三军夺帅）：三种来源每次成功后各结算一次 output
+   * （与 `afterActive` 仅覆盖主动战法区分；无次数上限）。
+   * 目标池：交给 output 段的 targetMode 重选（缺省传入对侧全体存活作为兜底）。
+   */
+  afterAct?: { output: SkillOutput[] };
   output: SkillOutput[];
 }
 
