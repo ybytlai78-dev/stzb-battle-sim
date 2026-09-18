@@ -4897,4 +4897,44 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       ],
     },
   },
+
+  // ─── 批量32：下架武将清单 §1.2「补 1 个机制」（7 处歧义已由用户逐条确认）───
+  /**
+   * 破凰（司马懿·魏步 h472·主动 A·距离 5·45%·敌军单体）：
+   * ① 立即引发**敌军全体**由破凰带来的剩余妖术效果（受击触发妖术的剩余次数逐次打出后移除）；
+   * ② 对敌军单体发动一次策略攻击（155%，受谋略属性影响）；
+   * ③ 使其每受到伤害时额外引发一次妖术伤害（130%，受谋略属性影响），最多生效 3 次，持续 3 回合。
+   * 官方：scripts/skill_extra.json id 200080（满级 155%/130%，1 级 77.5%/65%）。
+   * 描述为两版拼接：第一版目标「敌军单体」/ 第二版「敌军兵力最低的单体」
+   *   → 用户确认取**第一版**（「兵力最低」需特殊目标选择机制，本战法不引入）。
+   * 口径确认（用户）：「剩余妖术」= **本战法自身**此前施加的条件妖术的剩余次数——
+   *   第 1 回合无存量 → ① 空转，直接 ②③；之后每次发动先引爆上一轮留下的剩余次数
+   *   （例：剩余 3 次 → 连打 3 次妖术伤害并移除），再 ②③ 施加新的条件妖术。
+   * 成长率：155% 与 130% 两段「受谋略属性影响」均未确认 → 155% 留空（基值不缩放）、
+   *   130% 给 0（DoT growthRate 为必填字段）→ 登记 OFFLINE_MAIN_SKILLS（司马懿下架）。
+   * 引擎配套：**`sorcery` 状态新增 `onHurt` / `charges`（受击触发妖术 + 次数上限）**，
+   *   **新增输出段 `detonate_sorcery_marks`（引爆敌军全体由本战法施加的受击触发妖术剩余次数）**。
+   */
+  po_huang: {
+    id: 'po_huang',
+    name: '破凰',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.45,
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['damage', 'sorcery'],
+    output: [
+      // ① 引爆敌军全体上由本战法留下的条件妖术（无存量时空转）
+      { kind: 'detonate_sorcery_marks' },
+      // ② 策略攻击 155%（受谋略未确认 → 基值不缩放）
+      { kind: 'strategy_damage', rate: 155, strategyScaled: true },
+      // ③ 条件妖术：受击触发一次妖术伤害 130%（受谋略未确认 → 基值），最多 3 次、持续 3 回合
+      {
+        kind: 'inflict_status',
+        status: { type: 'sorcery', duration: 3, rate: 130, growthRate: 0, onHurt: true, charges: 3 },
+      },
+    ],
+  },
 };

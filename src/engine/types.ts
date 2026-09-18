@@ -214,6 +214,15 @@ export type SkillOutput =
       ignoresTroopCounter?: boolean;
     }
   | {
+      kind: 'detonate_sorcery_marks';
+      /**
+       * 引爆「受击触发妖术」剩余次数（破凰「立即引发敌军全体由破凰带来的剩余妖术效果」）：
+       * 遍历**敌军全体**，把由本战法施加的受击触发妖术（sorcery + onHurt）的剩余 charges 次
+       * 逐次立即打出（挂上时冻结值），随后移除该状态；目标无存量则本段跳过（首次发动空转，
+       * 由后续段施加新的条件妖术）。
+       */
+    }
+  | {
       kind: 'inflict_status';
       /** 单个状态，或状态数组（随机选 1 个施加——奇佐鬼谋随机 1 种控制） */
       status: CreateStatus | CreateStatus[];
@@ -389,7 +398,9 @@ export type CreateStatus =
   /** 免疫怯战（魏武之泽）：持续期间无法被施加怯战 */
   | { type: 'cowardice_immune'; duration: number }
   | { type: 'siege'; duration: number }
-  | { type: 'sorcery'; duration: number; rate: number; growthRate: number; sourceStrategy?: number; troopRatio?: TroopRatioCond }
+  /** onHurt=true：受击触发妖术（破凰「条件妖术」）——行动时不跳伤，携带者每受到 1 次伤害
+   *  额外引发 1 次妖术伤害，charges 次用尽即移除（与 remaining 持续回合两者先到先失效） */
+  | { type: 'sorcery'; duration: number; rate: number; growthRate: number; sourceStrategy?: number; troopRatio?: TroopRatioCond; onHurt?: boolean; charges?: number }
   | { type: 'burning'; duration: number; rate: number; growthRate: number; sourceStrategy?: number; troopRatio?: TroopRatioCond }
   | { type: 'panic'; duration: number; rate: number; growthRate: number; sourceStrategy?: number; troopRatio?: TroopRatioCond }
   /** 妖术诅咒（密谋定蜀）：携带者试图发动追击战法时触发一次妖术伤害（rate% 受谋略），持续 2 回合 */
@@ -1039,7 +1050,13 @@ export type Status =
   | { type: 'insight'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'cowardice_immune'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'siege'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
-  | { type: 'sorcery'; remaining: number; rate: number; sourceStrategy: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; stored?: DotStoredDamage; troopRatio?: TroopRatioCond }
+  /**
+   * 妖术（受击触发变体 = 破凰「条件妖术」）：onHurt 为 true 时**不在行动时跳伤**，
+   * 改为携带者每受到 1 次伤害额外引发 1 次妖术伤害（挂上时冻结 stored，滞后触发），
+   * charges 为剩余触发次数，用尽即移除；remaining 仍按回合递减（持续 3 回合，两者先到先失效）。
+   * 引爆（破凰第一段「引发敌军全体由破凰带来的剩余妖术效果」）：剩余 charges 次一次性逐次打出后移除。
+   */
+  | { type: 'sorcery'; remaining: number; rate: number; sourceStrategy: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; stored?: DotStoredDamage; troopRatio?: TroopRatioCond; onHurt?: boolean; charges?: number }
   | { type: 'burning'; remaining: number; rate: number; sourceStrategy: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; stored?: DotStoredDamage; troopRatio?: TroopRatioCond }
   | { type: 'panic'; remaining: number; rate: number; sourceStrategy: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; stored?: DotStoredDamage; troopRatio?: TroopRatioCond }
   /**

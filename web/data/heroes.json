@@ -1257,7 +1257,7 @@
     "growthDefense": 1.85,
     "growthStrategy": 2.3,
     "growthSpeed": 0.39,
-    "mainSkillId": "",
+    "mainSkillId": "po_huang",
     "mainSkillName": "破凰",
     "skillDesc": "立即引发敌军全体由破凰带来的剩余妖术效果，同时对敌军单体发动一次策略攻击（伤害率155.0%，受谋略属性影响），并使其每受到伤害时，额外引发一次妖术伤害（伤害率130.0%，受谋略属性影响），最多生效3次，持续3回合"
   },

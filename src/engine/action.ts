@@ -1447,6 +1447,8 @@ function tickDots(ctx: CombatContext, unit: UnitState): void {
   for (const s of unit.statuses) {
     if (!DOT_TYPES.includes(s.type as StatusType)) continue;
     const dot = s as Extract<Status, { type: 'sorcery' | 'burning' | 'panic' }>;
+    // 受击触发妖术（破凰「条件妖术」）：不在行动时跳伤，改由携带者受到伤害时触发
+    if (dot.type === 'sorcery' && dot.onHurt) continue;
     // 兵力阈值条件（巧音唤蝶燃烧「当目标兵力高于初始兵力 50% 时受到一次策略伤害」）：不满足则本回合不跳伤
     if (dot.troopRatio && !troopRatioMatches(unit, dot.troopRatio)) continue;
     dealDotDamage(ctx, unit, dot);
@@ -1597,7 +1599,8 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
 
   // 3. DoT 结算（妖术/燃烧/恐慌：行动时受到伤害）。先单独开行动组，避免跳伤/持节镇西叠层串进上一位武将的普攻组。
   const hasDot = unit.statuses.some(
-    (s) => s.type === 'sorcery' || s.type === 'burning' || s.type === 'panic'
+    (s) =>
+      (s.type === 'sorcery' && !s.onHurt) || s.type === 'burning' || s.type === 'panic'
   );
   if (hasDot) {
     ctx.events.push({
@@ -2421,12 +2424,22 @@ function pushStatus(
     if ('troopRatio' in create && create.troopRatio) {
       (status as { troopRatio?: TroopRatioCond }).troopRatio = create.troopRatio;
     }
+    // 受击触发妖术（破凰「条件妖术」）：行动时不跳伤，改为携带者受击时触发，charges 次用尽即移除
+    const hurtMark = create.type === 'sorcery' && create.onHurt === true ? create : undefined;
+    if (hurtMark) {
+      const mark = status as Extract<Status, { type: 'sorcery' }>;
+      mark.onHurt = true;
+      mark.charges = hurtMark.charges ?? 0;
+    }
     target.statuses.push(status);
+    const durText = create.duration >= 999 ? '持续至战斗结束' : `持续 ${create.duration} 回合`;
     ctx.events.push({
       type: 'status_inflicted',
       unitId: target.general.id,
       statusType: type,
-      detail: `${statusName(type)} ${Math.round(create.rate)}% ${create.duration >= 999 ? '持续至战斗结束' : `持续 ${create.duration} 回合`}`,
+      detail: hurtMark
+        ? `${statusName(type)} ${Math.round(create.rate)}% 受击触发 剩余 ${hurtMark.charges ?? 0} 次 ${durText}`
+        : `${statusName(type)} ${Math.round(create.rate)}% ${durText}`,
     });
     return;
   }
@@ -3224,7 +3237,7 @@ function executeSkillOutputs(
     // 单输出目标池：target:'self' → 施法者；targetMode 覆盖 → 按战法距离重新选敌/友军目标
     const enemies = caster.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
     const allies = caster.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
-    const outTarget = out.kind === 'positional_physical_damage' || out.kind === 'morale_branch' ? undefined : out.target;
+    const outTarget = out.kind === 'positional_physical_damage' || out.kind === 'morale_branch' || out.kind === 'detonate_sorcery_marks' ? undefined : out.target;
     const outMode =
       out.kind === 'physical_damage' || out.kind === 'strategy_damage' ? out.targetMode : undefined;
     const outIgnoreRange =
@@ -3314,6 +3327,29 @@ function executeSkillOutputs(
       pool = pool.filter((u) => out.troopTypes!.includes(u.general.troopType));
     }
     switch (out.kind) {
+      case 'detonate_sorcery_marks': {
+        // 破凰：引爆敌军全体身上由本战法施加的「受击触发妖术」剩余次数
+        // （剩余 N 次 → 连打 N 次挂上时冻结的妖术伤害，随后移除该状态；无存量则空转）
+        for (const foe of enemies) {
+          if (!foe.alive) continue;
+          const marks = foe.statuses.filter(
+            (s): s is Extract<Status, { type: 'sorcery' }> =>
+              s.type === 'sorcery' && s.onHurt === true && s.sourceSkillId === skill.id
+          );
+          if (marks.length === 0) continue;
+          // 先移除标记再逐次结算（结算伤害走 applyDamage 不会再触发本标记）
+          foe.statuses = foe.statuses.filter(
+            (s) => !(s.type === 'sorcery' && s.onHurt === true && s.sourceSkillId === skill.id)
+          );
+          for (const mark of marks) {
+            for (let k = 0; k < (mark.charges ?? 0); k++) {
+              if (!foe.alive) break;
+              dealDotDamage(ctx, foe, mark);
+            }
+          }
+        }
+        break;
+      }
       case 'physical_damage': {
         if (out.attacker === 'recipient') {
           const atkRange = out.range ?? skill.range;
@@ -4073,6 +4109,7 @@ function executeSkillWithTargets(
         o.kind !== 'morale_branch' &&
         o.kind !== 'random_pick' &&
         o.kind !== 'chance_group' &&
+        o.kind !== 'detonate_sorcery_marks' &&
         o.target !== 'self' &&
         // 单输出已覆盖目标池的 heal/inflict 不决定战法整体目标（利兵谋胜：伤敌 + 治友）
         !('targetSide' in o && o.targetSide) &&
@@ -4485,6 +4522,30 @@ function triggerIgniteOnHurt(ctx: CombatContext, target: UnitState): void {
   }
 }
 
+/** 受击触发妖术（破凰「条件妖术」）：携带者每受到 1 次伤害额外引发 1 次妖术伤害
+ *  （挂上时冻结 stored，滞后触发），charges 递减、用尽即移除；
+ *  与 remaining 持续回合两者先到先失效。
+ *  结算前**临时移除本标记**再打伤害——否则本次妖术伤害走 applyDamage 会再次触发本标记，
+ *  一次受击就把剩余次数全部吃掉（对照 ignite 一次性标记的「先移除再结算」）。 */
+function triggerSorceryMarkOnHurt(ctx: CombatContext, target: UnitState): void {
+  const marks = target.statuses.filter(
+    (s): s is Extract<Status, { type: 'sorcery' }> => s.type === 'sorcery' && s.onHurt === true
+  );
+  for (const mark of marks) {
+    if (!target.alive) break;
+    const left = (mark.charges ?? 0) - 1;
+    target.statuses = target.statuses.filter((x) => x !== mark);
+    dealDotDamage(ctx, target, mark);
+    if (!target.alive) break;
+    if (left > 0) {
+      mark.charges = left;
+      target.statuses.push(mark);
+    } else {
+      ctx.events.push({ type: 'status_expired', unitId: target.general.id, statusType: 'sorcery' });
+    }
+  }
+}
+
 /** 受击触发（盲侯奋勇/陷储立齐/同仇敌忾/缓师徐持）：扣兵后、阵亡标记前判定。
  *  反击等二次 applyDamage 不再递归（resolvingHurtHooks），避免盲侯循环。
  *  @param damageType 本次伤害类型；缺省不按 `onHurt.damageKind` 过滤（旧调用保持原行为）
@@ -4865,6 +4926,8 @@ export function applyDamage(
   }
   // 受击引燃（火势风威）：受到伤害时额外引发一次燃烧（触发后移除标记）
   triggerIgniteOnHurt(ctx, target);
+  // 受击触发妖术（破凰「条件妖术」）：受到伤害时额外引发一次妖术伤害（charges 次用尽移除）
+  triggerSorceryMarkOnHurt(ctx, target);
   // 持续型急救：仅非致死（扣兵后仍有兵力）可触发；兵力归零立即阵亡，不得复活
   if (!lethal && target.alive && target.troops > 0) {
     triggerFirstAidOnHurt(ctx, target);
