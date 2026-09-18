@@ -4681,4 +4681,41 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'inflict_status', status: { type: 'retaliate', duration: 999, rate: 120, maxTriggers: 2 } },
     ],
   },
+
+  /**
+   * 霸王渡江（孙策·吴骑 h450·被动 A）：距离 5，敌军单体。
+   * 每回合有 40% 的几率对有效距离 5 以内的敌军单体发动三次猛烈攻击（伤害率 150%），每次攻击目标独立判定；
+   * 本场战斗中自身无法发动主动战法；每次攻击造成伤害后可使霸王渡江发动率提升 3%，该效果可叠加 5 次。
+   * 官方：scripts/skill_extra.json id 200771（官网两版本拼接 → 按仓库口径**只用前半**：3%/层；
+   * 后半的 5%/层 不实现，与 web/data/heroes.json h450 清洗后描述一致）。
+   * 全文无「受 XX 属性影响」→ 无成长率留空问题、不登记下架（**孙策上架**）。
+   * 引擎配套：**新增 `chanceBoostPerDamage`（按造成伤害次数递增 chance_group 基础率）** ——
+   *   每造成 1 次伤害（实际扣兵 > 0）计 1 层（上限 maxStacks），chance_group 基础率 = chance + increment×层数
+   *   （再走士气）；计数走 ctx.skillDamageCounters（整场累计）。其余（被动 roundStartRepeat 每回合判定 /
+   *   chance_group / repeats 多段独立选目标 / 自身犹豫）均既有（火兽冲锋 + 宣威再战先例）。
+   */
+  bawang_dujiang: {
+    id: 'bawang_dujiang',
+    name: '霸王渡江',
+    type: 'passive',
+    triggerRate: 1,
+    timing: 'battle_start',
+    range: 5,
+    targetMode: 'self',
+    tags: ['damage', 'hesitation'],
+    chanceBoostPerDamage: { increment: 0.03, maxStacks: 5 },
+    output: [
+      // 本场战斗中自身无法发动主动战法（犹豫；被动/指挥不受影响）
+      { kind: 'inflict_status', status: { type: 'hesitation', duration: 999 } },
+    ],
+    roundStartRepeat: {
+      output: [
+        {
+          kind: 'chance_group',
+          chance: 0.4,
+          outputs: [{ kind: 'physical_damage', rate: 150, targetMode: 'random_single', repeats: 3 }],
+        },
+      ],
+    },
+  },
 };

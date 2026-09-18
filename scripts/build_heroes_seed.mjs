@@ -132,6 +132,7 @@ const SKILL_ID_BY_NAME = {
   全主诿异: 'quanzhu_weiyi',
   举贤决机: 'juxian_jueji',
   忠克猛烈: 'zhongke_menglie',
+  霸王渡江: 'bawang_dujiang',
   万箭齐发: 'wanjian_qifa',
   文伐: 'wenfa',
   不攻: 'bugong',

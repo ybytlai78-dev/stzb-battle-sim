@@ -159,6 +159,12 @@ export interface CombatContext {
    */
   skillCastCounters?: Map<string, number>;
   /**
+   * 「按造成伤害次数递增发动率」计数（霸王渡江）：key `${casterId}:${skillId}` → 已造成伤害次数
+   * （上限取 `skill.chanceBoostPerDamage.maxStacks`）。可选字段：单元测试直接构造 ctx 时可省略，
+   * 执行时惰性初始化。
+   */
+  skillDamageCounters?: Map<string, number>;
+  /**
    * 二类指挥·友军监听试图发动主动（谋谟帷幄）：key `${round}:${skillId}:${casterId}:${actorId}` → 已判定，
    * 保证「其每回合首次试图发动主动战法时」对每个发动者只走一次。
    * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
@@ -3042,7 +3048,13 @@ function executeSkillOutputs(
     }
     if (out.kind === 'chance_group') {
       const morale = effectiveMorale(caster);
-      const rate = moraleTriggerRate(morale, out.chance);
+      // 按造成伤害次数递增发动率（霸王渡江：40% + 3%/层，最多 5 层）
+      const boostCfg = skill.chanceBoostPerDamage;
+      const stacks = boostCfg
+        ? Math.min(boostCfg.maxStacks, ctx.skillDamageCounters?.get(`${caster.general.id}:${skill.id}`) ?? 0)
+        : 0;
+      const baseChance = boostCfg ? out.chance + boostCfg.increment * stacks : out.chance;
+      const rate = moraleTriggerRate(morale, Math.min(1, baseChance));
       const success = ctx.rng.chance(rate);
       ctx.events.push({
         type: 'skill_trigger',
@@ -3051,7 +3063,7 @@ function executeSkillOutputs(
         skillName: skill.name,
         success,
         rate: Math.round(rate * 100),
-        baseRate: Math.round(out.chance * 100),
+        baseRate: Math.round(Math.min(1, baseChance) * 100),
         morale,
       });
       if (success) executeSkillOutputs(ctx, caster, skill, targets, out.outputs);
@@ -3317,6 +3329,15 @@ function executeSkillOutputs(
               modifiers: collectDamageModifiers(ctx, source, t, true, hit, { ignoresTroopCounter: out.ignoresTroopCounter }),
             });
             applyDamage(ctx, t, capped, source, 'physical', 'skill');
+            // 按造成伤害次数递增发动率（霸王渡江）：本战法每造成 1 次伤害计 1 层（上限 maxStacks）
+            if (skill.chanceBoostPerDamage && capped > 0) {
+              ctx.skillDamageCounters ??= new Map();
+              const key = `${source.general.id}:${skill.id}`;
+              const used = ctx.skillDamageCounters.get(key) ?? 0;
+              if (used < skill.chanceBoostPerDamage.maxStacks) {
+                ctx.skillDamageCounters.set(key, used + 1);
+              }
+            }
             // 首次攻击标记（辕门射戟）：对本次攻击目标施加「造成攻击伤害降低」debuff（damage_boost caused 负值，
             // buffMult 10% 伤害下限 → 强制目标造成伤害降为 min 10%），持续 duration 回合；第二次攻击独立选目标不受影响
             if (out.markCausedReduce && t.alive) {

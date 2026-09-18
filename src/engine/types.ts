@@ -445,6 +445,14 @@ interface BaseSkill {
    * 仅主动战法有意义；准备主动按「释放」计一次（进入准备不计）。
    */
   triggerRateDecayPerCast?: number;
+  /**
+   * 按「造成伤害次数」递增本战法 `chance_group` 的基础发动率（霸王渡江「每次攻击造成伤害后可使
+   * 霸王渡江发动率提升 3.0%，该效果可叠加 5 次」）：
+   * 本战法每造成 1 次伤害（实际扣兵 > 0）计 1 层（上限 maxStacks），
+   * chance_group 的实际基础率 = chance + increment × 层数（再走士气）；
+   * 计数走 `ctx.skillDamageCounters`（键 `${casterId}:${skillId}`，整场累计不重置）。
+   */
+  chanceBoostPerDamage?: { increment: number; maxStacks: number };
 }
 
 /** 普通主动战法 */

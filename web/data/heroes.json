@@ -1477,7 +1477,7 @@
     "growthDefense": 1.75,
     "growthStrategy": 0.83,
     "growthSpeed": 1.44,
-    "mainSkillId": "",
+    "mainSkillId": "bawang_dujiang",
     "mainSkillName": "霸王渡江",
     "skillDesc": "每回合有40.0%的几率对有效距离5以内的敌军单体发动三次猛烈攻击（伤害率150.0%），每次攻击目标独立判定，本场战斗中，自身无法发动主动战法，每次攻击造成伤害后可使霸王渡江发动率提升3.0%，该效果可叠加5次"
   },
