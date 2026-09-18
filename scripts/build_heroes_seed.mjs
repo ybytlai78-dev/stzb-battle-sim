@@ -129,6 +129,7 @@ const SKILL_ID_BY_NAME = {
   计定山越: 'jiding_shanyue',
   威震河朔: 'weizhen_heshuo',
   匠心不竭: 'jiangxin_bujie',
+  全主诿异: 'quanzhu_weiyi',
   万箭齐发: 'wanjian_qifa',
   文伐: 'wenfa',
   不攻: 'bugong',

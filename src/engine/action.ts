@@ -12,6 +12,7 @@ import type {
   DamageModifiers,
   DamageType,
   DotStoredDamage,
+  DotType,
   OnHealConfig,
   OnHurtConfig,
   Position,
@@ -1130,13 +1131,15 @@ function computeDotTickDamage(
   ctx: CombatContext,
   caster: UnitState,
   target: UnitState,
-  dot: { rate: number; sourceStrategy: number; sourceSkillId?: string }
+  dot: { rate: number; sourceStrategy: number; sourceSkillId?: string; dotType?: DotType }
 ): DotStoredDamage {
   const skillType = dot.sourceSkillId ? resolveSkill(ctx, dot.sourceSkillId)?.type : undefined;
   const hit: DamageHitContext = {
     damageSource: 'skill',
     damageType: 'strategy',
     ...(skillType ? { skillType } : {}),
+    // DoT 类型维（全主诿异「被施加的燃烧/恐慌/妖术诅咒伤害提升」按此过滤）
+    ...(dot.dotType ? { dotType: dot.dotType } : {}),
   };
   const { causedMult, takenMult } = damageBoosts(ctx, caster, target, hit);
   const reduce = sumReduce(target, hit) + troopCounterReduceOf(caster, target);
@@ -1710,6 +1713,7 @@ export function inflictStatus(
         rate: dotCreate.rate,
         sourceStrategy: dotCreate.sourceStrategy ?? effectiveStat(caster, 'strategy'),
         sourceSkillId,
+        dotType: dotCreate.type,
       });
     }
     pushStatus(ctx, target, create, sourceSkillType, sourceSkillId, casterId, stored);
@@ -1979,6 +1983,7 @@ function sameDamageBoostFilter(existing: Status, incoming: CreateStatus): boolea
   if (existing.type !== 'damage_boost' && existing.type !== 'damage_reduce') return true;
   if (incoming.type !== 'damage_boost' && incoming.type !== 'damage_reduce') return true;
   const norm = (types?: SkillType[]) => [...(types ?? [])].sort().join(',');
+  const normDots = (types?: DotType[]) => [...(types ?? [])].sort().join(',');
   // charges 仅 damage_boost 有（次数型下一次攻击）；damage_reduce 无此字段，用 in 安全探测
   const hasCharges = (s: Status | CreateStatus): boolean =>
     'charges' in s ? (s as { charges?: number }).charges != null : false;
@@ -1986,6 +1991,7 @@ function sameDamageBoostFilter(existing: Status, incoming: CreateStatus): boolea
     (existing.damageSource ?? undefined) === (incoming.damageSource ?? undefined) &&
     (existing.damageType ?? undefined) === (incoming.damageType ?? undefined) &&
     norm(existing.skillTypes) === norm(incoming.skillTypes) &&
+    normDots(existing.dotTypes) === normDots('dotTypes' in incoming ? incoming.dotTypes : undefined) &&
     hasCharges(existing) === hasCharges(incoming)
   );
 }
@@ -2125,6 +2131,10 @@ function pushStatus(
     }
     if ((type === 'damage_boost' || type === 'damage_reduce') && 'damageType' in create && create.damageType != null) {
       (push as { damageType?: 'physical' | 'strategy' }).damageType = create.damageType;
+    }
+    // DoT 类型维过滤（全主诿异：只提升被施加的燃烧 / 恐慌 / 妖术诅咒）
+    if (type === 'damage_boost' && 'dotTypes' in create && create.dotTypes != null) {
+      (push as { dotTypes?: DotType[] }).dotTypes = create.dotTypes;
     }
     // 谋议宏图减伤 / 虎豹督军增伤按 8/8 衰减：冻结满额率为 baseRate
     if ((type === 'damage_reduce' || type === 'damage_boost') && 'decayEighths' in create && create.decayEighths) {
@@ -2582,18 +2592,23 @@ export type DamageHitContext = {
   damageSource?: 'basic' | 'skill';
   damageType?: DamageType;
   skillType?: SkillType;
+  /** DoT 类型（仅 DoT 挂上时结算携带）：供 `dotTypes` 过滤维使用（全主诿异） */
+  dotType?: DotType;
 };
 
 /**
  * 增减伤/减伤是否计入本次伤害。hit 缺省或某维缺省 = 该维不限制。
  */
 export function statusMatchesHit(
-  s: { damageSource?: 'basic' | 'skill'; skillTypes?: SkillType[]; damageType?: 'physical' | 'strategy' },
+  s: { damageSource?: 'basic' | 'skill'; skillTypes?: SkillType[]; damageType?: 'physical' | 'strategy'; dotTypes?: DotType[] },
   hit?: DamageHitContext
 ): boolean {
   if (!hit) return true;
   if (s.damageSource && hit.damageSource && s.damageSource !== hit.damageSource) return false;
   if (s.damageType && hit.damageType && s.damageType !== hit.damageType) return false;
+  if (s.dotTypes && s.dotTypes.length > 0) {
+    if (!hit.dotType || !s.dotTypes.includes(hit.dotType)) return false;
+  }
   if (s.skillTypes && s.skillTypes.length > 0) {
     if (!hit.skillType || !s.skillTypes.includes(hit.skillType)) return false;
   }

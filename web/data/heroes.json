@@ -1499,7 +1499,7 @@
     "growthDefense": 1.44,
     "growthStrategy": 1.53,
     "growthSpeed": 1.09,
-    "mainSkillId": "",
+    "mainSkillId": "quanzhu_weiyi",
     "mainSkillName": "全主诿异",
     "skillDesc": "使敌军全体被施加的燃烧、恐慌和妖术诅咒伤害提升20.0%（受谋略属性影响），持续3回合，同时对敌军群体1-2目标额外发动1次策略攻击（伤害率197.0%，受谋略属性影响）"
   },

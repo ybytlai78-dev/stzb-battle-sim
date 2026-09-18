@@ -4561,4 +4561,47 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+
+  /**
+   * 全主诿异（孙鲁班·吴弓 h654·主动 B）：发动率 40%，距离 5。
+   * ① 使敌军全体被施加的燃烧、恐慌和妖术诅咒伤害提升 20%（受谋略属性影响），持续 3 回合；
+   * ② 同时对敌军群体 1-2 目标额外发动 1 次策略攻击（伤害率 197%，受谋略属性影响）。
+   * 官方：scripts/skill_extra.json id 200937（满级 20% / 197%，1 级 10% / 98.5%）；
+   * 「敌军全体」与「敌军群体 1-2 目标」是两个不同目标池 → 战法目标取伤害段的 groupCount [1,2]，
+   * ① 用输出级 targetSide:'enemy' + targetMode:'all' 重选全体。
+   * 成长率：两处「受谋略属性影响」均未确认 → 留空（strategyScaled 在、不给 growthRate → 按基值不缩放）。
+   * 引擎配套：**新增 `damage_boost.dotTypes` 过滤维**（DoT 类型 = 燃烧 / 恐慌 / 妖术诅咒 / 妖术 / 引燃）——
+   *   DoT 挂上时结算把 `dotType` 写进 DamageHitContext，`statusMatchesHit` 据此过滤；
+   *   其余（输出级重选目标 / groupCount 区间 [1,2]）均既有（辕门射戟先例）。
+   */
+  quanzhu_weiyi: {
+    id: 'quanzhu_weiyi',
+    name: '全主诿异',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.4,
+    targetMode: 'group',
+    groupCount: [1, 2],
+    targetSide: 'enemy',
+    tags: ['damage', 'damage_boost'],
+    output: [
+      // ① 敌军全体：被施加的燃烧 / 恐慌 / 妖术诅咒伤害 +20%（受谋略，成长率留空），3 回合
+      {
+        kind: 'inflict_status',
+        targetSide: 'enemy',
+        targetMode: 'all',
+        status: {
+          type: 'damage_boost',
+          rate: 0.2,
+          duration: 3,
+          direction: 'taken',
+          dotTypes: ['burning', 'panic', 'curse'],
+          strategyScaled: true,
+        },
+      },
+      // ② 敌军群体 1-2 目标：额外策略攻击 197%（受谋略，成长率留空）
+      { kind: 'strategy_damage', rate: 197, strategyScaled: true },
+    ],
+  },
 };
