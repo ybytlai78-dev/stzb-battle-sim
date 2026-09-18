@@ -312,3 +312,50 @@ npx tsc --noEmit                    # 类型检查（strict）
 - **测试**：`tests/damage_lab_smoke.test.ts`（11 个，模块 import 版：三栏布局/分析页饼图+数学统计/战报左我右侍卫/返回实验室/**拖拽空槽投放+已选槽替换+池子保留**）+ `web/smoke.test.ts` 导航切换 1 个（nav-link 数量断言为 3）。
 - **部队加成弹窗（率土手游复刻，`teamEditor.ts` `openTroopBonusPanel` 已导出）**：深色古风 UI——红棕磨砂暗纹背景（多层渐变 + 135° 细纹纹理 + 径向高光）、暗金古风边框（含四角纹饰）、顶部标题栏（古楷暗金标题 + 右上**红色圆形 ×**关闭）、暗色蒙层（backdrop blur）。**三栏并列卡片**（无 tab、无底部按钮）：①阵营加成（圆形阵营徽章 + 「阵营加成-{阵营}」+「战斗中生效」橙标签 + 武将头像与四维加成格：攻击/谋略/防御/速度 **内联 SVG 线条图标 + 绿色数字 +N**）；②称号加成（「全局生效」青标签；激活 → 称号 chip + 武将行，未激活 → 「配置指定武将组合可激活 前往查看>>」）；③兵种加成（**马头剪影 SVG 徽章** + 「兵种加成-{骑兵/步兵/弓兵系}」+「战斗中生效」+ 武将行）。阵营/兵种按上阵多数取；空态「未激活」。主站红/蓝与实验室左栏「部队加成」按钮共用（实验室 `renderLabTeam` 头部已加）。旧 `.tb-*` tab 弹窗样式已删；smoke 断言更新（`.bonus-modal`/`.bm-card`/`.bm-stat.on`）。
 - 原型历程：`prototypes/damage-lab/`（独立 HTML + esbuild IIFE 验证版）**验证通过后已删除**，逻辑并入 `web/damageLab.ts`；构建脚本 `scripts/build_damage_lab.mjs` 已删。
+
+---
+
+## 会话交接（武将机制批次 · 2026-09-18，分支 `feat/hero-mechanics`）
+
+> 口径：**一个武将 = 一个提交 + push**；每将 ≥3 测试；`tsc` clean + 全量 `npm test` 全绿才提交；
+> 生成物（`web/data/*.json`、`scripts/seed_heroes.sql`）随提交入库；受属性缩放的段成长率留空
+> （`strategyScaled`/`attackScaled` 标记在，可选字段不写、必填字段给 0）并登记 `OFFLINE_MAIN_SKILLS`。
+
+### 已完成 11 个（§1.2 10 个 + §1.3 1 个）
+
+| 武将 | 战法 | 新机制（引擎字段） | 上线 |
+|---|---|---|---|
+| 诸葛恪 h522 | 计定山越 | —（复用 `morale_branch` 逐目标士气） | 下架 |
+| 袁绍 h670 | 威震河朔 | `triggerRateDecayPerCast` | 下架 |
+| 黄月英 h20 | 匠心不竭 | `delayedOutputs`（一类指挥分段延迟） | 下架 |
+| 孙鲁班 h654 | 全主诿异 | `damage_boost.dotTypes` | 下架 |
+| 荀彧 h794 | 举贤决机 | `onAttrChange`（属性升降「之前」判定） | 下架 |
+| 陈到 h793 | 忠克猛烈 | `retaliate` 状态 + `physical_damage.ignoresDefense` | **上架** |
+| 孙策 h450 | 霸王渡江 | `chanceBoostPerDamage` | **上架** |
+| 张梁 h557（§1.3） | 人公将军 | `damage_reduce.requireSelfStatus` | **上架** |
+| 袁绍·汉 h6 | 四世三公 | `attackerPick` / `targetPick` | **上架** |
+| 司马懿·晋 h807 | 其徐如林 | `strategyAdjacentBonus` | 下架 |
+| 司马徽 h811 | 徽言龙凤 | `teamDamageThreshold` + `recipientDamageByHigherStat` | 下架 |
+
+计数：已实现主战法 **99**（基线 88），上架池 67 → 73；测试 91 files/1121 → **102 files/1188**。
+
+### 待用户确认的 7 处歧义（未确认前不得动手）
+
+`破凰`（描述引用了「由破凰带来的剩余妖术」但全文没有施加妖术的句子）·`侵掠如火`（「进行攻击」范围 + 攻击类过滤）·
+`三军夺帅`（两句之间的「或」是否随机）·`奉令护蜀`（可叠加 5 次是否逐次消耗）·`地公将军`（「友军群体」是 2 还是 3 目标）·
+`西陵克晋`（「各自恢复一定兵力」无数值）·`缚父临危`（「友军中吕布」命中哪张卡）。
+
+### 剩余可做（§1.2 另 6 个，均为大机制）
+
+`僭号天子`（伤害转移/结转）·`率尔方雅`（敌我同池随机 3 + 按侧分支，友军段可复用 `recipientDamageByHigherStat`）·
+`伏波扬砂`（「伤害共计提升幅度每达到 40%」表述含糊，宜先问）·`赐剑长驱`（友军主动战法再发动 40%）·
+`鸾凤和鸣`（控制效果额外 +1 目标）·`连环计`（战法链：依次发动伐谋/迷阵/落雷）。
+
+### 已踩过的坑
+
+- 生成器幂等但**行尾**会漂移（CRLF/LF）：`git diff --numstat` 为 0 时属行尾噪声，`git checkout` 即可丢；
+  `heroes.json` 末尾换行已在 `export_web_data` / `sync_hero_mainskill` 统一补 `\n`。
+- 一类指挥若 `output: []` 且走「普通一类指挥直接执行」分支，须在条件里追加自己的新字段
+  （已加：`delayedOutputs` / `onAttrChange` / `strategyAdjacentBonus`）——否则监听型指挥会误走通用分支。
+- 单测替换 `ctx.skills` 里的战法定义**必须早于** `triggerCommandSkills`（锁定的是注册时的实例）。
+- 本轮新增的 effect/status 标签：`EffectTag` 补了 `'retaliate'`、`'counter'`；`DotType` 独立成类型。
