@@ -30,5 +30,6 @@ if (!hero) {
 }
 const before = hero.mainSkillId;
 hero.mainSkillId = skillId;
-writeFileSync(P, JSON.stringify(rows, null, 2), 'utf8');
+// 末尾补换行，与 web/data/heroes.json 既有格式（export_web_data 产物 + 88e13ea 对齐）一致，避免每次重跑多出「末行换行」噪声 diff
+writeFileSync(P, JSON.stringify(rows, null, 2) + '\n', 'utf8');
 console.log(`${heroId} ${hero.name}：mainSkillId "${before}" → "${hero.mainSkillId}"（共 ${rows.length} 条）`);

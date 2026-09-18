@@ -4406,4 +4406,58 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       onDealPhysical: true,
     },
   },
+
+  // ─── 批量31：下架武将清单 §1.2「补 1 个机制」逐个实现 ───
+
+  /**
+   * 计定山越（诸葛恪 h522·吴弓·主动 B）：1 回合准备，发动率 40%，距离 4，敌军群体 2 目标。
+   * ① 使敌军群体陷入恐慌状态（伤害率 134%，受谋略属性影响），每回合损失兵力，持续 2 回合；
+   * ② 若敌军群体士气一般或低落，额外使其陷入围困状态（无法恢复兵力）；
+   * ③ 使自身和友军单体恢复一定兵力（恢复率 98%，受谋略属性影响）。
+   * 官方：主动 B、发动率 40%、距离 4、目标「敌军群体（有效距离内 2 个目标）」、可用兵种弓
+   * （scripts/skill_extra.json id 200762；满级 / 1 级描述：恐慌 134%/67%、恢复 98%/49%）。
+   * 「受谋略属性影响」的恐慌 134% 与恢复 98% 成长率未确认 → 留空
+   *   （strategyScaled 标记在；DoT / heal 的 growthRate 是**必填字段**，给 0 = 不缩放、用基值）。
+   * 目标口径：「自身和友军单体」= 自身 + 1 名友军单体（不含自身），与奇佐鬼谋 / 合流同口径
+   *   （self 段 + targetSide:'ally' + random_single + excludeSelf）。
+   * 引擎配套：**无需新机制** —— ② 走既有 `morale_branch`（by:'target'、threshold 100：
+   *   士气 >100 高昂走 high（本战法为空），一般（=100）/ 低落（<100）走 low），
+   *   「士气一般或低落」即「非高昂」，故以 100 为阈值逐目标判定；③ 走既有 heal。
+   */
+  jiding_shanyue: {
+    id: 'jiding_shanyue',
+    name: '计定山越',
+    type: 'active',
+    prepare: true,
+    range: 4,
+    triggerRate: 0.4,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['panic', 'siege', 'heal'],
+    output: [
+      // ① 恐慌 DoT：134%（受谋略，成长率留空），持续 2 回合
+      { kind: 'inflict_status', status: { type: 'panic', duration: 2, rate: 134, growthRate: 0 } },
+      // ② 士气一般或低落（≤100）→ 追加围困 2 回合（恐慌 / 围困共用官方那句「持续 2 回合」）
+      {
+        kind: 'morale_branch',
+        threshold: 100,
+        by: 'target',
+        high: [],
+        low: [{ kind: 'inflict_status', status: { type: 'siege', duration: 2 } }],
+      },
+      // ③ 自身恢复 98%（受谋略，成长率留空）
+      { kind: 'heal', rate: 98, strategyScaled: true, growthRate: 0, target: 'self' },
+      // ④ 友军单体恢复 98%（不含自身；单体 = 距离内均匀随机）
+      {
+        kind: 'heal',
+        rate: 98,
+        strategyScaled: true,
+        growthRate: 0,
+        targetSide: 'ally',
+        targetMode: 'random_single',
+        excludeSelf: true,
+      },
+    ],
+  },
 };

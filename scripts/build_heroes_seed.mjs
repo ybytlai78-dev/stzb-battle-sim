@@ -126,6 +126,7 @@ const SKILL_ID_BY_NAME = {
   虎步关右: 'hubu_guanyou',
   火兽冲锋: 'huoshou_chongfeng',
   文德椒房: 'wende_jiaofang',
+  计定山越: 'jiding_shanyue',
   万箭齐发: 'wanjian_qifa',
   文伐: 'wenfa',
   不攻: 'bugong',

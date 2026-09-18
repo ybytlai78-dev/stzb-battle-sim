@@ -49,5 +49,6 @@ const heroes = rows.map((r) => ({
 }));
 
 mkdirSync(dirname(OUT), { recursive: true });
-writeFileSync(OUT, JSON.stringify(heroes, null, 2), 'utf8');
+// 末尾补换行（与仓库既有 heroes.json 格式一致，见 sync_hero_mainskill.mjs 同款处理）
+writeFileSync(OUT, JSON.stringify(heroes, null, 2) + '\n', 'utf8');
 console.log(`已导出 ${heroes.length} 个武将 → ${OUT}`);
