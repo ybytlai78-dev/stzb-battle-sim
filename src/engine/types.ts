@@ -617,6 +617,15 @@ export interface CommandSkill extends BaseSkill {
    */
   onHurt?: OnHurtConfig | OnHurtConfig[];
   onHeal?: OnHealConfig;
+  /**
+   * 属性升降「之前」判定（举贤决机：「我军全体在被成功施加属性提升效果前，有 40% 几率使其恢复一定兵力；
+   * 敌军全体在被成功施加属性下降效果前，有 40% 几率对其造成一次策略伤害」）。
+   * 在 `inflictStatus` 内、属性状态**成功施加之前**（冲突判定之前）由存活施法者按 rate 判定一次，
+   * 命中则对**被施加者**结算该条 output（发 skill_trigger，targetId = 被施加者）。
+   * victim：施法者**同侧** = 'ally'，异侧 = 'enemy'；sign：'up' = 属性提升、'down' = 属性下降。
+   * 「每种属性单独计算」——攻击/防御/谋略/速度各是一个状态、各自独立判定一次。
+   */
+  onAttrChange?: Array<{ victim: 'ally' | 'enemy'; sign: 'up' | 'down'; rate: number; output: SkillOutput[] }>;
   output: SkillOutput[];
 }
 

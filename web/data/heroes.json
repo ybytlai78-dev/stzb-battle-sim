@@ -503,7 +503,7 @@
     "growthDefense": 1.82,
     "growthStrategy": 2.55,
     "growthSpeed": 0.48,
-    "mainSkillId": "",
+    "mainSkillId": "juxian_jueji",
     "mainSkillName": "举贤决机",
     "skillDesc": "首回合起，我军全体在被成功施加属性提升效果前，有40.0%几率使其恢复一定兵力（恢复率60.0%，受谋略属性影响），敌军全体在被成功施加属性下降效果前，有40.0%几率对其造成一次策略伤害（伤害率100.0%，受谋略属性影响），每种属性单独计算"
   },

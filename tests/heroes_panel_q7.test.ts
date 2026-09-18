@@ -89,7 +89,7 @@ describe('七将面板入库（空槽 / 取基值下架）', () => {
     expect(isHeroListed(rec)).toBe(false);
   });
 
-  it('汉荀彧 h794 举贤决机空槽；与魏荀彧**不再互斥**（2026-09-16 互斥改白名单制）', () => {
+  it('汉荀彧 h794 举贤决机已挂槽（受谋略成长未确认 → 下架）；与魏荀彧**不再互斥**（2026-09-16 互斥改白名单制）', () => {
     const rec = HERO_RECORDS['h794'];
     const g = HERO_REGISTRY['h794'];
     expect(g.name).toBe('荀彧');
@@ -98,7 +98,8 @@ describe('七将面板入库（空槽 / 取基值下架）', () => {
     expect(g.cost).toBe(3.5);
     expect(rec.baseStrategy).toBe(99);
     expect(rec.growthStrategy).toBe(2.55);
-    expect(rec.mainSkillId).toBe('');
+    // 2026-09-18 实现：举贤决机挂槽；恢复 60% / 策略 100% 受谋略成长未确认 → 仍在 OFFLINE 名单（下架）
+    expect(rec.mainSkillId).toBe('juxian_jueji');
     expect(rec.mainSkillName).toBe('举贤决机');
     expect(rec.mutualExclusionGroup).toBeNull();
     expect(HERO_RECORDS['h24'].mutualExclusionGroup).toBeNull();

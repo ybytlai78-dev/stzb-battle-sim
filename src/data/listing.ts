@@ -32,6 +32,7 @@ export const OFFLINE_MAIN_SKILLS: Record<string, string> = {
   weizhen_heshuo: '主动战法伤害提升 20% 受攻击成长未确认（攻击 200% 固定不缩放）',
   jiangxin_bujie: '恐慌 34% / 燃烧 41% / 妖术 44% 受谋略成长未确认（按基值不缩放）',
   quanzhu_weiyi: 'DoT 伤害提升 20% / 策略伤害 197% 受谋略成长未确认（按基值不缩放）',
+  juxian_jueji: '恢复 60% / 策略伤害 100% 受谋略成长未确认（按基值不缩放）',
 };
 
 /**

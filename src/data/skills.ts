@@ -4604,4 +4604,46 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'strategy_damage', rate: 197, strategyScaled: true },
     ],
   },
+
+  /**
+   * 举贤决机（荀彧·魏步 h794·指挥 S）：距离 5，敌我全体。
+   * 首回合起，我军全体在被成功施加属性**提升**效果前，有 40% 几率使其恢复一定兵力（恢复率 60%，受谋略）；
+   * 敌军全体在被成功施加属性**下降**效果前，有 40% 几率对其造成一次策略伤害（伤害率 100%，受谋略）；
+   * 每种属性单独计算。
+   * 官方：scripts/skill_extra.json id 200269（满级 60% / 100%，1 级 30% / 50%）。
+   * 成长率：两处「受谋略属性影响」均未确认 → 留空（heal 的 growthRate 为必填 → 给 0；策略伤害不给 growthRate）。
+   * 引擎配套：**新增 `CommandSkill.onAttrChange`（属性升降「之前」判定）** —— inflictStatus 内、属性状态
+   *   成功施加之前（冲突判定之前）对「侧别 + 升降方向」匹配的规则各判一次，命中则对**被施加者**结算 output；
+   *   每条属性（攻/防/谋/速）各自独立判定（一维一个状态）+ 士气修正（一类指挥生效几率）。
+   * targetSide 取 'ally'：官方 targetShow 为「敌我全体」，引擎 targetSide 只能单侧，取友军侧用于目标登记与战报展示；
+   * 实际两条规则覆盖双向（我军提升 → 恢复；敌军下降 → 策略伤害）。
+   */
+  juxian_jueji: {
+    id: 'juxian_jueji',
+    name: '举贤决机',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['heal', 'damage'],
+    output: [],
+    onAttrChange: [
+      // 我军全体被施加属性提升（攻/防/谋/速各判一次）→ 40% 恢复 60%（受谋略，成长率留空）
+      {
+        victim: 'ally',
+        sign: 'up',
+        rate: 0.4,
+        output: [{ kind: 'heal', rate: 60, strategyScaled: true, growthRate: 0 }],
+      },
+      // 敌军全体被施加属性下降 → 40% 一次策略伤害 100%（受谋略，成长率留空）
+      {
+        victim: 'enemy',
+        sign: 'down',
+        rate: 0.4,
+        output: [{ kind: 'strategy_damage', rate: 100, strategyScaled: true }],
+      },
+    ],
+  },
 };

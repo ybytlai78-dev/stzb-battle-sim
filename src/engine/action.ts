@@ -324,7 +324,8 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
 
     // 普通一类指挥（无 roundRepeat/delayedOutput/delayedOutputs/onHurt）：直接执行一次（先驱/避其锋芒/共饮）
     // onHurt 战法准备阶段只登记，output 留到受击时结算（盲侯反击 / 缓师 debuff）
-    if (!skill.roundRepeat && !skill.delayedOutput && !skill.delayedOutputs && !skill.onHurt) {
+    // onAttrChange 战法准备阶段只登记，output 留到属性升降前结算（举贤决机）
+    if (!skill.roundRepeat && !skill.delayedOutput && !skill.delayedOutputs && !skill.onHurt && !skill.onAttrChange) {
       executeSkillOutputs(ctx, unit, skill, targets);
     }
   }
@@ -367,6 +368,48 @@ export function triggerPreparedEffectOnAct(ctx: CombatContext, unit: UnitState):
     });
     if (!success) continue;
     executeSkillOutputs(ctx, caster ?? unit, skill, [unit]);
+  }
+}
+
+/**
+ * 属性升降「之前」判定（举贤决机）：`inflictStatus` 内、属性状态成功施加**之前**（冲突判定之前）触发。
+ * 逐条规则命中「侧别 + 升降方向」时，由存活施法者按 rate（一类指挥生效几率 → 走士气）判定，
+ * 命中则对**被施加者**结算该条 output；每次判定发 `skill_trigger`（targetId = 被施加者）。
+ */
+export function triggerOnAttrChange(
+  ctx: CombatContext,
+  target: UnitState,
+  sign: 'up' | 'down'
+): void {
+  const rulesOf = (s: Skill): NonNullable<CommandSkill['onAttrChange']> | undefined =>
+    s.type === 'command' ? s.onAttrChange : undefined;
+  for (const l of [...ctx.lockedCommands]) {
+    const rules = rulesOf(l.skill);
+    if (!rules || rules.length === 0) continue;
+    const caster = ctx.myTeam.concat(ctx.enemyTeam).find((u) => u.general.id === l.casterId);
+    if (!caster) continue;
+    if (!caster.alive && !l.skill.retainAfterDeath) continue;
+    const victimSide = caster.side === target.side ? 'ally' : 'enemy';
+    for (const rule of rules) {
+      if (rule.victim !== victimSide || rule.sign !== sign) continue;
+      const morale = effectiveMorale(caster);
+      const rate = moraleTriggerRate(morale, rule.rate);
+      const success = ctx.rng.chance(rate);
+      ctx.events.push({
+        type: 'skill_trigger',
+        unitId: caster.general.id,
+        skillId: l.skill.id,
+        skillName: l.skill.name,
+        targetId: target.general.id,
+        success,
+        rate: Math.round(rate * 100),
+        baseRate: Math.round(rule.rate * 100),
+        morale,
+      });
+      if (!success) continue;
+      executeSkillOutputs(ctx, caster, l.skill, [target], rule.output);
+      if (!caster.alive) break;
+    }
   }
 }
 
@@ -1615,6 +1658,13 @@ export function inflictStatus(
     create = { ...create, duration: ctx.rng.intInclusive(a, b) } as CreateStatus;
   }
   const type = create.type;
+
+  // 属性升降「之前」判定（举贤决机）：属性状态成功施加**之前**（冲突判定之前）先判一次。
+  // 「每种属性单独计算」= 攻击/防御/谋略/速度各是一个状态，这里每个状态各触发一次。
+  const ATTR_STATUS_TYPES: StatusType[] = ['attack_buff', 'defense_buff', 'strategy_buff', 'speed_buff'];
+  if (ATTR_STATUS_TYPES.includes(type) && 'amount' in create) {
+    triggerOnAttrChange(ctx, target, create.amount >= 0 ? 'up' : 'down');
+  }
 
   // 洞察：免疫控制类效果（混乱/怯战/暴走/犹豫）
   const CONTROL_TYPES: StatusType[] = ['confusion', 'rampage', 'cowardice', 'hesitation'];
