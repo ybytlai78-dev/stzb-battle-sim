@@ -21,6 +21,26 @@ npx tsc --noEmit                    # 类型检查（strict）
 
 **golden 快照**：`tests/__snapshots__/golden.json` 锁定全部固定测试集的输出。引擎行为的有意变更会令其失败——确认变更是预期后，删除该文件再跑一次即可重新生成。任何让 `Math.random` 进入引擎的改动都是错误（见下）。
 
+## 工作树与提交（DSH，2026-09-18 起）
+
+开发在 **DSH 工作树**（`.dsh/worktrees/<hash>/战斗系统`）内进行；旧的《多工作树开发公约》（engine / mechanic / growth 三棵树、生成物不进分支）**已废止并删除**，其合并流程不再适用。
+
+- **一个工作区一个分支**：当前分支 `feat/hero-mechanics`（从 `main` 起）。每完成一个武将 = 一次提交 + `git push origin`。
+- **当前主线**：按 `docs/下架武将清单.md` §1.2「补 1 个机制」的武将逐个实现主战法（用户 2026-09-18 口径）。
+- **任务承接**：新增武将主战法 = `src/data/skills.ts` 定义 + `scripts/build_heroes_seed.mjs` 的 `SKILL_ID_BY_NAME` 挂槽 + `tests/main_skills_bN.test.ts`（每战法 ≥3 测试）。受属性缩放（受谋略/受攻击/受速度）的段**成长率留空**：`strategyScaled` 等标记在，`growthRate` 不写（可选字段）或用 `0`（必填字段：DoT / heal / grant_*），并登记 `src/data/listing.ts` 的 `OFFLINE_MAIN_SKILLS` → 武将暂下架，等成长率补齐再移出。
+- **生成物随提交入库**（`web/data/*.json`、`scripts/seed_heroes.sql`）：保证每个提交自洽、`npm test` 全绿。生成脚本已幂等——无源改动时重跑无 diff（仅行尾漂移），误跑可直接 `git checkout` 丢弃。
+- **数据链**（本机 MySQL 不可达时自动回退 `web/data/heroes.json`，是当前状态）：
+
+  ```bash
+  node scripts/build_heroes_seed.mjs        # SKILL_ID_BY_NAME → scripts/seed_heroes.sql
+  node scripts/gen_skill_data.mjs           # → web/data/skill_grades.json / skill_desc.json
+  node scripts/seed_db.mjs                  # MySQL 可用时灌库
+  node scripts/export_web_data.mjs          # MySQL 可用时导出 web/data/heroes.json
+  node scripts/sync_hero_mainskill.mjs <heroId> <skillId>   # MySQL 不可用时等效写 heroes.json
+  ```
+
+- **工作树 DB 隔离**按 DSH 路径推导：`.dsh/worktrees/<hash>/...` → 库名 `stzb战斗系统_dsh_<hash>`；库不存在时自动回退 JSON。`src/data/heroes.ts` 与 `scripts/db-config.mjs` 两处逻辑须同步改。
+
 ## 数据权威来源
 
 | 数据 | 文件 | 权威文档 |

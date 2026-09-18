@@ -29,16 +29,20 @@ export interface HeroDBConfig {
 const TREE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
 /**
- * 工作树目录名（`.wt-stzb/<name>`），非工作树返回 null。
+ * 工作树标识（DSH 工作树取 hash；旧 `.wt-stzb/<name>` 兜底取 name），非工作树返回 null。
  * ⚠️ 本逻辑须与 `scripts/db-config.mjs` 保持一致（tsconfig 的 include 不含 scripts/，无法直接 import）。
  */
 function worktreeName(): string | null {
-  return /[\\/]\.wt-stzb[\\/]([^\\/]+)$/.exec(TREE_ROOT)?.[1] ?? null;
+  const dsh = /[\\/]\.dsh[\\/]worktrees[\\/]([^\\/]+)[\\/][^\\/]+$/.exec(TREE_ROOT);
+  if (dsh) return `dsh_${dsh[1]}`;
+  const legacy = /[\\/]\.wt-stzb[\\/]([^\\/]+)$/.exec(TREE_ROOT);
+  return legacy ? `wt_${legacy[1]}` : null;
 }
 
 /**
- * 默认连接配置。**工作树自动隔离**：在 `.wt-stzb/<name>` 下运行时自动改用独立库
- * `stzb战斗系统_wt_<name>`，避免三棵树共用一库互相污染（见 `docs/多工作树开发公约.md` §六）。
+ * 默认连接配置。**工作树自动隔离**：在 DSH 工作树（`.dsh/worktrees/<hash>/<dirname>`）下运行时
+ * 自动改用独立库 `stzb战斗系统_dsh_<hash>`，避免多个工作区共用一库互相污染
+ * （旧 `.wt-stzb/<name>` 布局仍按 `stzb战斗系统_wt_<name>` 兜底）。
  * 可用 `STZB_DB_HOST` / `STZB_DB_PORT` / `STZB_DB_USER` / `STZB_DB_PASSWORD` / `STZB_DB_NAME` 覆盖。
  */
 const DEFAULT_DB_CONFIG: HeroDBConfig = {
@@ -46,9 +50,7 @@ const DEFAULT_DB_CONFIG: HeroDBConfig = {
   port: Number(process.env.STZB_DB_PORT ?? 3306),
   user: process.env.STZB_DB_USER ?? 'ybyt',
   password: process.env.STZB_DB_PASSWORD ?? '123456',
-  database:
-    process.env.STZB_DB_NAME ??
-    (worktreeName() ? `stzb战斗系统_wt_${worktreeName()}` : 'stzb战斗系统'),
+  database: process.env.STZB_DB_NAME ?? (worktreeName() ? `stzb战斗系统_${worktreeName()}` : 'stzb战斗系统'),
 };
 
 /** 武将 ID → HeroRecord（DB 原始字段，含成长值） */
@@ -104,7 +106,8 @@ function ingestHeroRow(row: HeroRow): void {
 
 /**
  * 连接 MySQL 并加载全部武将数据，构建 HERO_RECORDS / HERO_REGISTRY。可重复调用（幂等）。
- * 连接被拒绝时回退到 `web/data/heroes.json`（测试环境无库时使用）。
+ * 连不上 / 库不存在 / 无权限（DSH 工作树未建独立库）时回退到 `web/data/heroes.json`，
+ * 保证测试在无库环境下也能全量跑（json 为 export_web_data 的导出版，字段一致）。
  */
 export async function initHeroDB(config: HeroDBConfig = DEFAULT_DB_CONFIG): Promise<void> {
   if (initialized) return;
@@ -121,15 +124,20 @@ export async function initHeroDB(config: HeroDBConfig = DEFAULT_DB_CONFIG): Prom
     for (const row of rows as HeroRow[]) ingestHeroRow(row);
   } catch (err) {
     const code = (err as NodeJS.ErrnoException).code;
-    // 库不存在（工作树独立库尚未初始化）同样回退，避免忘建库直接把全部测试炸掉
-    const CONN_ERRORS = ['ECONNREFUSED', 'ENOTFOUND', 'ETIMEDOUT', 'ER_BAD_DB_ERROR'];
-    if (!CONN_ERRORS.includes(code ?? '')) throw err;
-    if (code === 'ER_BAD_DB_ERROR') {
-      console.warn(
-        `[heroes] 库 \`${config.database}\` 不存在，回退到 web/data/heroes.json` +
-          `（工作树未初始化独立库？见 docs/多工作树开发公约.md §六）`
-      );
-    }
+    // 不可达 / 库不存在 / 无权限（工作树独立库尚未初始化）一律回退，避免忘建库把全部测试炸掉
+    const FALLBACK_ERRORS = [
+      'ECONNREFUSED',
+      'ENOTFOUND',
+      'ETIMEDOUT',
+      'ER_BAD_DB_ERROR',
+      'ER_DBACCESS_DENIED_ERROR',
+      'ER_ACCESS_DENIED_ERROR',
+    ];
+    if (!FALLBACK_ERRORS.includes(code ?? '')) throw err;
+    console.warn(
+      `[heroes] 库 \`${config.database}\` 不可用（${code}），回退到 web/data/heroes.json` +
+        `（DSH 工作树未建独立库时属正常；见 AGENTS.md「工作树与提交」）`
+    );
     loadHeroesFromJson();
   } finally {
     if (conn) await conn.end();

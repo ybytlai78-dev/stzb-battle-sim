@@ -9,7 +9,7 @@ import { DB_CONFIG } from './db-config.mjs';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const sql = readFileSync(join(__dirname, 'seed_heroes.sql'), 'utf8');
 
-// 工作树自动隔离：库名由 scripts/db-config.mjs 推导（见 docs/多工作树开发公约.md §六）
+// 工作树自动隔离：库名按 DSH 工作树路径推导（见 scripts/db-config.mjs）
 const conn = await mysql.createConnection({ ...DB_CONFIG, multipleStatements: true });
 
 try {
