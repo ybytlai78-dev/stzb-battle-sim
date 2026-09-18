@@ -286,6 +286,12 @@ export type SkillOutput =
        * （见 action.executeSkillOutputs 的 lastDamageTargetIds）。
        */
       sameTargetsAsLastDamage?: boolean;
+      /**
+       * 整段开关：仅当**上一段伤害输出的命中目标**中存在带这些状态之一者才结算本段
+       * （地公将军「若有目标存在妖术效果，则额外附加属性至自身」；sorcery = 妖术 / curse = 妖术诅咒）。
+       * 与 `requireStatuses`（逐目标过滤伤害段）不同：这里是整段结算与否的门槛。
+       */
+      requireAnyPrevDamageTargetStatus?: StatusType[];
     }
   | { kind: 'remove_debuffs'; target?: 'self'; troopTypes?: TroopType[] }
   | { kind: 'grant_evasion'; stacks: number; target?: 'self' }

@@ -39,6 +39,7 @@ export const OFFLINE_MAIN_SKILLS: Record<string, string> = {
   po_huang: '策略攻击 155% / 条件妖术 130% 受谋略成长未确认（按基值不缩放）',
   sanjun_duoshuai: '策略攻击 100% 受谋略成长未确认（按基值不缩放；物理段 180% 与属性 ±10/−5 固定）',
   fengling_hushu: '下 1 次普攻增伤 35% 受攻击 / 下 1 次受击减伤 20% 受防御 成长未确认（按基值不缩放）',
+  digong_jiangjun: '策略攻击 136% / 吸取属性 24 受谋略成长未确认（按基值不缩放）',
 };
 
 /**

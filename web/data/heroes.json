@@ -3051,7 +3051,7 @@
     "growthDefense": 1.31,
     "growthStrategy": 1.88,
     "growthSpeed": 0.75,
-    "mainSkillId": "",
+    "mainSkillId": "digong_jiangjun",
     "mainSkillName": "地公将军",
     "skillDesc": "对敌军群体发动策略攻击（伤害率136.0%，受谋略属性影响），并吸取其24.0的防御、谋略属性并附加于友军群体（受谋略属性影响），若有目标存在妖术效果，则额外附加属性至自身，持续2回合"
   },

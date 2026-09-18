@@ -5071,4 +5071,70 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       reduceDefenseScaled: true,
     },
   },
+  /**
+   * 地公将军（张宝·群弓 h562·主动 B）：距离 4，40%，敌军群体（有效距离内 2 个目标）。
+   * 对敌军群体发动策略攻击（136%，受谋略属性影响），并吸取其 24.0 的防御、谋略属性并附加于友军群体
+   * （受谋略属性影响），若有目标存在妖术效果，则额外附加属性至自身，持续 2 回合。
+   * 官方：scripts/skill_extra.json id 200796（主动 B / 距离 4 / 敌军群体2 / 兵种弓；1 级 68% / 12）。
+   * 口径（用户确认）：
+   *  - 「友军群体」= 有效距离内 2 个目标（与敌方目标数同口径）；
+   *  - 「妖术效果」= sorcery（妖术）| curse（妖术诅咒）。
+   * 口径（本次推定，待复核）：友军段 `excludeSelf`——原文「**额外**附加属性至自身」表明自身不在
+   *   「友军群体」之内（否则第 ④ 段无从「额外」）。
+   * 成长率：136% 与 24.0 两处「受谋略属性影响」均未确认 → 按基值（strategyScaled 在、growthRate 缺）
+   *   → 登记 OFFLINE_MAIN_SKILLS（张宝下架）。
+   * 引擎配套：**新增 `inflict_status.requireAnyPrevDamageTargetStatus`**（整段开关：上一段伤害的命中目标中
+   *   存在带指定状态之一者才结算）——承载「若有目标存在妖术效果」条件分支；
+   *   敌军段复用 `sameTargetsAsLastDamage`（吸取打在本段策略伤害的同一批目标上）。
+   */
+  digong_jiangjun: {
+    id: 'digong_jiangjun',
+    name: '地公将军',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.4,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage', 'defense_buff', 'strategy_buff', 'debuff_defense', 'debuff_strategy'],
+    output: [
+      // ① 策略攻击 136%（受谋略未确认 → 基值）
+      { kind: 'strategy_damage', rate: 136, strategyScaled: true, targetMode: 'group', groupCount: 2 },
+      // ② 吸取：敌军**同一批目标** −24 防御 / −24 谋略（applyAll = 同目标同时施加两条）
+      {
+        kind: 'inflict_status',
+        sameTargetsAsLastDamage: true,
+        applyAll: true,
+        status: [
+          { type: 'defense_buff', amount: -24, duration: 2, strategyScaled: true },
+          { type: 'strategy_buff', amount: -24, duration: 2, strategyScaled: true },
+        ],
+      },
+      // ③ 附加于友军群体（有效距离内 2 目标，不含自身）＋24 防御 / ＋24 谋略
+      {
+        kind: 'inflict_status',
+        targetSide: 'ally',
+        targetMode: 'group',
+        groupCount: 2,
+        excludeSelf: true,
+        applyAll: true,
+        status: [
+          { type: 'defense_buff', amount: 24, duration: 2, strategyScaled: true },
+          { type: 'strategy_buff', amount: 24, duration: 2, strategyScaled: true },
+        ],
+      },
+      // ④ 若有目标存在妖术效果 → 额外附加属性至自身
+      {
+        kind: 'inflict_status',
+        target: 'self',
+        applyAll: true,
+        requireAnyPrevDamageTargetStatus: ['sorcery', 'curse'],
+        status: [
+          { type: 'defense_buff', amount: 24, duration: 2, strategyScaled: true },
+          { type: 'strategy_buff', amount: 24, duration: 2, strategyScaled: true },
+        ],
+      },
+    ],
+  },
 };

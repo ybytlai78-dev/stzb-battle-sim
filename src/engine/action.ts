@@ -3338,6 +3338,20 @@ function executeSkillOutputs(
       const overlap = new Set(lastDamageTargetIds.filter((id) => prevDamageTargetIds.includes(id)));
       pool = ctx.myTeam.concat(ctx.enemyTeam).filter((u) => u.alive && overlap.has(u.general.id));
     }
+    // 地公将军：整段开关——上一段伤害的命中目标中存在妖术（sorcery）/ 妖术诅咒（curse）才结算本段
+    if (
+      out.kind === 'inflict_status' &&
+      out.requireAnyPrevDamageTargetStatus &&
+      out.requireAnyPrevDamageTargetStatus.length > 0
+    ) {
+      const prevTargets = ctx.myTeam
+        .concat(ctx.enemyTeam)
+        .filter((u) => u.alive && lastDamageTargetIds.includes(u.general.id));
+      const hit = prevTargets.some((u) =>
+        u.statuses.some((st) => out.requireAnyPrevDamageTargetStatus!.includes(st.type))
+      );
+      if (!hit) continue;
+    }
     // 三军夺帅 / 地公将军：本段状态打在**上一段伤害**的同一批命中目标上（不按本段 targetMode 重选）
     if (out.kind === 'inflict_status' && out.sameTargetsAsLastDamage) {
       pool = ctx.myTeam
