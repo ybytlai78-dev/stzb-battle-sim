@@ -5190,4 +5190,59 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+  /**
+   * 缚父临危（吕姬·群步 h634·主动 B）：距离 4，35%，敌军群体（有效距离内 2 个目标）。
+   * 对敌军群体发动一次攻击（210%），并使自身及友军攻击属性最高的单体下两次攻击造成的伤害提升 30.0%。
+   * 同时使友军中吕布下一次造成的伤害无视规避。
+   * 官方：scripts/skill_extra.json id 200902（主动 B / 距离 4 / 敌军群体2 / 兵种步；1 级 105% / 15%）。
+   * 口径（用户确认）：
+   *  - 「攻击」= 普通攻击 / 物理主动战法 / 追击战法（同侵掠如火，不含分兵溅射 / 反击 / 指挥代打 / DoT）；
+   *  - 「无视规避」覆盖**任意伤害类型**（攻击与策略都算）；
+   *  - 「友军中吕布」按**武将名**匹配，两张卡（h3 汉骑 / h479 群弓 SP 吕布）都算；队里无吕布则该句空转。
+   * 成长率：210% 与 30% 两段均无「受…属性影响」→ 无待确认成长率，**吕姬上架**（不登记 OFFLINE）。
+   * 引擎配套：
+   *  ① `inflict_status.targetPick`：`'highest_attack_ally'`（我军攻击最高单体，含施法者自身）/
+   *     `'ally_named'`（配合 targetPickName 按武将名匹配）；
+   *  ② `damage_boost.attackOnly`（仅「进行攻击」，复用侵掠如火建立的 isAttackHitForProc 口径）
+   *     + `charges: 2`（下**两**次攻击，由既有 consumeAttackCharges 逐次消耗）；
+   *  ③ 新状态 `ignore_evasion`：下一次造成伤害无视规避，在所有伤害路径的统一入口 consumeEvasion 内消耗。
+   */
+  fufu_linwei: {
+    id: 'fufu_linwei',
+    name: '缚父临危',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.35,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage', 'damage_boost'],
+    output: [
+      // ① 对敌军群体（有效距离内 2 目标）发动一次攻击 210%
+      { kind: 'physical_damage', rate: 210, targetMode: 'group', groupCount: 2 },
+      // ② 自身及友军攻击属性最高的单体：下两次「进行攻击」造成的伤害 +30%
+      {
+        kind: 'inflict_status',
+        targetSide: 'ally',
+        targetPick: 'highest_attack_ally',
+        status: {
+          type: 'damage_boost',
+          rate: 0.3,
+          duration: 999,
+          direction: 'caused',
+          charges: 2,
+          attackOnly: true,
+        },
+      },
+      // ③ 友军中吕布：下一次造成的伤害无视规避（按名匹配，两张吕布卡都算）
+      {
+        kind: 'inflict_status',
+        targetSide: 'ally',
+        targetPick: 'ally_named',
+        targetPickName: '吕布',
+        status: { type: 'ignore_evasion', duration: 999 },
+      },
+    ],
+  },
 };

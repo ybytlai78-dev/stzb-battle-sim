@@ -1301,7 +1301,7 @@
     "growthDefense": 1.49,
     "growthStrategy": 0.59,
     "growthSpeed": 0.53,
-    "mainSkillId": "",
+    "mainSkillId": "fufu_linwei",
     "mainSkillName": "缚父临危",
     "skillDesc": "对敌军群体发动一次攻击（伤害率210.0%），并使自身及友军攻击属性最高的单体下两次攻击造成的伤害提升30.0%。同时使友军中吕布下一次造成的伤害无视规避"
   },

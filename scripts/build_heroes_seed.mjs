@@ -143,6 +143,7 @@ const SKILL_ID_BY_NAME = {
   奉令护蜀: 'fengling_hushu',
   地公将军: 'digong_jiangjun',
   西陵克晋: 'xiling_kejin',
+  缚父临危: 'fufu_linwei',
   万箭齐发: 'wanjian_qifa',
   文伐: 'wenfa',
   不攻: 'bugong',

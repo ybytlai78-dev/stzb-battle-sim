@@ -1596,6 +1596,8 @@ function tickStatusesOnActStart(ctx: CombatContext, unit: UnitState): void {
     if (s.type === 'evasion') continue; // 规避按层数，不递减
     // 叠层待发（奉令护蜀）：只由「普攻打出 / 受到实际伤害」清空，不按回合递减
     if (s.type === 'pending_stacks') continue;
+    // 下一次伤害无视规避（缚父临危）：消耗制，不按回合递减
+    if (s.type === 'ignore_evasion') continue;
     // 次数型下一次攻击：不按回合递减，打出后由 consumeAttackCharges 移除
     if (s.type === 'damage_boost' && 'charges' in s && s.charges != null) continue;
     // 次数型分兵：不按回合递减，打出后由 consumeSplitCharges 移除
@@ -2238,7 +2240,10 @@ function sameDamageBoostFilter(existing: Status, incoming: CreateStatus): boolea
     (existing.damageType ?? undefined) === (incoming.damageType ?? undefined) &&
     norm(existing.skillTypes) === norm(incoming.skillTypes) &&
     normDots(existing.dotTypes) === normDots('dotTypes' in incoming ? incoming.dotTypes : undefined) &&
-    hasCharges(existing) === hasCharges(incoming)
+    hasCharges(existing) === hasCharges(incoming) &&
+    // 「仅进行攻击」维（缚父临危）：与全局增伤是两条独立轨，不判同源
+    ('attackOnly' in existing ? Boolean(existing.attackOnly) : false) ===
+      ('attackOnly' in incoming ? Boolean(incoming.attackOnly) : false)
   );
 }
 
@@ -2295,6 +2300,20 @@ function pushStatus(
       unitId: target.general.id,
       statusType: type,
       detail: `规避 +${create.stacks} 层`,
+    });
+    return;
+  }
+  if (type === 'ignore_evasion') {
+    // 缚父临危：下一次造成伤害无视规避（消耗制；同战法重复施加只刷新，不叠加）
+    const dup = target.statuses.some((s) => s.type === 'ignore_evasion' && s.sourceSkillId === sourceSkillId);
+    if (!dup) {
+      target.statuses.push({ type: 'ignore_evasion', appliedRound, sourceSkillType, sourceSkillId, sourceUnitId: casterId });
+    }
+    ctx.events.push({
+      type: 'status_inflicted',
+      unitId: target.general.id,
+      statusType: type,
+      detail: '下一次造成的伤害无视规避',
     });
     return;
   }
@@ -2406,6 +2425,10 @@ function pushStatus(
     // 条件减伤（人公将军）：仅当携带者自身带该状态时生效
     if (type === 'damage_reduce' && 'requireSelfStatus' in create && create.requireSelfStatus != null) {
       (push as { requireSelfStatus?: StatusType }).requireSelfStatus = create.requireSelfStatus;
+    }
+    // 仅「进行攻击」的增减伤（缚父临危「下两次**攻击**造成的伤害提升 30%」）：普攻 / 物理主动 / 追击
+    if (type === 'damage_boost' && 'attackOnly' in create && create.attackOnly) {
+      (push as { attackOnly?: boolean }).attackOnly = true;
     }
     // 谋议宏图减伤 / 虎豹督军增伤按 8/8 衰减：冻结满额率为 baseRate
     if ((type === 'damage_reduce' || type === 'damage_boost') && 'decayEighths' in create && create.decayEighths) {
@@ -2685,6 +2708,7 @@ export function tickStatuses(ctx: CombatContext, units: UnitState[]): void {
       }
       if (s.appliedRound !== 0) continue; // 行动中施加：下次行动开始前递减
       if (s.type === 'pending_stacks') continue; // 叠层待发：不按回合递减（奉令护蜀）
+      if (s.type === 'ignore_evasion') continue; // 无视规避：消耗制，不按回合递减（缚父临危）
       if (s.type === 'rest') continue; // 休整 remaining 只在跳恢复时递减
       // 次数型分兵（准备阶段施加）：不按回合递减
       if (s.type === 'split' && 'charges' in s && s.charges != null) continue;
@@ -2801,6 +2825,17 @@ export function removeDebuffs(ctx: CombatContext, targets: UnitState[]): void {
  * 避免同回合后续伤害白嫖残留层。
  */
 export function consumeEvasion(ctx: CombatContext, target: UnitState, sourceId: string): boolean {
+  // 缚父临危：攻击方带「下一次造成的伤害无视规避」标记时，跳过规避判定并消耗该标记
+  // （覆盖任意伤害类型；所有伤害路径统一经本入口，故只此一处接线）
+  const attacker = sourceId ? castUnit(ctx, sourceId) : undefined;
+  const ignore = attacker?.statuses.find(
+    (s): s is Extract<Status, { type: 'ignore_evasion' }> => s.type === 'ignore_evasion'
+  );
+  if (attacker && ignore) {
+    attacker.statuses = attacker.statuses.filter((s) => s !== ignore);
+    ctx.events.push({ type: 'status_expired', unitId: attacker.general.id, statusType: 'ignore_evasion' });
+    return false;
+  }
   const ev = getStatus(target, 'evasion');
   if (ev && ev.stacks > 0) {
     ev.stacks -= 1;
@@ -2896,10 +2931,12 @@ export type DamageHitContext = {
  * 增减伤/减伤是否计入本次伤害。hit 缺省或某维缺省 = 该维不限制。
  */
 export function statusMatchesHit(
-  s: { damageSource?: 'basic' | 'skill'; skillTypes?: SkillType[]; damageType?: 'physical' | 'strategy'; dotTypes?: DotType[] },
+  s: { damageSource?: 'basic' | 'skill'; skillTypes?: SkillType[]; damageType?: 'physical' | 'strategy'; dotTypes?: DotType[]; attackOnly?: boolean },
   hit?: DamageHitContext
 ): boolean {
   if (!hit) return true;
+  // 仅「进行攻击」（缚父临危）：普攻 / 物理主动 / 追击，不含分兵溅射、反击、指挥代打与 DoT
+  if (s.attackOnly && !isAttackHitForProc(hit)) return false;
   if (s.damageSource && hit.damageSource && s.damageSource !== hit.damageSource) return false;
   if (s.damageType && hit.damageType && s.damageType !== hit.damageType) return false;
   if (s.dotTypes && s.dotTypes.length > 0) {
@@ -3070,6 +3107,7 @@ function statusName(type: StatusType): string {
     case 'ignore_def': return '无视防御';
     case 'retaliate': return '受击追加攻击';
     case 'pending_stacks': return '叠层待发';
+    case 'ignore_evasion': return '无视规避';
     case 'range_buff': return '攻击距离';
   }
 }
@@ -3405,6 +3443,15 @@ function executeSkillOutputs(
         u.statuses.some((st) => out.requireAnyPrevDamageTargetStatus!.includes(st.type))
       );
       if (!hit) continue;
+    }
+    // 缚父临危：状态段的友军目标选取（① 我军当前攻击属性最高单体，② 按武将名匹配「吕布」等指定武将）
+    if (out.kind === 'inflict_status' && out.targetPick) {
+      if (out.targetPick === 'highest_attack_ally') {
+        const pick = highestStatAlly(allies, 'attack'); // 含施法者自身（「自身及友军攻击属性最高的单体」）
+        pool = pick ? [pick] : [];
+      } else if (out.targetPick === 'ally_named') {
+        pool = allies.filter((u) => u.alive && u.general.name === out.targetPickName);
+      }
     }
     // 三军夺帅 / 地公将军：本段状态打在**上一段伤害**的同一批命中目标上（不按本段 targetMode 重选）
     if (out.kind === 'inflict_status' && out.sameTargetsAsLastDamage) {
