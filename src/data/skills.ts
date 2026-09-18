@@ -5038,4 +5038,37 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       ],
     },
   },
+  /**
+   * 奉令护蜀（马岱·蜀骑 h615·被动 A）：距离 2，目标自己。
+   * 战斗中，任意友军发动普通攻击、主动战法、追击战法后，马岱的下 1 次普通攻击造成的伤害提升 35.0%
+   * （受攻击属性影响），下 1 次受到的所有伤害降低 20.0%（受防御属性影响），以上效果可叠加 5 次。
+   * 官方：scripts/skill_extra.json id 200865（被动 A / 距离 2 / 自己 / 兵种骑；1 级 17.5% / 10.0%）。
+   * 口径（用户确认）：层数上限 5；攻击段与减伤段**共用同一层数**、都 = 基值 × 层数，
+   *   各自在对应时机（普攻打出后 / 首次受击实际扣兵后）**清空全部层数**（先到先清）。
+   * 口径（本次推定，待复核）：「任意友军」**不含马岱自身**——官方对含己场景用「我军全体」
+   *   （皇裔流离），此处措辞刻意区分；若按含己实现，马岱每次普攻会「先清空再被自己补 1 层」。
+   *   切换成本：`triggerAllyActStacks` 里去掉 `if (holder === actor) continue;` 一行。
+   * 成长率：35% 受攻击、20% 受防御 两段成长率未确认 → 按基值（`boostAttackScaled` / `reduceDefenseScaled`
+   *   标记在、growthRate 缺）→ 登记 OFFLINE_MAIN_SKILLS（马岱下架）。
+   * 引擎配套：`PassiveSkill.allyActStacks`（友军成功发动后叠层）+ 新状态 `pending_stacks`
+   *   （下次普攻增伤 / 下次受击减伤，触发后清空全部层数；不按回合递减，两个 tick 函数显式跳过）。
+   */
+  fengling_hushu: {
+    id: 'fengling_hushu',
+    name: '奉令护蜀',
+    type: 'passive',
+    range: 2,
+    triggerRate: 1,
+    timing: 'battle_start',
+    targetMode: 'self',
+    tags: ['damage_boost', 'damage_reduce'],
+    output: [],
+    allyActStacks: {
+      maxStacks: 5,
+      boostRate: 0.35,
+      boostAttackScaled: true,
+      reduceRate: 0.2,
+      reduceDefenseScaled: true,
+    },
+  },
 };

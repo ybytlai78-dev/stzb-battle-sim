@@ -874,6 +874,22 @@ export interface PassiveSkill extends BaseSkill {
    * 目标池：交给 output 段的 targetMode 重选（缺省传入对侧全体存活作为兜底）。
    */
   afterAct?: { output: SkillOutput[] };
+  /**
+   * 「任意友军成功发动普攻 / 主动 / 追击后」叠层（奉令护蜀）：本侧每次成功发动
+   * （**含自身**，沿用徽言龙凤「友军全体」含己的口径）→ 给持有者挂 / 叠加 `pending_stacks`（上限 maxStacks）。
+   * boostRate / reduceRate 为**每层**数值（基值 = 属性 80 时的值）；
+   * boostAttackScaled / reduceDefenseScaled 标记在、growthRate 未确认时按基值不缩放
+   * （登记 listing.OFFLINE_MAIN_SKILLS，待成长率确认后补 growthRate）。
+   */
+  allyActStacks?: {
+    maxStacks: number;
+    boostRate: number;
+    boostAttackScaled?: boolean;
+    boostGrowthRate?: number;
+    reduceRate: number;
+    reduceDefenseScaled?: boolean;
+    reduceGrowthRate?: number;
+  };
   output: SkillOutput[];
 }
 
@@ -1038,7 +1054,9 @@ export type StatusType =
   /** 先手（诸葛锦囊）：行动排序时该单位优先出手 */
   | 'priority'
   /** 受击追加攻击标记（忠克猛烈）：携带者受攻击伤害时施法者追加 1 次攻击，最多 N 次 */
-  | 'retaliate';
+  | 'retaliate'
+  /** 叠层待发（奉令护蜀）：友军每次成功发动叠 1 层（上限 5），下次普攻增伤 / 下次受击减伤后清空全部层数 */
+  | 'pending_stacks';
 
 /** DoT（妖术/燃烧/恐慌）挂上时冻结的每次伤害（滞后触发）：
  *  伤害在「挂上时」结算并冻结——按当时的增伤合计（造成侧 + 受到侧）、施法者兵力、
@@ -1126,7 +1144,16 @@ export type Status =
    * 最多 triggers 达到 maxTriggers 次后移除；窗口「直到施法者下回合行动前」由施法者行动时统一清除
    * （remaining 仅作占位，不参与递减）。
    */
-  | { type: 'retaliate'; rate: number; maxTriggers: number; triggers: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId: string };
+  | { type: 'retaliate'; rate: number; maxTriggers: number; triggers: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId: string }
+  /**
+   * 叠层待发（奉令护蜀）：友军（含自身）每次成功发动普攻 / 主动 / 追击后 +1 层（上限 maxStacks）。
+   *  - 携带者下 1 次**普通攻击**：造成伤害 + perLayerBoost × 层数，攻击打出后清空全部层数；
+   *  - 携带者下 1 次**受到伤害**：受到伤害 − perLayerReduce × 层数，实际扣兵后清空全部层数。
+   * 两段共用同一层数计数器（先触发者清空，另一段随之失效）；
+   * perLayer* 在首次叠层时按「生效攻击 / 生效防御」缩放后冻结（受攻击 / 受防御，成长率未确认时按基值）。
+   * 无 remaining：不按回合递减，只由上述两个时机清空（两个 tick 函数均显式跳过）。
+   */
+  | { type: 'pending_stacks'; stacks: number; maxStacks: number; perLayerBoost: number; perLayerReduce: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string };
 
 export interface UnitState {
   readonly general: General;

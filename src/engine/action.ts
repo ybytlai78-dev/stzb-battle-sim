@@ -1540,6 +1540,8 @@ function executeSplitAttack(
 function tickStatusesOnActStart(ctx: CombatContext, unit: UnitState): void {
   for (const s of [...unit.statuses]) {
     if (s.type === 'evasion') continue; // 规避按层数，不递减
+    // 叠层待发（奉令护蜀）：只由「普攻打出 / 受到实际伤害」清空，不按回合递减
+    if (s.type === 'pending_stacks') continue;
     // 次数型下一次攻击：不按回合递减，打出后由 consumeAttackCharges 移除
     if (s.type === 'damage_boost' && 'charges' in s && s.charges != null) continue;
     // 次数型分兵：不按回合递减，打出后由 consumeSplitCharges 移除
@@ -2628,6 +2630,7 @@ export function tickStatuses(ctx: CombatContext, units: UnitState[]): void {
         continue;
       }
       if (s.appliedRound !== 0) continue; // 行动中施加：下次行动开始前递减
+      if (s.type === 'pending_stacks') continue; // 叠层待发：不按回合递减（奉令护蜀）
       if (s.type === 'rest') continue; // 休整 remaining 只在跳恢复时递减
       // 次数型分兵（准备阶段施加）：不按回合递减
       if (s.type === 'split' && 'charges' in s && s.charges != null) continue;
@@ -2863,7 +2866,7 @@ function sumReduce(target: UnitState, hit?: DamageHitContext): number {
       statusMatchesHit(s, hit) &&
       (!('requireSelfStatus' in s) || !s.requireSelfStatus || hasStatus(target, s.requireSelfStatus))
   );
-  return sumRates(list, 'damage_reduce');
+  return sumRates(list, 'damage_reduce') + pendingStacksReduceOf(target);
 }
 
 /**
@@ -2913,7 +2916,11 @@ function damageBoosts(
     'taken'
   );
   // 被动概率增伤（侵掠如火）：命中则并入造成侧合计（数值体现在伤害本身，不进战报增减伤明细）
-  return { causedMult: 1 + causedBoost + attackProcBoostOf(ctx, source, hit), takenMult: 1 + takenBoost };
+  // 叠层待发·下次普攻增伤（奉令护蜀）：同属「进行攻击」的一次性造成侧增伤
+  return {
+    causedMult: 1 + causedBoost + attackProcBoostOf(ctx, source, hit) + pendingStacksBoostOf(source, hit),
+    takenMult: 1 + takenBoost,
+  };
 }
 
 /**
@@ -3008,6 +3015,7 @@ function statusName(type: StatusType): string {
     case 'morale_boost': return '士气提高';
     case 'ignore_def': return '无视防御';
     case 'retaliate': return '受击追加攻击';
+    case 'pending_stacks': return '叠层待发';
     case 'range_buff': return '攻击距离';
   }
 }
@@ -4051,8 +4059,8 @@ export function triggerActiveSkill(
   executeSkillWithTargets(ctx, unit, skill, enemies, allies, attackPool);
   triggerAfterFirstActiveCommands(ctx, unit);
   triggerPassiveAfterActive(ctx, unit);
-  // 三军夺帅：成功发动主动战法后触发
-  triggerPassiveAfterAct(ctx, unit);
+  // 三军夺帅：成功发动主动战法后触发；奉令护蜀：本侧友军行动叠层
+  triggerActHooks(ctx, unit);
 }
 
 /** 准备完成的战法自动发动 */
@@ -4067,8 +4075,8 @@ function executePreparedSkill(
   executeSkillWithTargets(ctx, unit, skill, enemies, allies, attackPool);
   triggerAfterFirstActiveCommands(ctx, unit);
   triggerPassiveAfterActive(ctx, unit);
-  // 三军夺帅：成功发动主动战法后触发
-  triggerPassiveAfterAct(ctx, unit);
+  // 三军夺帅：成功发动主动战法后触发；奉令护蜀：本侧友军行动叠层
+  triggerActHooks(ctx, unit);
 }
 
 /**
@@ -4098,6 +4106,114 @@ function triggerAfterFirstActiveCommands(ctx: CombatContext, unit: UnitState): v
     });
     executeSkillOutputs(ctx, unit, skill, selected);
   }
+}
+
+/**
+ * 友军行动叠层（奉令护蜀）：本侧每次成功发动普攻 / 主动 / 追击后，给带 `allyActStacks` 被动的**其他**友军
+ * 挂 / 叠加 1 层 `pending_stacks`（**不含行动者自身**——官方「任意友军」与「我军全体」措辞刻意区分，待复核）。
+ * 每层数值在**首次叠层**时按持有者生效攻击 / 生效防御缩放后冻结（受攻击 / 受防御；成长率未确认时按基值）。
+ */
+export function triggerAllyActStacks(ctx: CombatContext, actor: UnitState): void {
+  const team = actor.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+  for (const holder of team) {
+    if (!holder.alive) continue;
+    // 「任意友军」= 除行动者自身以外的友军（待复核：官方另有「我军全体」措辞用于含己场景）
+    if (holder === actor) continue;
+    for (const id of holder.general.passiveSkillIds) {
+      const skill = resolveSkill(ctx, id);
+      if (skill?.type !== 'passive' || !skill.allyActStacks) continue;
+      addPendingStack(ctx, holder, skill);
+    }
+  }
+}
+
+/** 「成功发动」后的统一监听入口（普攻 / 主动 / 追击三来源共用）：
+ *  ① 行动者自身 `afterAct`（三军夺帅）；② 本侧 `allyActStacks` 叠层（奉令护蜀）。
+ *  叠层发生在本次行动**之后**，不影响本次行动的伤害结算。 */
+export function triggerActHooks(ctx: CombatContext, actor: UnitState): void {
+  triggerPassiveAfterAct(ctx, actor);
+  triggerAllyActStacks(ctx, actor);
+}
+
+/** 叠 1 层待发（奉令护蜀）：首次叠层时冻结「每层增伤 / 每层减伤」，此后只加层数（上限 maxStacks）。 */
+function addPendingStack(
+  ctx: CombatContext,
+  holder: UnitState,
+  skill: Extract<Skill, { type: 'passive' }>
+): void {
+  const cfg = skill.allyActStacks;
+  if (!cfg) return;
+  const existing = holder.statuses.find(
+    (s): s is Extract<Status, { type: 'pending_stacks' }> =>
+      s.type === 'pending_stacks' && s.sourceSkillId === skill.id
+  );
+  if (existing) {
+    if (existing.stacks < cfg.maxStacks) existing.stacks += 1;
+    ctx.events.push({
+      type: 'status_inflicted',
+      unitId: holder.general.id,
+      statusType: 'pending_stacks',
+      detail: `${skill.name} ${existing.stacks}/${cfg.maxStacks} 层`,
+    });
+    return;
+  }
+  // 每层数值：受攻击 / 受防御缩放（growthRate 未确认时不缩放、用基值），挂上时冻结
+  const atk = effectiveStat(holder, 'attack');
+  const def = effectiveStat(holder, 'defense');
+  const perLayerBoost =
+    cfg.boostAttackScaled && cfg.boostGrowthRate !== undefined
+      ? roundRate(scaledValue(cfg.boostRate * 100, cfg.boostGrowthRate, atk)) / 100
+      : cfg.boostRate;
+  const perLayerReduce =
+    cfg.reduceDefenseScaled && cfg.reduceGrowthRate !== undefined
+      ? roundRate(scaledValue(cfg.reduceRate * 100, cfg.reduceGrowthRate, def)) / 100
+      : cfg.reduceRate;
+  holder.statuses.push({
+    type: 'pending_stacks',
+    stacks: 1,
+    maxStacks: cfg.maxStacks,
+    perLayerBoost,
+    perLayerReduce,
+    appliedRound: ctx.currentRound,
+    sourceSkillType: 'passive',
+    sourceSkillId: skill.id,
+    sourceUnitId: holder.general.id,
+  });
+  ctx.events.push({
+    type: 'status_inflicted',
+    unitId: holder.general.id,
+    statusType: 'pending_stacks',
+    detail: `${skill.name} 1/${cfg.maxStacks} 层`,
+  });
+}
+
+/** 清空叠层待发（奉令护蜀）：普攻打出 / 受到实际伤害后**全部层数**清零（两段共用计数器，先到先清）。 */
+function consumePendingStacks(ctx: CombatContext, unit: UnitState): void {
+  const list = unit.statuses.filter((s) => s.type === 'pending_stacks');
+  if (list.length === 0) return;
+  unit.statuses = unit.statuses.filter((s) => s.type !== 'pending_stacks');
+  for (const _s of list) {
+    ctx.events.push({ type: 'status_expired', unitId: unit.general.id, statusType: 'pending_stacks' });
+  }
+}
+
+/** 叠层待发·下次普攻增伤（奉令护蜀）：仅**普通攻击**读取（不含分兵溅射） */
+function pendingStacksBoostOf(source: UnitState, hit?: DamageHitContext): number {
+  if (!hit || hit.damageSource !== 'basic' || hit.split) return 0;
+  let boost = 0;
+  for (const s of source.statuses) {
+    if (s.type === 'pending_stacks') boost += s.perLayerBoost * s.stacks;
+  }
+  return boost;
+}
+
+/** 叠层待发·下次受击减伤（奉令护蜀）：**任何**伤害都读取 */
+function pendingStacksReduceOf(target: UnitState): number {
+  let reduce = 0;
+  for (const s of target.statuses) {
+    if (s.type === 'pending_stacks') reduce += s.perLayerReduce * s.stacks;
+  }
+  return reduce;
 }
 
 /**
@@ -4285,8 +4401,8 @@ function triggerPursuitSkill(
     skillName: skill.name,
   });
   executeSkillOutputs(ctx, unit, skill, [hitTarget]);
-  // 三军夺帅：成功发动追击战法后触发
-  triggerPassiveAfterAct(ctx, unit);
+  // 三军夺帅：成功发动追击战法后触发；奉令护蜀：本侧友军行动叠层
+  triggerActHooks(ctx, unit);
 }
 
 // ─── 普通攻击 ───
@@ -4367,8 +4483,8 @@ function normalAttack(
   dealAttack(ctx, unit, target, distance);
   // 七步释嫌等：成功发动普通攻击（含规避命中）后触发
   triggerAllyActCommands(ctx, unit);
-  // 三军夺帅：成功发动普通攻击后触发
-  triggerPassiveAfterAct(ctx, unit);
+  // 三军夺帅：成功发动普通攻击后触发；奉令护蜀：本侧友军行动叠层
+  triggerActHooks(ctx, unit);
   return target;
 }
 
@@ -4401,6 +4517,8 @@ function dealAttack(ctx: CombatContext, unit: UnitState, target: UnitState, dist
   // 规避：命中前判定免疫
   if (consumeEvasion(ctx, hit, unit.general.id)) {
     consumeAttackCharges(ctx, unit, { damageSource: 'basic', damageType: 'physical' });
+    // 奉令护蜀：本次普攻已打出 → 清空待发层数（含未能造成伤害的规避情形）
+    consumePendingStacks(ctx, unit);
     return;
   }
 
@@ -4415,6 +4533,8 @@ function dealAttack(ctx: CombatContext, unit: UnitState, target: UnitState, dist
   });
   applyDamage(ctx, hit, capped, unit, 'physical', 'basic');
   consumeAttackCharges(ctx, unit, { damageSource: 'basic', damageType: 'physical' });
+  // 奉令护蜀：普攻打出后清空待发层数（攻击已消耗本次增伤）
+  consumePendingStacks(ctx, unit);
 }
 
 /** 持续型急救受击触发（皇裔流离/金匮要略）：目标受到伤害后判定。
@@ -4996,6 +5116,8 @@ export function applyDamage(
     if (source) noteTeamDamage(ctx, source);
     consumeTakenCharges(target, hit);
     decayFifthsOnHit(ctx, target, hit);
+    // 奉令护蜀：受到实际伤害后清空待发层数（本次减伤已被 sumReduce 计入）
+    consumePendingStacks(ctx, target);
     if (source && damageType === 'physical') {
       for (const id of source.general.passiveSkillIds) {
         const skill = resolveSkill(ctx, id);

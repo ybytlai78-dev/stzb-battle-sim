@@ -2401,7 +2401,7 @@
     "growthDefense": 1.77,
     "growthStrategy": 0.94,
     "growthSpeed": 1.41,
-    "mainSkillId": "",
+    "mainSkillId": "fengling_hushu",
     "mainSkillName": "奉令护蜀",
     "skillDesc": "战斗中，任意友军发动普通攻击、主动战法、追击战法后，马岱的下1次普通攻击造成的伤害提升35.0%（受攻击属性影响），下1次受到的所有伤害降低20.0%（受防御属性影响），以上效果可叠加5次"
   },
