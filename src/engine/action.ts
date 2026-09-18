@@ -1437,6 +1437,8 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
 
   // 0. 行动中施加的状态递减：计数器回合持续到下次行动开始前（连击/行动中怯战等）
   tickStatusesOnActStart(ctx, unit);
+  // 忠克猛烈：施法者行动时清除其施加的受击追加攻击标记（窗口「直到施法者下回合行动前」）
+  expireRetaliateOnCasterAct(ctx, unit);
 
   // 行动阶段判定顺序：被动 → 指挥（预备怯战 + 二类） → DoT → 主动 → 普攻 → 追击 → 分兵
   // 混乱：无法发动主动战法 + 普攻；但被动/指挥/DoT仍正常判定
@@ -1745,6 +1747,12 @@ export function inflictStatus(
       }
       return;
     }
+    pushStatus(ctx, target, create, sourceSkillType, sourceSkillId, casterId);
+    return;
+  }
+
+  // 受击追加攻击标记（忠克猛烈）：独立共存，不参与冲突判定
+  if (type === 'retaliate') {
     pushStatus(ctx, target, create, sourceSkillType, sourceSkillId, casterId);
     return;
   }
@@ -2117,8 +2125,29 @@ function pushStatus(
     });
     return;
   }
-  if (type === 'range_buff') {
-    // 攻击距离提高（帝临回光「使自身攻击距离 +1」）：只放大普攻可达距离上限，
+  if (type === 'retaliate') {
+    // 受击追加攻击标记（忠克猛烈）：标记挂在**目标**身上，施法者在目标每次受攻击伤害后追加 1 次攻击
+    const push: Status = {
+      type: 'retaliate',
+      rate: create.rate,
+      maxTriggers: create.maxTriggers,
+      triggers: 0,
+      remaining,
+      appliedRound,
+      sourceSkillType,
+      sourceSkillId,
+      sourceUnitId: casterId ?? '',
+    };
+    target.statuses.push(push);
+    ctx.events.push({
+      type: 'status_inflicted',
+      unitId: target.general.id,
+      statusType: type,
+      detail: `每受到攻击伤害由施法者追加 1 次攻击（${create.rate}%，最多 ${create.maxTriggers} 次，直到施法者下回合行动前）`,
+    });
+    return;
+  }
+  if (type === 'range_buff') {    // 攻击距离提高（帝临回光「使自身攻击距离 +1」）：只放大普攻可达距离上限，
     // 由 target.ts attackRangeOf 求和，不影响战法有效距离（skill.range）
     const push: Status = { type, remaining, appliedRound, sourceSkillType, sourceSkillId } as Status;
     (push as { amount: number }).amount = create.amount;
@@ -2618,7 +2647,8 @@ export function effectiveStat(unit: UnitState, kind: 'attack' | 'defense' | 'str
  * 攻击伤害用的目标防御：先生效属性，再按攻击方 ignore_def 比例折减。
  * 攻防差 = 攻击 − 目标防御 × (1 − 无视比例)。
  */
-function physicalTargetDefense(attacker: UnitState, target: UnitState): number {
+function physicalTargetDefense(attacker: UnitState, target: UnitState, ignoresDefense = false): number {
+  if (ignoresDefense) return 0; // 忠克猛烈：本战法造成的伤害无视目标防御属性
   return applyIgnoreDef(effectiveStat(target, 'defense'), sumRates(attacker.statuses, 'ignore_def'));
 }
 
@@ -2785,6 +2815,7 @@ function statusName(type: StatusType): string {
     case 'rest': return '休整';
     case 'morale_boost': return '士气提高';
     case 'ignore_def': return '无视防御';
+    case 'retaliate': return '受击追加攻击';
     case 'range_buff': return '攻击距离';
   }
 }
@@ -3252,7 +3283,7 @@ function executeSkillOutputs(
             // 规避：默认免疫一次伤害；ignoresEvasion 时无视
             if (!out.ignoresEvasion && consumeEvasion(ctx, t, source.general.id)) continue;
             const atk = effectiveStat(source, 'attack');
-            const def = physicalTargetDefense(source, t);
+            const def = physicalTargetDefense(source, t, out.ignoresDefense === true);
             const hit: DamageHitContext = { damageSource: 'skill', damageType: 'physical', skillType: skill.type };
             const { causedMult, takenMult } = damageBoosts(ctx, source, t, hit);
             const counterReduce = out.ignoresTroopCounter ? 0 : troopCounterReduceOf(source, t);
@@ -4665,6 +4696,16 @@ export function applyDamage(
       ctx.resolvingHurtHooks = false;
     }
   }
+  // 忠克猛烈：目标每受到 1 次攻击伤害 → 标记施法者追加 1 次攻击（最多 2 次）。
+  // 同样包一层 resolvingHurtHooks：追加攻击段不再触发受击/反击/引燃等二次钩子（防循环）
+  if (!ctx.resolvingHurtHooks && actual > 0 && damageType === 'physical') {
+    ctx.resolvingHurtHooks = true;
+    try {
+      settleRetaliateOnHurt(ctx, target);
+    } finally {
+      ctx.resolvingHurtHooks = false;
+    }
+  }
   if (target.troops <= 0 && target.alive) {
     target.alive = false;
     ctx.events.push({
@@ -4673,5 +4714,45 @@ export function applyDamage(
       name: target.general.name,
       side: target.side,
     });
+  }
+}
+
+/**
+ * 忠克猛烈：携带者每受到 1 次**攻击伤害**（普攻 / 攻击战法 / 反击均可），由标记施法者对其追加 1 次攻击
+ * （伤害率 rate，无视兵种相克与目标防御 —— 与该战法主动段同口径），每个标记最多 maxTriggers 次。
+ */
+function settleRetaliateOnHurt(ctx: CombatContext, target: UnitState): void {
+  const marks = target.statuses.filter(
+    (s): s is Extract<Status, { type: 'retaliate' }> => s.type === 'retaliate',
+  );
+  for (const mark of marks) {
+    if (!target.alive) return;
+    const caster = castUnit(ctx, mark.sourceUnitId);
+    const skill = resolveSkill(ctx, mark.sourceSkillId);
+    if (!caster || !caster.alive || !skill) continue;
+    executeSkillOutputs(ctx, caster, skill, [target], [
+      { kind: 'physical_damage', rate: mark.rate, ignoresTroopCounter: true, ignoresDefense: true },
+    ]);
+    mark.triggers += 1;
+    if (mark.triggers >= mark.maxTriggers) {
+      target.statuses = target.statuses.filter((s) => s !== mark);
+    }
+  }
+}
+
+/**
+ * 忠克猛烈：施法者下一次行动开始时，清除其施加的「受击追加攻击」标记（官方「直到陈到下回合行动前」）。
+ * 标记挂在目标身上，故不能走目标的 tickStatusesOnActStart，需要在**施法者**行动时全局清扫。
+ */
+function expireRetaliateOnCasterAct(ctx: CombatContext, actor: UnitState): void {
+  for (const u of [...ctx.myTeam, ...ctx.enemyTeam]) {
+    u.statuses = u.statuses.filter(
+      (s) =>
+        !(
+          s.type === 'retaliate' &&
+          s.sourceUnitId === actor.general.id &&
+          s.appliedRound < ctx.currentRound
+        ),
+    );
   }
 }

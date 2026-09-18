@@ -2357,7 +2357,7 @@
     "growthDefense": 1.75,
     "growthStrategy": 1.2,
     "growthSpeed": 0.74,
-    "mainSkillId": "",
+    "mainSkillId": "zhongke_menglie",
     "mainSkillName": "忠克猛烈",
     "skillDesc": "本战法造成的伤害无视兵种相克及目标的防御属性；对敌军单体发动1次攻击（伤害率300.0%），并使其陷入犹豫状态，持续1回合；直到陈到下回合行动前，目标每受到1次攻击伤害，陈到对其发动1次攻击(伤害率120.0%)，期间最多可触发2次"
   },

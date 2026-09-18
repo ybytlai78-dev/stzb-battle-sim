@@ -4646,4 +4646,39 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+
+  /**
+   * 忠克猛烈（陈到·蜀步 h793·主动 S）：发动率 50%，距离 5，敌军单体。
+   * 本战法造成的伤害无视兵种相克及目标的防御属性；对敌军单体发动 1 次攻击（伤害率 300%），
+   * 并使其陷入犹豫状态（无法发动主动战法）持续 1 回合；直到陈到下回合行动前，目标每受到 1 次
+   * 攻击伤害，陈到对其发动 1 次攻击（伤害率 120%），期间最多可触发 2 次。
+   * 官方：scripts/skill_extra.json id 200268（1 级 150% / 60%）。
+   * 全文无「受 XX 属性影响」→ **无成长率留空问题，不需要下架登记**（本批首个可上架武将）。
+   * 引擎配套（2 项）：
+   *  ① `physical_damage.ignoresDefense`（无视目标防御属性，防御按 0 计）；
+   *  ② 新状态 `retaliate`（受击追加攻击标记）：携带者每受 1 次攻击伤害 → 标记施法者追加 1 次攻击
+   *     （同口径：无视兵种相克 + 无视防御），最多 maxTriggers 次；窗口「直到施法者下回合行动前」
+   *     由施法者行动时 `expireRetaliateOnCasterAct` 清除。
+   * 口径：犹豫「持续1回合」按仓库同措辞先例（樊渊泅囚 / 怯心夺志「犹豫 1 回合」）取 duration 1
+   *   ——即本回合内尚未行动的目标会被封住（若目标本回合已行动，则其下回合行动前到期）。
+   */
+  zhongke_menglie: {
+    id: 'zhongke_menglie',
+    name: '忠克猛烈',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.5,
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['damage', 'hesitation', 'retaliate'],
+    output: [
+      // ① 无视兵种相克 + 无视目标防御的 300% 攻击
+      { kind: 'physical_damage', rate: 300, ignoresTroopCounter: true, ignoresDefense: true },
+      // ② 犹豫 1 回合
+      { kind: 'inflict_status', status: { type: 'hesitation', duration: 1 } },
+      // ③ 受击追加攻击标记：每受 1 次攻击伤害 → 追加 1 次 120%，最多 2 次（窗口由施法者行动清除）
+      { kind: 'inflict_status', status: { type: 'retaliate', duration: 999, rate: 120, maxTriggers: 2 } },
+    ],
+  },
 };

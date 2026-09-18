@@ -68,7 +68,8 @@ export type EffectTag =
   | 'rest' // 休整：每回合行动时恢复（挂上时冻结），指挥与主动互不冲突
   | 'morale_boost' // 士气提高：指挥战法同号冲突取较高；同一战法重复触发累加（谋议宏图）
   | 'ignore_def' // 无视防御：攻击时目标防御 × (1 − rate)，作用于攻防差（击势）
-  | 'range_buff'; // 攻击距离提高：普攻可达的敌军距离上限 +amount（帝临回光）
+  | 'range_buff' // 攻击距离提高：普攻可达的敌军距离上限 +amount（帝临回光）
+  | 'retaliate'; // 受击追加攻击标记（忠克猛烈）：携带者受攻击伤害时施法者追加 1 次攻击，最多 N 次
 
 // ─── 战法输出效果（联合类型）───
 
@@ -140,6 +141,11 @@ export type SkillOutput =
       chain?: { chance: number; decay: number };
       /** 为 true 时本次结算不加算兵种克制 −30% */
       ignoresTroopCounter?: boolean;
+      /**
+       * 无视目标防御属性（忠克猛烈「本战法造成的伤害无视目标的防御属性」）：
+       * 为 true 时本段攻击伤害的目标防御按 0 计算（等价 ignore_def 100%）。
+       */
+      ignoresDefense?: boolean;
     }
   | {
       kind: 'chance_group';
@@ -398,7 +404,13 @@ export type CreateStatus =
   /** 无视防御比例（0.6 = 60%），自身攻击时目标防御 × (1 − rate) */
   | { type: 'ignore_def'; rate: number; duration: number }
   /** 攻击距离提高（帝临回光「攻击距离 +1」）：普攻可达距离上限 +amount，见 target.ts attackRangeOf */
-  | { type: 'range_buff'; amount: number; duration: number };
+  | { type: 'range_buff'; amount: number; duration: number }
+  /**
+   * 受击追加攻击标记（忠克猛烈）：携带者每受到 1 次**攻击伤害**（普攻/战法/反击均可），
+   * 由标记施法者对其追加 1 次攻击（伤害率 rate，无视兵种相克与目标防御 —— 与该战法主动段同口径），
+   * 期间最多触发 maxTriggers 次；窗口「直到施法者下回合行动前」由施法者行动时清除。
+   */
+  | { type: 'retaliate'; duration: number; rate: number; maxTriggers: number };
 
 // ─── 战法（联合类型）───
 
@@ -903,8 +915,7 @@ export interface BattleConfig {
 // ─── 战斗中的武将运行时状态 ───
 
 export type StatusType =
-  | 'confusion'
-  | 'rampage'
+  | 'confusion'  | 'rampage'
   | 'cowardice'
   | 'hesitation'
   | 'evasion'
@@ -936,7 +947,9 @@ export type StatusType =
   | 'ignore_def'
   | 'range_buff'
   /** 先手（诸葛锦囊）：行动排序时该单位优先出手 */
-  | 'priority';
+  | 'priority'
+  /** 受击追加攻击标记（忠克猛烈）：携带者受攻击伤害时施法者追加 1 次攻击，最多 N 次 */
+  | 'retaliate';
 
 /** DoT（妖术/燃烧/恐慌）挂上时冻结的每次伤害（滞后触发）：
  *  伤害在「挂上时」结算并冻结——按当时的增伤合计（造成侧 + 受到侧）、施法者兵力、
@@ -1012,7 +1025,13 @@ export type Status =
   | { type: 'morale_boost'; amount: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   | { type: 'ignore_def'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   /** 攻击距离提高（帝临回光）：普攻可达距离上限 +amount（target.ts attackRangeOf 求和） */
-  | { type: 'range_buff'; amount: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string };
+  | { type: 'range_buff'; amount: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
+  /**
+   * 受击追加攻击标记（忠克猛烈）：携带者每受到 1 次攻击伤害 → 施法者对其追加 1 次攻击（rate%），
+   * 最多 triggers 达到 maxTriggers 次后移除；窗口「直到施法者下回合行动前」由施法者行动时统一清除
+   * （remaining 仅作占位，不参与递减）。
+   */
+  | { type: 'retaliate'; rate: number; maxTriggers: number; triggers: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId: string };
 
 export interface UnitState {
   readonly general: General;
