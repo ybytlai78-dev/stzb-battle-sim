@@ -1291,6 +1291,12 @@ export interface PassiveSkill extends BaseSkill {
   /** 施法者阵亡后受击效果仍生效（同仇敌忾全队光环），缺省 false */
   retainAfterDeath?: boolean;
   /**
+   * 不受敌方指挥战法的影响（藤甲突击「不受敌方指挥战法的影响」）：携带者免疫**敌方指挥战法**
+   * 施加的状态（inflictStatus 拦截，发 `command_immune_blocked`）与指挥战法的伤害段
+   * （物理/策略/位置伤害段逐目标跳过）；友方指挥与主动/追击/被动战法不受影响。
+   */
+  commandImmune?: true;
+  /**
    * 被动先手（侵掠如火「在战斗中可以优先行动」）：前 N 回合优先行动，999 = 全程
    * （与指挥 `priorityRounds` 同口径，见 combat.buildPriorityOrder）。
    */
@@ -1393,7 +1399,7 @@ export interface PassiveSkill extends BaseSkill {
    * （计数走 `ctx.afterActiveCounters`，键 `${casterId}:${skillId}`，整场累计不随回合重置）。
    * output 段建议带 targetMode（如 'group'）按战法距离重选目标。
    */
-  afterActive?: { output: SkillOutput[]; maxTriggers?: number };
+  afterActive?: { output: SkillOutput[]; maxTriggers?: number; /** 每回合只触发一次（藤甲突击「每回合首次发动主动战法后」） */ oncePerRound?: boolean };
   /**
    * 「成功发动普通攻击 / 主动战法 / 追击战法后」触发（三军夺帅）：三种来源每次成功后各结算一次 output
    * （与 `afterActive` 仅覆盖主动战法区分；无次数上限）。
@@ -1989,6 +1995,8 @@ export type BattleEvent =
     }
   | { type: 'siege_blocked'; unitId: string; skillId: string }
   | { type: 'insight_blocked'; unitId: string; statusType: StatusType }
+  /** 不受敌方指挥战法影响（藤甲突击）：敌方指挥战法的状态/伤害被整段拦截 */
+  | { type: 'command_immune_blocked'; unitId: string; skillId: string; statusType?: StatusType }
   | { type: 'cowardice_immune_blocked'; unitId: string; statusType: StatusType }
   | {
       type: 'split_damage';

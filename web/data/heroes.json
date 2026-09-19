@@ -151,7 +151,7 @@
     "growthDefense": 1.87,
     "growthStrategy": 0.38,
     "growthSpeed": 0.53,
-    "mainSkillId": "",
+    "mainSkillId": "tengjia_tuji",
     "mainSkillName": "藤甲突击",
     "skillDesc": "不受敌方指挥战法的影响，同时每回合首次发动主动战法后，对距离4以内敌军群体发动一次攻击（伤害率100.0%），并使其下一次造成的攻击或策略攻击伤害降低50.0%"
   },

@@ -8664,4 +8664,53 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       ],
     },
   },
+
+  /**
+   * 藤甲突击（兀突骨·群步 h519 主战法）：被动 B（battle_start 登记型），距离 1，目标自己。
+   * 满级「不受敌方指挥战法的影响，同时每回合首次发动主动战法后，对距离 4 以内敌军群体发动一次攻击
+   *   （伤害率 100.0%），并使其下一次造成的攻击或策略攻击伤害降低 50.0%」；1 级：伤害率 50.0%、
+   *   伤害降低 25.0%。
+   * 官方：scripts/skill_extra.json id 200756（被动 / 距离 1 / 目标自己 / 兵种步；effect 不受指挥战法影响;
+   *   攻击伤害;攻击伤害降低;策略攻击伤害降低）。来源 https://stzb.163.com/m/skilllist/200756.html
+   *
+   * 口径（策略 A，2026-09-20；推定处已标注）：
+   *   ① 官方 desc 两版拼接（v1「每回合首次发动主动战法后」/ v2「每回合发动主动战法时」）→ 按仓库
+   *      dedupe 口径取**前半 v1**（web/data/heroes.json 亦为 v1）；
+   *   ② 「不受敌方指挥战法的影响」→ 新引擎件 `PassiveSkill.commandImmune`：
+   *      敌方指挥战法施加的状态在 `inflictStatus` 整段拦截（发 `command_immune_blocked`）、
+   *      指挥战法的伤害段（物理 / 策略 / 位置）逐目标跳过；**友方指挥**与主动/追击/被动战法不受影响；
+   *   ③ 「每回合首次发动主动战法后」→ 既有被动钩子 `afterActive` + 新字段 `oncePerRound`（按
+   *      `${回合}:${战法}:${单位}` 去重）；
+   *   ④ 「对距离 4 以内敌军群体发动一次攻击」= `physical_damage` rate 100 + 段级 `range:4` +
+   *      `targetMode:'group'`（群体 = 2 目标，推定）；
+   *   ⑤ 「使其下一次造成的攻击或策略攻击伤害降低 50.0%」= `damage_boost` direction:'caused' rate −0.5
+   *      + `charges:1`（次数型，由携带者下一次造成伤害时消耗，缚父临危同款写法），落点 =
+   *      本次攻击的命中目标（`sameTargetsAsLastDamage`）；
+   *   ⑥ 无「受属性影响」段、无数值缺口 → **上架**。
+   */
+  tengjia_tuji: {
+    id: 'tengjia_tuji',
+    name: '藤甲突击',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['damage', 'damage_boost'],
+    // ① 不受敌方指挥战法的影响（状态 + 伤害段全拦截）
+    commandImmune: true,
+    output: [],
+    // ③ 每回合首次发动主动战法后：④ 距离 4 内敌军群体一次攻击 + ⑤ 其下一次造成伤害 −50%
+    afterActive: {
+      oncePerRound: true,
+      output: [
+        { kind: 'physical_damage', rate: 100, targetMode: 'group', groupCount: 2, range: 4 },
+        {
+          kind: 'inflict_status',
+          sameTargetsAsLastDamage: true,
+          status: { type: 'damage_boost', rate: -0.5, duration: 999, direction: 'caused', charges: 1 },
+        },
+      ],
+    },
+  },
 };

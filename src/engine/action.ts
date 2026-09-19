@@ -32,6 +32,14 @@ import type { Rng } from './rng';
 import { calcDamage, applyTroopCap, scaledValue, roundRate, sumRates, buffMult, calcHealAmount, moraleRate, applyIgnoreDef, troopCounterReduce } from './formulas';
 import { nearestEnemy, skillTargets, distanceBetween, adjacentUnits, sameSideDistance, attackRangeOf, POSITION_INDEX, unitsInSkillRange } from './target';
 
+/** 是否「不受敌方指挥战法影响」（藤甲突击）：携带者装有任何 commandImmune 被动即为真。 */
+function hasCommandImmune(ctx: CombatContext, unit: UnitState): boolean {
+  return unit.general.passiveSkillIds.some((id) => {
+    const s = resolveSkill(ctx, id);
+    return s?.type === 'passive' && s.commandImmune === true;
+  });
+}
+
 /** 施法者站位条件（潜谋远计「仅对自身处于前锋或中军位置时生效」）：不满足 → 本战法整次不生效 */
 function passesCasterPosition(skill: Skill, unit: UnitState): boolean {
   const allowed = skill.casterPositions;
@@ -361,6 +369,8 @@ export interface CombatContext {
    * 「自身造成伤害后追加打击」重入保护（京观垒冢）：追加打击自身造成的伤害不再回灌同一钩子（防递归）。
    */
   resolvingDealStrike?: boolean;
+  /** 被动 afterActive「每回合首次」去重（藤甲突击）：key `${回合}:${skillId}:${unitId}` */
+  afterActiveRoundKeys?: Set<string>;
 }
 
 /** 持续型急救战法级计数器（皇裔流离/金匮要略）：一个战法一个实例，全队共享。
@@ -2324,6 +2334,21 @@ export function inflictStatus(
     create = { ...create, duration: ctx.rng.intInclusive(a, b) } as CreateStatus;
   }
   const type = create.type;
+
+  // 不受敌方指挥战法影响（藤甲突击）：敌方指挥战法施加的状态整段拦截（友方指挥不受影响）
+  if (sourceSkillType === 'command') {
+    const from = casterId ? castUnit(ctx, casterId) : undefined;
+    const fromEnemy = from ? from.side !== target.side : false;
+    if (fromEnemy && hasCommandImmune(ctx, target)) {
+      ctx.events.push({
+        type: 'command_immune_blocked',
+        unitId: target.general.id,
+        skillId: sourceSkillId,
+        statusType: type,
+      });
+      return;
+    }
+  }
 
   // 注：曾在此清理 remaining ≤ 0 的「僵尸」同名状态（防止同源重挂累加到已到期实例上）。
   // 新口径（同源默认刷新）下不再需要：刷新会把僵尸实例的 amount/rate 替换为本次值、
@@ -5461,6 +5486,11 @@ function executeSkillOutputs(
             if (!raw.alive) continue;
             const t = redirectPhysicalHit(ctx, raw);
             if (!t.alive) continue;
+            // 不受敌方指挥战法影响（藤甲突击）：指挥战法伤害段对其整段跳过
+            if (skill.type === 'command' && caster.side !== t.side && hasCommandImmune(ctx, t)) {
+              ctx.events.push({ type: 'command_immune_blocked', unitId: t.general.id, skillId: skill.id });
+              continue;
+            }
             attacked = true;
             selectedIds.push(t.general.id);
             // 常驻伤害前叠层（持节镇西）：伤害源叠攻击、受击者叠防御
@@ -5602,6 +5632,11 @@ function executeSkillOutputs(
               : pool;
           for (const t of foePool) {
             if (!t.alive) continue;
+            // 不受敌方指挥战法影响（藤甲突击）：指挥战法的伤害段对该目标整段跳过
+            if (skill.type === 'command' && caster.side !== t.side && hasCommandImmune(ctx, t)) {
+              ctx.events.push({ type: 'command_immune_blocked', unitId: t.general.id, skillId: skill.id });
+              continue;
+            }
             if (out.requireStatuses?.length && !out.requireStatuses.some((st) => hasStatus(t, st))) continue;
             selectedIds.push(t.general.id);
             // 常驻伤害前叠层（持节镇西）：施法者叠谋略、受击者叠防御
@@ -6079,6 +6114,11 @@ function executeSkillOutputs(
           if (!raw.alive) continue;
           const t = redirectPhysicalHit(ctx, raw);
           if (!t.alive) continue;
+          // 不受敌方指挥战法影响（藤甲突击）：指挥战法伤害段对其整段跳过
+          if (skill.type === 'command' && caster.side !== t.side && hasCommandImmune(ctx, t)) {
+            ctx.events.push({ type: 'command_immune_blocked', unitId: t.general.id, skillId: skill.id });
+            continue;
+          }
           attacked = true;
           selectedIds.push(t.general.id);
           triggerStackBuff(ctx, source, t, 'physical');
@@ -6508,6 +6548,13 @@ export function triggerPassiveAfterActive(ctx: CombatContext, unit: UnitState): 
     const skill = resolveSkill(ctx, id);
     if (skill?.type !== 'passive' || !skill.afterActive) continue;
     const cfg = skill.afterActive;
+    // 每回合只触发一次（藤甲突击「每回合首次发动主动战法后」）
+    if (cfg.oncePerRound) {
+      ctx.afterActiveRoundKeys ??= new Set();
+      const rk = `${ctx.currentRound}:${skill.id}:${unit.general.id}`;
+      if (ctx.afterActiveRoundKeys.has(rk)) continue;
+      ctx.afterActiveRoundKeys.add(rk);
+    }
     if (cfg.maxTriggers != null) {
       ctx.afterActiveCounters ??= new Map();
       const key = `${unit.general.id}:${skill.id}`;
