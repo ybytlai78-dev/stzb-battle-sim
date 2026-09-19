@@ -3989,7 +3989,7 @@ function executeSkillOutputs(
               sign;
             inflictStatus(ctx, t, { ...create, rate: scaled }, skill.type, skill.id, caster.general.id);
           } else if (create.type === 'damage_boost' && create.speedScaled) {
-            /** 增减伤受速度影响（攻其不备 +11.6%）；growthRate 缺省时不缩放、用基值 */
+            /** 增减伤受速度影响（攻其不备 11.6% + 成长 0.02/点）；growthRate 缺省时不缩放、用基值 */
             if (create.growthRate !== undefined) {
               const sign = Math.sign(create.rate) || 1;
               const scaled =

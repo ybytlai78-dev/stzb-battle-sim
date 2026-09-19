@@ -56,6 +56,16 @@ function commandTeam(skillId: string): General[] {
 }
 
 /**
+ * 攻其不备（受速度缩放）专用：中军携带者的速度可指定。
+ * 官方口径 = `10% + 0.02×速度`（速度 80 → 11.6%），按 1% 粒度八舍九入显示。
+ */
+function gongqiTeam(speed: number): General[] {
+  const team = commandTeam('gongqi_bubei');
+  team[1].speed = speed;
+  return team;
+}
+
+/**
  * 一类指挥挂在前锋：受击钩子（空城）需要载体被打到。
  */
 function commandFront(skillId: string): General[] {
@@ -199,7 +209,7 @@ describe('空城（B 一类指挥：前 2 回合受击 70% 规避当次）', () 
 });
 
 describe('攻其不备（S 一类指挥：锁 2 目标，受攻击伤害 taken +11.6%，最多 5 层）', () => {
-  it('装配：groupCount 2，victim locked，maxStacks 5，speedScaled 无成长率', () => {
+  it('装配：groupCount 2，victim locked，maxStacks 5，speedScaled + growthRate 0.02', () => {
     expect(commandTeam('gongqi_bubei')[1].commandSkillIds).toContain('gongqi_bubei');
     const s = asCommand('gongqi_bubei');
     expect(s.groupCount).toBe(2);
@@ -210,7 +220,7 @@ describe('攻其不备（S 一类指挥：锁 2 目标，受攻击伤害 taken +
     expect(st?.type).toBe('damage_boost');
     if (st?.type === 'damage_boost') {
       expect(st.speedScaled).toBe(true);
-      expect(st.growthRate).toBeUndefined();
+      expect(st.growthRate).toBe(0.02);
       expect(st.rate).toBe(0.116);
     }
   });
@@ -234,10 +244,11 @@ describe('攻其不备（S 一类指挥：锁 2 目标，受攻击伤害 taken +
     expect(found).toBe(true);
   });
 
-  it('数值：同目标叠层 ≤5；rate 为 0.116 的倍数', () => {
+  it('数值：同目标叠层 ≤5；单层按速度缩放（200 速度 → 14%）成倍累加', () => {
+    const per = 0.14; // 10% + 0.02×200 = 14%（速度 80 基值 11.6%）
     let saw = false;
     for (let seed = 1; seed <= 40; seed++) {
-      const report = run(commandTeam('gongqi_bubei'), seed);
+      const report = run(gongqiTeam(200), seed);
       const stacks = new Map<string, number>();
       let round = 0;
       let pendingVictim: string | undefined;
@@ -254,15 +265,41 @@ describe('攻其不备（S 一类指挥：锁 2 目标，受攻击伤害 taken +
       saw = true;
       expect([...stacks.values()].every((n) => n <= 5)).toBe(true);
       for (const b of inflicted(report, 'damage_boost')) {
-        const m = b.detail.match(/(\d+)%/);
+        const m = b.detail.match(/([\d.]+)%/);
         expect(m).toBeTruthy();
         const rate = Number(m![1]) / 100;
-        const layers = Math.round(rate / 0.116);
-        expect(Math.abs(layers * 0.116 - rate)).toBeLessThan(0.02);
-        expect(rate).toBeLessThanOrEqual(0.116 * 5 + 1e-9);
+        const layers = Math.round(rate / per);
+        expect(Math.abs(layers * per - rate)).toBeLessThan(1e-9);
+        expect(rate).toBeLessThanOrEqual(per * 5 + 1e-9);
       }
     }
     expect(saw).toBe(true);
+  });
+
+  it('速度缩放锁定：80→11%、100→12%、200→14%、245→15%、295→16%（10% + 0.02×速度，八舍九入）', () => {
+    // 官方配置：constant_param=10、intel_param=4、attri_type=速度 → 数值 = 10 + 4×速度/200；
+    // 速度 80 = 11.6%（官方描述）→ 八舍九入 11%；100 = 12.0；200 = 14.0；245 = 14.9 → 15%；295 = 15.9 → 16%。
+    const points = [
+      { speed: 80, pct: 11 },
+      { speed: 100, pct: 12 },
+      { speed: 200, pct: 14 },
+      { speed: 245, pct: 15 },
+      { speed: 295, pct: 16 },
+    ];
+    for (const { speed, pct } of points) {
+      let seen = false;
+      for (let seed = 1; seed <= 40 && !seen; seed++) {
+        const boosts = inflicted(run(gongqiTeam(speed), seed), 'damage_boost');
+        if (boosts.length === 0) continue;
+        seen = true;
+        // 叠层是「单层 rate × 层数」，最小值即首层单层值
+        const layerPct = Math.min(
+          ...boosts.map((b) => Number(b.detail.match(/([\d.]+)%/)![1]))
+        );
+        expect(layerPct).toBe(pct);
+      }
+      expect(seen).toBe(true);
+    }
   });
 });
 
