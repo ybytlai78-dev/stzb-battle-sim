@@ -7739,4 +7739,59 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       ],
     },
   },
+
+  // ─── 批量39：武将 36（孙坚·汉弓）───
+
+  /**
+   * 勇挚刚毅（孙坚·汉弓 h805 主战法）：被动 S，距离 5，目标自己。
+   * 满级：自身受到攻击伤害后，有 60.0% 几率对敌军单体发动一次攻击（伤害率 100.0%）；
+   *   自身受到策略攻击伤害后，有 40.0% 几率对敌军群体发动一次攻击（伤害率 80.0%）；
+   *   当自身兵力首次低于初始兵力的 90%、80%、70% 和 60% 时，造成的攻击伤害提升 5.0%（受攻击属性影响）、
+   *   受到恢复效果提升 5.0%（受防御属性影响），此效果最多叠加 4 次。
+   * 1 级：受击反伤 60% / 50%、40% / 40%；每档提升 2.5%（1 级同为 4 档）。
+   * 官方：scripts/skill_extra.json id 200288（被动 S / 距离 5 / 目标自己 / 兵种弓；
+   *   effect 标签 攻击伤害;攻击伤害提高;受到恢复效果提高）。
+   *   来源 https://stzb.163.com/m/skilllist/200288.html
+   *
+   * 口径（策略 A，2026-09-20，逐条推定）：
+   *   ① 「造成的攻击伤害提升 5.0%（受攻击属性影响）」= `damage_boost`
+   *      （`direction:'caused'`、`damageType:'physical'`、`attackScaled:true`、`stack:true`）；
+   *      官方未给成长系数 → `growthRate` 缺（缺省不缩放、用基值）。
+   *   ② 「受到恢复效果提升 5.0%（受防御属性影响）」= **新状态 `heal_boost`**
+   *      （`defenseScaled:true`、`stack:true`，`growthRate` 缺 → 基值）；
+   *      加成在 `recoverTroops`（全引擎恢复唯一收口）统一结算，主动 heal / 休整 rest /
+   *      持续急救 first_aid / 每回合恢复 recoverEachRound / 代打 healSource 全部受益。
+   *   ③ 4 个兵力阈值「首次低于 90/80/70/60%」按**逐档各触发一次、共 4 层**（官方「首次低于」
+   *      + 「最多叠加 4 次」最可辩护解读）→ 复用 `PassiveSkill.troopThresholdBuff`（已实现逐档去重）。
+   *   ④ 「敌军群体」未写目标数 → 按 **2 目标**（`targetMode:'group'` + `groupCount:2`，仓库惯例）——**推定**。
+   *   ⑤ ①② 两段「受属性影响」而官方未给成长系数 → 登记 `src/data/listing.ts` 的 `OFFLINE_MAIN_SKILLS`
+   *      （武将下架，上架池保持 77，待 scripts/derive_growth_rate.mjs 反解）。
+   */
+  yongzhi_gangyi: {
+    id: 'yongzhi_gangyi',
+    name: '勇挚刚毅',
+    type: 'passive',
+    triggerRate: 1,
+    timing: 'battle_start',
+    range: 5,
+    targetMode: 'self',
+    tags: ['damage', 'damage_boost', 'heal'],
+    output: [],
+    // ① 受攻击伤害后 60% → 敌军单体一次攻击 100%（自带 targetMode 重选敌军单体）
+    // ② 受策略攻击伤害后 40% → 敌军群体 2 目标一次攻击 80%（groupCount 2 为推定）
+    onHurt: [
+      { victim: 'self', rate: 0.6, damageKind: 'physical', applyTo: 'skill_targets', output: [{ kind: 'physical_damage', rate: 100, targetMode: 'random_single' }] },
+      { victim: 'self', rate: 0.4, damageKind: 'strategy', applyTo: 'skill_targets', output: [{ kind: 'physical_damage', rate: 80, targetMode: 'group', groupCount: 2 }] },
+    ],
+    // ③ 兵力首次低于 90/80/70/60% 逐档触发：每档各 +5% 攻击伤害（受攻击，基值）+5% 受到恢复（受防御，基值）
+    // 注：`troopThresholdBuff.thresholds` 为**百分数**（引擎按 `兵力/初始兵力×100` 比较，见 action.triggerTroopThresholdBuff；
+    // 先例甚陷不惧 `[90,70,50,30]`），故此处写 [90,80,70,60] 而非小数。
+    troopThresholdBuff: {
+      thresholds: [90, 80, 70, 60],
+      output: [
+        { kind: 'inflict_status', target: 'self', status: { type: 'damage_boost', rate: 0.05, duration: 999, direction: 'caused', damageType: 'physical', attackScaled: true, stack: true } },
+        { kind: 'inflict_status', target: 'self', status: { type: 'heal_boost', rate: 0.05, duration: 999, defenseScaled: true, stack: true } },
+      ],
+    },
+  },
 };

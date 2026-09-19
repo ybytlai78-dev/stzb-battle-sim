@@ -1855,11 +1855,12 @@ type ActEndCountingStatus = Exclude<Status, { type: 'evasion' | 'pending_stacks'
  *  直到「再下一次行动开始前」才移除 —— 即 remaining 减到 ≤0 时**只打「下次行动开始时移除」标记**
  *  （用 remaining ≤ 0 表达），本次行动照常生效，下一次行动开始时由 markStatusesOnActStart 开头清掉。
  *  第 1 组（DoT sorcery/burning/panic/curse/ignite、治愈 first_aid/rest）与其余行动计数型
- *  保持 8032010 的「携带者行动结束后递减」；priority / counter 仍是「行动开始前递减 + 即时移除」。 */
+ *  保持 8032010 的「携带者行动结束后递减」；priority / counter 仍是「行动开始前递减 + 即时移除」。
+ *  heal_boost（受到恢复效果提升）与属性/增减伤同组：数值型增益，行动开始前递减，duration 999 等同常驻。 */
 const NEXT_ACT_TICK_TYPES = [
   'hesitation', 'cowardice', 'confusion', 'rampage',
   'attack_buff', 'defense_buff', 'strategy_buff', 'speed_buff',
-  'damage_boost', 'damage_reduce',
+  'damage_boost', 'damage_reduce', 'heal_boost',
 ] as const;
 type NextActTickStatus = Extract<Status, { type: (typeof NEXT_ACT_TICK_TYPES)[number] }>;
 
@@ -2568,7 +2569,7 @@ export function inflictStatus(
     if (incomingVal > curVal) {
       if (sameType.type === 'evasion') {
         if (create.type === 'evasion') sameType.stacks = create.stacks;
-      } else if (sameType.type === 'attack_buff' || sameType.type === 'defense_buff' || sameType.type === 'strategy_buff' || sameType.type === 'speed_buff' || sameType.type === 'damage_reduce' || sameType.type === 'damage_boost' || sameType.type === 'trigger_boost' || sameType.type === 'morale_boost' || sameType.type === 'ignore_def') {
+      } else if (sameType.type === 'attack_buff' || sameType.type === 'defense_buff' || sameType.type === 'strategy_buff' || sameType.type === 'speed_buff' || sameType.type === 'damage_reduce' || sameType.type === 'damage_boost' || sameType.type === 'heal_boost' || sameType.type === 'trigger_boost' || sameType.type === 'morale_boost' || sameType.type === 'ignore_def') {
         // 维度不同（点数 vs 百分比）无法直接比较时，后施加者替换
         const sameDim =
           ('amount' in sameType && 'amount' in create) &&
@@ -2923,7 +2924,7 @@ function pushStatus(
     });
     return;
   }
-  if (type === 'damage_reduce' || type === 'damage_boost' || type === 'trigger_boost' || type === 'morale_boost' || type === 'ignore_def') {
+  if (type === 'damage_reduce' || type === 'damage_boost' || type === 'heal_boost' || type === 'trigger_boost' || type === 'morale_boost' || type === 'ignore_def') {
     const amount = 'amount' in create ? create.amount : create.rate;
     const push: Status = { type, remaining, appliedRound, sourceSkillType, sourceSkillId } as Status;
     if ('amount' in create) (push as { amount: number }).amount = create.amount;
@@ -3035,6 +3036,10 @@ function pushStatus(
       detail = `${statusName(type)} ${create.rate} 剩余 ${create.decayEighths}/8 ${durText}`;
     } else if (type === 'ignore_def') {
       detail = `无视防御 ${Math.round(create.rate * 100)}% ${durText}`;
+    } else if (type === 'heal_boost') {
+      // 受到恢复效果提升（勇挚刚毅）：百分数化，不输出原始小数；rate<0 = 受到恢复效果降低
+      const pct = Math.round(Math.abs(create.rate) * 100);
+      detail = `受到恢复效果${create.rate >= 0 ? '提升' : '降低'} ${pct}% ${durText}`;
     } else if (type === 'morale_boost' && 'amount' in create) {
       // amount 为负 = 士气降低（心战为上）
       detail = `${create.amount < 0 ? '士气降低' : '士气提高'} ${Math.abs(create.amount)} ${durText}`;
@@ -3438,6 +3443,7 @@ const SKILL_TYPE_PRIORITY: Record<SkillType, number> = { passive: 2, command: 1,
  * - 属性类（攻击/防御/谋略/速度）与士气：按 `amount` 正负（>0 有益）；
  * - 增减伤 `damage_boost`：`caused` 正值 = 增伤、`taken` 负值 = 减伤（有益），反之为有害；
  * - 减伤 `damage_reduce`：`rate > 0` 有益；
+ * - 恢复提高 `heal_boost`：`rate > 0` 有益（rate<0 = 受到恢复效果降低，有害）；
  * - 白名单：发动率提升 / 洞察 / 免疫怯战 / 规避（层数式与概率式）/ 连击 / 分兵 / 休整 / 急救 /
  *   援护 / 无视防御 / 攻击距离 / 先手 / 反击 / 受击标记 / 叠层待发 / 无视规避 / 控制扩散 / 准备跳过。
  * 控制 / DoT / 围困 / 挑衅等有害或中性一律 false。
@@ -3455,6 +3461,9 @@ export function isBeneficialStatus(s: Status): boolean {
       return dir === 'caused' ? s.rate > 0 : s.rate < 0;
     }
     case 'damage_reduce':
+      return s.rate > 0;
+    /** 受到恢复效果提升：rate>0 有益、rate<0（受到恢复效果降低）有害 */
+    case 'heal_boost':
       return s.rate > 0;
     case 'trigger_boost':
     case 'insight':
@@ -3773,6 +3782,7 @@ function statusName(type: StatusType): string {
     case 'strategy_buff': return '谋略增益';
     case 'speed_buff': return '速度增益';
     case 'damage_reduce': return '减伤';
+    case 'heal_boost': return '恢复提升';
     case 'damage_boost': return '增伤';
     case 'trigger_boost': return '发动率提升';
     case 'insight': return '洞察';
@@ -5459,6 +5469,14 @@ function executeSkillOutputs(
             /** 减伤受防御影响（蛮王御众 30%，成长率未确认 → 缺省走下方 else 用基值）：公式同受谋略，属性换生效防御 */
             const scaled = roundRate(scaledValue(create.rate * 100, create.growthRate, effectiveStat(caster, 'defense'))) / 100;
             inflictStatus(ctx, t, { ...create, rate: scaled }, skill.type, skill.id, caster.general.id);
+          } else if (create.type === 'heal_boost' && create.strategyScaled && create.growthRate !== undefined) {
+            /** 恢复提高受谋略影响（守静却敌）：百分比按 1% 粒度八舍九入后转小数（同 damage_reduce 写法） */
+            const scaled = roundRate(scaledValue(create.rate * 100, create.growthRate, effectiveStat(caster, 'strategy'))) / 100;
+            inflictStatus(ctx, t, { ...create, rate: scaled }, skill.type, skill.id, caster.general.id);
+          } else if (create.type === 'heal_boost' && create.defenseScaled && create.growthRate !== undefined) {
+            /** 恢复提高受防御影响（勇挚刚毅 5%，成长率未确认 → 缺省走下方 else 用基值）：公式同受谋略，属性换生效防御 */
+            const scaled = roundRate(scaledValue(create.rate * 100, create.growthRate, effectiveStat(caster, 'defense'))) / 100;
+            inflictStatus(ctx, t, { ...create, rate: scaled }, skill.type, skill.id, caster.general.id);
           } else if (create.type === 'damage_boost' && create.strategyScaled && create.growthRate !== undefined) {
             // 增减伤受谋略影响（密谋定蜀 +5% / 母仪浮梦 -40%，成长 0.15/点）：
             // 按绝对值缩放再恢复符号，使负向减伤随谋略增强（-40% 谋略 180 → -55%）
@@ -6584,12 +6602,19 @@ function triggerOnHeal(ctx: CombatContext, target: UnitState): void {
  *  实际恢复量 = min(请求量, 伤兵池剩余, 兵力缺口) 且扣减伤兵池；
  *  未配置机制（直接构造 ctx 的单元测试）时保持旧行为：恢复只受兵力上限限制。
  *  已阵亡或兵力已为 0 时返回 0（不可复活）。
- *  实际恢复 > 0 后走 `triggerOnHeal`（主动奶 / 持续急救 / 休整共用）。 */
+ *  实际恢复 > 0 后走 `triggerOnHeal`（主动奶 / 持续急救 / 休整共用）。
+ *
+ *  **「恢复提高效果统一入口」**：请求量在算 recoverable 之前先按携带者的 `heal_boost` 状态加成 ——
+ *  `demand = floor(amount × (1 + Σheal_boost.rate))`。这是全引擎唯一收口处（主动 heal / 休整 rest /
+ *  持续急救 first_aid / 每回合恢复 recoverEachRound / 代打 healSource 均经此函数），
+ *  故新状态 heal_boost（勇挚刚毅「受到恢复效果提升」）只需在这里加一次，所有恢复途径统一受益。 */
 export function recoverTroops(ctx: CombatContext, target: UnitState, amount: number): number {
   // 已阵亡（兵力 0）不可被急救/休整/主动恢复复活
   if (!target.alive || target.troops <= 0) return 0;
+  const boost = target.statuses.filter((s) => s.type === 'heal_boost').reduce((a, s) => a + s.rate, 0);
+  const demand = boost > 0 ? Math.floor(amount * (1 + boost)) : amount;
   const pool = ctx.woundedMortality ? Math.min(target.wounded, target.general.maxTroops - target.troops) : target.general.maxTroops - target.troops;
-  const recoverable = Math.max(0, Math.min(amount, pool));
+  const recoverable = Math.max(0, Math.min(demand, pool));
   if (recoverable > 0) {
     target.troops += recoverable;
     if (ctx.woundedMortality) target.wounded -= recoverable;

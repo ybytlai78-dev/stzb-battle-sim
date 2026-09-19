@@ -722,6 +722,7 @@ function statusName(t: string): string {
     evade_chance: '概率规避',
     combo: '连击', attack_buff: '攻击增益', defense_buff: '防御增益', strategy_buff: '谋略增益',
     speed_buff: '速度增益', damage_reduce: '减伤', damage_boost: '增伤', trigger_boost: '发动率提升',
+    heal_boost: '恢复提升',
     morale_boost: '士气提高', ignore_def: '无视防御', range_buff: '攻击距离',
     insight: '洞察', siege: '围困', sorcery: '妖术', burning: '燃烧', panic: '恐慌',
     split: '分兵', jump_prep: '跳过准备', taunt: '挑衅', cover: '援護',
