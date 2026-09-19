@@ -3720,7 +3720,13 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     output: [],
   },
 
-  /** 攻其不备（S 一类指挥）：锁敌军 2 目标；其每次受到攻击伤害后 taken +11.6%（受速度，无成长率用基值），最多 5 层。策略/DoT 不叠。 */
+  /**
+   * 攻其不备（S 一类指挥）：锁敌军 2 目标；其每次受到攻击伤害后 taken +11.6%，最多 5 层。策略/DoT 不叠。
+   * 受速度影响：基值 11.6%（速度 80）、成长 0.02/点 —— 等价官方客户端配置 `10% + 0.02×速度`。
+   * 依据（2026-09-18 反解，见《速度战法受速度成长调研.md》）：官方描述 11.6%@速80 +
+   * 2024-06-19 调整（100 速单层 6%→12%、200 速前后差 4%）+ 客户端配置表
+   * `intel_param=4 / constant_param=10 / attri_type=4(速度) / value_add_max=5`。
+   */
   gongqi_bubei: {
     id: 'gongqi_bubei',
     name: '攻其不备',
@@ -3739,7 +3745,15 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       maxStacks: 5,
       output: [{
         kind: 'inflict_status',
-        status: { type: 'damage_boost', rate: 0.116, duration: 999, direction: 'taken', speedScaled: true, stacks: 1 },
+        status: {
+          type: 'damage_boost',
+          rate: 0.116,
+          duration: 999,
+          direction: 'taken',
+          speedScaled: true,
+          growthRate: 0.02,
+          stacks: 1,
+        },
       }],
     },
     output: [],

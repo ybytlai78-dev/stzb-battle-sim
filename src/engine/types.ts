@@ -343,7 +343,7 @@ export type CreateStatus =
    *  stacks：叠层计数（带上限的增减伤，银龙冲阵），同战法累加时 +1
    *  strategyScaled=true 且给 growthRate 时（密谋定蜀每次发动 +5% 受谋略）：rate 为谋略 80 时的基础值，实际数值按 scaledValue 缩放
    *  defenseScaled=true（当敌制决 +8%）：公式同受谋略，属性换生效防御
-   *  speedScaled=true（攻其不备 +11.6%）：受速度缩放；growthRate === undefined 时不缩放、用基值
+   *  speedScaled=true（攻其不备 11.6% / 成长 0.02 受速度）：受速度缩放；growthRate === undefined 时不缩放、用基值
    *  charges：次数型。direction:'caused' 时按攻击者打出消耗（青丘媚祸）；
    *  direction:'taken' 时按受击方吃到匹配伤害后消耗（文伐下一次受到策略），不按回合递减
    *  attackScaled=true（万箭 −50% / 恃强 −30%）：受攻击缩放；growthRate === undefined 时不缩放、用基值
