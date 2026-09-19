@@ -164,6 +164,7 @@ const SKILL_ID_BY_NAME = {
   蛮王御众: 'manwang_yuzhong',
   知人待士: 'zhiren_daishi',
   胡笳离愁: 'hujia_lichou',
+  断首何怒: 'duanshou_henu',
 };
 
 /** 现有 8 个武将固定拼音 id（测试直接引用 HERO_REGISTRY.<id>） */

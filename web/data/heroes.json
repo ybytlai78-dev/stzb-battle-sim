@@ -927,7 +927,7 @@
     "growthDefense": 2.14,
     "growthStrategy": 0.89,
     "growthSpeed": 1.47,
-    "mainSkillId": "",
+    "mainSkillId": "duanshou_henu",
     "mainSkillName": "断首何怒",
     "skillDesc": "战斗中，自身受到伤害后有60.0%的几率使伤害来源的下一次攻击和策略攻击伤害下降42.0%（受防御属性影响）。同时每回合行动时使自身受到的所有伤害降低80.0%，每当受到攻击或策略攻击伤害后，减伤效果将降低1/5"
   },

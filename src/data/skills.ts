@@ -7688,4 +7688,55 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+  /**
+   * 断首何怒（严颜 h631·蜀·骑·被动 S·距离 1·目标自己）。
+   * 满级：战斗中，自身受到伤害后有 60.0% 的几率使伤害来源的下一次攻击和策略攻击伤害下降
+   *   42.0%（受防御属性影响）。同时每回合行动时使自身受到的所有伤害降低 80.0%，
+   *   每当受到攻击或策略攻击伤害后，减伤效果将降低 1/5。
+   * 1 级：受击后 60% / 21.0%；每回合 40.0% 全伤害降低（衰减同为 1/5）。
+   * 官方：scripts/skill_extra.json id 200899（被动 S / 距离 1 / 目标自己 / 兵种骑；
+   *   effect 标签 受到攻击伤害降低;受到策略攻击伤害降低;攻击伤害降低;策略攻击伤害降低）。
+   *   来源 https://stzb.163.com/m/skilllist/200899.html
+   * 口径（策略 A，用户 2026-09-20 指定，勿再询问）：
+   *   ① 42%「受防御属性影响」而官方未给成长系数 → `defenseScaled: true` 标记保留、
+   *      `growthRate` 缺（`damage_boost.growthRate` 可选，缺省不缩放用基值）→ 登记
+   *      OFFLINE_MAIN_SKILLS（武将下架，上架池保持 77）。
+   *   ② 「降低 1/5」按仓库既有 `decayFifths` 线性口径：80% → 64% → 48% → 32% → 16% → 移除
+   *      （受击实际扣兵后 −1 份）。
+   *   ③ 「每回合行动时使自身受到的所有伤害降低 80%」= **每回合行动时刷新回满额 80%**
+   *      （含份数重置，见引擎改动）——推定，最可辩护解读。
+   *   ④ 「使伤害来源的下一次攻击和策略攻击伤害下降 42%」= 对来源挂 `damage_boost`
+   *      （`direction:'caused'`、`rate:-0.42`、`charges:1`）——下一次造成**任意伤害**即消耗（推定）。
+   *   ⑤ 减伤段无「受属性影响」→ 80% 固定不缩放。
+   * 引擎配套：**新增「衰减类状态同源重挂 = 刷新」**（`action.ts` `inflictStatus`）——
+   *   旧实现同源重挂只替换 `rate`/`remaining`，残留 `fifths` 会把「每回合刷新回 80%」打回；
+   *   现同源刷新（含同类型取较高胜者）遇 `decayFifths`/`decayEighths` 时一并重置份数与满额率。
+   *   既有一次性施加的衰减类战法（疮痍累身 / 恃强淬锋 / 谋议宏图）不受影响。
+   */
+  duanshou_henu: {
+    id: 'duanshou_henu',
+    name: '断首何怒',
+    type: 'passive',
+    triggerRate: 1,
+    timing: 'battle_start',
+    range: 1,
+    targetMode: 'self',
+    tags: ['damage_boost', 'damage_reduce'],
+    output: [],
+    // ① 自身受到伤害后 60%：使伤害来源的下一次造成的攻击/策略伤害 −42%（受防御，成长未确认 → 基值）
+    onHurt: {
+      victim: 'self',
+      rate: 0.6,
+      applyTo: 'source',
+      output: [
+        { kind: 'inflict_status', status: { type: 'damage_boost', rate: -0.42, duration: 999, direction: 'caused', defenseScaled: true, charges: 1 } },
+      ],
+    },
+    // ② 每回合行动时（出手前）刷新自身「受到所有伤害 −80%」；每受攻击/策略伤害后按 1/5 衰减（decayFifths 5）
+    roundStartRepeat: {
+      output: [
+        { kind: 'inflict_status', target: 'self', status: { type: 'damage_reduce', rate: 0.8, duration: 999, decayFifths: 5 } },
+      ],
+    },
+  },
 };

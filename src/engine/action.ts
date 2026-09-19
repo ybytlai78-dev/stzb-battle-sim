@@ -2514,6 +2514,9 @@ export function inflictStatus(
     if ('remaining' in sameSource) {
       sameSource.remaining = Math.max(sameSource.remaining, 'duration' in create ? remainingFromDuration(create.duration) : sameSource.remaining);
     }
+    // 衰减类状态（decayFifths / decayEighths）同源重挂 = 刷新：份数与满额率重置
+    // （断首何怒「每回合行动时使自身受到的所有伤害降低 80%」——每回合回满额）
+    refreshDecayCounters(sameSource, create);
     // 反击同战法重挂：刷新 appliedRound（原因同上；rate 已在上方替换）
     if (sameSource.type === 'counter' && create.type === 'counter') {
       sameSource.appliedRound = ctx.currentRound;
@@ -2593,6 +2596,8 @@ export function inflictStatus(
           (create.type === 'damage_reduce' && sameType.type === 'damage_reduce')
         ) {
           applyDamageFilterFromWinner(sameType, create);
+          // 衰减类状态（decayFifths / decayEighths）胜者重挂 = 刷新：份数与满额率重置
+          refreshDecayCounters(sameType, create);
         }
         sameType.sourceSkillId = sourceSkillId;
         if (casterId) (sameType as { sourceUnitId?: string }).sourceUnitId = casterId;
@@ -2712,6 +2717,33 @@ function applyDamageFilterFromWinner(
   else delete surviving.skillTypes;
   if ('damageType' in winner && winner.damageType != null) surviving.damageType = winner.damageType;
   else delete surviving.damageType;
+}
+
+/**
+ * 衰减类状态（`decayFifths` / `decayEighths`）重挂 = 刷新：份数与满额率一并重置。
+ *
+ * 官方文案**未写**「层数 / 可叠加」的衰减效果走「每次施加可刷新」语义——
+ * 抚民励德 / 断首何怒「每回合行动时使自身受到的所有伤害降低 80%」：回合开始重挂即回满额，
+ * 否则残留份数会把本次刷新打回（旧实现只替换 `rate`，`fifths` 仍停在上一回合的剩余值，
+ * 显示 0.8 但下一次受击又按旧份数算回 0.48）。
+ *
+ * 一次性施加的既有衰减战法（疮痍累身 / 恃强淬锋 / 谋议宏图）不受影响。
+ */
+function refreshDecayCounters(same: Status, create: CreateStatus): void {
+  if (
+    (same.type === 'damage_boost' || same.type === 'damage_reduce') &&
+    (create.type === 'damage_boost' || create.type === 'damage_reduce')
+  ) {
+    if (create.decayFifths) {
+      same.fifths = create.decayFifths;
+      same.fifthsBase = create.decayFifths;
+      same.baseRate = create.rate;
+    }
+    if (create.decayEighths) {
+      same.eighths = create.decayEighths;
+      same.baseRate = create.rate;
+    }
+  }
 }
 
 /**
