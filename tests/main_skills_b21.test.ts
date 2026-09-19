@@ -1,10 +1,12 @@
 /**
  * 虎豹督军（曹纯·魏·骑 主战法）：一类指挥，我军群体（有效距离内 2–3 目标，各 50%）
  * 进行攻击的伤害提高 50%，该效果每回合开始时减少 1/8。
- * 8 份衰减时点（用户口径 2026-09-17）：**第 1 回合 8/8** → 第 2 回合 7/8 → … → 第 8 回合 1/8（第 9 回合移除）。
+ * 时点（用户口径 2026-09-18）：官方口径「战斗开始后首回合」——准备阶段只释放+锁目标，
+ * 效果在**第 1 回合开始**才结算并计数：第 1 回合 8/8 → 第 2 回合 7/8 → … → 第 8 回合 1/8（第 9 回合移除）。
  * 「受攻击属性影响」成长率 = 0.25/点（用户实测：攻击 277.8 → 99%、266 → 96%）。
  *
- * 引擎新增：`damage_boost` 支持 `decayEighths`（此前仅 `damage_reduce` 有）。
+ * 引擎新增：`damage_boost` 支持 `decayEighths`（此前仅 `damage_reduce` 有）；
+ * `CommandSkill.settleOnFirstRound`（首回合开始结算，与谋议宏图共用）。
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { runBattle } from '../src/engine/combat';
@@ -111,28 +113,31 @@ describe('虎豹督军（曹纯，一类指挥：我军群体增伤 50%，每回
     expect(s.tags).toEqual(expect.arrayContaining(['damage_boost']));
   });
 
-  it('机制：准备阶段挂 8/8 增伤 73%（曹纯 40 级攻击 173）；第 1 回合保持 8/8，第 2 回合起衰减', () => {
+  it('机制：准备阶段只释放不结算；第 1 回合开始挂 8/8 增伤 73%（曹纯 40 级攻击 173）；第 2 回合起衰减', () => {
     const report = run(caoTeam(), 1, 2);
     expect(report.events.filter((e) => e.type === 'skill_cast' && e.skillName === '虎豹督军')).toHaveLength(1);
 
     const prepEnd = report.events.findIndex((e) => e.type === 'preparation_end');
-    const prep = report.events.filter(
-      (e, i): e is Inflicted => i < prepEnd && e.type === 'status_inflicted' && e.statusType === 'damage_boost'
-    );
-    // 我军群体 2–3 目标（groupCount [2,3] 各 50%）
-    expect(prep.length).toBeGreaterThanOrEqual(2);
-    expect(prep.length).toBeLessThanOrEqual(3);
-    // 攻击 173 → 50 + 0.25×(173−80) = 73.25 → 八舍九入 73%（受攻击成长率 0.25，用户实测）
-    expect(prep.every((e) => e.detail.includes('提高 73%') && e.detail.includes('剩余 8/8'))).toBe(true);
-
     const r1 = report.events.findIndex((e) => e.type === 'round_start' && e.round === 1);
     const r2 = report.events.findIndex((e) => e.type === 'round_start' && e.round === 2);
-    // 用户口径 2026-09-17：第 1 回合不衰减（8/8）
+
+    // 准备阶段：只释放（skill_cast/skill_target），不挂增伤
+    expect(report.events.some((e, i) => i < prepEnd && e.type === 'skill_cast' && e.skillName === '虎豹督军')).toBe(
+      true
+    );
     expect(
-      report.events.some(
-        (e, i) => i > r1 && i < r2 && e.type === 'status_inflicted' && e.statusType === 'damage_boost'
-      )
+      report.events.some((e, i) => i < prepEnd && e.type === 'status_inflicted' && e.statusType === 'damage_boost')
     ).toBe(false);
+
+    // 第 1 回合开始才结算：我军群体 2–3 目标（groupCount [2,3] 各 50%）、满额 8/8
+    const r1Boosts = report.events.filter(
+      (e, i): e is Inflicted =>
+        i > r1 && i < r2 && e.type === 'status_inflicted' && e.statusType === 'damage_boost'
+    );
+    expect(r1Boosts.length).toBeGreaterThanOrEqual(2);
+    expect(r1Boosts.length).toBeLessThanOrEqual(3);
+    // 攻击 173 → 50 + 0.25×(173−80) = 73.25 → 八舍九入 73%（受攻击成长率 0.25，用户实测）
+    expect(r1Boosts.every((e) => e.detail.includes('提高 73%') && e.detail.includes('剩余 8/8'))).toBe(true);
 
     const decayed = report.events.find(
       (e, i): e is Inflicted =>

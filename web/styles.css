@@ -1711,7 +1711,10 @@ main {
 .sk { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .sk-h { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .sk-n {
-  flex: 1;
+  /* 名称不撑满：让「次数 X」紧贴在**本战法名称**右侧。
+     旧写法 flex:1 会把次数右对齐到格子边缘，紧邻下一个战法的名称，
+     容易被误读成下一个战法的次数（2026-09-18：普攻的次数 8 被读成落首箭的次数）。 */
+  flex: 0 1 auto;
   min-width: 0;
   font-size: 11px;
   white-space: nowrap;

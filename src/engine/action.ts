@@ -353,13 +353,15 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
     // 普通一类指挥（无 roundRepeat/delayedOutput/delayedOutputs/onHurt）：直接执行一次（先驱/避其锋芒/共饮）
     // onHurt 战法准备阶段只登记，output 留到受击时结算（盲侯反击 / 缓师 debuff）
     // onAttrChange 战法准备阶段只登记，output 留到属性升降前结算（举贤决机）
+    // settleOnFirstRound（虎豹督军/谋议宏图）：准备阶段只释放+锁目标，output 留到第 1 回合开始时结算
     if (
       !skill.roundRepeat &&
       !skill.delayedOutput &&
       !skill.delayedOutputs &&
       !skill.onHurt &&
       !skill.onAttrChange &&
-      !skill.strategyAdjacentBonus
+      !skill.strategyAdjacentBonus &&
+      !skill.settleOnFirstRound
     ) {
       executeSkillOutputs(ctx, unit, skill, targets);
     }
@@ -2730,8 +2732,8 @@ export function tickStatuses(ctx: CombatContext, units: UnitState[]): void {
 /**
  * 回合前准备阶段（谋议宏图 / 恃强淬锋）：`round_start` 之后、单位行动之前。
  * 1. 带 `eighths` 的减伤/增伤（谋议宏图 / 虎豹督军）衰减 1/8（≤0 则移除）；**不对 fifths 做回合衰减**
- *    ⚠️ 时点（用户口径 2026-09-17）：**第 1 回合保持满额 8/8**，从第 2 回合开始每回合 −1/8（第 8 回合 1/8）。
- *    此前实现是「准备阶段 8/8 → 第 1 回合开始即 7/8」，整体早了一回合。
+ *    ⚠️ 时点（用户口径 2026-09-17 / 2026-09-18）：**第 1 回合保持满额 8/8**，从第 2 回合开始每回合 −1/8（第 8 回合 1/8）。
+ *    这两张战法为 `settleOnFirstRound`：效果本身第 1 回合才开始结算（准备阶段不挂），见第 1.5 步。
  * 2. 被动 `selfPhysBoost.onRoundStart` 给持有者叠 1 层造成攻击伤害提高
  * 3. 一类指挥 `roundStartRepeat` 对锁定目标再结算（士气叠层，同战法累加）
  */
@@ -2764,6 +2766,21 @@ export function tickRoundStartStatuses(ctx: CombatContext): void {
         statusType: s.type,
         detail: decayDetail,
       });
+    }
+  }
+
+  // 1.5 一类指挥·首回合开始结算（虎豹督军 / 谋议宏图，「战斗开始后首回合」口径）：
+  // 准备阶段只释放+锁目标，这里才把 output 挂到锁定目标上——第 1 回合 8/8、士气只 +8（不叠加准备阶段那一次）。
+  if (ctx.currentRound === 1) {
+    for (const locked of ctx.lockedCommands) {
+      const skill = locked.skill;
+      if (skill.phase !== 'prep' || !skill.settleOnFirstRound) continue;
+      const caster = castUnit(ctx, locked.casterId);
+      if (!caster) continue;
+      if (!caster.alive && !skill.retainAfterDeath) continue;
+      const targets = locked.targets.filter((t) => t.alive);
+      if (targets.length === 0) continue;
+      executeSkillOutputs(ctx, caster, skill, targets);
     }
   }
 

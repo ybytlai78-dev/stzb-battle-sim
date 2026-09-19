@@ -663,10 +663,11 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     ],
   },
   /**
-   * 谋议宏图（司马炎主战法·一类指挥）：准备阶段对我军全体挂减伤 30%（受谋略，成长率 0.175/点）与士气 +8。
-   * 减伤按 8/8 计；**第 1 回合保持 8/8**，从第 2 回合开始每回合回合前衰减 1/8（第 8 回合 1/8）。
-   * 士气每回合开始再 +8（同战法累加）。因准备阶段已释放：
-   * 第 1 回合行动时减伤剩余 8/8、士气 +8；第 2 回合减伤 7/8、士气 +16；第 3 回合减伤 6/8、士气 +24。
+   * 谋议宏图（司马炎主战法·一类指挥）：官方口径「战斗开始后**首回合**」。
+   * 准备阶段只释放并锁定我军全体（不结算）；效果在第 1 回合 `round_start` 后结算一次：
+   *  - 减伤 30%（受谋略，成长率 0.175/点）按 8/8 挂上；第 1 回合 8/8，第 2 回合起每回合回合前 −1/8（第 8 回合 1/8）。
+   *  - 士气每回合开始 +8（`roundStartRepeat`，同战法累加）：第 1 回合 +8、第 2 回合 +16、第 3 回合 +24。
+   * 基准时点（用户口径 2026-09-18）：`settleOnFirstRound`——准备阶段不计数，第 1 回合才开始计数 8/8。
    * 不同指挥战法的士气提高冲突、数值取较高。
    */
   mouyi_hongtu: {
@@ -679,13 +680,13 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     targetMode: 'all',
     targetSide: 'ally',
     retainAfterDeath: true,
+    settleOnFirstRound: true,
     tags: ['damage_reduce', 'morale_boost'],
     roundStartRepeat: {
       output: [{ kind: 'inflict_status', status: { type: 'morale_boost', amount: 8, duration: 999 } }],
     },
     output: [
       { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.3, duration: 999, strategyScaled: true, growthRate: 0.175, decayEighths: 8 } },
-      { kind: 'inflict_status', status: { type: 'morale_boost', amount: 8, duration: 999 } },
     ],
   },
   /** 皇裔流离（刘备主战法·一类指挥）：开始前准备回合阶段释放一次，使我军全体（三目标）受到伤害时有 50% 几率恢复一定兵力
@@ -769,9 +770,10 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     ],
   },
   /**
-   * 虎豹督军（曹纯主战法·一类指挥）：战斗开始后首回合，使我军群体（有效距离内 2–3 目标，各 50%）
-   * 进行攻击的伤害提高 50%，该效果每回合开始时减少 1/8。
-   * 8 份衰减时点（用户口径 2026-09-17）：**第 1 回合 8/8** → 第 2 回合 7/8 → … → 第 8 回合 1/8（同谋议宏图）。
+   * 虎豹督军（曹纯主战法·一类指挥）：官方口径「战斗开始后**首回合**」。
+   * 准备阶段只释放并锁定我军群体（有效距离内 2–3 目标，各 50%，不结算）；
+   * 效果在第 1 回合 `round_start` 后结算：进行攻击的伤害提高 50%，该效果每回合开始时减少 1/8。
+   * 8 份衰减时点（用户口径 2026-09-18）：**第 1 回合开始才挂上并计数 8/8** → 第 2 回合 7/8 → … → 第 8 回合 1/8。
    * 官方：指挥 A，有效距离 3（网易技能库 200739；来源 dateyuan/七将主战法调研.md §3.1）。
    * 「受攻击属性影响」成长率 = **0.25/点**（用户实测 2026-09-17：攻击 277.8 → 满层 99%、攻击 266 → 96%；
    * 反解区间 [0.24722, 0.25215)，0.25 = 基值/200 即 +200 攻击翻倍）。
@@ -788,6 +790,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     targetSide: 'ally',
     groupCount: [2, 3],
     retainAfterDeath: true,
+    settleOnFirstRound: true,
     tags: ['damage_boost'],
     output: [
       {

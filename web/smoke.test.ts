@@ -270,6 +270,15 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(stats.querySelector('.sk-row')!.textContent).toContain('普攻');
     expect(stats.querySelector('.sk-row')!.textContent).toContain('次数');
     expect(stats.textContent).toContain('九锡黄龙');
+    // 「次数 X」必须与所属战法名称同格（.sk-c 紧跟 .sk-n），避免右对齐后被误读成下一格的次数
+    const skCells = Array.from(stats.querySelectorAll('.sk'));
+    expect(skCells.length).toBeGreaterThan(0);
+    for (const cell of skCells) {
+      const name = cell.querySelector('.sk-n');
+      const count = cell.querySelector('.sk-c');
+      expect(name && count, '每格都应有名称与次数').toBeTruthy();
+      expect(name!.nextElementSibling).toBe(count);
+    }
     (stats.querySelector('[data-stats="hero"]') as HTMLButtonElement).click();
     expect(stats.querySelector('.sh-row')).toBeTruthy();
     expect(stats.textContent).toContain('伤害');
