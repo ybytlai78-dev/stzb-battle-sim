@@ -17,7 +17,19 @@ WORK_POSIX="$(dirname "$PWD")/.gh-pages-work"
 WORK_GIT="$(cygpath -w "$WORK_POSIX")"
 
 echo "==> 1/3 构建（base=${BASE}）"
-npx vite build --base="${BASE}/"
+# ⚠️ git-bash 坑 2（2026-09-19 线上事故）：MSYS 会把以斜杠开头的参数当 POSIX 路径转换成 Windows 路径，
+#    实测 `--base=/stzb-battle-sim/` 被改写成 `C:/Program Files/Git/stzb-battle-sim/`
+#    → dist/index.html 里资源变成 `/Program Files/Git/stzb-battle-sim/assets/...`，线上全站 404。
+#    MSYS_NO_PATHCONV / MSYS2_ARG_CONV_EXCL 关掉参数转换（不同 MSYS 版本认的变量不同，两个都设）。
+MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' npx vite build --base="${BASE}/"
+
+# 产物自检：base 不对就拒绝部署，别把坏包推上线
+if ! grep -q "src=\"${BASE}/assets/" dist/index.html; then
+  echo "✗ 构建产物自检失败：dist/index.html 未引用 ${BASE}/assets/，拒绝部署" >&2
+  grep -o 'src="[^"]*"' dist/index.html >&2 || true
+  exit 1
+fi
+echo "    ✓ 产物自检通过：$(grep -o 'src="[^"]*"' dist/index.html | head -1)"
 
 echo "==> 2/3 生成 gh-pages 分支内容"
 git worktree remove "$WORK_GIT" --force 2>/dev/null || true
