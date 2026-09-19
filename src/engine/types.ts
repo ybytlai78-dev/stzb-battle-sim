@@ -87,6 +87,13 @@ export type SkillOutput =
       /** 输出级 group 目标数（仅 targetMode:'group'，缺省沿用战法 groupCount 或 2）；`[2,3]` 50/50 随机（辕门射戟） */
       groupCount?: number | [number, number];
       /**
+       * 段级按阵营过滤**本战法整体（锁定）目标**（率尔方雅）：
+       * 只结算锁定目标中与施法者**同侧**（'ally'）/ **对侧**（'enemy'）/ **自身**（'self'）者，
+       * 不重选池、不按战法距离重新抽取。用于「同一批随机目标按阵营分派不同效果」——
+       * 先由 `BaseSkill.targetPool:'mixed'` 抽出 N 个敌我混合目标，再各段按锁定目标分阵营。
+       */
+      lockedSide?: 'ally' | 'enemy' | 'self';
+      /**
        * 首次攻击标记（辕门射戟）：伤害结算后对本次攻击的每个目标施加「造成攻击伤害降低」debuff
        * （damage_boost caused 方向，rate 为小数如 -99.99 = -9999%，配合 buffMult 10% 伤害下限
        * 强制目标造成伤害降为 min 10%），持续 duration 回合。第二次攻击目标独立选择、不受影响。
@@ -250,6 +257,12 @@ export type SkillOutput =
       groupCount?: number | [number, number];
       /** 从友军池排除施法者（「自身 + 友军单体」的友军段：奇佐鬼谋 / 黄天余音） */
       excludeSelf?: boolean;
+      /**
+       * 段级按阵营过滤**本战法整体（锁定）目标**（率尔方雅）：
+       * 只结算锁定目标中与施法者**同侧**（'ally'）/ **对侧**（'enemy'）/ **自身**（'self'）者，
+       * 不重选池、不按战法距离重新抽取（与 `targetSide` 的「重选池」语义不同）。
+       */
+      lockedSide?: 'ally' | 'enemy' | 'self';
       /**
        * status 为数组时：true = 对同一目标施加全部状态（黄天余音友军四维）；
        * 缺省仍随机选 1 个（奇佐鬼谋控制）。
@@ -493,6 +506,12 @@ interface BaseSkill {
   tags: EffectTag[];
   /** group 模式目标数（仅 targetMode:'group' 有效，缺省 2）；`[2,3]` = 50% 概率 2 目标 / 50% 概率 3 目标（辕门射戟） */
   groupCount?: number | [number, number];
+  /**
+   * 目标池覆盖：`'mixed'` = **敌我同池**（双方存活单位，**不含施法者自身**）随机抽取
+   * （率尔方雅「对自身以外的随机 3 名武将」；与暴走目标池同口径，但无需暴走状态）。
+   * 缺省按输出启发式选池（敌军 / 友军 / 暴走时混合）。
+   */
+  targetPool?: 'mixed';
   /**
    * 开场上阵单位的 troopType 集合必须 ⊆ 此列表，否则本战法整次不生效（疏数弓+骑）。
    * 读部署名单（不论 alive）；战斗中不再复查。

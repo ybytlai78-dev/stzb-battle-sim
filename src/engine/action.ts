@@ -3547,6 +3547,17 @@ function executeSkillOutputs(
     if ('troopTypes' in out && out.troopTypes && out.troopTypes.length > 0) {
       pool = pool.filter((u) => out.troopTypes!.includes(u.general.troopType));
     }
+    // 段级按阵营过滤锁定目标（率尔方雅）：不经重选池，直接取**本战法整体目标**中同侧/对侧/自身者，
+    // 使「同一批敌我混合目标」按阵营分派不同段（先混合抽 3 个 → 友军段增伤+代打、敌军段随机控制）
+    if ('lockedSide' in out && out.lockedSide) {
+      const side = out.lockedSide;
+      pool = pool.filter((u) => {
+        if (!u.alive) return false;
+        if (side === 'self') return u.general.id === caster.general.id;
+        const sameSide = u.side === caster.side;
+        return side === 'ally' ? sameSide : !sameSide;
+      });
+    }
     switch (out.kind) {
       case 'detonate_sorcery_marks': {
         // 破凰：引爆敌军全体身上由本战法施加的「受击触发妖术」剩余次数
@@ -3619,7 +3630,7 @@ function executeSkillOutputs(
                       ),
                     ];
                   })()
-                : skillTargets(ctx, rider, enemies, atkRange, resolveCombatTargetMode(out.targetMode, 'random_single'));
+                : skillTargets(ctx, rider, enemies, atkRange, resolveCombatTargetMode(out.targetMode, 'random_single'), out.groupCount);
             let riderAttacked = false;
             for (const raw of foes) {
               if (!raw.alive) continue;
@@ -4506,15 +4517,18 @@ function executeSkillWithTargets(
     // targetSide 覆盖：'enemy'=对敌施放（闭月等防御减益）、'ally'=对友施放；缺省按启发式
     const targetSide = 'targetSide' in skill ? skill.targetSide : undefined;
     const pool =
-      targetSide === 'enemy'
-        ? enemies
-        : targetSide === 'ally'
-          ? allies
-          : rampage
-            ? attackPool
-            : selfBuff
-              ? allies
-              : enemies;
+      // 敌我同池（率尔方雅「对自身以外的随机 3 名武将」）：双方存活单位、不含施法者自身
+      skill.targetPool === 'mixed'
+        ? mixedPool(ctx, unit)
+        : targetSide === 'enemy'
+          ? enemies
+          : targetSide === 'ally'
+            ? allies
+            : rampage
+              ? attackPool
+              : selfBuff
+                ? allies
+                : enemies;
     targets = skillTargets(ctx, unit, pool, skill.range, targetMode, skill.groupCount ?? 2);
   }
 

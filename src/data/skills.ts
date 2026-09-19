@@ -5278,4 +5278,71 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { skillId: 'luolei', targetMode: 'random_single', requireTargetStatus: 'rampage' },
     ],
   },
+  /**
+   * 率尔方雅（胡芳·晋步 h797·主动 A）：距离 5，发动率 40%，敌我群体（有效距离内 3 个目标）。
+   * 对自身以外的随机 3 名武将造成一次攻击伤害（伤害率 10.0%）；若目标为友军，则使其造成的所有伤害
+   * 提升 22.0%（受谋略属性影响）持续 1 回合，并使其立即对敌军群体发动一次攻击（伤害率 180.0%）或
+   * 策略攻击（伤害率 180.0%，受谋略属性影响），伤害类型由该武将自身攻击和谋略较高值决定；
+   * 若目标为敌军，则使其随机陷入犹豫、混乱、暴走、怯战状态中的一种，持续 1 回合。
+   * 官方：scripts/skill_extra.json id 200273（主动 A / 距离 5 / 敌我群体3 / 兵种弓步骑 / 发动率 40%；
+   *   1 级 10% / 增伤 11% / 90%）。
+   * 入档判断：**下架** —— 22% 增伤与 180% 策略段均「受谋略属性影响」而官方未给成长系数，
+   *   按本批口径留空 `growthRate`（按基值不缩放）+ 登记 OFFLINE_MAIN_SKILLS，待反解确认后移出。
+   * 引擎配套：
+   *   ① `BaseSkill.targetPool:'mixed'`（敌我同池随机 N，排除施法者自身）；
+   *   ② `SkillOutput.lockedSide`（段级按阵营过滤**锁定目标**，不重选池）——同一批 3 个目标里，
+   *      友军走「增伤 + 代打」、敌军走「随机控制」；
+   *   ③ 友军代打复用 `attacker:'recipient'` + `recipientDamageByHigherStat`（徽言龙凤口径：
+   *      攻击 > 谋略 → 攻击伤害，否则策略伤害），选敌复用 `targetMode:'group'`（敌军群体 2 目标）。
+   */
+  lv_er_fang_ya: {
+    id: 'lv_er_fang_ya',
+    name: '率尔方雅',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.4,
+    targetMode: 'group',
+    groupCount: 3,
+    targetPool: 'mixed',
+    tags: ['damage', 'damage_boost', 'hesitation', 'confusion', 'rampage', 'cowardice'],
+    output: [
+      // ① 对自身以外随机 3 名武将（敌我同池）各造成一次攻击伤害 10%
+      { kind: 'physical_damage', rate: 10 },
+      // ② 友军：造成的所有伤害 +22%（受谋略）1 回合（成长率未确认 → 按基值 22% 不缩放）
+      {
+        kind: 'inflict_status',
+        lockedSide: 'ally',
+        status: {
+          type: 'damage_boost',
+          rate: 0.22,
+          direction: 'caused',
+          strategyScaled: true,
+          duration: 1,
+        },
+      },
+      // ③ 友军：立即对敌军群体（有效距离内 2 目标）发动一次攻击 / 策略攻击 180%，
+      //    伤害类型由该武将自身攻击与谋略孰高决定（代打者属性、吃代打者自身增减伤）
+      {
+        kind: 'physical_damage',
+        rate: 0, // 由 recipientDamageByHigherStat 定轨（攻击 180% / 策略 180%），本字段忽略
+        attacker: 'recipient',
+        lockedSide: 'ally',
+        recipientDamageByHigherStat: { attackRate: 180, strategyRate: 180 },
+        targetMode: 'group',
+        groupCount: 2,
+      },
+      // ④ 敌军：随机陷入犹豫 / 混乱 / 暴走 / 怯战之一，持续 1 回合
+      {
+        kind: 'inflict_status',
+        lockedSide: 'enemy',
+        status: [
+          { type: 'hesitation', duration: 1 },
+          { type: 'confusion', duration: 1 },
+          { type: 'rampage', duration: 1 },
+          { type: 'cowardice', duration: 1 },
+        ],
+      },
+    ],
+  },
 };
