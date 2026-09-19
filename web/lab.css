@@ -86,6 +86,7 @@
   padding: 8px 10px;
   color: var(--text);
   overflow-y: auto;
+  overflow-x: hidden; /* 只允许纵向滚动：overflow-y:auto 会连带把 overflow-x 变成 auto，横向溢出时出现横条 */
   min-height: 0;
 }
 .lab-guard h2 {
@@ -94,11 +95,14 @@
   color: var(--gold);
   letter-spacing: 2px;
 }
-/* 两列字段网格：攻击/防御、谋略/速度 各一行；兵力 .g-row-full 独占一行 */
+/* 两列字段网格：攻击/防御、谋略/速度 各一行；兵力 .g-row-full 独占一行。
+   列宽用 auto + space-between（内容自适应）——之前用 1fr 1fr，输入框 flex:1 撑满半列，
+   会把右侧「防御/速度」挤出面板（用户 2026-09-19 反馈「输入框太长」）。 */
 .g-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0 10px;
+  grid-template-columns: auto auto;
+  justify-content: space-between;
+  gap: 4px 12px;
 }
 .g-row {
   display: flex;
@@ -106,20 +110,27 @@
   gap: 6px;
   margin: 5px 0;
   font-size: 12px;
+  min-width: 0;
 }
 .g-row label {
   flex: 0 0 32px;
   color: var(--text-dim);
 }
+/* 短输入框：三到四位数字够用，且保证 label + input 一定落在面板宽度内（不产生横向溢出/滚动条） */
 .g-row input[type="number"] {
-  flex: 1;
-  min-width: 0;
+  flex: 0 0 auto;
+  width: 70px;
+  max-width: 100%;
   background: #17171a;
   border: 1px solid #3a3a40;
   border-radius: 4px;
   color: var(--text);
   padding: 3px 6px;
   font-size: 12.5px;
+}
+/* 兵力独占整行：也不许拉满（原实现会拉成整条长输入框） */
+.g-row-full input[type="number"] {
+  width: 110px;
 }
 .g-row input:focus {
   outline: none;
