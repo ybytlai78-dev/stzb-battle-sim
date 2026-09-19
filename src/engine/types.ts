@@ -601,6 +601,15 @@ export type CreateStatus =
   | { type: 'evade_chance'; rate: number; charges: number; duration: number }
   | { type: 'combo'; duration: number }
   /**
+   * 伤害分摊（言出必克 / 雅虑适时）：**携带者**替同侧友军承担一部分受到的伤害——同侧任一符合条件者
+   * 受伤时，携带者按 `rate` 立即分担（自身扣兵、受击者少扣），`charges` 为剩余分摊次数（王朗「分摊一次」；
+   * 缺省无限）。
+   * `scope:'heart_sync'` = 只对**同为该状态携带者**的其它友军生效（雅虑适时 同心）；
+   * 缺省 `'all_allies'` = 同侧全体友军（言出必克）。
+   * `damageKind` 限定只分摊该类型伤害（王朗 策略）；缺省全部。
+   */
+  | { type: 'damage_share'; rate: number; duration: number; damageKind?: 'physical' | 'strategy'; charges?: number; scope?: 'heart_sync' | 'all_allies' }
+  /**
    * 策略伤害浮动（敛微穷极，刘徽）：携带者造成策略伤害时，伤害率 × 当前浮动系数——系数在
    * `[low, high]`（百分点）内均匀随机，区间随回合线性收敛到 `mid`（`convergeRounds` 回合起恒为 mid）；
    * 上限/中点「受谋略属性影响」→ `strategyScaled + growthRate` 给定时按施法者谋略缩放（未确认 → 基值）。
@@ -1662,6 +1671,8 @@ export type StatusType =
   | 'avoid_charge'
   /** 策略伤害浮动（敛微穷极，刘徽）：携带者策略伤害率在收敛区间内随机 */
   | 'strategy_flux'
+  /** 伤害分摊（言出必克 / 雅虑适时）：携带者替同侧友军分担伤害 */
+  | 'damage_share'
   /** 受到恢复效果提升（勇挚刚毅）：rate 为恢复量加成比例，recoverTroops 统一收口 */
   | 'heal_boost'
   | 'trigger_boost'
@@ -1722,6 +1733,8 @@ export type Status =
   /** 概率规避（列营守险）：charges = 剩余机会；每次受击消耗 1，命中则免疫该次伤害，用尽即移除 */
   | { type: 'evade_chance'; rate: number; charges: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   | { type: 'combo'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  /** 伤害分摊（言出必克 / 雅虑适时）：携带者替同侧友军按 rate 分担（charges 用完移除，缺省无限） */
+  | { type: 'damage_share'; rate: number; damageKind?: 'physical' | 'strategy'; charges?: number; scope?: 'heart_sync' | 'all_allies'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   /** 避锐（疲兵沮意）：吸收层数（每回合 +2）；受击前消耗 1 层令该次伤害降低 perStackRate，不按回合递减 */
   | { type: 'avoid_charge'; stacks: number; perStackRate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   /**
@@ -2052,6 +2065,8 @@ export type BattleEvent =
   | { type: 'command_immune_blocked'; unitId: string; skillId: string; statusType?: StatusType }
   /** 抵御负面效果（审时定计，XP程昱）：该次施加被取消 */
   | { type: 'status_resisted'; unitId: string; skillId: string; statusType: StatusType }
+  /** 伤害分摊（言出必克 / 雅虑适时）：unitId = 代为承担者，targetId = 原受击者 */
+  | { type: 'share_damage'; unitId: string; targetId: string; skillId: string; amount: number }
   | { type: 'cowardice_immune_blocked'; unitId: string; statusType: StatusType }
   | {
       type: 'split_damage';

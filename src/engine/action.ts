@@ -488,6 +488,8 @@ export interface CombatContext {
   resolvingSpecialDebuff?: boolean;
   /** 「敌军每回合首次受到持续伤害」去重（衔命建功）：key `${回合}:${skillId}:${targetId}` */
   dotReceivedKeys?: Set<string>;
+  /** 伤害分摊重入保护（言出必克 / 雅虑适时）：分摊出去的伤害不再被二次分摊 */
+  resolvingDamageShare?: boolean;
 }
 
 /** 持续型急救战法级计数器（皇裔流离/金匮要略）：一个战法一个实例，全队共享。
@@ -2263,6 +2265,8 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
 
   // 2. 二类指挥判定（奇兵拒北，行动时）
   triggerRoundCommandOnAct(ctx, unit);
+  // 2.1 一类指挥的「行动时分段」钩子（言出必克：一类减伤 + 每回合行动时判定）：与二类指挥共用实现
+  triggerOnActSegmentsForPrepCommands(ctx, unit);
 
   // 2.5 休整：每回合行动时按挂上时冻结值恢复（指挥预备判定之后、DoT 之前）
   tickRests(ctx, unit);
@@ -2588,6 +2592,12 @@ function inflictStatusCore(
 
   // 策略伤害浮动（敛微穷极）：整场光环标记，不参与冲突判定；同战法重复施加只刷新
   if (type === 'strategy_flux') {
+    pushStatus(ctx, target, create, sourceSkillType, sourceSkillId, casterId);
+    return;
+  }
+
+  // 伤害分摊（言出必克 / 雅虑适时）：独立标记，不参与冲突判定；同战法重复施加叠加分摊次数
+  if (type === 'damage_share') {
     pushStatus(ctx, target, create, sourceSkillType, sourceSkillId, casterId);
     return;
   }
@@ -3286,6 +3296,47 @@ function pushStatus(
       statusType: type,
       detail: `策略伤害浮动 ${create.low}%~${create.high}%（${create.convergeRounds} 回合内收敛至 ${create.mid}%）`,
     });
+    return;
+  }
+  if (type === 'damage_share') {
+    // 伤害分摊（言出必克 / 雅虑适时）：同战法重复施加 = 分摊次数累加（每次激活 +charges）
+    const existing = target.statuses.find(
+      (s): s is Extract<Status, { type: 'damage_share' }> => s.type === 'damage_share' && s.sourceSkillId === sourceSkillId
+    );
+    if (existing) {
+      if (create.charges != null || existing.charges != null) {
+        existing.charges = (existing.charges ?? 0) + (create.charges ?? 0);
+      }
+      existing.rate = create.rate;
+      existing.damageKind = create.damageKind;
+      existing.scope = create.scope;
+      existing.remaining = Math.max(existing.remaining, remaining);
+      ctx.events.push({
+        type: 'status_inflicted',
+        unitId: target.general.id,
+        statusType: type,
+        detail: `分摊 ${Math.round(create.rate * 100)}%（剩余 ${existing.charges ?? '∞'} 次）`,
+      });
+    } else {
+      target.statuses.push({
+        type: 'damage_share',
+        rate: create.rate,
+        damageKind: create.damageKind,
+        charges: create.charges,
+        scope: create.scope,
+        remaining,
+        appliedRound,
+        sourceSkillType,
+        sourceSkillId,
+        sourceUnitId: casterId,
+      });
+      ctx.events.push({
+        type: 'status_inflicted',
+        unitId: target.general.id,
+        statusType: type,
+        detail: `分摊 ${Math.round(create.rate * 100)}%${create.charges != null ? `（${create.charges} 次）` : ''}`,
+      });
+    }
     return;
   }
   if (type === 'evade_chance') {
@@ -4015,6 +4066,7 @@ export function isBeneficialStatus(s: Status): boolean {
     case 'ignore_evasion':
     case 'avoid_charge':
     case 'strategy_flux':
+    case 'damage_share':
     case 'control_spread':
     case 'jump_prep':
       return true;
@@ -4365,6 +4417,7 @@ function statusName(type: StatusType): string {
     case 'pending_stacks': return '叠层待发';
     case 'avoid_charge': return '避锐';
     case 'strategy_flux': return '策略伤害浮动';
+    case 'damage_share': return '伤害分摊';
     case 'ignore_evasion': return '无视规避';
     case 'control_spread': return '控制效果 +1 目标';
     case 'range_buff': return '攻击距离';
@@ -4680,6 +4733,20 @@ function runCopyRandomActive(ctx: CombatContext, caster: UnitState, skill: Skill
 
 /** 【扬砂】额外普攻单次行动上限（安全阀：层数可在额外普攻中继续累计） */
 const YANGSHA_MAX_EXTRA_ATTACKS = 20;
+
+/**
+ * 一类指挥的「行动时分段」入口（言出必克「一类减伤 + 每回合行动时判定」）：
+ * 与二类指挥共用 `executeOnActSegments`（窗口 / 几率 / once 语义一致），但只处理 `phase:'prep'` 的指挥，
+ * 且不经二类指挥的锁定与动态发动率逻辑。
+ */
+function triggerOnActSegmentsForPrepCommands(ctx: CombatContext, unit: UnitState): void {
+  if (!unit.alive) return;
+  for (const id of unit.general.commandSkillIds) {
+    const skill = resolveSkill(ctx, id);
+    if (skill?.type !== 'command' || skill.phase !== 'prep' || !skill.onActSegments) continue;
+    executeOnActSegments(ctx, unit, skill);
+  }
+}
 
 /**
  * 二类指挥·行动时分段（辞后定朝）：携带者行动时（主段之后）按窗口逐段执行。
@@ -7874,7 +7941,53 @@ export function applyDamage(
       triggerAvoidConsume(ctx, avoid);
     }
   }
-  const incoming = Math.round(Math.max(0, damage) * (1 - reduceRate));
+  let incoming = Math.round(Math.max(0, damage) * (1 - reduceRate));
+  // 伤害分摊（言出必克「为友军全体分摊一次 50% 受到的策略伤害」/ 雅虑适时「同心…分摊 15%」）：
+  // 同侧携带 damage_share 的友军按 rate 立即替受击者承担（自身扣兵、受击者少扣）；分摊出去的伤害
+  // 不再被二次分摊（resolvingDamageShare 防递归）。「分摊」= 受击主体仍承担剩余部分（待拍板项按字面解读）。
+  if (!ctx.resolvingDamageShare && !ctx.sealResolving) {
+    const team = target.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+    const sharers = team.filter((u) => {
+      if (!u.alive || u === target) return false;
+      return u.statuses.some(
+        (s): s is Extract<Status, { type: 'damage_share' }> =>
+          s.type === 'damage_share' && (s.damageKind == null || s.damageKind === (damageType ?? 'physical'))
+      );
+    });
+    if (sharers.length > 0) {
+      ctx.resolvingDamageShare = true;
+      try {
+        for (const sharer of sharers) {
+          if (incoming <= 0) break;
+          const st = sharer.statuses.find(
+            (s): s is Extract<Status, { type: 'damage_share' }> =>
+              s.type === 'damage_share' && (s.damageKind == null || s.damageKind === (damageType ?? 'physical'))
+          );
+          if (!st || (st.charges != null && st.charges <= 0)) continue;
+          const transfer = Math.min(sharer.troops, Math.round(incoming * st.rate));
+          if (transfer <= 0) continue;
+          if (st.charges != null) {
+            st.charges -= 1;
+            if (st.charges <= 0) {
+              sharer.statuses = sharer.statuses.filter((x) => x !== st);
+              ctx.events.push({ type: 'status_expired', unitId: sharer.general.id, statusType: 'damage_share' });
+            }
+          }
+          ctx.events.push({
+            type: 'share_damage',
+            unitId: sharer.general.id,
+            targetId: target.general.id,
+            skillId: st.sourceSkillId,
+            amount: transfer,
+          });
+          applyDamage(ctx, sharer, transfer, undefined, damageType, 'skill');
+          incoming -= transfer;
+        }
+      } finally {
+        ctx.resolvingDamageShare = false;
+      }
+    }
+  }
   let actual = Math.min(incoming, target.troops);
   // 玉玺（僭号天子）：我方受到的伤害按比例转入玉玺账本，本回合不从受击者扣兵（回合开始结转给持有者）。
   // 结转结算自身置 ctx.sealResolving → 不再被玉玺转移（防自循环）。

@@ -8920,4 +8920,74 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     // ② 第 3 回合起：敌军陷入持续伤害时立即额外引发一次该伤害
     extraTickOnDotApply: { startRound: 3 },
   },
+
+  /**
+   * 言出必克（XP王朗·魏弓 h652 主战法）：指挥 B（一类指挥 prep；另每回合行动时判定），距离 2，
+   * 我军全体，发动率 --。
+   * 满级「正式回合开始后，使我军全体受到的策略攻击伤害降低 40.0%（受谋略属性影响），每次受到策略攻击
+   *   伤害后，减伤效果降低 1/8。同时，每回合行动时，有 60.0% 的概率为友军全体分摊一次 50% 受到的策略伤害」；
+   * 1 级：减伤 20.0% / 30% 概率（分摊率与 1/8 衰减同）。
+   * 官方：scripts/skill_extra.json id 200934（指挥 / 距离 2 / 我军全体 / 兵种弓；effect 受到策略攻击伤害降低;
+   *   伤害分摊）。来源 https://stzb.163.com/m/skilllist/200934.html
+   *
+   * 口径（策略 A，2026-09-20；推定处已标注）：
+   *   ① 「受到的策略攻击伤害降低 40%，每次受到策略攻击伤害后降低 1/8」= `damage_reduce`
+   *      （damageType:'strategy' + strategyScaled，成长率未确认 → 基值）+ 既有 `decayFifths: 8`
+   *      （按**初始值线性** −1/8：40→35→30→25→20→15→10→5→0；官方未写基准，同疮痍累身口径，**推定**）；
+   *   ② 「每回合行动时 60% 为友军全体分摊一次 50% 受到的策略伤害」= `onActSegments`（阴丽华先例：
+   *      行动时分段 + 几率）→ 命中则给自己挂 `damage_share`（rate 0.5 / damageKind:'strategy' /
+   *      `charges: 1` = 「分摊一次」/ scope 缺省 = 同侧全体）；同战法重复激活 = 分摊次数累加（**推定**）；
+   *   ③ 新引擎件 `damage_share`（分摊）：同侧任一友军受到匹配伤害时，携带者按 rate 立即承担
+   *      （自身扣兵、受击者少扣，推 `share_damage` 事件）；「分摊后受击主体仍承担剩余 50%」按
+   *      官方字面「分摊」解读（待拍板项的**推定**）；分摊出去的伤害不再被二次分摊（防递归）；
+   *      承担部分按**结算后数值**直接扣兵（不重复走伤害公式，故承担者自身减伤不再二次生效，**推定**）；
+   *   ④ 「每回合行动时」= 一类指挥的 `onActSegments`（新增 `triggerOnActSegmentsForPrepCommands`：
+   *      prep 阶段指挥同样在每个回合自身行动时执行行动时分段）；
+   *   ⑤ 减伤「受谋略属性影响」成长系数未给 → 基值不缩放 → 登记 OFFLINE_MAIN_SKILLS（XP王朗下架）。
+   */
+  yanchu_bike: {
+    id: 'yanchu_bike',
+    name: '言出必克',
+    type: 'command',
+    phase: 'prep',
+    range: 2,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['damage_reduce'],
+    output: [],
+    // ① 正式回合开始后：我军全体策略减伤 40%（受谋略未确认 → 基值），每次受策略伤害 −1/8
+    initialOutput: [
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'damage_reduce',
+          rate: 0.4,
+          duration: 999,
+          strategyScaled: true,
+          damageType: 'strategy',
+          decayFifths: 8,
+        },
+      },
+    ],
+    // ② 每回合行动时 60%：为自己挂「分摊一次 50% 策略伤害」（同侧全体友军受益）
+    onActSegments: [
+      {
+        rate: 0.6,
+        output: [
+          {
+            kind: 'inflict_status',
+            target: 'self',
+            status: {
+              type: 'damage_share',
+              rate: 0.5,
+              duration: 999,
+              damageKind: 'strategy',
+              charges: 1,
+            },
+          },
+        ],
+      },
+    ],
+  },
 };

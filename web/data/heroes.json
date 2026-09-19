@@ -2765,7 +2765,7 @@
     "growthDefense": 1.29,
     "growthStrategy": 2.07,
     "growthSpeed": 1.05,
-    "mainSkillId": "",
+    "mainSkillId": "yanchu_bike",
     "mainSkillName": "言出必克",
     "skillDesc": "正式回合开始后，使我军全体受到的策略攻击伤害降低40.0%（受谋略属性影响），每次受到策略攻击伤害后，减伤效果降低1/8。同时，每回合行动时，有60.0%的概率为友军全体分摊一次50%受到的策略伤害"
   },
