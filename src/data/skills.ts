@@ -5119,6 +5119,168 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     },
   },
 
+  // ─── 拆解通用 B+ 第七阶段：移除敌军有益（4）+ 援护（3）───
+
+  /**
+   * 看破（D 主动·距离 3·发动 30%–40%·敌军单体）：
+   * 移除敌军单体的**有益效果**，并使其防御属性下降 10，持续 1 回合。
+   * 官方：scripts/skill_extra.json id 200218（1 级 5%）；发动率区间按仓库口径取**上界 40%**。
+   * 引擎配套：**新增输出 `remove_buffs`**——移除**有益**状态（`isBeneficialStatus` 判定），
+   *   且按用户 2026-09-19 口径做**来源优先级过滤**（被动 > 指挥 > 主动 = 追击）：
+   *   看破是主动，只能清「主动/追击」带来的有益效果（大赏三军等指挥光环、被动增益清不掉）。
+   * 防御 −10 无「受属性影响」→ 固定；「持续 1 回合」按行动中施加口径 duration 2。
+   */
+  kanpo: {
+    id: 'kanpo',
+    name: '看破',
+    type: 'active',
+    prepare: false,
+    range: 3,
+    triggerRate: 0.4,
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['debuff_defense'],
+    output: [
+      { kind: 'remove_buffs' },
+      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -10, duration: 2 } },
+    ],
+  },
+  /**
+   * 索敌（D 主动·距离 3·35%·敌军群体 2 目标）：
+   * 移除敌军群体的有益效果，并对其发动一次攻击（伤害率 75%）。
+   * 官方 id 200735（1 级 37.5%）。
+   * 官方文本顺序「先移除、后攻击」→ output 顺序一致（移除后本次攻击不再吃到目标增益）。
+   */
+  suodi: {
+    id: 'suodi',
+    name: '索敌',
+    type: 'active',
+    prepare: false,
+    range: 3,
+    triggerRate: 0.35,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage'],
+    output: [{ kind: 'remove_buffs' }, { kind: 'physical_damage', rate: 75 }],
+  },
+  /**
+   * 驱逐（D 追击·40%·攻击目标）：
+   * 普通攻击后，对攻击目标再次发动策略攻击（伤害率 110%，受谋略，成长率未确认 → 留空按基值），
+   * 并移除其有益效果。
+   * 官方 id 200131（1 级 55%）；官方文本顺序「先伤害、后移除」→ output 顺序一致。
+   */
+  quzhu: {
+    id: 'quzhu',
+    name: '驱逐',
+    type: 'pursuit',
+    range: 0,
+    triggerRate: 0.4,
+    tags: ['damage'],
+    output: [
+      { kind: 'strategy_damage', rate: 110, strategyScaled: true },
+      { kind: 'remove_buffs' },
+    ],
+  },
+  /**
+   * 火积（B 追击·45%·攻击目标·弓）：
+   * 普通攻击后，使攻击目标**立即受到燃烧伤害**（伤害率 192%，受谋略，成长率未确认 → 留空按基值），
+   * 并移除其有益效果。
+   * 官方 id 200722（1 级 96%）。
+   * 用户 2026-09-19 确认：「立即受到」= **当场结算、不挂状态**，但走**燃烧（DoT）公式**
+   *   （新增 `strategy_damage.dotFormula`：兵力基础 ×1/3、谋略基础 ×0.25，并以 `dotType:'burning'`
+   *   参与「被施加的燃烧伤害提升」等过滤）。
+   */
+  huoji: {
+    id: 'huoji',
+    name: '火积',
+    type: 'pursuit',
+    range: 0,
+    triggerRate: 0.45,
+    tags: ['damage', 'burning'],
+    output: [
+      { kind: 'strategy_damage', rate: 192, strategyScaled: true, dotFormula: true },
+      { kind: 'remove_buffs' },
+    ],
+  },
+  /**
+   * 援护（D 主动·距离 2·发动 30%–45%·友军单体）：
+   * 援护友军单体，为其抵挡普通攻击，持续 2 回合。
+   * 官方 id 200238；发动率区间按仓库口径取**上界 45%**。
+   * 引擎配套：**新增输出 `grant_cover`** —— `cover` 挂在施法者自身（保护者），
+   *   `protectId` 记录被保护的友军（战法有效距离内随机 1 名、不含自身）；
+   *   `findCoverGuard` 据此只代受该友军的普攻（「援护友军全体」仍不填 protectId，走既有口径）。
+   * 「持续 2 回合」按行动中施加口径 duration 3（同反击）。
+   */
+  yuanhu: {
+    id: 'yuanhu',
+    name: '援护',
+    type: 'active',
+    prepare: false,
+    range: 2,
+    triggerRate: 0.45,
+    targetMode: 'self',
+    tags: ['cover'],
+    output: [{ kind: 'grant_cover', duration: 3 }],
+  },
+  /**
+   * 移花接木（C 主动·距离 2·发动 30%–40%·目标自己）：
+   * 移除自身有害效果，防御属性提升 50，并援护友军全体（为其抵挡普通攻击），持续 2 回合。
+   * 官方 id 200239（1 级 防御 +25）；发动率区间按仓库口径取**上界 40%**。
+   * 引擎配套：**无需新机制** —— `remove_debuffs` + `defense_buff` + 既有 `cover`（挂自身 = 保护者，
+   *   不填 protectId = 援护友军全体）。
+   * 「持续 2 回合」按行动中施加口径 duration 3（防御提升同）。
+   */
+  yihuajiemu: {
+    id: 'yihuajiemu',
+    name: '移花接木',
+    type: 'active',
+    prepare: false,
+    range: 2,
+    triggerRate: 0.4,
+    targetMode: 'self',
+    tags: ['immunity', 'defense_buff', 'cover'],
+    output: [
+      { kind: 'remove_debuffs', target: 'self' },
+      { kind: 'inflict_status', target: 'self', status: { type: 'defense_buff', amount: 50, duration: 3 } },
+      { kind: 'inflict_status', target: 'self', status: { type: 'cover', duration: 3 } },
+    ],
+  },
+  /**
+   * 一夫当关（A 一类指挥·距离 3·目标自己）：
+   * 战斗开始后前 2 回合，援护友军全体，使自身受到**攻击**伤害降低 50%（受防御属性影响）；
+   * **仅对自身处于前锋位置时生效**。
+   * 官方 id 200674（1 级 25%）。
+   * 引擎配套：**新增 `damage_reduce.defenseScaled`**（受防御缩放；成长率未确认 → 留空按基值 0.5）；
+   *   援护友军全体复用既有 `cover` 口径（挂自身）；站位条件走 skill 级 `casterPositions:['前锋']`。
+   * 「前 2 回合」= 准备阶段施加 duration 2（appliedRound 0，回合末递减）。
+   */
+  yifudangguan: {
+    id: 'yifudangguan',
+    name: '一夫当关',
+    type: 'command',
+    phase: 'prep',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'self',
+    casterPositions: ['前锋'],
+    tags: ['cover', 'damage_reduce'],
+    output: [
+      { kind: 'inflict_status', target: 'self', status: { type: 'cover', duration: 2 } },
+      {
+        kind: 'inflict_status',
+        target: 'self',
+        status: {
+          type: 'damage_reduce',
+          rate: 0.5,
+          duration: 2,
+          defenseScaled: true,
+          damageType: 'physical',
+        },
+      },
+    ],
+  },
+
   // ─── 批量31：下架武将清单 §1.2「补 1 个机制」逐个实现 ───
 
   /**

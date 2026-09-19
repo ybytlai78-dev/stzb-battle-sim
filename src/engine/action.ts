@@ -2836,7 +2836,15 @@ function pushStatus(
     return;
   }
   // insight / siege / cover / 控制类：通用简化字段
-  target.statuses.push({ type, remaining, appliedRound, sourceSkillType, sourceSkillId } as Status);
+  // （cover 额外带 protectId —— 援护单体「只为其抵挡普通攻击」；缺省 = 援护友军全体）
+  target.statuses.push({
+    type,
+    remaining,
+    appliedRound,
+    sourceSkillType,
+    sourceSkillId,
+    ...(create.type === 'cover' && create.protectId ? { protectId: create.protectId } : {}),
+  } as Status);
   ctx.events.push({
     type: 'status_inflicted',
     unitId: target.general.id,
@@ -3001,6 +3009,57 @@ export function tickRoundStartStatuses(ctx: CombatContext): void {
 
 /** 有害状态类型（removeDebuffs 全清 / 垒实迎击「只移除负面」共用同一口径） */
 const DEBUFF_TYPES: StatusType[] = ['confusion', 'rampage', 'cowardice', 'hesitation', 'siege', 'sorcery', 'burning', 'panic', 'curse', 'ignite', 'taunt'];
+
+/** 移除有益效果的来源优先级（用户 2026-09-19 口径）：被动 > 指挥 > 主动 = 追击 */
+const SKILL_TYPE_PRIORITY: Record<SkillType, number> = { passive: 2, command: 1, active: 0, pursuit: 0 };
+
+/**
+ * 是否为**有益**状态（看破 / 索敌 / 驱逐 / 火积「移除其有益效果」的判定）：
+ * - 属性类（攻击/防御/谋略/速度）与士气：按 `amount` 正负（>0 有益）；
+ * - 增减伤 `damage_boost`：`caused` 正值 = 增伤、`taken` 负值 = 减伤（有益），反之为有害；
+ * - 减伤 `damage_reduce`：`rate > 0` 有益；
+ * - 白名单：发动率提升 / 洞察 / 免疫怯战 / 规避（层数式与概率式）/ 连击 / 分兵 / 休整 / 急救 /
+ *   援护 / 无视防御 / 攻击距离 / 先手 / 反击 / 受击标记 / 叠层待发 / 无视规避 / 控制扩散 / 准备跳过。
+ * 控制 / DoT / 围困 / 挑衅等有害或中性一律 false。
+ */
+export function isBeneficialStatus(s: Status): boolean {
+  switch (s.type) {
+    case 'attack_buff':
+    case 'defense_buff':
+    case 'strategy_buff':
+    case 'speed_buff':
+    case 'morale_boost':
+      return 'amount' in s && s.amount > 0;
+    case 'damage_boost': {
+      const dir = s.direction ?? 'taken';
+      return dir === 'caused' ? s.rate > 0 : s.rate < 0;
+    }
+    case 'damage_reduce':
+      return s.rate > 0;
+    case 'trigger_boost':
+    case 'insight':
+    case 'cowardice_immune':
+    case 'evasion':
+    case 'evade_chance':
+    case 'combo':
+    case 'split':
+    case 'first_aid':
+    case 'rest':
+    case 'cover':
+    case 'ignore_def':
+    case 'range_buff':
+    case 'priority':
+    case 'counter':
+    case 'retaliate':
+    case 'pending_stacks':
+    case 'ignore_evasion':
+    case 'control_spread':
+    case 'jump_prep':
+      return true;
+    default:
+      return false;
+  }
+}
 
 /** 移除所有有害状态（孙权九锡黄龙） */
 export function removeDebuffs(ctx: CombatContext, targets: UnitState[]): void {
@@ -3963,7 +4022,7 @@ function executeSkillOutputs(
     // 单输出目标池：target:'self' → 施法者；targetMode 覆盖 → 按战法距离重新选敌/友军目标
     const enemies = caster.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
     const allies = caster.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
-    const outTarget = out.kind === 'positional_physical_damage' || out.kind === 'morale_branch' || out.kind === 'detonate_sorcery_marks' ? undefined : out.target;
+    const outTarget = out.kind === 'positional_physical_damage' || out.kind === 'morale_branch' || out.kind === 'detonate_sorcery_marks' || out.kind === 'grant_cover' ? undefined : out.target;
     const outMode =
       out.kind === 'physical_damage' || out.kind === 'strategy_damage' ? out.targetMode : undefined;
     const outIgnoreRange =
@@ -4414,7 +4473,13 @@ function executeSkillOutputs(
           if (out.strategyScaled && out.growthRate !== undefined) {
             rate = roundRate(scaledValue(rate, out.growthRate, effStrategy));
           }
-          const hit: DamageHitContext = { damageSource: 'skill', damageType: 'strategy', skillType: skill.type };
+          const hit: DamageHitContext = {
+            damageSource: 'skill',
+            damageType: 'strategy',
+            skillType: skill.type,
+            // 火积「立即受到燃烧伤害」：按燃烧公式结算，并以 dotType 参与「受到燃烧伤害提升」等过滤
+            ...(out.dotFormula ? { dotType: 'burning' as DotType } : {}),
+          };
           const { causedMult, takenMult } = damageBoosts(ctx, stratSrc, t, hit);
           const reduce = sumReduce(t, hit) + troopCounterReduceOf(stratSrc, t);
           const { damage, breakdown } = calcDamage(
@@ -4427,6 +4492,7 @@ function executeSkillOutputs(
               targetDefense: t.general.defense,
               targetStrategy: t.general.strategy,
               mult: buffMult(causedMult, takenMult, reduce),
+              isDot: out.dotFormula === true,
             },
             ctx.rng
           );
@@ -4612,8 +4678,8 @@ function executeSkillOutputs(
                 100) *
               sign;
             inflictStatus(ctx, t, { ...create, rate: scaled }, skill.type, skill.id, caster.general.id);
-          } else if (create.type === 'damage_boost' && create.defenseScaled && create.growthRate !== undefined) {
-            /** 增减伤受防御影响（当敌制决 +8%，成长 0.026/点）：公式同受谋略，属性换生效防御 */
+          } else if ((create.type === 'damage_boost' || create.type === 'damage_reduce') && create.defenseScaled && create.growthRate !== undefined) {
+            /** 增减伤/减伤受防御影响（当敌制决 +8% / 一夫当关 −50%）：公式同受谋略，属性换生效防御 */
             const sign = Math.sign(create.rate) || 1;
             const scaled =
               (roundRate(scaledValue(Math.abs(create.rate) * 100, create.growthRate, effectiveStat(caster, 'defense'))) /
@@ -4670,6 +4736,50 @@ function executeSkillOutputs(
           if (extra) inflictStatus(ctx, extra, spreadCreate, skill.type, skill.id, caster.general.id);
           consumeControlSpread(ctx, caster, controlSpread);
         }
+        break;
+      }
+      case 'remove_buffs': {
+        // 看破 / 索敌 / 驱逐 / 火积「移除其有益效果」：
+        // ① 只移除**有益**状态（isBeneficialStatus——不会误删我们打在敌人身上的减益）；
+        // ② 来源优先级过滤（用户 2026-09-19 口径：被动 > 指挥 > 主动 = 追击）——
+        //    施法战法只能移除「来源战法类型优先级 ≤ 自身」的有益状态。
+        //    例：火积（追击）无法移除大赏三军（指挥）的增伤，只能清主动/追击带来的规避、属性提升等。
+        const selfPrio = SKILL_TYPE_PRIORITY[skill.type];
+        const isRemovable = (s: Status) =>
+          isBeneficialStatus(s) && SKILL_TYPE_PRIORITY[s.sourceSkillType] <= selfPrio;
+        for (const t of pool) {
+          if (!t.alive) continue;
+          const removed = t.statuses.filter(isRemovable);
+          if (removed.length === 0) continue;
+          for (const s of removed) {
+            ctx.events.push({ type: 'status_expired', unitId: t.general.id, statusType: s.type });
+          }
+          t.statuses = t.statuses.filter((s) => !isRemovable(s));
+          ctx.events.push({
+            type: 'status_changed',
+            unitId: t.general.id,
+            statusType: removed[0].type,
+            detail: `移除 ${removed.length} 个有益效果`,
+          });
+        }
+        break;
+      }
+      case 'grant_cover': {
+        // 援护（D 主动「援护友军单体，为其抵挡普通攻击」）：
+        // cover 挂施法者自身（保护者），protectId = 战法有效距离内随机 1 名友军（不含自身）
+        const candidates = allies.filter((u) => u.alive && u.general.id !== caster.general.id);
+        const chosen =
+          candidates.length > 0
+            ? skillTargets(ctx, caster, candidates, skill.range, 'random_single')[0]
+            : undefined;
+        if (!chosen) break;
+        inflictStatus(
+          ctx,
+          caster,
+          { type: 'cover', duration: out.duration, protectId: chosen.general.id },
+          skill.type,
+          skill.id
+        );
         break;
       }
       case 'remove_debuffs':
@@ -5233,6 +5343,7 @@ function executeSkillWithTargets(
         o.kind !== 'random_pick' &&
         o.kind !== 'chance_group' &&
         o.kind !== 'detonate_sorcery_marks' &&
+        o.kind !== 'grant_cover' &&
         o.target !== 'self' &&
         // 单输出已覆盖目标池的 heal/inflict 不决定战法整体目标（利兵谋胜：伤敌 + 治友）
         !('targetSide' in o && o.targetSide) &&
@@ -6008,7 +6119,11 @@ function findCoverGuard(ctx: CombatContext, victim: UnitState): UnitState | unde
     (u) =>
       u.alive &&
       u.general.id !== victim.general.id &&
-      u.statuses.some((s) => s.type === 'cover')
+      u.statuses.some(
+        // cover 挂在**保护者**身上；protectId 缺省 = 援护友军全体（任何友军都代受），
+        // 有值时只代受该友军的普攻（援护单体）
+        (s) => s.type === 'cover' && (!s.protectId || s.protectId === victim.general.id)
+      )
   );
 }
 

@@ -151,9 +151,9 @@
     "targetDesc": "自己",
     "effectDesc": "战斗开始后前2回合，援护友军全体，使自身受到攻击时的伤害降低70.0%，仅对自身处于前锋位置时生效",
     "sources": "【蜀·黄忠·步】【群·兀突骨·步】",
-    "status": "skipped",
-    "missingMechanics": "援护全体+前锋条件",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "buff-remove+cover p7"
   },
   {
     "name": "久战熟谋",
@@ -1503,9 +1503,9 @@
     "targetDesc": "自己",
     "effectDesc": "移除自身有害效果，防御属性提升50.0，并援护友军全体，为其抵挡普通攻击，持续2回合",
     "sources": "【群·徐荣·步】【蜀·关羽·步】",
-    "status": "skipped",
-    "missingMechanics": "援护友军全体",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "buff-remove+cover p7"
   },
   {
     "name": "窃兵",
@@ -1841,9 +1841,9 @@
     "targetDesc": "友军单体",
     "effectDesc": "援护友军单体，为其抵挡普通攻击，持续2回合",
     "sources": "【蜀·雷铜·步】",
-    "status": "skipped",
-    "missingMechanics": "援护友军单体",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "buff-remove+cover p7"
   },
   {
     "name": "收拢",
@@ -1893,9 +1893,9 @@
     "targetDesc": "敌军单体",
     "effectDesc": "移除敌军单体的有益效果，并使其防御属性下降10.0，持续1回合",
     "sources": "【汉·王烈·步】【魏·司马通·弓】【汉·董承·骑】",
-    "status": "skipped",
-    "missingMechanics": "移除敌军有益",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "buff-remove+cover p7"
   },
   {
     "name": "突进",
@@ -1919,9 +1919,9 @@
     "targetDesc": "敌军群体（有效距离内2个目标）",
     "effectDesc": "移除敌军群体的有益效果并对其发动一次攻击（伤害率75.0%）",
     "sources": "【蜀·夏侯月姬·骑】【吴·全琮·步】【汉·何进·骑】",
-    "status": "skipped",
-    "missingMechanics": "移除敌军有益",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "buff-remove+cover p7"
   },
   {
     "name": "诱敌",
@@ -2504,9 +2504,9 @@
     "targetDesc": "攻击目标",
     "effectDesc": "普通攻击后，使攻击目标立即受到燃烧伤害（伤害率192.0%，受谋略属性影响），并移除其有益效果",
     "sources": "【群·张鲁·弓】【魏·文聘·骑】",
-    "status": "skipped",
-    "missingMechanics": "移除敌军有益",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "buff-remove+cover p7"
   },
   {
     "name": "破甲",
@@ -2595,8 +2595,8 @@
     "targetDesc": "攻击目标",
     "effectDesc": "普通攻击后，对攻击目标再次发动策略攻击（伤害率110.0%，受谋略属性影响），并移除其有益效果",
     "sources": "【汉·刘焉·步】",
-    "status": "skipped",
-    "missingMechanics": "移除敌军有益",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "buff-remove+cover p7"
   }
 ]

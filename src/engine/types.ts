@@ -205,6 +205,12 @@ export type SkillOutput =
       kind: 'strategy_damage';
       rate: number;
       strategyScaled: boolean;
+      /**
+       * 按 DoT（燃烧/妖术）公式结算但**立即触发**（火积「立即受到燃烧伤害」）：
+       * 兵力基础 ×1/3、谋略基础 ×0.25；同时以 `dotType:'burning'` 参与
+       * 「被施加的燃烧/恐慌伤害提升」（全主诿异 dotTypes）等过滤。
+       */
+      dotFormula?: boolean;
       /** strategyScaled 且 growthRate === undefined 时不缩放、用基值 */
       growthRate?: number;
       ignoresEvasion?: boolean;
@@ -374,6 +380,20 @@ export type SkillOutput =
     }
   | { kind: 'remove_debuffs'; target?: 'self'; troopTypes?: TroopType[] }
   /**
+   * 移除目标的**有益**状态（看破 / 索敌 / 驱逐 / 火积「移除其有益效果」）：
+   * 判定走 `isBeneficialStatus`（属性 buff 看 amount 正负、增减伤看 direction 正负…），
+   * 并按**来源优先级**过滤（用户 2026-09-19 口径）：被动 > 指挥 > 主动 = 追击——
+   * 施法战法只能移除「来源战法类型优先级 ≤ 自身」的有益状态。
+   * 例：火积（追击）无法移除大赏三军（指挥）的增伤，只能清主动/追击带来的规避、属性提升等。
+   */
+  | { kind: 'remove_buffs'; target?: 'self' }
+  /**
+   * 援护友军单体（援护 D）：把 `cover` 挂在**施法者自身**（保护者），`protectId` 记录被保护的友军——
+   * 只有该友军受普攻时由施法者代受（「援护友军全体」不填 protectId，走既有 `inflict_status` cover 口径）。
+   * 被保护友军由本输出在战法有效距离内随机选（不含施法者自身）。
+   */
+  | { kind: 'grant_cover'; duration: number }
+  /**
    * 移除目标身上**由指定来源战法类型施加**的状态（辞后定朝「移除自身受到的由指挥、主动、追击战法
    * 带来的有害和有益效果」）：有害与有益都移除、被动/战法自带（准备阶段）的不动；逐条记 status_expired。
    */
@@ -486,7 +506,7 @@ export type CreateStatus =
   | { type: 'defense_buff'; amount: number; duration: number; strategyScaled?: boolean; growthRate?: number; percent?: boolean }
   | { type: 'strategy_buff'; amount: number; duration: number; strategyScaled?: boolean; growthRate?: number; percent?: boolean }
   | { type: 'speed_buff'; amount: number; duration: number; strategyScaled?: boolean; growthRate?: number; percent?: boolean }
-  | { type: 'damage_reduce'; rate: number; duration: number; strategyScaled?: boolean; /** 受攻击缩放（对称字段）；growthRate === undefined 时不缩放、用基值 */ attackScaled?: boolean; growthRate?: number; /** 按 8 份衰减（谋议宏图）：第 1 回合 8/8，第 2 回合起每回合回合前 −1/8（第 8 回合 1/8） */ decayEighths?: number; /** 按 N 份受击衰减（疮痍累身 12）：受匹配伤害且实际扣兵后 −1 份，rate = baseRate × 剩余/初始 */ decayFifths?: number; /** 伤害来源过滤：basic=普攻（分类键小类「普通」）/ skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效（分类键小类「主动/追击/指挥」）；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省攻击+策略都吃（分类键「大类」，见 action.ts damageClassKey） */ damageType?: 'physical' | 'strategy'; /** 只对这些 DoT 类型生效（全主诿异：被施加的燃烧/恐慌/妖术诅咒伤害提升 20%）；缺省不限（非 DoT 伤害也吃） */ dotTypes?: DotType[]; /** 条件减伤（人公将军「敌方武将存在妖术效果时造成的攻击伤害降低 20%」）：仅当**携带者自身**带该状态时本减伤才生效 */ requireSelfStatus?: StatusType }
+  | { type: 'damage_reduce'; rate: number; duration: number; strategyScaled?: boolean; /** 受防御缩放（一夫当关 −50%，公式同受谋略，属性换生效防御）；growthRate === undefined 时不缩放、用基值 */ defenseScaled?: boolean; /** 受攻击缩放（对称字段）；growthRate === undefined 时不缩放、用基值 */ attackScaled?: boolean; growthRate?: number; /** 按 8 份衰减（谋议宏图）：第 1 回合 8/8，第 2 回合起每回合回合前 −1/8（第 8 回合 1/8） */ decayEighths?: number; /** 按 N 份受击衰减（疮痍累身 12）：受匹配伤害且实际扣兵后 −1 份，rate = baseRate × 剩余/初始 */ decayFifths?: number; /** 伤害来源过滤：basic=普攻（分类键小类「普通」）/ skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效（分类键小类「主动/追击/指挥」）；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省攻击+策略都吃（分类键「大类」，见 action.ts damageClassKey） */ damageType?: 'physical' | 'strategy'; /** 只对这些 DoT 类型生效（全主诿异：被施加的燃烧/恐慌/妖术诅咒伤害提升 20%）；缺省不限（非 DoT 伤害也吃） */ dotTypes?: DotType[]; /** 条件减伤（人公将军「敌方武将存在妖术效果时造成的攻击伤害降低 20%」）：仅当**携带者自身**带该状态时本减伤才生效 */ requireSelfStatus?: StatusType }
   /** direction：'caused'=自身造成伤害提高/降低（血溅黄砂、强势）；'taken'=自身受到伤害提高/降低（神兵天降、名士在野）。缺省 'taken'。
    *  stacks：叠层计数（带上限的增减伤，银龙冲阵），同战法累加时 +1
    *  strategyScaled=true 且给 growthRate 时（密谋定蜀每次发动 +5% 受谋略）：rate 为谋略 80 时的基础值，实际数值按 scaledValue 缩放
@@ -532,7 +552,7 @@ export type CreateStatus =
   | { type: 'taunt'; duration: number; targetId: string }
   /** 反击资格（反击之策）：携带者被普攻实际扣兵后，对来源打 rate% 攻击。不消耗。rate 与 physical_damage 同口径（100=100%） */
   | { type: 'counter'; duration: number; rate: number }
-  | { type: 'cover'; duration: number }
+  | { type: 'cover'; duration: number; /** 只保护该友军（援护单体「为其抵挡普通攻击」）；缺省 = 援护友军全体 */ protectId?: string }
   /** 先手（诸葛锦囊）：授予后 N 回合内该单位优先行动 */
   | { type: 'priority'; duration: number }
   /** 持续型急救（皇裔流离/金匮要略）：受击时按几率触发恢复。
@@ -1385,7 +1405,7 @@ export type Status =
   | { type: 'jump_prep'; remaining: number; rate: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'taunt'; remaining: number; targetId: string; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'counter'; remaining: number; rate: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
-  | { type: 'cover'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'cover'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; /** 只保护该友军（援护单体）；缺省 = 援护友军全体 */ protectId?: string }
   | { type: 'priority'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   /**
    * 持续型急救（皇裔流离/金匮要略）：受击时按几率触发恢复。
