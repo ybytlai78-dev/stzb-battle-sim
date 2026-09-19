@@ -96,24 +96,19 @@
     letter-spacing: 0;
   }
 
-  /* 配队槽位（横屏手机紧凑版）：只放「官方卡面」——
-     卡框 .frame + 卡面文字 .plate（势力字 / 竖排名 / 星级 / Lv·兵种）都要显示（用户 2026-09-19 确认）；
-     旧信息列（位置标签 / 圆头像 / 属性概览）与战法图标区继续隐藏——
-     主战法图标贴在立绘右下角不好看（用户 2026-09-19 反馈）。 */
+  /* 配队槽位（横屏手机紧凑版）：只留纯立绘铺满整格 ——
+     槽位里不用卡框（242:350 比例与槽位高度不匹配，用户 2026-09-19 反馈）；
+     .frame / .plate 已在 styles.css 里对槽位全局隐藏，这里让卡盒铺满、立绘拉满；
+     旧信息列（位置标签 / 圆头像 / 属性概览）与战法图标区同样隐藏
+     （主战法图标贴在立绘右下角不好看，用户 2026-09-19 反馈）。 */
   .slot { padding: 0; border-radius: var(--radius); }
   .slot-inner { position: relative; display: block; gap: 0; }
-  .slot-card { position: absolute; inset: 0; }
+  .slot-card { position: absolute; inset: 0; width: auto; }
   .slot-art { width: 100%; height: 100%; border: none; border-radius: 0; }
   .slot-main { position: absolute; inset: 0; display: block; }
   .slot .hero-line,
   .slot .slot-sub,
   .slot .hero-skills { display: none; }
-  /* 卡面文字：84px 窄列把字号压到可读下界（比例沿用 styles.css 的官方卡） */
-  .slot-card .fac { font-size: 6.5px; top: 1px; }
-  .slot-card .hero-name { font-size: 9px; letter-spacing: 0; }
-  .slot-card .hero-stars { font-size: 5.5px; }
-  .slot-card .card-bar { font-size: 6.5px; gap: 3px; }
-  .slot-card .sp-badge { font-size: 5.5px; }
   /* 空槽：84px 窄列放不下「点击选择 前锋」（会折成四行），只留素材加号 slot-add.png；
      文字本身保留在 DOM 里（font-size:0 只是看不见），读屏仍能读到。 */
   .slot.empty { font-size: 0; letter-spacing: 0; gap: 4px; }

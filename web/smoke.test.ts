@@ -139,6 +139,42 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(card.querySelector('.bar .s')).toBeNull();
   });
 
+  it('武将池搜索支持拼音：首字母 l / lb 与全拼 lvbu、lubu 都能命中', async () => {
+    await boot();
+    const input = document.querySelector('header.app #pool-search-slot input') as HTMLInputElement;
+    const names = () =>
+      Array.from(document.querySelectorAll('.hero-pool .hero-card .n')).map((e) => e.textContent ?? '');
+    const all = names();
+    expect(all.length).toBeGreaterThan(50); // 未筛选时是全场武将
+
+    const type = (v: string) => {
+      input.value = v;
+      input.dispatchEvent(new Event('input'));
+      return names();
+    };
+
+    // ① 单字母首字母：l 开头的一批（吕布 / 刘备 / 灵帝 …），但不是全场
+    const l = type('l');
+    expect(l.length).toBeGreaterThan(3);
+    expect(l.length).toBeLessThan(all.length);
+    expect(l.some((n) => n.includes('吕布'))).toBe(true);
+    expect(l.some((n) => n.includes('刘备'))).toBe(true);
+
+    // ② 两字母首字母：lb → 吕布 + 刘备（灵帝是 ld，不该命中）
+    const lb = type('lb');
+    expect(lb.some((n) => n.includes('吕布'))).toBe(true);
+    expect(lb.some((n) => n.includes('刘备'))).toBe(true);
+    expect(lb.some((n) => n.includes('灵帝'))).toBe(false);
+
+    // ③ 全拼：lvbu（ü 记作 v）与 lubu（ü 打不出时用 u）都能命中吕布
+    expect(type('lvbu').some((n) => n.includes('吕布'))).toBe(true);
+    expect(type('lubu').some((n) => n.includes('吕布'))).toBe(true);
+    expect(type('liubei').some((n) => n.includes('刘备'))).toBe(true);
+
+    // ④ 中文名搜索不受影响
+    expect(type('吕布').some((n) => n.includes('吕布'))).toBe(true);
+  });
+
   it('顶栏「伤害测试」导航：进入 lab 视图 / 再点返回配将', async () => {
     await boot();
     const labNav = document.querySelector('.nav-link[data-nav="lab"]') as HTMLElement;

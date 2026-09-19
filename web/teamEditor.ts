@@ -6,6 +6,7 @@
  */
 import { HEROES, getHeroById, SKILL_TYPE_NAME, avatarSrc, portraitSrc, isFemale, freePointBudget, troopCapacity, skillGrade, skillTypeIcon, gradeFrame, gradeRibbon, gradePlate, SKILL_DESCS, isMainSkill, isLearnableSkillListed, rednessStars, buildGeneral, TROOP_CHAR as TYPE_CHAR, FACTION_CLASS, cardFrameSrc } from './heroes';
 import type { HeroJson } from './heroes';
+import pinyinJson from './data/pinyin.json';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import type { General, Skill, TroopType, FormationBonus } from '../src/engine/types';
 import type { BattleReport } from '../src/engine/types';
@@ -112,10 +113,31 @@ interface HeroFilter {
 const FACTION_TAGS = ['汉', '魏', '蜀', '吴', '群', '晋'];
 const TYPE_TAGS = ['骑', '步', '弓'];
 
+/** 拼音检索表（`scripts/gen_pinyin.mjs` 生成）：i = 首字母串，f = 全拼（ü 统一记作 v） */
+const PINYIN: Record<string, { i: string; f: string }> = pinyinJson as Record<string, { i: string; f: string }>;
+
+/** 查询是否命中拼音：首字母前缀（l → 吕布/刘备）或全拼包含（lubu / lvbu → 吕布） */
+function pinyinHit(id: string, q: string): boolean {
+  const p = PINYIN[id];
+  if (!p) return false;
+  if (p.i.startsWith(q)) return true;
+  const qv = q.replace(/ü/g, 'v');
+  return p.f.includes(qv) || p.f.replace(/v/g, 'u').includes(qv);
+}
+
 function heroMatchesFilter(hero: HeroJson, sel: HeroFilter, q: string): boolean {
   if (sel.faction.size > 0 && !sel.faction.has(hero.faction)) return false;
   if (sel.type.size > 0 && !sel.type.has(TYPE_CHAR[hero.troopType] ?? '')) return false;
-  if (q && !(hero.name.toLowerCase().includes(q) || hero.faction.toLowerCase().includes(q) || hero.tags.join(',').includes(q))) return false;
+  if (
+    q &&
+    !(
+      hero.name.toLowerCase().includes(q) ||
+      hero.faction.toLowerCase().includes(q) ||
+      hero.tags.join(',').includes(q) ||
+      pinyinHit(hero.id, q)
+    )
+  )
+    return false;
   return true;
 }
 
@@ -616,7 +638,7 @@ export function renderHeroPool(state: EditorState, h: EditorHandlers, searchSlot
   pool.className = 'hero-pool';
   pool.innerHTML = `
     <div class="toolbar">
-      <input type="text" placeholder="搜索武将名 / 势力 / SP…" />
+      <input type="text" placeholder="搜索武将名 / 拼音 / 势力 / SP…" />
     </div>
     ${heroFilterHtml()}
     <div class="hero-grid"></div>
@@ -1192,7 +1214,7 @@ export function openHeroPicker(team: 'red' | 'blue', slotIndex: number, h: Edito
   modal.innerHTML = `
     <div class="m-head">
       <h3>选择武将</h3>
-      <div class="pick-toolbar"><input type="text" placeholder="搜索武将名 / 势力 / SP…" /></div>
+      <div class="pick-toolbar"><input type="text" placeholder="搜索武将名 / 拼音 / 势力 / SP…" /></div>
       <span class="m-close">×</span>
     </div>
     <div class="m-body">
