@@ -12,6 +12,7 @@ import type {
   DamageModifiers,
   DamageType,
   DotStoredDamage,
+  DotType,
   OnHealConfig,
   OnHurtConfig,
   Position,
@@ -68,11 +69,26 @@ function moraleTriggerRate(morale: number, baseRate: number): number {
  * `additive: false` 显式声明时才退回乘算；skillTypes 限定战法类型（动如雷震仅追击）；
  * 多种 trigger_boost 按施加顺序逐条相加叠加。
  */
-function boostedBaseRate(unit: UnitState, skillType: SkillType, baseRate: number): number {
+/** 「攻击类」战法：输出段（含 chance_group / random_pick 内层）含 physical_damage
+ *  （侵掠如火「攻击类主动战法发动率提升 20.0%」的过滤维） */
+function isAttackClassSkill(skill: Skill): boolean {
+  const walk = (outs: SkillOutput[]): boolean =>
+    outs.some((o) => {
+      if (o.kind === 'physical_damage') return true;
+      if (o.kind === 'chance_group') return walk(o.outputs);
+      if (o.kind === 'random_pick') return walk(o.options.flat());
+      return false;
+    });
+  return walk(skill.output);
+}
+
+function boostedBaseRate(unit: UnitState, skillType: SkillType, baseRate: number, skill?: Skill): number {
   let rate = baseRate;
   for (const s of unit.statuses) {
     if (s.type !== 'trigger_boost') continue;
     if (s.skillTypes && s.skillTypes.length > 0 && !s.skillTypes.includes(skillType)) continue;
+    // 攻击类过滤（侵掠如火）：只对输出含物理伤害的战法生效
+    if (s.attackSkillsOnly && (!skill || !isAttackClassSkill(skill))) continue;
     if (s.additive === false) rate *= 1 + s.rate;
     else rate += s.rate;
   }
@@ -151,6 +167,25 @@ export interface CombatContext {
    * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
    */
   afterActiveCounters?: Map<string, number>;
+  /**
+   * 主动战法成功发动计数（发动率递减：威震河朔）：key `${casterId}:${skillId}` → 已发动次数（整场累计）。
+   * 每次实际释放（含准备完成释放）后 +1，用于把基础发动率按 `triggerRateDecayPerCast` 递减。
+   * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
+   */
+  skillCastCounters?: Map<string, number>;
+  /**
+   * 「按造成伤害次数递增发动率」计数（霸王渡江）：key `${casterId}:${skillId}` → 已造成伤害次数
+   * （上限取 `skill.chanceBoostPerDamage.maxStacks`）。可选字段：单元测试直接构造 ctx 时可省略，
+   * 执行时惰性初始化。
+   */
+  skillDamageCounters?: Map<string, number>;
+  /**
+   * 全队累计伤害计数（徽言龙凤）：key `${casterId}:${skillId}` → 该战法视角下「本侧已造成伤害次数」。
+   * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
+   */
+  teamDamageCounters?: Map<string, number>;
+  /** 全队累计伤害门槛已激活标记（徽言龙凤）：键同 teamDamageCounters */
+  teamThresholdActive?: Set<string>;
   /**
    * 二类指挥·友军监听试图发动主动（谋谟帷幄）：key `${round}:${skillId}:${casterId}:${actorId}` → 已判定，
    * 保证「其每回合首次试图发动主动战法时」对每个发动者只走一次。
@@ -315,9 +350,17 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
       executeSkillOutputs(ctx, unit, skill, targets, skill.initialOutput);
     }
 
-    // 普通一类指挥（无 roundRepeat/delayedOutput/onHurt）：直接执行一次（先驱/避其锋芒/共饮）
+    // 普通一类指挥（无 roundRepeat/delayedOutput/delayedOutputs/onHurt）：直接执行一次（先驱/避其锋芒/共饮）
     // onHurt 战法准备阶段只登记，output 留到受击时结算（盲侯反击 / 缓师 debuff）
-    if (!skill.roundRepeat && !skill.delayedOutput && !skill.onHurt) {
+    // onAttrChange 战法准备阶段只登记，output 留到属性升降前结算（举贤决机）
+    if (
+      !skill.roundRepeat &&
+      !skill.delayedOutput &&
+      !skill.delayedOutputs &&
+      !skill.onHurt &&
+      !skill.onAttrChange &&
+      !skill.strategyAdjacentBonus
+    ) {
       executeSkillOutputs(ctx, unit, skill, targets);
     }
   }
@@ -363,53 +406,203 @@ export function triggerPreparedEffectOnAct(ctx: CombatContext, unit: UnitState):
   }
 }
 
-/** 一类指挥 delayedOutput：到 atRound 回合自动结算（白衣第3回合打出预先结算伤害）。
- *  战报口径（官方）：「【施法者】【战法】的效果使【目标】损失了X兵力(剩余)」+ 「【目标】的来自【施法者】【战法】的策略攻击伤害效果消失了」 */
+/**
+ * 属性升降「之前」判定（举贤决机）：`inflictStatus` 内、属性状态成功施加**之前**（冲突判定之前）触发。
+ * 逐条规则命中「侧别 + 升降方向」时，由存活施法者按 rate（一类指挥生效几率 → 走士气）判定，
+ * 命中则对**被施加者**结算该条 output；每次判定发 `skill_trigger`（targetId = 被施加者）。
+ */
+export function triggerOnAttrChange(
+  ctx: CombatContext,
+  target: UnitState,
+  sign: 'up' | 'down'
+): void {
+  const rulesOf = (s: Skill): NonNullable<CommandSkill['onAttrChange']> | undefined =>
+    s.type === 'command' ? s.onAttrChange : undefined;
+  for (const l of [...ctx.lockedCommands]) {
+    const rules = rulesOf(l.skill);
+    if (!rules || rules.length === 0) continue;
+    const caster = ctx.myTeam.concat(ctx.enemyTeam).find((u) => u.general.id === l.casterId);
+    if (!caster) continue;
+    if (!caster.alive && !l.skill.retainAfterDeath) continue;
+    const victimSide = caster.side === target.side ? 'ally' : 'enemy';
+    for (const rule of rules) {
+      if (rule.victim !== victimSide || rule.sign !== sign) continue;
+      const morale = effectiveMorale(caster);
+      const rate = moraleTriggerRate(morale, rule.rate);
+      const success = ctx.rng.chance(rate);
+      ctx.events.push({
+        type: 'skill_trigger',
+        unitId: caster.general.id,
+        skillId: l.skill.id,
+        skillName: l.skill.name,
+        targetId: target.general.id,
+        success,
+        rate: Math.round(rate * 100),
+        baseRate: Math.round(rule.rate * 100),
+        morale,
+      });
+      if (!success) continue;
+      executeSkillOutputs(ctx, caster, l.skill, [target], rule.output);
+      if (!caster.alive) break;
+    }
+  }
+}
+
+/**
+ * 全队累计伤害门槛（徽言龙凤）：本侧单位每造成 1 次伤害（实际扣兵 > 0）计数 +1，
+ * 达到 `count` 时**激活**该战法 —— 立即对锁定目标结算激活段 output，并允许其 roundStartRepeat 开始执行。
+ * 计数与激活标记按「战法 × 施法者」记（ctx.teamDamageCounters / ctx.teamThresholdActive）。
+ */
+function noteTeamDamage(ctx: CombatContext, source: UnitState): void {
+  for (const l of [...ctx.lockedCommands]) {
+    const cfg = l.skill.type === 'command' ? l.skill.teamDamageThreshold : undefined;
+    if (!cfg) continue;
+    const caster = castUnit(ctx, l.casterId);
+    if (!caster || caster.side !== source.side) continue;
+    const key = `${l.casterId}:${l.skill.id}`;
+    if (ctx.teamThresholdActive?.has(key)) continue;
+    ctx.teamDamageCounters ??= new Map();
+    const n = (ctx.teamDamageCounters.get(key) ?? 0) + 1;
+    ctx.teamDamageCounters.set(key, n);
+    if (n < cfg.count) continue;
+    ctx.teamThresholdActive ??= new Set();
+    ctx.teamThresholdActive.add(key);
+    if (!caster.alive && !l.skill.retainAfterDeath) continue;
+    const targets = l.targets.filter((t) => t.alive);
+    if (targets.length > 0) executeSkillOutputs(ctx, caster, l.skill, targets, cfg.output);
+  }
+}
+
+/**
+ * 其徐如林：**本侧**单位造成策略伤害生效后，对目标**同侧相邻**单位额外造成一次策略伤害
+ * （伤害率 = 原伤害率 × 当前比例；比例 = baseRate + perRound × (当前回合 - 1)，可叠至战斗结束）。
+ *  - 光环注册于 `ctx.lockedCommands`（一类指挥）；仅覆盖与施法者**同侧**的伤害来源，施法者阵亡即失效。
+ *  - 额外伤害由**原伤害的造成者**结算（沿用其攻击/兵力/增减伤口径），战报 skillId / skillName 记为其徐如林。
+ *  - 直接构造 damage 事件（不经 strategy_damage 输出分支）→ 不会递归触发本光环。
+ */
+function triggerStrategyAdjacentBonus(
+  ctx: CombatContext,
+  source: UnitState,
+  target: UnitState,
+  originalRate: number
+): void {
+  const auras = ctx.lockedCommands.filter(
+    (l): l is LockedCommand & { skill: CommandSkill } =>
+      l.skill.type === 'command' && !!l.skill.strategyAdjacentBonus
+  );
+  if (auras.length === 0) return;
+  const team = target.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+  const adjacents = adjacentUnits(target, team);
+  if (adjacents.length === 0) return;
+  for (const l of auras) {
+    const cfg = l.skill.strategyAdjacentBonus!;
+    const owner = castUnit(ctx, l.casterId);
+    if (!owner) continue;
+    if (!owner.alive && !l.skill.retainAfterDeath) continue;
+    if (owner.side !== source.side) continue; // 只覆盖「我军全体施加的策略伤害」
+    const scale = (v: number): number =>
+      cfg.strategyScaled && cfg.growthRate !== undefined
+        ? roundRate(scaledValue(v, cfg.growthRate, effectiveStat(owner, 'strategy')))
+        : v;
+    const ratioPct = scale(cfg.baseRate) + scale(cfg.perRound) * Math.max(0, ctx.currentRound - 1);
+    const rate = (originalRate * ratioPct) / 100;
+    for (const raw of adjacents) {
+      if (!raw.alive) continue;
+      triggerStackBuff(ctx, source, raw, 'strategy');
+      const hit: DamageHitContext = { damageSource: 'skill', damageType: 'strategy', skillType: l.skill.type };
+      const { causedMult, takenMult } = damageBoosts(ctx, source, raw, hit);
+      const reduce = sumReduce(raw, hit) + troopCounterReduceOf(source, raw);
+      const { damage, breakdown } = calcDamage(
+        {
+          damageType: 'strategy',
+          rate,
+          attackerAttack: source.general.attack,
+          attackerStrategy: effectiveStat(source, 'strategy'),
+          attackerTroops: source.troops,
+          targetDefense: raw.general.defense,
+          targetStrategy: raw.general.strategy,
+          mult: buffMult(causedMult, takenMult, reduce),
+        },
+        ctx.rng
+      );
+      const capped = applyTroopCap(damage, raw.troops);
+      ctx.events.push({
+        type: 'damage',
+        sourceId: source.general.id,
+        targetId: raw.general.id,
+        skillId: l.skill.id,
+        skillName: l.skill.name,
+        damageType: 'strategy',
+        damage: capped,
+        breakdown,
+        modifiers: collectDamageModifiers(ctx, source, raw, true, hit),
+      });
+      applyDamage(ctx, raw, capped, source, 'strategy', 'skill');
+    }
+  }
+}
+
+/** 一类指挥延迟结算：到 atRound 回合自动结算。
+ *  ① `delayedOutput`（单次、伤害预存）：白衣渡江第 3 回合打出预先结算的伤害。
+ *     战报口径（官方）：「【施法者】【战法】的效果使【目标】损失了X兵力(剩余)」+ 「【目标】的来自【施法者】【战法】的策略攻击伤害效果消失了」
+ *  ② `delayedOutputs`（多次、不预存）：匠心不竭第 1/3/5 回合分别对锁定目标施加恐慌 / 燃烧 / 妖术。 */
 export function triggerDelayedOutputs(ctx: CombatContext, round: number): void {
   for (const l of ctx.lockedCommands) {
     const { skill } = l;
-    if (skill.phase !== 'prep' || !skill.delayedOutput) continue;
-    if (round !== skill.delayedOutput.atRound) continue;
+    if (skill.phase !== 'prep') continue;
+    if (!skill.delayedOutput && !skill.delayedOutputs) continue;
     // 一类指挥施法者阵亡后效果仍存在（retainAfterDeath）或施法者存活
     const caster = ctx.myTeam.concat(ctx.enemyTeam).find((u) => u.general.id === l.casterId);
     if (caster && !caster.alive && !skill.retainAfterDeath) continue;
-    if (l.storedDamage && l.storedDamage.length > 0) {
-      // 用预先结算的伤害直接打出（不重新计算）。
-      // 注：持节镇西叠层已在准备阶段结算时触发一次（白衣=友军策略伤害），此处不重复叠层
-      const damageType: DamageType = skill.delayedOutput.output.some((o) => o.kind === 'strategy_damage')
-        ? 'strategy'
-        : 'physical';
-      for (const d of l.storedDamage) {
-        const target = ctx.myTeam.concat(ctx.enemyTeam).find((u) => u.general.id === d.targetId);
-        if (!target || !target.alive) continue;
-        const actual = Math.min(Math.max(0, d.damage), target.troops);
-        ctx.events.push({
-          type: 'damage',
-          sourceId: l.casterId,
-          targetId: target.general.id,
-          skillId: skill.id,
-          skillName: skill.name,
-          damageType,
-          damage: d.damage,
-          breakdown: d.breakdown,
-          delayedEffect: true,
-          afterTroops: target.troops - actual,
-        });
-        ctx.events.push({
-          type: 'stored_effect_expired',
-          unitId: target.general.id,
-          sourceId: l.casterId,
-          skillId: skill.id,
-          skillName: skill.name,
-          damageType,
-        });
-        applyDamage(ctx, target, d.damage, caster, damageType, 'skill');
+
+    if (skill.delayedOutput && round === skill.delayedOutput.atRound) {
+      if (l.storedDamage && l.storedDamage.length > 0) {
+        // 用预先结算的伤害直接打出（不重新计算）。
+        // 注：持节镇西叠层已在准备阶段结算时触发一次（白衣=友军策略伤害），此处不重复叠层
+        const damageType: DamageType = skill.delayedOutput.output.some((o) => o.kind === 'strategy_damage')
+          ? 'strategy'
+          : 'physical';
+        for (const d of l.storedDamage) {
+          const target = ctx.myTeam.concat(ctx.enemyTeam).find((u) => u.general.id === d.targetId);
+          if (!target || !target.alive) continue;
+          const actual = Math.min(Math.max(0, d.damage), target.troops);
+          ctx.events.push({
+            type: 'damage',
+            sourceId: l.casterId,
+            targetId: target.general.id,
+            skillId: skill.id,
+            skillName: skill.name,
+            damageType,
+            damage: d.damage,
+            breakdown: d.breakdown,
+            delayedEffect: true,
+            afterTroops: target.troops - actual,
+          });
+          ctx.events.push({
+            type: 'stored_effect_expired',
+            unitId: target.general.id,
+            sourceId: l.casterId,
+            skillId: skill.id,
+            skillName: skill.name,
+            damageType,
+          });
+          applyDamage(ctx, target, d.damage, caster, damageType, 'skill');
+        }
+      } else if (caster) {
+        // 非伤害类延迟输出（令明负榇：第 4 回合起进入分兵状态）→ 对锁定目标执行 output
+        const aliveTargets = l.targets.filter((t) => t.alive);
+        if (aliveTargets.length > 0) {
+          executeSkillOutputs(ctx, caster, skill, aliveTargets, skill.delayedOutput.output);
+        }
       }
-    } else if (caster) {
-      // 非伤害类延迟输出（令明负榇：第 4 回合起进入分兵状态）→ 对锁定目标执行 output
-      const aliveTargets = l.targets.filter((t) => t.alive);
-      if (aliveTargets.length > 0) {
-        executeSkillOutputs(ctx, caster, skill, aliveTargets, skill.delayedOutput.output);
+    }
+
+    // 多次分段延迟施加（匠心不竭：第 1 回合恐慌 / 第 3 回合燃烧 / 第 5 回合妖术）
+    if (skill.delayedOutputs && caster) {
+      for (const entry of skill.delayedOutputs) {
+        if (entry.atRound !== round) continue;
+        const aliveTargets = l.targets.filter((t) => t.alive);
+        if (aliveTargets.length > 0) executeSkillOutputs(ctx, caster, skill, aliveTargets, entry.output);
       }
     }
   }
@@ -988,6 +1181,60 @@ function lowestStrategyAlly(allies: UnitState[], exclude: UnitState): UnitState 
 }
 
 /**
+ * 指定属性**最高**的存活友军（西陵克晋：我军当前攻击 / 谋略属性最高的武将）。
+ * **含施法者自身**（官方：「也有可能施加给陆抗自己」）；并列时速度更高优先，再比站位（前锋 > 中军 > 大营）。
+ * 无存活友军时返回 undefined，调用方跳过该段。
+ */
+function highestStatAlly(allies: UnitState[], stat: 'attack' | 'strategy'): UnitState | undefined {
+  const alive = allies.filter((a) => a.alive);
+  if (alive.length === 0) return undefined;
+  return alive.reduce((best, cur) => {
+    const cs = effectiveStat(cur, stat);
+    const bs = effectiveStat(best, stat);
+    if (cs !== bs) return cs > bs ? cur : best;
+    const cspd = effectiveStat(cur, 'speed');
+    const bspd = effectiveStat(best, 'speed');
+    if (cspd !== bspd) return cspd > bspd ? cur : best;
+    return POSITION_INDEX[cur.general.position] < POSITION_INDEX[best.general.position] ? cur : best;
+  });
+}
+
+/**
+ * 代打者结算后恢复（西陵克晋「并各自恢复一定兵力」）：**立即型急救**——按**代打者当前兵力**走恢复公式，
+ * 不落状态、与任何恢复类战法不冲突；官方口径「恢复量与任何属性无关，仅由执行时自身兵力决定」。
+ * 恢复值 = calcHealAmount(代打者当前兵力, rate)；heal 事件按仓库口径归属**施法者**（战报统计到陆抗·西陵克晋）。
+ */
+function healDamageSource(
+  ctx: CombatContext,
+  skill: Skill,
+  caster: UnitState,
+  source: UnitState,
+  rate: number
+): void {
+  if (!source.alive || source.troops <= 0) return;
+  // 围困：无法回复兵力
+  if (hasStatus(source, 'siege')) {
+    ctx.events.push({ type: 'siege_blocked', unitId: source.general.id, skillId: skill.id });
+    return;
+  }
+  const amount = calcHealAmount(source.troops, rate);
+  const before = source.troops;
+  const healed = recoverTroops(ctx, source, amount);
+  if (healed > 0) {
+    ctx.events.push({
+      type: 'heal',
+      sourceId: caster.general.id,
+      targetId: source.general.id,
+      skillId: skill.id,
+      skillName: skill.name,
+      amount: healed,
+      before,
+      after: source.troops,
+    });
+  }
+}
+
+/**
  * 常驻伤害前叠层（持节镇西）：友军每次造成攻击伤害前 → 出手方叠攻击；造成策略伤害前 → 出手方叠谋略；
  * 受到伤害前 → 受击者叠防御。攻击/策略/DoT/诅咒/引燃均走此入口。
  * 只作用于持有者的友军（同侧，含持有者自身）。每层各自持续 1 回合（回合结束掉 1 层），至多 maxStacks 层；
@@ -1110,13 +1357,15 @@ function computeDotTickDamage(
   ctx: CombatContext,
   caster: UnitState,
   target: UnitState,
-  dot: { rate: number; sourceStrategy: number; sourceSkillId?: string }
+  dot: { rate: number; sourceStrategy: number; sourceSkillId?: string; dotType?: DotType }
 ): DotStoredDamage {
   const skillType = dot.sourceSkillId ? resolveSkill(ctx, dot.sourceSkillId)?.type : undefined;
   const hit: DamageHitContext = {
     damageSource: 'skill',
     damageType: 'strategy',
     ...(skillType ? { skillType } : {}),
+    // DoT 类型维（全主诿异「被施加的燃烧/恐慌/妖术诅咒伤害提升」按此过滤）
+    ...(dot.dotType ? { dotType: dot.dotType } : {}),
   };
   const { causedMult, takenMult } = damageBoosts(ctx, caster, target, hit);
   const reduce = sumReduce(target, hit) + troopCounterReduceOf(caster, target);
@@ -1267,6 +1516,8 @@ function tickDots(ctx: CombatContext, unit: UnitState): void {
   for (const s of unit.statuses) {
     if (!DOT_TYPES.includes(s.type as StatusType)) continue;
     const dot = s as Extract<Status, { type: 'sorcery' | 'burning' | 'panic' }>;
+    // 受击触发妖术（破凰「条件妖术」）：不在行动时跳伤，改由携带者受到伤害时触发
+    if (dot.type === 'sorcery' && dot.onHurt) continue;
     // 兵力阈值条件（巧音唤蝶燃烧「当目标兵力高于初始兵力 50% 时受到一次策略伤害」）：不满足则本回合不跳伤
     if (dot.troopRatio && !troopRatioMatches(unit, dot.troopRatio)) continue;
     dealDotDamage(ctx, unit, dot);
@@ -1306,7 +1557,7 @@ function executeSplitAttack(
     if (consumeEvasion(ctx, adjTarget, unit.general.id)) continue;
     const atk = effectiveStat(unit, 'attack');
     const def = physicalTargetDefense(unit, adjTarget);
-    const hit: DamageHitContext = { damageSource: 'basic', damageType: 'physical' };
+    const hit: DamageHitContext = { damageSource: 'basic', damageType: 'physical', split: true };
     const { causedMult, takenMult } = damageBoosts(ctx, unit, adjTarget, hit);
     const reduce = sumReduce(adjTarget, hit) + troopCounterReduceOf(unit, adjTarget);
     const { damage, breakdown } = calcDamage(
@@ -1343,6 +1594,10 @@ function executeSplitAttack(
 function tickStatusesOnActStart(ctx: CombatContext, unit: UnitState): void {
   for (const s of [...unit.statuses]) {
     if (s.type === 'evasion') continue; // 规避按层数，不递减
+    // 叠层待发（奉令护蜀）：只由「普攻打出 / 受到实际伤害」清空，不按回合递减
+    if (s.type === 'pending_stacks') continue;
+    // 下一次伤害无视规避（缚父临危）：消耗制，不按回合递减
+    if (s.type === 'ignore_evasion') continue;
     // 次数型下一次攻击：不按回合递减，打出后由 consumeAttackCharges 移除
     if (s.type === 'damage_boost' && 'charges' in s && s.charges != null) continue;
     // 次数型分兵：不按回合递减，打出后由 consumeSplitCharges 移除
@@ -1371,6 +1626,8 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
 
   // 0. 行动中施加的状态递减：计数器回合持续到下次行动开始前（连击/行动中怯战等）
   tickStatusesOnActStart(ctx, unit);
+  // 忠克猛烈：施法者行动时清除其施加的受击追加攻击标记（窗口「直到施法者下回合行动前」）
+  expireRetaliateOnCasterAct(ctx, unit);
 
   // 行动阶段判定顺序：被动 → 指挥（预备怯战 + 二类） → DoT → 主动 → 普攻 → 追击 → 分兵
   // 混乱：无法发动主动战法 + 普攻；但被动/指挥/DoT仍正常判定
@@ -1415,7 +1672,8 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
 
   // 3. DoT 结算（妖术/燃烧/恐慌：行动时受到伤害）。先单独开行动组，避免跳伤/持节镇西叠层串进上一位武将的普攻组。
   const hasDot = unit.statuses.some(
-    (s) => s.type === 'sorcery' || s.type === 'burning' || s.type === 'panic'
+    (s) =>
+      (s.type === 'sorcery' && !s.onHurt) || s.type === 'burning' || s.type === 'panic'
   );
   if (hasDot) {
     ctx.events.push({
@@ -1593,6 +1851,13 @@ export function inflictStatus(
   }
   const type = create.type;
 
+  // 属性升降「之前」判定（举贤决机）：属性状态成功施加**之前**（冲突判定之前）先判一次。
+  // 「每种属性单独计算」= 攻击/防御/谋略/速度各是一个状态，这里每个状态各触发一次。
+  const ATTR_STATUS_TYPES: StatusType[] = ['attack_buff', 'defense_buff', 'strategy_buff', 'speed_buff'];
+  if (ATTR_STATUS_TYPES.includes(type) && 'amount' in create) {
+    triggerOnAttrChange(ctx, target, create.amount >= 0 ? 'up' : 'down');
+  }
+
   // 洞察：免疫控制类效果（混乱/怯战/暴走/犹豫）
   const CONTROL_TYPES: StatusType[] = ['confusion', 'rampage', 'cowardice', 'hesitation'];
   if (CONTROL_TYPES.includes(type) && hasStatus(target, 'insight')) {
@@ -1676,6 +1941,12 @@ export function inflictStatus(
     return;
   }
 
+  // 受击追加攻击标记（忠克猛烈）：独立共存，不参与冲突判定
+  if (type === 'retaliate') {
+    pushStatus(ctx, target, create, sourceSkillType, sourceSkillId, casterId);
+    return;
+  }
+
   // DoT（妖术/燃烧/恐慌）+ 妖术诅咒（curse）+ 引燃标记（ignite）：各自独立共存，不参与冲突判定。
   // 挂上时结算（滞后触发）：施法者可解析时，按挂上时的增伤合计/施法者兵力/目标防御谋略/减伤
   // 预先计算每次跳伤并冻结（stored），之后触发直接打出；施法者不可解析时无 stored，
@@ -1690,6 +1961,7 @@ export function inflictStatus(
         rate: dotCreate.rate,
         sourceStrategy: dotCreate.sourceStrategy ?? effectiveStat(caster, 'strategy'),
         sourceSkillId,
+        dotType: dotCreate.type,
       });
     }
     pushStatus(ctx, target, create, sourceSkillType, sourceSkillId, casterId, stored);
@@ -1959,6 +2231,7 @@ function sameDamageBoostFilter(existing: Status, incoming: CreateStatus): boolea
   if (existing.type !== 'damage_boost' && existing.type !== 'damage_reduce') return true;
   if (incoming.type !== 'damage_boost' && incoming.type !== 'damage_reduce') return true;
   const norm = (types?: SkillType[]) => [...(types ?? [])].sort().join(',');
+  const normDots = (types?: DotType[]) => [...(types ?? [])].sort().join(',');
   // charges 仅 damage_boost 有（次数型下一次攻击）；damage_reduce 无此字段，用 in 安全探测
   const hasCharges = (s: Status | CreateStatus): boolean =>
     'charges' in s ? (s as { charges?: number }).charges != null : false;
@@ -1966,7 +2239,11 @@ function sameDamageBoostFilter(existing: Status, incoming: CreateStatus): boolea
     (existing.damageSource ?? undefined) === (incoming.damageSource ?? undefined) &&
     (existing.damageType ?? undefined) === (incoming.damageType ?? undefined) &&
     norm(existing.skillTypes) === norm(incoming.skillTypes) &&
-    hasCharges(existing) === hasCharges(incoming)
+    normDots(existing.dotTypes) === normDots('dotTypes' in incoming ? incoming.dotTypes : undefined) &&
+    hasCharges(existing) === hasCharges(incoming) &&
+    // 「仅进行攻击」维（缚父临危）：与全局增伤是两条独立轨，不判同源
+    ('attackOnly' in existing ? Boolean(existing.attackOnly) : false) ===
+      ('attackOnly' in incoming ? Boolean(incoming.attackOnly) : false)
   );
 }
 
@@ -2026,6 +2303,20 @@ function pushStatus(
     });
     return;
   }
+  if (type === 'ignore_evasion') {
+    // 缚父临危：下一次造成伤害无视规避（消耗制；同战法重复施加只刷新，不叠加）
+    const dup = target.statuses.some((s) => s.type === 'ignore_evasion' && s.sourceSkillId === sourceSkillId);
+    if (!dup) {
+      target.statuses.push({ type: 'ignore_evasion', appliedRound, sourceSkillType, sourceSkillId, sourceUnitId: casterId });
+    }
+    ctx.events.push({
+      type: 'status_inflicted',
+      unitId: target.general.id,
+      statusType: type,
+      detail: '下一次造成的伤害无视规避',
+    });
+    return;
+  }
   if (type === 'evade_chance') {
     // 概率规避（列营守险）：受击时消耗 1 次机会并掷 rate，命中则完全免疫该次伤害（见 consumeEvasion）
     const push: Status = { type, remaining, appliedRound, sourceSkillType, sourceSkillId } as Status;
@@ -2041,8 +2332,29 @@ function pushStatus(
     });
     return;
   }
-  if (type === 'range_buff') {
-    // 攻击距离提高（帝临回光「使自身攻击距离 +1」）：只放大普攻可达距离上限，
+  if (type === 'retaliate') {
+    // 受击追加攻击标记（忠克猛烈）：标记挂在**目标**身上，施法者在目标每次受攻击伤害后追加 1 次攻击
+    const push: Status = {
+      type: 'retaliate',
+      rate: create.rate,
+      maxTriggers: create.maxTriggers,
+      triggers: 0,
+      remaining,
+      appliedRound,
+      sourceSkillType,
+      sourceSkillId,
+      sourceUnitId: casterId ?? '',
+    };
+    target.statuses.push(push);
+    ctx.events.push({
+      type: 'status_inflicted',
+      unitId: target.general.id,
+      statusType: type,
+      detail: `每受到攻击伤害由施法者追加 1 次攻击（${create.rate}%，最多 ${create.maxTriggers} 次，直到施法者下回合行动前）`,
+    });
+    return;
+  }
+  if (type === 'range_buff') {    // 攻击距离提高（帝临回光「使自身攻击距离 +1」）：只放大普攻可达距离上限，
     // 由 target.ts attackRangeOf 求和，不影响战法有效距离（skill.range）
     const push: Status = { type, remaining, appliedRound, sourceSkillType, sourceSkillId } as Status;
     (push as { amount: number }).amount = create.amount;
@@ -2106,6 +2418,18 @@ function pushStatus(
     if ((type === 'damage_boost' || type === 'damage_reduce') && 'damageType' in create && create.damageType != null) {
       (push as { damageType?: 'physical' | 'strategy' }).damageType = create.damageType;
     }
+    // DoT 类型维过滤（全主诿异：只提升被施加的燃烧 / 恐慌 / 妖术诅咒）
+    if (type === 'damage_boost' && 'dotTypes' in create && create.dotTypes != null) {
+      (push as { dotTypes?: DotType[] }).dotTypes = create.dotTypes;
+    }
+    // 条件减伤（人公将军）：仅当携带者自身带该状态时生效
+    if (type === 'damage_reduce' && 'requireSelfStatus' in create && create.requireSelfStatus != null) {
+      (push as { requireSelfStatus?: StatusType }).requireSelfStatus = create.requireSelfStatus;
+    }
+    // 仅「进行攻击」的增减伤（缚父临危「下两次**攻击**造成的伤害提升 30%」）：普攻 / 物理主动 / 追击
+    if (type === 'damage_boost' && 'attackOnly' in create && create.attackOnly) {
+      (push as { attackOnly?: boolean }).attackOnly = true;
+    }
     // 谋议宏图减伤 / 虎豹督军增伤按 8/8 衰减：冻结满额率为 baseRate
     if ((type === 'damage_reduce' || type === 'damage_boost') && 'decayEighths' in create && create.decayEighths) {
       (push as { eighths?: number }).eighths = create.decayEighths;
@@ -2126,6 +2450,10 @@ function pushStatus(
     }
     if (type === 'trigger_boost' && 'additive' in create && create.additive) {
       (push as { additive?: boolean }).additive = true;
+    }
+    // 攻击类过滤（侵掠如火：只提升攻击类主动战法发动率）
+    if (type === 'trigger_boost' && 'attackSkillsOnly' in create && create.attackSkillsOnly) {
+      (push as { attackSkillsOnly?: boolean }).attackSkillsOnly = true;
     }
     target.statuses.push(push);
     // 战报 detail：duration ≥ 999（战斗结束约定）→「持续至战斗结束」；
@@ -2194,12 +2522,22 @@ function pushStatus(
     if ('troopRatio' in create && create.troopRatio) {
       (status as { troopRatio?: TroopRatioCond }).troopRatio = create.troopRatio;
     }
+    // 受击触发妖术（破凰「条件妖术」）：行动时不跳伤，改为携带者受击时触发，charges 次用尽即移除
+    const hurtMark = create.type === 'sorcery' && create.onHurt === true ? create : undefined;
+    if (hurtMark) {
+      const mark = status as Extract<Status, { type: 'sorcery' }>;
+      mark.onHurt = true;
+      mark.charges = hurtMark.charges ?? 0;
+    }
     target.statuses.push(status);
+    const durText = create.duration >= 999 ? '持续至战斗结束' : `持续 ${create.duration} 回合`;
     ctx.events.push({
       type: 'status_inflicted',
       unitId: target.general.id,
       statusType: type,
-      detail: `${statusName(type)} ${Math.round(create.rate)}% ${create.duration >= 999 ? '持续至战斗结束' : `持续 ${create.duration} 回合`}`,
+      detail: hurtMark
+        ? `${statusName(type)} ${Math.round(create.rate)}% 受击触发 剩余 ${hurtMark.charges ?? 0} 次 ${durText}`
+        : `${statusName(type)} ${Math.round(create.rate)}% ${durText}`,
     });
     return;
   }
@@ -2369,6 +2707,8 @@ export function tickStatuses(ctx: CombatContext, units: UnitState[]): void {
         continue;
       }
       if (s.appliedRound !== 0) continue; // 行动中施加：下次行动开始前递减
+      if (s.type === 'pending_stacks') continue; // 叠层待发：不按回合递减（奉令护蜀）
+      if (s.type === 'ignore_evasion') continue; // 无视规避：消耗制，不按回合递减（缚父临危）
       if (s.type === 'rest') continue; // 休整 remaining 只在跳恢复时递减
       // 次数型分兵（准备阶段施加）：不按回合递减
       if (s.type === 'split' && 'charges' in s && s.charges != null) continue;
@@ -2439,6 +2779,13 @@ export function tickRoundStartStatuses(ctx: CombatContext): void {
   for (const locked of ctx.lockedCommands) {
     const skill = locked.skill;
     if (!skill.roundStartRepeat) continue;
+    // 全队累计伤害门槛（徽言龙凤）：未激活前整段不执行
+    if (
+      skill.teamDamageThreshold &&
+      !ctx.teamThresholdActive?.has(`${locked.casterId}:${skill.id}`)
+    ) {
+      continue;
+    }
     const rs = skill.roundStartRepeat;
     if (rs.startRound != null && ctx.currentRound < rs.startRound) continue;
     if (rs.endRound != null && ctx.currentRound > rs.endRound) continue;
@@ -2478,6 +2825,17 @@ export function removeDebuffs(ctx: CombatContext, targets: UnitState[]): void {
  * 避免同回合后续伤害白嫖残留层。
  */
 export function consumeEvasion(ctx: CombatContext, target: UnitState, sourceId: string): boolean {
+  // 缚父临危：攻击方带「下一次造成的伤害无视规避」标记时，跳过规避判定并消耗该标记
+  // （覆盖任意伤害类型；所有伤害路径统一经本入口，故只此一处接线）
+  const attacker = sourceId ? castUnit(ctx, sourceId) : undefined;
+  const ignore = attacker?.statuses.find(
+    (s): s is Extract<Status, { type: 'ignore_evasion' }> => s.type === 'ignore_evasion'
+  );
+  if (attacker && ignore) {
+    attacker.statuses = attacker.statuses.filter((s) => s !== ignore);
+    ctx.events.push({ type: 'status_expired', unitId: attacker.general.id, statusType: 'ignore_evasion' });
+    return false;
+  }
   const ev = getStatus(target, 'evasion');
   if (ev && ev.stacks > 0) {
     ev.stacks -= 1;
@@ -2538,7 +2896,8 @@ export function effectiveStat(unit: UnitState, kind: 'attack' | 'defense' | 'str
  * 攻击伤害用的目标防御：先生效属性，再按攻击方 ignore_def 比例折减。
  * 攻防差 = 攻击 − 目标防御 × (1 − 无视比例)。
  */
-function physicalTargetDefense(attacker: UnitState, target: UnitState): number {
+function physicalTargetDefense(attacker: UnitState, target: UnitState, ignoresDefense = false): number {
+  if (ignoresDefense) return 0; // 忠克猛烈：本战法造成的伤害无视目标防御属性
   return applyIgnoreDef(effectiveStat(target, 'defense'), sumRates(attacker.statuses, 'ignore_def'));
 }
 
@@ -2562,30 +2921,43 @@ export type DamageHitContext = {
   damageSource?: 'basic' | 'skill';
   damageType?: DamageType;
   skillType?: SkillType;
+  /** DoT 类型（仅 DoT 挂上时结算携带）：供 `dotTypes` 过滤维使用（全主诿异） */
+  dotType?: DotType;
+  /** 分兵溅射伤害（普攻衍生）：不算「进行攻击」（侵掠如火概率增伤不吃分兵） */
+  split?: boolean;
 };
 
 /**
  * 增减伤/减伤是否计入本次伤害。hit 缺省或某维缺省 = 该维不限制。
  */
 export function statusMatchesHit(
-  s: { damageSource?: 'basic' | 'skill'; skillTypes?: SkillType[]; damageType?: 'physical' | 'strategy' },
+  s: { damageSource?: 'basic' | 'skill'; skillTypes?: SkillType[]; damageType?: 'physical' | 'strategy'; dotTypes?: DotType[]; attackOnly?: boolean },
   hit?: DamageHitContext
 ): boolean {
   if (!hit) return true;
+  // 仅「进行攻击」（缚父临危）：普攻 / 物理主动 / 追击，不含分兵溅射、反击、指挥代打与 DoT
+  if (s.attackOnly && !isAttackHitForProc(hit)) return false;
   if (s.damageSource && hit.damageSource && s.damageSource !== hit.damageSource) return false;
   if (s.damageType && hit.damageType && s.damageType !== hit.damageType) return false;
+  if (s.dotTypes && s.dotTypes.length > 0) {
+    if (!hit.dotType || !s.dotTypes.includes(hit.dotType)) return false;
+  }
   if (s.skillTypes && s.skillTypes.length > 0) {
     if (!hit.skillType || !s.skillTypes.includes(hit.skillType)) return false;
   }
   return true;
 }
 
-/** 受击方减伤合计；hit 过滤后仍走 formulas.sumRates，不改其签名。 */
+/** 受击方减伤合计；hit 过滤后仍走 formulas.sumRates，不改其签名。
+ *  条件减伤（人公将军）：`requireSelfStatus` 未满足时本减伤不生效（按**携带者当前**状态实时判定）。 */
 function sumReduce(target: UnitState, hit?: DamageHitContext): number {
   const list = target.statuses.filter(
-    (s) => s.type === 'damage_reduce' && statusMatchesHit(s, hit)
+    (s) =>
+      s.type === 'damage_reduce' &&
+      statusMatchesHit(s, hit) &&
+      (!('requireSelfStatus' in s) || !s.requireSelfStatus || hasStatus(target, s.requireSelfStatus))
   );
-  return sumRates(list, 'damage_reduce');
+  return sumRates(list, 'damage_reduce') + pendingStacksReduceOf(target);
 }
 
 /**
@@ -2595,6 +2967,29 @@ function sumReduce(target: UnitState, hit?: DamageHitContext): number {
  * 消费方：buffMult 按「单一总和」模型把两侧增伤与受击方减伤（damage_reduce）求和后 clamp 下限 10%。
  * @param hit 本次伤害上下文；缺省不过滤（旧调用保持原行为）
  */
+/** 「进行攻击」判定（侵掠如火口径）：普通攻击 / 物理主动战法 / 追击战法；
+ *  不含分兵溅射（split）、反击、指挥代打（skillType:'command'）与 DoT。 */
+function isAttackHitForProc(hit?: DamageHitContext): boolean {
+  if (!hit || hit.damageType !== 'physical' || hit.dotType || hit.split) return false;
+  if (hit.damageSource === 'basic') return true;
+  return hit.skillType === 'active' || hit.skillType === 'pursuit';
+}
+
+/** 进行攻击时概率增伤（侵掠如火）：按施法者被动 `attackProcBoost` 逐条掷一次，命中累加 rate。
+ *  官方未写受士气影响（非战法发动率，属效果几率）→ 按固定概率判定，不走 moraleTriggerRate。 */
+function attackProcBoostOf(ctx: CombatContext, source: UnitState, hit?: DamageHitContext): number {
+  if (!isAttackHitForProc(hit)) return 0;
+  let boost = 0;
+  for (const id of source.general.passiveSkillIds) {
+    const skill = resolveSkill(ctx, id);
+    if (skill?.type !== 'passive') continue;
+    const cfg = skill.attackProcBoost;
+    if (!cfg) continue;
+    if (ctx.rng.chance(cfg.chance)) boost += cfg.rate;
+  }
+  return boost;
+}
+
 function damageBoosts(
   ctx: CombatContext,
   source: UnitState,
@@ -2611,7 +3006,12 @@ function damageBoosts(
     'damage_boost',
     'taken'
   );
-  return { causedMult: 1 + causedBoost, takenMult: 1 + takenBoost };
+  // 被动概率增伤（侵掠如火）：命中则并入造成侧合计（数值体现在伤害本身，不进战报增减伤明细）
+  // 叠层待发·下次普攻增伤（奉令护蜀）：同属「进行攻击」的一次性造成侧增伤
+  return {
+    causedMult: 1 + causedBoost + attackProcBoostOf(ctx, source, hit) + pendingStacksBoostOf(source, hit),
+    takenMult: 1 + takenBoost,
+  };
 }
 
 /**
@@ -2651,7 +3051,12 @@ function collectDamageModifiers(
         .map((s) => toSrc(s, 'taken'))
     : [];
   const reduce = target.statuses
-    .filter((s): s is Extract<Status, { type: 'damage_reduce' }> => s.type === 'damage_reduce' && statusMatchesHit(s, hit))
+    .filter(
+      (s): s is Extract<Status, { type: 'damage_reduce' }> =>
+        s.type === 'damage_reduce' &&
+        statusMatchesHit(s, hit) &&
+        (!s.requireSelfStatus || hasStatus(target, s.requireSelfStatus))
+    )
     .map((s) => toSrc(s, 'reduce'));
   const cr = troopCounterReduceOf(source, target);
   if (cr > 0 && !opts?.ignoresTroopCounter) {
@@ -2700,6 +3105,9 @@ function statusName(type: StatusType): string {
     case 'rest': return '休整';
     case 'morale_boost': return '士气提高';
     case 'ignore_def': return '无视防御';
+    case 'retaliate': return '受击追加攻击';
+    case 'pending_stacks': return '叠层待发';
+    case 'ignore_evasion': return '无视规避';
     case 'range_buff': return '攻击距离';
   }
 }
@@ -2926,7 +3334,13 @@ function executeSkillOutputs(
     }
     if (out.kind === 'chance_group') {
       const morale = effectiveMorale(caster);
-      const rate = moraleTriggerRate(morale, out.chance);
+      // 按造成伤害次数递增发动率（霸王渡江：40% + 3%/层，最多 5 层）
+      const boostCfg = skill.chanceBoostPerDamage;
+      const stacks = boostCfg
+        ? Math.min(boostCfg.maxStacks, ctx.skillDamageCounters?.get(`${caster.general.id}:${skill.id}`) ?? 0)
+        : 0;
+      const baseChance = boostCfg ? out.chance + boostCfg.increment * stacks : out.chance;
+      const rate = moraleTriggerRate(morale, Math.min(1, baseChance));
       const success = ctx.rng.chance(rate);
       ctx.events.push({
         type: 'skill_trigger',
@@ -2935,7 +3349,7 @@ function executeSkillOutputs(
         skillName: skill.name,
         success,
         rate: Math.round(rate * 100),
-        baseRate: Math.round(out.chance * 100),
+        baseRate: Math.round(Math.min(1, baseChance) * 100),
         morale,
       });
       if (success) executeSkillOutputs(ctx, caster, skill, targets, out.outputs);
@@ -2968,7 +3382,7 @@ function executeSkillOutputs(
     // 单输出目标池：target:'self' → 施法者；targetMode 覆盖 → 按战法距离重新选敌/友军目标
     const enemies = caster.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
     const allies = caster.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
-    const outTarget = out.kind === 'positional_physical_damage' || out.kind === 'morale_branch' ? undefined : out.target;
+    const outTarget = out.kind === 'positional_physical_damage' || out.kind === 'morale_branch' || out.kind === 'detonate_sorcery_marks' ? undefined : out.target;
     const outMode =
       out.kind === 'physical_damage' || out.kind === 'strategy_damage' ? out.targetMode : undefined;
     const outIgnoreRange =
@@ -3016,6 +3430,35 @@ function executeSkillOutputs(
       const overlap = new Set(lastDamageTargetIds.filter((id) => prevDamageTargetIds.includes(id)));
       pool = ctx.myTeam.concat(ctx.enemyTeam).filter((u) => u.alive && overlap.has(u.general.id));
     }
+    // 地公将军：整段开关——上一段伤害的命中目标中存在妖术（sorcery）/ 妖术诅咒（curse）才结算本段
+    if (
+      out.kind === 'inflict_status' &&
+      out.requireAnyPrevDamageTargetStatus &&
+      out.requireAnyPrevDamageTargetStatus.length > 0
+    ) {
+      const prevTargets = ctx.myTeam
+        .concat(ctx.enemyTeam)
+        .filter((u) => u.alive && lastDamageTargetIds.includes(u.general.id));
+      const hit = prevTargets.some((u) =>
+        u.statuses.some((st) => out.requireAnyPrevDamageTargetStatus!.includes(st.type))
+      );
+      if (!hit) continue;
+    }
+    // 缚父临危：状态段的友军目标选取（① 我军当前攻击属性最高单体，② 按武将名匹配「吕布」等指定武将）
+    if (out.kind === 'inflict_status' && out.targetPick) {
+      if (out.targetPick === 'highest_attack_ally') {
+        const pick = highestStatAlly(allies, 'attack'); // 含施法者自身（「自身及友军攻击属性最高的单体」）
+        pool = pick ? [pick] : [];
+      } else if (out.targetPick === 'ally_named') {
+        pool = allies.filter((u) => u.alive && u.general.name === out.targetPickName);
+      }
+    }
+    // 三军夺帅 / 地公将军：本段状态打在**上一段伤害**的同一批命中目标上（不按本段 targetMode 重选）
+    if (out.kind === 'inflict_status' && out.sameTargetsAsLastDamage) {
+      pool = ctx.myTeam
+        .concat(ctx.enemyTeam)
+        .filter((u) => u.alive && lastDamageTargetIds.includes(u.general.id));
+    }
     if (out.kind === 'inflict_status' && out.positions && out.positions.length > 0) {
       // 阵营池：缺省敌军（落首箭混乱打大营）；targetSide:'ally' 时改按友军站位筛（怀橘遗亲：大营 / 前锋中军）
       const sidePool =
@@ -3058,11 +3501,47 @@ function executeSkillOutputs(
       pool = pool.filter((u) => out.troopTypes!.includes(u.general.troopType));
     }
     switch (out.kind) {
+      case 'detonate_sorcery_marks': {
+        // 破凰：引爆敌军全体身上由本战法施加的「受击触发妖术」剩余次数
+        // （剩余 N 次 → 连打 N 次挂上时冻结的妖术伤害，随后移除该状态；无存量则空转）
+        for (const foe of enemies) {
+          if (!foe.alive) continue;
+          const marks = foe.statuses.filter(
+            (s): s is Extract<Status, { type: 'sorcery' }> =>
+              s.type === 'sorcery' && s.onHurt === true && s.sourceSkillId === skill.id
+          );
+          if (marks.length === 0) continue;
+          // 先移除标记再逐次结算（结算伤害走 applyDamage 不会再触发本标记）
+          foe.statuses = foe.statuses.filter(
+            (s) => !(s.type === 'sorcery' && s.onHurt === true && s.sourceSkillId === skill.id)
+          );
+          for (const mark of marks) {
+            for (let k = 0; k < (mark.charges ?? 0); k++) {
+              if (!foe.alive) break;
+              dealDotDamage(ctx, foe, mark);
+            }
+          }
+        }
+        break;
+      }
       case 'physical_damage': {
         if (out.attacker === 'recipient') {
           const atkRange = out.range ?? skill.range;
           const selectedIds: string[] = [];
-          for (const rider of pool) {
+          // 代打者挑选：highest_attack = 只由我军攻击属性最高者出手（四世三公「额外…」段）
+          const riders =
+            out.attackerPick === 'highest_attack'
+              ? (() => {
+                  const alive = pool.filter((u) => u.alive);
+                  if (alive.length === 0) return [] as UnitState[];
+                  return [
+                    alive.reduce((best, u) =>
+                      effectiveStat(u, 'attack') > effectiveStat(best, 'attack') ? u : best
+                    ),
+                  ];
+                })()
+              : pool;
+          for (const rider of riders) {
             if (!rider.alive) continue;
             if (out.chance != null) {
               const morale = effectiveMorale(caster);
@@ -3081,7 +3560,19 @@ function executeSkillOutputs(
               });
               if (!success) continue;
             }
-            const foes = skillTargets(ctx, rider, enemies, atkRange, resolveCombatTargetMode(out.targetMode, 'random_single'));
+            // 选敌覆盖：lowest_defense = 直接取存活敌军中防御最低者（无视距离；四世三公「对敌军防御最低单体」段）
+            const foes =
+              out.targetPick === 'lowest_defense'
+                ? (() => {
+                    const alive = enemies.filter((e) => e.alive);
+                    if (alive.length === 0) return [] as UnitState[];
+                    return [
+                      alive.reduce((best, u) =>
+                        effectiveStat(u, 'defense') < effectiveStat(best, 'defense') ? u : best
+                      ),
+                    ];
+                  })()
+                : skillTargets(ctx, rider, enemies, atkRange, resolveCombatTargetMode(out.targetMode, 'random_single'));
             let riderAttacked = false;
             for (const raw of foes) {
               if (!raw.alive) continue;
@@ -3089,21 +3580,34 @@ function executeSkillOutputs(
               if (!t.alive) continue;
               riderAttacked = true;
               selectedIds.push(t.general.id);
-              triggerStackBuff(ctx, rider, t, 'physical');
+              // 代打伤害按代打者属性孰高定轨（徽言龙凤「由攻击或谋略属性中较高的属性决定」）：
+              // 生效攻击 > 生效谋略 → 攻击伤害（attackRate），否则策略伤害（strategyRate）
+              const byHigher = out.recipientDamageByHigherStat;
+              const useStrategy = byHigher
+                ? effectiveStat(rider, 'strategy') >= effectiveStat(rider, 'attack')
+                : false;
+              const damageType: DamageType = useStrategy ? 'strategy' : 'physical';
+              triggerStackBuff(ctx, rider, t, damageType);
               if (!out.ignoresEvasion && consumeEvasion(ctx, t, rider.general.id)) continue;
               const atk = effectiveStat(rider, 'attack');
-              const def = physicalTargetDefense(rider, t);
-              const hit: DamageHitContext = { damageSource: 'skill', damageType: 'physical', skillType: skill.type };
+              const def = useStrategy ? t.general.defense : physicalTargetDefense(rider, t);
+              const hit: DamageHitContext = { damageSource: 'skill', damageType, skillType: skill.type };
               const { causedMult, takenMult } = damageBoosts(ctx, rider, t, hit);
               const counterReduce = out.ignoresTroopCounter ? 0 : troopCounterReduceOf(rider, t);
               const reduce = sumReduce(t, hit) + counterReduce;
-              const rate = Array.isArray(out.rate) ? ctx.rng.intInclusive(out.rate[0], out.rate[1]) : out.rate;
+              const rate = byHigher
+                ? useStrategy
+                  ? byHigher.strategyRate
+                  : byHigher.attackRate
+                : Array.isArray(out.rate)
+                  ? ctx.rng.intInclusive(out.rate[0], out.rate[1])
+                  : out.rate;
               const { damage, breakdown } = calcDamage(
                 {
-                  damageType: 'physical',
+                  damageType,
                   rate,
                   attackerAttack: atk,
-                  attackerStrategy: rider.general.strategy,
+                  attackerStrategy: effectiveStat(rider, 'strategy'),
                   attackerTroops: rider.troops,
                   targetDefense: def,
                   targetStrategy: t.general.strategy,
@@ -3118,12 +3622,12 @@ function executeSkillOutputs(
                 targetId: t.general.id,
                 skillId: skill.id,
                 skillName: skill.name,
-                damageType: 'physical',
+                damageType,
                 damage: capped,
                 breakdown,
                 modifiers: collectDamageModifiers(ctx, rider, t, true, hit, { ignoresTroopCounter: out.ignoresTroopCounter }),
               });
-              applyDamage(ctx, t, capped, rider, 'physical', 'skill');
+              applyDamage(ctx, t, capped, rider, damageType, 'skill');
             }
             if (riderAttacked) consumeAttackCharges(ctx, rider, { damageSource: 'skill', damageType: 'physical', skillType: skill.type });
           }
@@ -3132,7 +3636,11 @@ function executeSkillOutputs(
           break;
         }
         const source =
-          out.attacker === 'lowest_strategy_ally' ? lowestStrategyAlly(allies, caster) : caster;
+          out.attacker === 'lowest_strategy_ally'
+            ? lowestStrategyAlly(allies, caster)
+            : out.attacker === 'highest_attack_ally'
+              ? highestStatAlly(allies, 'attack')
+              : caster;
         if (!source) {
           rememberDamageTargets([]);
           break;
@@ -3167,7 +3675,7 @@ function executeSkillOutputs(
             // 规避：默认免疫一次伤害；ignoresEvasion 时无视
             if (!out.ignoresEvasion && consumeEvasion(ctx, t, source.general.id)) continue;
             const atk = effectiveStat(source, 'attack');
-            const def = physicalTargetDefense(source, t);
+            const def = physicalTargetDefense(source, t, out.ignoresDefense === true);
             const hit: DamageHitContext = { damageSource: 'skill', damageType: 'physical', skillType: skill.type };
             const { causedMult, takenMult } = damageBoosts(ctx, source, t, hit);
             const counterReduce = out.ignoresTroopCounter ? 0 : troopCounterReduceOf(source, t);
@@ -3201,6 +3709,15 @@ function executeSkillOutputs(
               modifiers: collectDamageModifiers(ctx, source, t, true, hit, { ignoresTroopCounter: out.ignoresTroopCounter }),
             });
             applyDamage(ctx, t, capped, source, 'physical', 'skill');
+            // 按造成伤害次数递增发动率（霸王渡江）：本战法每造成 1 次伤害计 1 层（上限 maxStacks）
+            if (skill.chanceBoostPerDamage && capped > 0) {
+              ctx.skillDamageCounters ??= new Map();
+              const key = `${source.general.id}:${skill.id}`;
+              const used = ctx.skillDamageCounters.get(key) ?? 0;
+              if (used < skill.chanceBoostPerDamage.maxStacks) {
+                ctx.skillDamageCounters.set(key, used + 1);
+              }
+            }
             // 首次攻击标记（辕门射戟）：对本次攻击目标施加「造成攻击伤害降低」debuff（damage_boost caused 负值，
             // buffMult 10% 伤害下限 → 强制目标造成伤害降为 min 10%），持续 duration 回合；第二次攻击独立选目标不受影响
             if (out.markCausedReduce && t.alive) {
@@ -3241,36 +3758,47 @@ function executeSkillOutputs(
         }
         rememberDamageTargets(selectedIds);
         if (attacked) consumeAttackCharges(ctx, source, { damageSource: 'skill', damageType: 'physical', skillType: skill.type });
+        // 西陵克晋：代打者结算后按自身当前兵力恢复（每次发动一段恢复一次，不随目标数叠加）
+        if (attacked && out.healSource) healDamageSource(ctx, skill, caster, source, out.healSource.rate);
         executeDamageChain(ctx, caster, skill, targets, out);
         break;
       }
       case 'strategy_damage': {
         const selectedIds: string[] = [];
+        // 代打者（西陵克晋）：我军当前谋略属性最高者出手；缺省 = statU（既有口径零回归）
+        const stratRider =
+          out.attacker === 'highest_strategy_ally' ? highestStatAlly(allies, 'strategy') : undefined;
+        if (out.attacker === 'highest_strategy_ally' && !stratRider) {
+          rememberDamageTargets([]);
+          break;
+        }
+        const stratSrc = stratRider ?? statU;
+        const stratActor = stratRider ?? caster;
         for (const t of pool) {
           if (!t.alive) continue;
           if (out.requireStatuses?.length && !out.requireStatuses.some((st) => hasStatus(t, st))) continue;
           selectedIds.push(t.general.id);
           // 常驻伤害前叠层（持节镇西）：施法者叠谋略、受击者叠防御
-          triggerStackBuff(ctx, statU, t, 'strategy');
+          triggerStackBuff(ctx, stratSrc, t, 'strategy');
           // 规避：默认免疫一次伤害；ignoresEvasion 时无视
-          if (!out.ignoresEvasion && consumeEvasion(ctx, t, statU.general.id)) continue;
+          if (!out.ignoresEvasion && consumeEvasion(ctx, t, stratSrc.general.id)) continue;
           // 叠层后再读生效谋略（与攻击伤害先叠攻击再读 effectiveStat 对齐；
           // 群体逐目标叠层，每段伤害吃到截至本目标的全部层）
-          const effStrategy = effectiveStat(statU, 'strategy');
+          const effStrategy = effectiveStat(stratSrc, 'strategy');
           let rate = out.rate;
           if (out.strategyScaled && out.growthRate !== undefined) {
             rate = roundRate(scaledValue(out.rate, out.growthRate, effStrategy));
           }
           const hit: DamageHitContext = { damageSource: 'skill', damageType: 'strategy', skillType: skill.type };
-          const { causedMult, takenMult } = damageBoosts(ctx, statU, t, hit);
-          const reduce = sumReduce(t, hit) + troopCounterReduceOf(statU, t);
+          const { causedMult, takenMult } = damageBoosts(ctx, stratSrc, t, hit);
+          const reduce = sumReduce(t, hit) + troopCounterReduceOf(stratSrc, t);
           const { damage, breakdown } = calcDamage(
             {
               damageType: 'strategy',
               rate,
-              attackerAttack: statU.general.attack,
+              attackerAttack: stratSrc.general.attack,
               attackerStrategy: effStrategy,
-              attackerTroops: statU.troops,
+              attackerTroops: stratSrc.troops,
               targetDefense: t.general.defense,
               targetStrategy: t.general.strategy,
               mult: buffMult(causedMult, takenMult, reduce),
@@ -3280,19 +3808,27 @@ function executeSkillOutputs(
           const capped = applyTroopCap(damage, t.troops);
           ctx.events.push({
             type: 'damage',
-            sourceId: caster.general.id,
+            sourceId: stratActor.general.id,
+            // 代打（西陵克晋）：杀伤统计归属施法者
+            creditToId: stratActor.general.id === caster.general.id ? undefined : caster.general.id,
             targetId: t.general.id,
             skillId: skill.id,
             skillName: skill.name,
             damageType: 'strategy',
             damage: capped,
             breakdown,
-            modifiers: collectDamageModifiers(ctx, caster, t, true, hit),
+            modifiers: collectDamageModifiers(ctx, stratSrc, t, true, hit),
           });
-          applyDamage(ctx, t, capped, caster, 'strategy', 'skill');
+          applyDamage(ctx, t, capped, stratActor, 'strategy', 'skill');
+          // 其徐如林：本侧施加的策略伤害生效后，对目标同侧相邻敌军额外造成一次策略伤害（原伤害率 × 比例）
+          if (capped > 0) triggerStrategyAdjacentBonus(ctx, caster, t, rate);
         }
         rememberDamageTargets(selectedIds);
-        if (pool.some((t) => t.alive)) consumeAttackCharges(ctx, caster, { damageSource: 'skill', damageType: 'strategy', skillType: skill.type });
+        if (pool.some((t) => t.alive)) consumeAttackCharges(ctx, stratActor, { damageSource: 'skill', damageType: 'strategy', skillType: skill.type });
+        // 西陵克晋：代打者结算后按自身当前兵力恢复（每次发动一段恢复一次，不随目标数叠加）
+        if (selectedIds.length > 0 && out.healSource) {
+          healDamageSource(ctx, skill, caster, stratActor, out.healSource.rate);
+        }
         executeDamageChain(ctx, caster, skill, targets, out);
         break;
       }
@@ -3608,9 +4144,13 @@ export function triggerActiveSkill(
   // 七步释嫌等：进入主动发动率判定即「试图发动」
   triggerAllyActCommands(ctx, unit);
   if (!unit.alive) return;
-  // 发动率提升：乘算（难知如阴）或加算封顶（动如雷震），再乘士气系数
+  // 发动率递减（威震河朔）：每次成功发动后基础率 −decay，可叠、最低 0（在 trigger_boost 与士气之前）
+  const decayPerCast = skill.triggerRateDecayPerCast ?? 0;
+  const castCount = decayPerCast > 0 ? (ctx.skillCastCounters?.get(`${unit.general.id}:${skill.id}`) ?? 0) : 0;
   const rolled = rollTriggerRate(ctx.rng, skill.triggerRate);
-  const base = boostedBaseRate(unit, 'active', rolled);
+  const decayed = decayPerCast > 0 ? Math.max(0, rolled - decayPerCast * castCount) : rolled;
+  // 发动率提升：乘算（难知如阴）或加算封顶（动如雷震），再乘士气系数
+  const base = boostedBaseRate(unit, 'active', decayed, skill);
   const morale = effectiveMorale(unit);
   const rate = moraleTriggerRate(morale, base);
   const success = ctx.rng.chance(rate);
@@ -3655,6 +4195,8 @@ export function triggerActiveSkill(
   executeSkillWithTargets(ctx, unit, skill, enemies, allies, attackPool);
   triggerAfterFirstActiveCommands(ctx, unit);
   triggerPassiveAfterActive(ctx, unit);
+  // 三军夺帅：成功发动主动战法后触发；奉令护蜀：本侧友军行动叠层
+  triggerActHooks(ctx, unit);
 }
 
 /** 准备完成的战法自动发动 */
@@ -3669,6 +4211,8 @@ function executePreparedSkill(
   executeSkillWithTargets(ctx, unit, skill, enemies, allies, attackPool);
   triggerAfterFirstActiveCommands(ctx, unit);
   triggerPassiveAfterActive(ctx, unit);
+  // 三军夺帅：成功发动主动战法后触发；奉令护蜀：本侧友军行动叠层
+  triggerActHooks(ctx, unit);
 }
 
 /**
@@ -3697,6 +4241,136 @@ function triggerAfterFirstActiveCommands(ctx: CombatContext, unit: UnitState): v
       skillName: skill.name,
     });
     executeSkillOutputs(ctx, unit, skill, selected);
+  }
+}
+
+/**
+ * 友军行动叠层（奉令护蜀）：本侧每次成功发动普攻 / 主动 / 追击后，给带 `allyActStacks` 被动的**其他**友军
+ * 挂 / 叠加 1 层 `pending_stacks`（**不含行动者自身**——官方「任意友军」与「我军全体」措辞刻意区分，待复核）。
+ * 每层数值在**首次叠层**时按持有者生效攻击 / 生效防御缩放后冻结（受攻击 / 受防御；成长率未确认时按基值）。
+ */
+export function triggerAllyActStacks(ctx: CombatContext, actor: UnitState): void {
+  const team = actor.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+  for (const holder of team) {
+    if (!holder.alive) continue;
+    // 「任意友军」= 除行动者自身以外的友军（待复核：官方另有「我军全体」措辞用于含己场景）
+    if (holder === actor) continue;
+    for (const id of holder.general.passiveSkillIds) {
+      const skill = resolveSkill(ctx, id);
+      if (skill?.type !== 'passive' || !skill.allyActStacks) continue;
+      addPendingStack(ctx, holder, skill);
+    }
+  }
+}
+
+/** 「成功发动」后的统一监听入口（普攻 / 主动 / 追击三来源共用）：
+ *  ① 行动者自身 `afterAct`（三军夺帅）；② 本侧 `allyActStacks` 叠层（奉令护蜀）。
+ *  叠层发生在本次行动**之后**，不影响本次行动的伤害结算。 */
+export function triggerActHooks(ctx: CombatContext, actor: UnitState): void {
+  triggerPassiveAfterAct(ctx, actor);
+  triggerAllyActStacks(ctx, actor);
+}
+
+/** 叠 1 层待发（奉令护蜀）：首次叠层时冻结「每层增伤 / 每层减伤」，此后只加层数（上限 maxStacks）。 */
+function addPendingStack(
+  ctx: CombatContext,
+  holder: UnitState,
+  skill: Extract<Skill, { type: 'passive' }>
+): void {
+  const cfg = skill.allyActStacks;
+  if (!cfg) return;
+  const existing = holder.statuses.find(
+    (s): s is Extract<Status, { type: 'pending_stacks' }> =>
+      s.type === 'pending_stacks' && s.sourceSkillId === skill.id
+  );
+  if (existing) {
+    if (existing.stacks < cfg.maxStacks) existing.stacks += 1;
+    ctx.events.push({
+      type: 'status_inflicted',
+      unitId: holder.general.id,
+      statusType: 'pending_stacks',
+      detail: `${skill.name} ${existing.stacks}/${cfg.maxStacks} 层`,
+    });
+    return;
+  }
+  // 每层数值：受攻击 / 受防御缩放（growthRate 未确认时不缩放、用基值），挂上时冻结
+  const atk = effectiveStat(holder, 'attack');
+  const def = effectiveStat(holder, 'defense');
+  const perLayerBoost =
+    cfg.boostAttackScaled && cfg.boostGrowthRate !== undefined
+      ? roundRate(scaledValue(cfg.boostRate * 100, cfg.boostGrowthRate, atk)) / 100
+      : cfg.boostRate;
+  const perLayerReduce =
+    cfg.reduceDefenseScaled && cfg.reduceGrowthRate !== undefined
+      ? roundRate(scaledValue(cfg.reduceRate * 100, cfg.reduceGrowthRate, def)) / 100
+      : cfg.reduceRate;
+  holder.statuses.push({
+    type: 'pending_stacks',
+    stacks: 1,
+    maxStacks: cfg.maxStacks,
+    perLayerBoost,
+    perLayerReduce,
+    appliedRound: ctx.currentRound,
+    sourceSkillType: 'passive',
+    sourceSkillId: skill.id,
+    sourceUnitId: holder.general.id,
+  });
+  ctx.events.push({
+    type: 'status_inflicted',
+    unitId: holder.general.id,
+    statusType: 'pending_stacks',
+    detail: `${skill.name} 1/${cfg.maxStacks} 层`,
+  });
+}
+
+/** 清空叠层待发（奉令护蜀）：普攻打出 / 受到实际伤害后**全部层数**清零（两段共用计数器，先到先清）。 */
+function consumePendingStacks(ctx: CombatContext, unit: UnitState): void {
+  const list = unit.statuses.filter((s) => s.type === 'pending_stacks');
+  if (list.length === 0) return;
+  unit.statuses = unit.statuses.filter((s) => s.type !== 'pending_stacks');
+  for (const _s of list) {
+    ctx.events.push({ type: 'status_expired', unitId: unit.general.id, statusType: 'pending_stacks' });
+  }
+}
+
+/** 叠层待发·下次普攻增伤（奉令护蜀）：仅**普通攻击**读取（不含分兵溅射） */
+function pendingStacksBoostOf(source: UnitState, hit?: DamageHitContext): number {
+  if (!hit || hit.damageSource !== 'basic' || hit.split) return 0;
+  let boost = 0;
+  for (const s of source.statuses) {
+    if (s.type === 'pending_stacks') boost += s.perLayerBoost * s.stacks;
+  }
+  return boost;
+}
+
+/** 叠层待发·下次受击减伤（奉令护蜀）：**任何**伤害都读取 */
+function pendingStacksReduceOf(target: UnitState): number {
+  let reduce = 0;
+  for (const s of target.statuses) {
+    if (s.type === 'pending_stacks') reduce += s.perLayerReduce * s.stacks;
+  }
+  return reduce;
+}
+
+/**
+ * 被动「成功发动普通攻击 / 主动战法 / 追击战法后」触发（三军夺帅）：三种来源每次成功后各结算一次 output。
+ * 与 `triggerPassiveAfterActive`（仅主动战法）区分；无次数上限。
+ * 调用点：普攻（performNormalAttack）／主动释放（普通 + 准备完成）／追击成功释放。
+ * 注意：本钩子输出的伤害段**不再**回触发本钩子（只有三类「发动」动作会调用它），故无自递归。
+ */
+export function triggerPassiveAfterAct(ctx: CombatContext, unit: UnitState): void {
+  if (!unit.alive) return;
+  const enemies = unit.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
+  for (const id of unit.general.passiveSkillIds) {
+    const skill = resolveSkill(ctx, id);
+    if (skill?.type !== 'passive' || !skill.afterAct) continue;
+    ctx.events.push({
+      type: 'skill_cast',
+      unitId: unit.general.id,
+      skillId: skill.id,
+      skillName: skill.name,
+    });
+    executeSkillOutputs(ctx, unit, skill, enemies, skill.afterAct.output);
   }
 }
 
@@ -3742,6 +4416,12 @@ function executeSkillWithTargets(
     // 追击战法由普攻命中触发，不在此处理
     return;
   }
+  // 发动率递减计数：本战法实际释放一次（威力上即「发动一次」，准备主动在释放时计一次）
+  if (skill.triggerRateDecayPerCast) {
+    ctx.skillCastCounters ??= new Map();
+    const key = `${unit.general.id}:${skill.id}`;
+    ctx.skillCastCounters.set(key, (ctx.skillCastCounters.get(key) ?? 0) + 1);
+  }
 
   const targetMode = skill.targetMode;
   let targets: UnitState[];
@@ -3758,6 +4438,7 @@ function executeSkillWithTargets(
         o.kind !== 'morale_branch' &&
         o.kind !== 'random_pick' &&
         o.kind !== 'chance_group' &&
+        o.kind !== 'detonate_sorcery_marks' &&
         o.target !== 'self' &&
         // 单输出已覆盖目标池的 heal/inflict 不决定战法整体目标（利兵谋胜：伤敌 + 治友）
         !('targetSide' in o && o.targetSide) &&
@@ -3827,7 +4508,7 @@ function triggerPursuitSkill(
   if (!unit.alive) return;
   // 发动率提升：追击同样吃 trigger_boost（动如雷震仅追击加算 +100 个百分点）
   const rolled = rollTriggerRate(ctx.rng, skill.triggerRate);
-  const base = boostedBaseRate(unit, 'pursuit', rolled);
+  const base = boostedBaseRate(unit, 'pursuit', rolled, skill);
   const morale = effectiveMorale(unit);
   const rate = moraleTriggerRate(morale, base);
   const success = ctx.rng.chance(rate);
@@ -3856,6 +4537,8 @@ function triggerPursuitSkill(
     skillName: skill.name,
   });
   executeSkillOutputs(ctx, unit, skill, [hitTarget]);
+  // 三军夺帅：成功发动追击战法后触发；奉令护蜀：本侧友军行动叠层
+  triggerActHooks(ctx, unit);
 }
 
 // ─── 普通攻击 ───
@@ -3936,6 +4619,8 @@ function normalAttack(
   dealAttack(ctx, unit, target, distance);
   // 七步释嫌等：成功发动普通攻击（含规避命中）后触发
   triggerAllyActCommands(ctx, unit);
+  // 三军夺帅：成功发动普通攻击后触发；奉令护蜀：本侧友军行动叠层
+  triggerActHooks(ctx, unit);
   return target;
 }
 
@@ -3968,6 +4653,8 @@ function dealAttack(ctx: CombatContext, unit: UnitState, target: UnitState, dist
   // 规避：命中前判定免疫
   if (consumeEvasion(ctx, hit, unit.general.id)) {
     consumeAttackCharges(ctx, unit, { damageSource: 'basic', damageType: 'physical' });
+    // 奉令护蜀：本次普攻已打出 → 清空待发层数（含未能造成伤害的规避情形）
+    consumePendingStacks(ctx, unit);
     return;
   }
 
@@ -3982,6 +4669,8 @@ function dealAttack(ctx: CombatContext, unit: UnitState, target: UnitState, dist
   });
   applyDamage(ctx, hit, capped, unit, 'physical', 'basic');
   consumeAttackCharges(ctx, unit, { damageSource: 'basic', damageType: 'physical' });
+  // 奉令护蜀：普攻打出后清空待发层数（攻击已消耗本次增伤）
+  consumePendingStacks(ctx, unit);
 }
 
 /** 持续型急救受击触发（皇裔流离/金匮要略）：目标受到伤害后判定。
@@ -4167,6 +4856,30 @@ function triggerIgniteOnHurt(ctx: CombatContext, target: UnitState): void {
   for (const ignite of ignites) {
     dealDotDamage(ctx, target, ignite);
     if (!target.alive) break;
+  }
+}
+
+/** 受击触发妖术（破凰「条件妖术」）：携带者每受到 1 次伤害额外引发 1 次妖术伤害
+ *  （挂上时冻结 stored，滞后触发），charges 递减、用尽即移除；
+ *  与 remaining 持续回合两者先到先失效。
+ *  结算前**临时移除本标记**再打伤害——否则本次妖术伤害走 applyDamage 会再次触发本标记，
+ *  一次受击就把剩余次数全部吃掉（对照 ignite 一次性标记的「先移除再结算」）。 */
+function triggerSorceryMarkOnHurt(ctx: CombatContext, target: UnitState): void {
+  const marks = target.statuses.filter(
+    (s): s is Extract<Status, { type: 'sorcery' }> => s.type === 'sorcery' && s.onHurt === true
+  );
+  for (const mark of marks) {
+    if (!target.alive) break;
+    const left = (mark.charges ?? 0) - 1;
+    target.statuses = target.statuses.filter((x) => x !== mark);
+    dealDotDamage(ctx, target, mark);
+    if (!target.alive) break;
+    if (left > 0) {
+      mark.charges = left;
+      target.statuses.push(mark);
+    } else {
+      ctx.events.push({ type: 'status_expired', unitId: target.general.id, statusType: 'sorcery' });
+    }
   }
 }
 
@@ -4535,8 +5248,12 @@ export function applyDamage(
   }
   if (actual > 0) {
     const hit: DamageHitContext = { damageSource, damageType };
+    // 全队累计伤害门槛（徽言龙凤）：本侧造成伤害即计数，达到门槛激活光环
+    if (source) noteTeamDamage(ctx, source);
     consumeTakenCharges(target, hit);
     decayFifthsOnHit(ctx, target, hit);
+    // 奉令护蜀：受到实际伤害后清空待发层数（本次减伤已被 sumReduce 计入）
+    consumePendingStacks(ctx, target);
     if (source && damageType === 'physical') {
       for (const id of source.general.passiveSkillIds) {
         const skill = resolveSkill(ctx, id);
@@ -4548,6 +5265,8 @@ export function applyDamage(
   }
   // 受击引燃（火势风威）：受到伤害时额外引发一次燃烧（触发后移除标记）
   triggerIgniteOnHurt(ctx, target);
+  // 受击触发妖术（破凰「条件妖术」）：受到伤害时额外引发一次妖术伤害（charges 次用尽移除）
+  triggerSorceryMarkOnHurt(ctx, target);
   // 持续型急救：仅非致死（扣兵后仍有兵力）可触发；兵力归零立即阵亡，不得复活
   if (!lethal && target.alive && target.troops > 0) {
     triggerFirstAidOnHurt(ctx, target);
@@ -4570,6 +5289,16 @@ export function applyDamage(
       ctx.resolvingHurtHooks = false;
     }
   }
+  // 忠克猛烈：目标每受到 1 次攻击伤害 → 标记施法者追加 1 次攻击（最多 2 次）。
+  // 同样包一层 resolvingHurtHooks：追加攻击段不再触发受击/反击/引燃等二次钩子（防循环）
+  if (!ctx.resolvingHurtHooks && actual > 0 && damageType === 'physical') {
+    ctx.resolvingHurtHooks = true;
+    try {
+      settleRetaliateOnHurt(ctx, target);
+    } finally {
+      ctx.resolvingHurtHooks = false;
+    }
+  }
   if (target.troops <= 0 && target.alive) {
     target.alive = false;
     ctx.events.push({
@@ -4578,5 +5307,45 @@ export function applyDamage(
       name: target.general.name,
       side: target.side,
     });
+  }
+}
+
+/**
+ * 忠克猛烈：携带者每受到 1 次**攻击伤害**（普攻 / 攻击战法 / 反击均可），由标记施法者对其追加 1 次攻击
+ * （伤害率 rate，无视兵种相克与目标防御 —— 与该战法主动段同口径），每个标记最多 maxTriggers 次。
+ */
+function settleRetaliateOnHurt(ctx: CombatContext, target: UnitState): void {
+  const marks = target.statuses.filter(
+    (s): s is Extract<Status, { type: 'retaliate' }> => s.type === 'retaliate',
+  );
+  for (const mark of marks) {
+    if (!target.alive) return;
+    const caster = castUnit(ctx, mark.sourceUnitId);
+    const skill = resolveSkill(ctx, mark.sourceSkillId);
+    if (!caster || !caster.alive || !skill) continue;
+    executeSkillOutputs(ctx, caster, skill, [target], [
+      { kind: 'physical_damage', rate: mark.rate, ignoresTroopCounter: true, ignoresDefense: true },
+    ]);
+    mark.triggers += 1;
+    if (mark.triggers >= mark.maxTriggers) {
+      target.statuses = target.statuses.filter((s) => s !== mark);
+    }
+  }
+}
+
+/**
+ * 忠克猛烈：施法者下一次行动开始时，清除其施加的「受击追加攻击」标记（官方「直到陈到下回合行动前」）。
+ * 标记挂在目标身上，故不能走目标的 tickStatusesOnActStart，需要在**施法者**行动时全局清扫。
+ */
+function expireRetaliateOnCasterAct(ctx: CombatContext, actor: UnitState): void {
+  for (const u of [...ctx.myTeam, ...ctx.enemyTeam]) {
+    u.statuses = u.statuses.filter(
+      (s) =>
+        !(
+          s.type === 'retaliate' &&
+          s.sourceUnitId === actor.general.id &&
+          s.appliedRound < ctx.currentRound
+        ),
+    );
   }
 }

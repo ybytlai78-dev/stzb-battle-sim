@@ -4406,4 +4406,843 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       onDealPhysical: true,
     },
   },
+
+  // ─── 批量31：下架武将清单 §1.2「补 1 个机制」逐个实现 ───
+
+  /**
+   * 计定山越（诸葛恪 h522·吴弓·主动 B）：1 回合准备，发动率 40%，距离 4，敌军群体 2 目标。
+   * ① 使敌军群体陷入恐慌状态（伤害率 134%，受谋略属性影响），每回合损失兵力，持续 2 回合；
+   * ② 若敌军群体士气一般或低落，额外使其陷入围困状态（无法恢复兵力）；
+   * ③ 使自身和友军单体恢复一定兵力（恢复率 98%，受谋略属性影响）。
+   * 官方：主动 B、发动率 40%、距离 4、目标「敌军群体（有效距离内 2 个目标）」、可用兵种弓
+   * （scripts/skill_extra.json id 200762；满级 / 1 级描述：恐慌 134%/67%、恢复 98%/49%）。
+   * 「受谋略属性影响」的恐慌 134% 与恢复 98% 成长率未确认 → 留空
+   *   （strategyScaled 标记在；DoT / heal 的 growthRate 是**必填字段**，给 0 = 不缩放、用基值）。
+   * 目标口径：「自身和友军单体」= 自身 + 1 名友军单体（不含自身），与奇佐鬼谋 / 合流同口径
+   *   （self 段 + targetSide:'ally' + random_single + excludeSelf）。
+   * 引擎配套：**无需新机制** —— ② 走既有 `morale_branch`（by:'target'、threshold 100：
+   *   士气 >100 高昂走 high（本战法为空），一般（=100）/ 低落（<100）走 low），
+   *   「士气一般或低落」即「非高昂」，故以 100 为阈值逐目标判定；③ 走既有 heal。
+   */
+  jiding_shanyue: {
+    id: 'jiding_shanyue',
+    name: '计定山越',
+    type: 'active',
+    prepare: true,
+    range: 4,
+    triggerRate: 0.4,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['panic', 'siege', 'heal'],
+    output: [
+      // ① 恐慌 DoT：134%（受谋略，成长率留空），持续 2 回合
+      { kind: 'inflict_status', status: { type: 'panic', duration: 2, rate: 134, growthRate: 0 } },
+      // ② 士气一般或低落（≤100）→ 追加围困 2 回合（恐慌 / 围困共用官方那句「持续 2 回合」）
+      {
+        kind: 'morale_branch',
+        threshold: 100,
+        by: 'target',
+        high: [],
+        low: [{ kind: 'inflict_status', status: { type: 'siege', duration: 2 } }],
+      },
+      // ③ 自身恢复 98%（受谋略，成长率留空）
+      { kind: 'heal', rate: 98, strategyScaled: true, growthRate: 0, target: 'self' },
+      // ④ 友军单体恢复 98%（不含自身；单体 = 距离内均匀随机）
+      {
+        kind: 'heal',
+        rate: 98,
+        strategyScaled: true,
+        growthRate: 0,
+        targetSide: 'ally',
+        targetMode: 'random_single',
+        excludeSelf: true,
+      },
+    ],
+  },
+
+  /**
+   * 威震河朔（袁绍·群弓 h670·主动 A）：发动率 70%，距离 5，敌军群体（有效距离内 2 个目标）。
+   * ① 对敌军群体发动一次攻击（伤害率 200%）；
+   * ② 使自身与友军单体的主动战法伤害提升 20%（受攻击属性影响），持续 2 回合；
+   * ③ 此战法每发动一次，其发动率降低 10%。
+   * 官方：主动 A / 70% / 距离 5 / 敌军群体 2 / 弓（scripts/skill_extra.json id 200947）。
+   * 官网该条为「攻击版 + 策略版」两段拼接，按仓库口径**只用前半**（攻击 200% + 受**攻击** 20%），
+   * 与 web/data/heroes.json h670 清洗后描述一致（策略版 240% / 受谋略 24% 不实现）。
+   * 受攻击的 20% 成长率未确认 → 留空（attackScaled: true 且不给 growthRate → 不缩放、用基值）。
+   * 引擎配套：**新增 `triggerRateDecayPerCast`（主动战法发动率递减）** —— 每次成功发动后基础发动率
+   * −0.1（可叠、最低 0），结算顺序 = 基础率 − 递减 + trigger_boost → × 士气；计数走 ctx.skillCastCounters。
+   * 其余（群体攻击 / 「自身 + 友军单体」/ damage_boost 的 skillTypes 过滤）均为既有能力。
+   */
+  weizhen_heshuo: {
+    id: 'weizhen_heshuo',
+    name: '威震河朔',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.7,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage', 'damage_boost'],
+    triggerRateDecayPerCast: 0.1,
+    output: [
+      // ① 敌军群体 2 目标：攻击 200%
+      { kind: 'physical_damage', rate: 200 },
+      // ② 自身：造成主动战法伤害 +20%（受攻击，成长率留空），2 回合
+      {
+        kind: 'inflict_status',
+        targetSide: 'self',
+        status: {
+          type: 'damage_boost',
+          rate: 0.2,
+          duration: 2,
+          direction: 'caused',
+          skillTypes: ['active'],
+          attackScaled: true,
+        },
+      },
+      // ③ 友军单体（不含自身）：同款 +20%
+      {
+        kind: 'inflict_status',
+        targetSide: 'ally',
+        targetMode: 'random_single',
+        excludeSelf: true,
+        status: {
+          type: 'damage_boost',
+          rate: 0.2,
+          duration: 2,
+          direction: 'caused',
+          skillTypes: ['active'],
+          attackScaled: true,
+        },
+      },
+    ],
+  },
+
+  /**
+   * 匠心不竭（黄月英·蜀步 h20·指挥 A）：距离 6，敌军全体。
+   * 战斗开始后，使敌军全体从第 1、3、5 回合开始，逐渐陷入恐慌（伤害率 34%）、燃烧（41%）、妖术（44%）
+   * （均受谋略属性影响），每回合开始时损失一定兵力，持续直到战斗结束；所造成的伤害无视规避。
+   * 官方：scripts/skill_extra.json id 200020（满级 34%/41%/44%，1 级 17%/20.5%/22%）；
+   * targetShow「敌军群体（有效距离内 3 个目标）」——率土一队 3 人，与描述「敌军全体」等价，按 `all` 取目标
+   * （同黄天当立 / 白衣渡江的全体口径）。
+   * 成长率：「受谋略属性影响」三段均未确认 → 留空（DoT 的 growthRate 为必填字段，给 0 = 不缩放、用基值）。
+   * 引擎配套：**新增 `CommandSkill.delayedOutputs`（一类指挥多次分段延迟施加）** ——
+   *   第 atRound 回合开始、单位行动前，对准备阶段锁定的目标（存活者）执行该条目 output。
+   * 无视规避：引擎 DoT 伤害不走规避判定（规避只作用于攻击伤害），自动满足。
+   */
+  jiangxin_bujie: {
+    id: 'jiangxin_bujie',
+    name: '匠心不竭',
+    type: 'command',
+    phase: 'prep',
+    range: 6,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'enemy',
+    tags: ['panic', 'burning', 'sorcery'],
+    output: [],
+    delayedOutputs: [
+      // 第 1 回合起：恐慌 34%（受谋略，成长率留空），至战斗结束
+      {
+        atRound: 1,
+        output: [{ kind: 'inflict_status', status: { type: 'panic', duration: 999, rate: 34, growthRate: 0 } }],
+      },
+      // 第 3 回合起：燃烧 41%
+      {
+        atRound: 3,
+        output: [{ kind: 'inflict_status', status: { type: 'burning', duration: 999, rate: 41, growthRate: 0 } }],
+      },
+      // 第 5 回合起：妖术 44%
+      {
+        atRound: 5,
+        output: [{ kind: 'inflict_status', status: { type: 'sorcery', duration: 999, rate: 44, growthRate: 0 } }],
+      },
+    ],
+  },
+
+  /**
+   * 全主诿异（孙鲁班·吴弓 h654·主动 B）：发动率 40%，距离 5。
+   * ① 使敌军全体被施加的燃烧、恐慌和妖术诅咒伤害提升 20%（受谋略属性影响），持续 3 回合；
+   * ② 同时对敌军群体 1-2 目标额外发动 1 次策略攻击（伤害率 197%，受谋略属性影响）。
+   * 官方：scripts/skill_extra.json id 200937（满级 20% / 197%，1 级 10% / 98.5%）；
+   * 「敌军全体」与「敌军群体 1-2 目标」是两个不同目标池 → 战法目标取伤害段的 groupCount [1,2]，
+   * ① 用输出级 targetSide:'enemy' + targetMode:'all' 重选全体。
+   * 成长率：两处「受谋略属性影响」均未确认 → 留空（strategyScaled 在、不给 growthRate → 按基值不缩放）。
+   * 引擎配套：**新增 `damage_boost.dotTypes` 过滤维**（DoT 类型 = 燃烧 / 恐慌 / 妖术诅咒 / 妖术 / 引燃）——
+   *   DoT 挂上时结算把 `dotType` 写进 DamageHitContext，`statusMatchesHit` 据此过滤；
+   *   其余（输出级重选目标 / groupCount 区间 [1,2]）均既有（辕门射戟先例）。
+   */
+  quanzhu_weiyi: {
+    id: 'quanzhu_weiyi',
+    name: '全主诿异',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.4,
+    targetMode: 'group',
+    groupCount: [1, 2],
+    targetSide: 'enemy',
+    tags: ['damage', 'damage_boost'],
+    output: [
+      // ① 敌军全体：被施加的燃烧 / 恐慌 / 妖术诅咒伤害 +20%（受谋略，成长率留空），3 回合
+      {
+        kind: 'inflict_status',
+        targetSide: 'enemy',
+        targetMode: 'all',
+        status: {
+          type: 'damage_boost',
+          rate: 0.2,
+          duration: 3,
+          direction: 'taken',
+          dotTypes: ['burning', 'panic', 'curse'],
+          strategyScaled: true,
+        },
+      },
+      // ② 敌军群体 1-2 目标：额外策略攻击 197%（受谋略，成长率留空）
+      { kind: 'strategy_damage', rate: 197, strategyScaled: true },
+    ],
+  },
+
+  /**
+   * 举贤决机（荀彧·魏步 h794·指挥 S）：距离 5，敌我全体。
+   * 首回合起，我军全体在被成功施加属性**提升**效果前，有 40% 几率使其恢复一定兵力（恢复率 60%，受谋略）；
+   * 敌军全体在被成功施加属性**下降**效果前，有 40% 几率对其造成一次策略伤害（伤害率 100%，受谋略）；
+   * 每种属性单独计算。
+   * 官方：scripts/skill_extra.json id 200269（满级 60% / 100%，1 级 30% / 50%）。
+   * 成长率：两处「受谋略属性影响」均未确认 → 留空（heal 的 growthRate 为必填 → 给 0；策略伤害不给 growthRate）。
+   * 引擎配套：**新增 `CommandSkill.onAttrChange`（属性升降「之前」判定）** —— inflictStatus 内、属性状态
+   *   成功施加之前（冲突判定之前）对「侧别 + 升降方向」匹配的规则各判一次，命中则对**被施加者**结算 output；
+   *   每条属性（攻/防/谋/速）各自独立判定（一维一个状态）+ 士气修正（一类指挥生效几率）。
+   * targetSide 取 'ally'：官方 targetShow 为「敌我全体」，引擎 targetSide 只能单侧，取友军侧用于目标登记与战报展示；
+   * 实际两条规则覆盖双向（我军提升 → 恢复；敌军下降 → 策略伤害）。
+   */
+  juxian_jueji: {
+    id: 'juxian_jueji',
+    name: '举贤决机',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['heal', 'damage'],
+    output: [],
+    onAttrChange: [
+      // 我军全体被施加属性提升（攻/防/谋/速各判一次）→ 40% 恢复 60%（受谋略，成长率留空）
+      {
+        victim: 'ally',
+        sign: 'up',
+        rate: 0.4,
+        output: [{ kind: 'heal', rate: 60, strategyScaled: true, growthRate: 0 }],
+      },
+      // 敌军全体被施加属性下降 → 40% 一次策略伤害 100%（受谋略，成长率留空）
+      {
+        victim: 'enemy',
+        sign: 'down',
+        rate: 0.4,
+        output: [{ kind: 'strategy_damage', rate: 100, strategyScaled: true }],
+      },
+    ],
+  },
+
+  /**
+   * 忠克猛烈（陈到·蜀步 h793·主动 S）：发动率 50%，距离 5，敌军单体。
+   * 本战法造成的伤害无视兵种相克及目标的防御属性；对敌军单体发动 1 次攻击（伤害率 300%），
+   * 并使其陷入犹豫状态（无法发动主动战法）持续 1 回合；直到陈到下回合行动前，目标每受到 1 次
+   * 攻击伤害，陈到对其发动 1 次攻击（伤害率 120%），期间最多可触发 2 次。
+   * 官方：scripts/skill_extra.json id 200268（1 级 150% / 60%）。
+   * 全文无「受 XX 属性影响」→ **无成长率留空问题，不需要下架登记**（本批首个可上架武将）。
+   * 引擎配套（2 项）：
+   *  ① `physical_damage.ignoresDefense`（无视目标防御属性，防御按 0 计）；
+   *  ② 新状态 `retaliate`（受击追加攻击标记）：携带者每受 1 次攻击伤害 → 标记施法者追加 1 次攻击
+   *     （同口径：无视兵种相克 + 无视防御），最多 maxTriggers 次；窗口「直到施法者下回合行动前」
+   *     由施法者行动时 `expireRetaliateOnCasterAct` 清除。
+   * 口径：犹豫「持续1回合」按仓库同措辞先例（樊渊泅囚 / 怯心夺志「犹豫 1 回合」）取 duration 1
+   *   ——即本回合内尚未行动的目标会被封住（若目标本回合已行动，则其下回合行动前到期）。
+   */
+  zhongke_menglie: {
+    id: 'zhongke_menglie',
+    name: '忠克猛烈',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.5,
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['damage', 'hesitation', 'retaliate'],
+    output: [
+      // ① 无视兵种相克 + 无视目标防御的 300% 攻击
+      { kind: 'physical_damage', rate: 300, ignoresTroopCounter: true, ignoresDefense: true },
+      // ② 犹豫 1 回合
+      { kind: 'inflict_status', status: { type: 'hesitation', duration: 1 } },
+      // ③ 受击追加攻击标记：每受 1 次攻击伤害 → 追加 1 次 120%，最多 2 次（窗口由施法者行动清除）
+      { kind: 'inflict_status', status: { type: 'retaliate', duration: 999, rate: 120, maxTriggers: 2 } },
+    ],
+  },
+
+  /**
+   * 霸王渡江（孙策·吴骑 h450·被动 A）：距离 5，敌军单体。
+   * 每回合有 40% 的几率对有效距离 5 以内的敌军单体发动三次猛烈攻击（伤害率 150%），每次攻击目标独立判定；
+   * 本场战斗中自身无法发动主动战法；每次攻击造成伤害后可使霸王渡江发动率提升 3%，该效果可叠加 5 次。
+   * 官方：scripts/skill_extra.json id 200771（官网两版本拼接 → 按仓库口径**只用前半**：3%/层；
+   * 后半的 5%/层 不实现，与 web/data/heroes.json h450 清洗后描述一致）。
+   * 全文无「受 XX 属性影响」→ 无成长率留空问题、不登记下架（**孙策上架**）。
+   * 引擎配套：**新增 `chanceBoostPerDamage`（按造成伤害次数递增 chance_group 基础率）** ——
+   *   每造成 1 次伤害（实际扣兵 > 0）计 1 层（上限 maxStacks），chance_group 基础率 = chance + increment×层数
+   *   （再走士气）；计数走 ctx.skillDamageCounters（整场累计）。其余（被动 roundStartRepeat 每回合判定 /
+   *   chance_group / repeats 多段独立选目标 / 自身犹豫）均既有（火兽冲锋 + 宣威再战先例）。
+   */
+  bawang_dujiang: {
+    id: 'bawang_dujiang',
+    name: '霸王渡江',
+    type: 'passive',
+    triggerRate: 1,
+    timing: 'battle_start',
+    range: 5,
+    targetMode: 'self',
+    tags: ['damage', 'hesitation'],
+    chanceBoostPerDamage: { increment: 0.03, maxStacks: 5 },
+    output: [
+      // 本场战斗中自身无法发动主动战法（犹豫；被动/指挥不受影响）
+      { kind: 'inflict_status', status: { type: 'hesitation', duration: 999 } },
+    ],
+    roundStartRepeat: {
+      output: [
+        {
+          kind: 'chance_group',
+          chance: 0.4,
+          outputs: [{ kind: 'physical_damage', rate: 150, targetMode: 'random_single', repeats: 3 }],
+        },
+      ],
+    },
+  },
+
+  /**
+   * 人公将军（张梁·群步 h557·指挥 B）：距离 3，我军全体 / 我军群体（官方 targetShow「我军群体（有效距离内 3 个目标）」）。
+   * 战斗前 4 回合：使我军全体防御属性提高 60；使我军前锋、中军受到普通攻击时会进行反击（伤害率 75%）；
+   * 在此期间，敌方武将存在妖术效果时造成的攻击伤害降低 20%。
+   * 官方：scripts/skill_extra.json id 200795（指挥 B / 距离 3 / 我军群体 3 目标 / 步；
+   * 满级 60 防御 + 反击 75% + 减伤 20%，1 级 30 / 37.5% / 10%）。
+   * 全文无「受 XX 属性影响」→ 无成长率留空问题、不登记下架（**张梁上架**）。
+   * 引擎配套：**新增 `damage_reduce.requireSelfStatus`（条件减伤）** —— 仅当携带者自身带该状态时本减伤才生效，
+   *   在 sumReduce / collectDamageModifiers 按携带者**当前**状态实时判定（人公将军：仅对带「妖术」的敌军生效）。
+   * 其余全部既有：一类指挥（准备阶段施加一次）/ 防御属性点数 buff / `counter` 反击资格（受普攻实际扣兵后反击来源）/
+   *   inflict_status 的 positions 站位筛选（怀橘遗亲先例）。
+   */
+  rengong_jiangjun: {
+    id: 'rengong_jiangjun',
+    name: '人公将军',
+    type: 'command',
+    phase: 'prep',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['defense_buff', 'counter', 'damage_reduce'],
+    output: [
+      // ① 前 4 回合：我军全体防御 +60
+      { kind: 'inflict_status', status: { type: 'defense_buff', amount: 60, duration: 4 } },
+      // ② 前 4 回合：我军前锋 / 中军 受普攻时反击 75%
+      {
+        kind: 'inflict_status',
+        targetSide: 'ally',
+        positions: ['前锋', '中军'],
+        status: { type: 'counter', duration: 4, rate: 75 },
+      },
+      // ③ 前 4 回合：带「妖术」效果的敌军造成的攻击伤害 −20%（条件减伤，按携带者当前状态实时判定）
+      {
+        kind: 'inflict_status',
+        targetSide: 'enemy',
+        targetMode: 'all',
+        status: {
+          type: 'damage_reduce',
+          rate: 0.2,
+          duration: 4,
+          damageType: 'physical',
+          requireSelfStatus: 'sorcery',
+        },
+      },
+    ],
+  },
+
+  /**
+   * 四世三公（袁绍·汉步 h6·主动 B）：发动率 35%，距离 5，敌军单体。
+   * ① 使我军全体分别对距离 5 以内的敌军单体发动一次攻击（伤害率 150%），每次目标独立判定；
+   * ② 额外使我军攻击属性最高单体，对敌军防御最低单体发动一次攻击（伤害率 160%）。
+   * 官方：scripts/skill_extra.json id 200006（主动 B / 35% / 距离 5 / 敌军单体 / 步；1 级 75% / 80%）；
+   * 官网描述为两段拼接（前半重复两次）→ 清洗后取前半 + 额外段，与 web/data/heroes.json h6 一致。
+   * 全文无「受 XX 属性影响」→ 无成长率留空问题、不登记下架（**袁绍·汉上架**）。
+   * 引擎配套（2 个选目标/选代打者开关，均挂在既有 `attacker:'recipient'` 代打路径上）：
+   *  ① `physical_damage.attackerPick: 'highest_attack'`（只由我军攻击属性最高者出手）；
+   *  ② `physical_damage.targetPick: 'lowest_defense'`（直接取存活敌军中防御最低者，无视距离）。
+   * ① 段用 `attacker:'recipient'` + `targetMode:'random_single'`（我军全体各打一次、各自独立选目标）。
+   */
+  sishisan_gong: {
+    id: 'sishisan_gong',
+    name: '四世三公',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.35,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['damage'],
+    output: [
+      // ① 我军全体各自对距离 5 内敌军单体发动一次攻击 150%（每次独立选目标）
+      {
+        kind: 'physical_damage',
+        rate: 150,
+        attacker: 'recipient',
+        targetMode: 'random_single',
+        range: 5,
+      },
+      // ② 我军攻击属性最高单体 → 敌军防御最低单体，攻击 160%
+      {
+        kind: 'physical_damage',
+        rate: 160,
+        attacker: 'recipient',
+        attackerPick: 'highest_attack',
+        targetPick: 'lowest_defense',
+      },
+    ],
+  },
+
+  /**
+   * 其徐如林（司马懿·晋步 h807·指挥 S）：距离 5，我军全体。
+   * 我军全体在正式回合后施加的策略伤害，在生效时会对目标相邻的敌军额外造成一次策略伤害
+   * （伤害率为原伤害率的 15%），此比例每回合结束时额外提升 5%，可叠加，持续至战斗结束。
+   * 官方：scripts/skill_extra.json id 200282（指挥 S / 距离 5 / 我军全体 / 弓步骑；1 级 7.5% / 2.5%）。
+   * 成长率：两处「受谋略属性影响」均未确认 → 留空（strategyScaled 在、不给 growthRate → 按基值不缩放）；
+   * 登记 OFFLINE_MAIN_SKILLS（武将暂下架）。
+   * 引擎配套：**新增 `CommandSkill.strategyAdjacentBonus`（策略伤害相邻跳伤光环）** ——
+   *   本侧单位造成**策略伤害输出段**生效后，对目标同侧相邻单位额外结算一次策略伤害
+   *   （伤害率 = 原伤害率 × (baseRate + perRound × (当前回合 − 1))）；额外伤害沿用原伤害造成者的
+   *   攻击/兵力/增减伤口径，事件 skillId 记为其徐如林，直接构造 damage 事件（不递归触发本光环）。
+   *   覆盖范围：策略伤害输出段；DoT 跳伤 / 分兵 / 引燃暂不触发（如需再补）。
+   */
+  qixu_rulin: {
+    id: 'qixu_rulin',
+    name: '其徐如林',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['damage'],
+    output: [],
+    strategyAdjacentBonus: { baseRate: 15, perRound: 5, strategyScaled: true },
+  },
+
+  /**
+   * 徽言龙凤（司马徽·群步 h811·指挥 S）：距离 5，友军全体。
+   * 友军全体共计造成 6 次伤害后，使友军全体获得：士气提升 10（受谋略属性影响）；
+   * 每回合行动时造成的所有伤害提升 7%（受谋略属性影响），可叠加；
+   * 每回合行动时有 60% 的几率对随机敌军单体造成 1 次攻击伤害（伤害率 150%）或策略攻击伤害
+   * （伤害率 120%，受谋略属性影响），由攻击或谋略属性中较高的属性决定。
+   * 官方：scripts/skill_extra.json id 200294（指挥 S / 距离 5 / 友军全体 / 弓步骑；
+   * 1 级 士气 5 / 增伤 3.5% / 攻击 100% / 策略 60%）。
+   * 成长率：士气、增伤、策略伤害三处「受谋略属性影响」均未确认 → 留空（增伤 strategyScaled 在、
+   * 不给 growthRate = 基值；策略伤害率按下表基值直接用）→ 登记 OFFLINE_MAIN_SKILLS（司马徽下架）。
+   * 引擎配套：
+   *  ① **新增 `CommandSkill.teamDamageThreshold`（全队累计伤害门槛）** —— 本侧累计造成 N 次伤害后激活，
+   *     立即结算激活段 output，并**启用**该战法的 roundStartRepeat（激活前不执行）；
+   *  ② **新增 `physical_damage.recipientDamageByHigherStat`（代打伤害按代打者属性孰高定轨）** ——
+   *     配合既有 `attacker:'recipient'` + `chance`（逐代打者各判一次）实现「每回合每个友军各 60% 一次，
+   *     由该友军自己攻击/谋略孰高决定打攻击还是策略」。
+   * 口径：③ 的 60% 由 recipient 路径**逐友军**各判一次（每回合每人一次）；伤害取该友军自己的面板。
+   */
+  huiyan_longfeng: {
+    id: 'huiyan_longfeng',
+    name: '徽言龙凤',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['morale_boost', 'damage_boost', 'damage'],
+    output: [],
+    teamDamageThreshold: {
+      count: 6,
+      // 激活瞬间：友军全体士气 +10（受谋略未确认 → 基值 10）
+      output: [{ kind: 'inflict_status', status: { type: 'morale_boost', amount: 10, duration: 999 } }],
+    },
+    roundStartRepeat: {
+      output: [
+        // 每回合行动时：造成所有伤害 +7%（受谋略，成长率留空），可叠加
+        {
+          kind: 'inflict_status',
+          status: {
+            type: 'damage_boost',
+            rate: 0.07,
+            duration: 1,
+            direction: 'caused',
+            strategyScaled: true,
+            stacks: 1,
+          },
+        },
+        // 每回合行动时：每名友军各 60% → 随机敌军单体，按自身攻击/谋略孰高打攻击 150% 或策略 120%
+        {
+          kind: 'physical_damage',
+          rate: 0,
+          attacker: 'recipient',
+          recipientDamageByHigherStat: { attackRate: 150, strategyRate: 120 },
+          chance: 0.6,
+          targetMode: 'random_single',
+          range: 5,
+        },
+      ],
+    },
+  },
+
+  // ─── 批量32：下架武将清单 §1.2「补 1 个机制」（7 处歧义已由用户逐条确认）───
+  /**
+   * 破凰（司马懿·魏步 h472·主动 A·距离 5·45%·敌军单体）：
+   * ① 立即引发**敌军全体**由破凰带来的剩余妖术效果（受击触发妖术的剩余次数逐次打出后移除）；
+   * ② 对敌军单体发动一次策略攻击（155%，受谋略属性影响）；
+   * ③ 使其每受到伤害时额外引发一次妖术伤害（130%，受谋略属性影响），最多生效 3 次，持续 3 回合。
+   * 官方：scripts/skill_extra.json id 200080（满级 155%/130%，1 级 77.5%/65%）。
+   * 描述为两版拼接：第一版目标「敌军单体」/ 第二版「敌军兵力最低的单体」
+   *   → 用户确认取**第一版**（「兵力最低」需特殊目标选择机制，本战法不引入）。
+   * 口径确认（用户）：「剩余妖术」= **本战法自身**此前施加的条件妖术的剩余次数——
+   *   第 1 回合无存量 → ① 空转，直接 ②③；之后每次发动先引爆上一轮留下的剩余次数
+   *   （例：剩余 3 次 → 连打 3 次妖术伤害并移除），再 ②③ 施加新的条件妖术。
+   * 成长率：155% 与 130% 两段「受谋略属性影响」均未确认 → 155% 留空（基值不缩放）、
+   *   130% 给 0（DoT growthRate 为必填字段）→ 登记 OFFLINE_MAIN_SKILLS（司马懿下架）。
+   * 引擎配套：**`sorcery` 状态新增 `onHurt` / `charges`（受击触发妖术 + 次数上限）**，
+   *   **新增输出段 `detonate_sorcery_marks`（引爆敌军全体由本战法施加的受击触发妖术剩余次数）**。
+   */
+  po_huang: {
+    id: 'po_huang',
+    name: '破凰',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.45,
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['damage', 'sorcery'],
+    output: [
+      // ① 引爆敌军全体上由本战法留下的条件妖术（无存量时空转）
+      { kind: 'detonate_sorcery_marks' },
+      // ② 策略攻击 155%（受谋略未确认 → 基值不缩放）
+      { kind: 'strategy_damage', rate: 155, strategyScaled: true },
+      // ③ 条件妖术：受击触发一次妖术伤害 130%（受谋略未确认 → 基值），最多 3 次、持续 3 回合
+      {
+        kind: 'inflict_status',
+        status: { type: 'sorcery', duration: 3, rate: 130, growthRate: 0, onHurt: true, charges: 3 },
+      },
+    ],
+  },
+  /**
+   * 侵掠如火（甘宁·吴步 h34·被动 A）：距离 1，目标自己。
+   * ① 在战斗中可以优先行动；
+   * ② 攻击类主动战法发动率提升 20.0%；
+   * ③ 进行攻击时有 30.0% 的几率使本次攻击伤害提高 50.0%。
+   * 官方：scripts/skill_extra.json id 200034（被动 A / 距离 1 / 自己 / 兵种步；1 级 10% / 25%）。
+   * 成长率：三段均无「受…属性影响」→ 无待确认成长率，**甘宁上架**（不登记 OFFLINE_MAIN_SKILLS）。
+   * 口径（用户确认）：
+   *  - ③「进行攻击」= 普通攻击 / 物理主动战法 / 追击战法；不含分兵溅射、反击、指挥代打（奇兵拒北）与 DoT；
+   *  - ③ 按「每个伤害对象各掷一次」，官方未写受士气影响（属效果几率、非战法发动率）→ 固定 30%，不走 moraleTriggerRate。
+   * 引擎配套：
+   *  ① `PassiveSkill.priorityRounds`（被动先手，原 `priorityRounds` 仅指挥战法支持），combat.buildPriorityOrder 同步识别；
+   *  ② `trigger_boost.attackSkillsOnly`（只提升「攻击类」战法发动率 = 输出段含物理伤害，含 chance_group / random_pick 内层）；
+   *  ③ `PassiveSkill.attackProcBoost`（进行攻击时概率增伤，见 action.attackProcBoostOf / isAttackHitForProc）。
+   */
+  qinlue_ruhuo: {
+    id: 'qinlue_ruhuo',
+    name: '侵掠如火',
+    type: 'passive',
+    range: 1,
+    triggerRate: 1,
+    timing: 'battle_start',
+    targetMode: 'self',
+    tags: ['damage_boost'],
+    // ① 全程先手（duration ≥ 999 / priorityRounds 999 = 战斗结束约定）
+    priorityRounds: 999,
+    // ③ 进行攻击时 30% 几率本次攻击伤害 +50%
+    attackProcBoost: { chance: 0.3, rate: 0.5 },
+    output: [
+      // ② 攻击类主动战法发动率 +20%（全程；只对输出含物理伤害的主动战法生效）
+      {
+        kind: 'inflict_status',
+        target: 'self',
+        status: {
+          type: 'trigger_boost',
+          rate: 0.2,
+          duration: 999,
+          skillTypes: ['active'],
+          attackSkillsOnly: true,
+        },
+      },
+    ],
+  },
+  /**
+   * 三军夺帅（杜预·晋弓 h705·被动 S）：距离 5，目标自己。
+   * 自身每成功发动普通攻击、主动及追击战法后，随机二选一（用户确认「或」= 每次触发 50/50）：
+   *  ① 对距离 5 以内敌军单体发动一次攻击（180%）并使自身攻击属性提高 10；
+   *  ② 对敌军群体 2 目标发动一次策略攻击（100%，受谋略属性影响）并使目标谋略属性降低 5；
+   * 属性变化可叠加，持续到战斗结束。
+   * 官方：scripts/skill_extra.json id 200987（被动 S / 距离 5 / 自己 / 兵种弓；1 级 90% / 10 / 50% / 5）。
+   * 成长率：仅 ②「受谋略属性影响」→ 未确认，按基值（strategyScaled 在、growthRate 缺）→ 登记 OFFLINE_MAIN_SKILLS（杜预下架）。
+   * 引擎配套：
+   *  ① `PassiveSkill.afterAct`（成功发动普攻 / 主动 / 追击后触发，三种来源统一钩子）；
+   *  ② 复用既有 `random_pick`（count:1 + 两组 options）= 50/50 随机二选一；
+   *  ③ `inflict_status.sameTargetsAsLastDamage`（谋略 −5 打在 ② 策略段的同一批目标上，不重选）。
+   */
+  sanjun_duoshuai: {
+    id: 'sanjun_duoshuai',
+    name: '三军夺帅',
+    type: 'passive',
+    range: 5,
+    triggerRate: 1,
+    timing: 'battle_start',
+    targetMode: 'self',
+    tags: ['damage', 'attack_buff', 'debuff_strategy'],
+    output: [],
+    afterAct: {
+      output: [
+        {
+          kind: 'random_pick',
+          count: 1,
+          options: [
+            // ① 距离 5 以内敌军单体攻击 180% + 自身攻击 +10（同战法重复触发累加、持续到战斗结束）
+            [
+              { kind: 'physical_damage', rate: 180, targetMode: 'random_single' },
+              {
+                kind: 'inflict_status',
+                target: 'self',
+                status: { type: 'attack_buff', amount: 10, duration: 999 },
+              },
+            ],
+            // ② 敌军群体 2 目标策略攻击 100%（受谋略）+ 目标谋略 −5（同一批目标）
+            [
+              {
+                kind: 'strategy_damage',
+                rate: 100,
+                strategyScaled: true,
+                targetMode: 'group',
+                groupCount: 2,
+              },
+              {
+                kind: 'inflict_status',
+                sameTargetsAsLastDamage: true,
+                status: { type: 'strategy_buff', amount: -5, duration: 999 },
+              },
+            ],
+          ],
+        },
+      ],
+    },
+  },
+  /**
+   * 奉令护蜀（马岱·蜀骑 h615·被动 A）：距离 2，目标自己。
+   * 战斗中，任意友军发动普通攻击、主动战法、追击战法后，马岱的下 1 次普通攻击造成的伤害提升 35.0%
+   * （受攻击属性影响），下 1 次受到的所有伤害降低 20.0%（受防御属性影响），以上效果可叠加 5 次。
+   * 官方：scripts/skill_extra.json id 200865（被动 A / 距离 2 / 自己 / 兵种骑；1 级 17.5% / 10.0%）。
+   * 口径（用户确认）：层数上限 5；攻击段与减伤段**共用同一层数**、都 = 基值 × 层数，
+   *   各自在对应时机（普攻打出后 / 首次受击实际扣兵后）**清空全部层数**（先到先清）。
+   * 口径（本次推定，待复核）：「任意友军」**不含马岱自身**——官方对含己场景用「我军全体」
+   *   （皇裔流离），此处措辞刻意区分；若按含己实现，马岱每次普攻会「先清空再被自己补 1 层」。
+   *   切换成本：`triggerAllyActStacks` 里去掉 `if (holder === actor) continue;` 一行。
+   * 成长率：35% 受攻击、20% 受防御 两段成长率未确认 → 按基值（`boostAttackScaled` / `reduceDefenseScaled`
+   *   标记在、growthRate 缺）→ 登记 OFFLINE_MAIN_SKILLS（马岱下架）。
+   * 引擎配套：`PassiveSkill.allyActStacks`（友军成功发动后叠层）+ 新状态 `pending_stacks`
+   *   （下次普攻增伤 / 下次受击减伤，触发后清空全部层数；不按回合递减，两个 tick 函数显式跳过）。
+   */
+  fengling_hushu: {
+    id: 'fengling_hushu',
+    name: '奉令护蜀',
+    type: 'passive',
+    range: 2,
+    triggerRate: 1,
+    timing: 'battle_start',
+    targetMode: 'self',
+    tags: ['damage_boost', 'damage_reduce'],
+    output: [],
+    allyActStacks: {
+      maxStacks: 5,
+      boostRate: 0.35,
+      boostAttackScaled: true,
+      reduceRate: 0.2,
+      reduceDefenseScaled: true,
+    },
+  },
+  /**
+   * 地公将军（张宝·群弓 h562·主动 B）：距离 4，40%，敌军群体（有效距离内 2 个目标）。
+   * 对敌军群体发动策略攻击（136%，受谋略属性影响），并吸取其 24.0 的防御、谋略属性并附加于友军群体
+   * （受谋略属性影响），若有目标存在妖术效果，则额外附加属性至自身，持续 2 回合。
+   * 官方：scripts/skill_extra.json id 200796（主动 B / 距离 4 / 敌军群体2 / 兵种弓；1 级 68% / 12）。
+   * 口径（用户确认）：
+   *  - 「友军群体」= 有效距离内 2 个目标（与敌方目标数同口径）；
+   *  - 「妖术效果」= sorcery（妖术）| curse（妖术诅咒）。
+   * 口径（本次推定，待复核）：友军段 `excludeSelf`——原文「**额外**附加属性至自身」表明自身不在
+   *   「友军群体」之内（否则第 ④ 段无从「额外」）。
+   * 成长率：136% 与 24.0 两处「受谋略属性影响」均未确认 → 按基值（strategyScaled 在、growthRate 缺）
+   *   → 登记 OFFLINE_MAIN_SKILLS（张宝下架）。
+   * 引擎配套：**新增 `inflict_status.requireAnyPrevDamageTargetStatus`**（整段开关：上一段伤害的命中目标中
+   *   存在带指定状态之一者才结算）——承载「若有目标存在妖术效果」条件分支；
+   *   敌军段复用 `sameTargetsAsLastDamage`（吸取打在本段策略伤害的同一批目标上）。
+   */
+  digong_jiangjun: {
+    id: 'digong_jiangjun',
+    name: '地公将军',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.4,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage', 'defense_buff', 'strategy_buff', 'debuff_defense', 'debuff_strategy'],
+    output: [
+      // ① 策略攻击 136%（受谋略未确认 → 基值）
+      { kind: 'strategy_damage', rate: 136, strategyScaled: true, targetMode: 'group', groupCount: 2 },
+      // ② 吸取：敌军**同一批目标** −24 防御 / −24 谋略（applyAll = 同目标同时施加两条）
+      {
+        kind: 'inflict_status',
+        sameTargetsAsLastDamage: true,
+        applyAll: true,
+        status: [
+          { type: 'defense_buff', amount: -24, duration: 2, strategyScaled: true },
+          { type: 'strategy_buff', amount: -24, duration: 2, strategyScaled: true },
+        ],
+      },
+      // ③ 附加于友军群体（有效距离内 2 目标，不含自身）＋24 防御 / ＋24 谋略
+      {
+        kind: 'inflict_status',
+        targetSide: 'ally',
+        targetMode: 'group',
+        groupCount: 2,
+        excludeSelf: true,
+        applyAll: true,
+        status: [
+          { type: 'defense_buff', amount: 24, duration: 2, strategyScaled: true },
+          { type: 'strategy_buff', amount: 24, duration: 2, strategyScaled: true },
+        ],
+      },
+      // ④ 若有目标存在妖术效果 → 额外附加属性至自身
+      {
+        kind: 'inflict_status',
+        target: 'self',
+        applyAll: true,
+        requireAnyPrevDamageTargetStatus: ['sorcery', 'curse'],
+        status: [
+          { type: 'defense_buff', amount: 24, duration: 2, strategyScaled: true },
+          { type: 'strategy_buff', amount: 24, duration: 2, strategyScaled: true },
+        ],
+      },
+    ],
+  },
+  /**
+   * 西陵克晋（陆抗·吴步 h574·指挥 S）：距离 4，目标自己，每回合 50% 几率。
+   * 战斗中，每回合有 50.0% 的几率使我军当前攻击属性最高的武将对距离 4 以内的敌军发动一次攻击（150%），
+   * 我军当前谋略属性最高的武将对距离 4 以内的敌军发动一次策略攻击（150%，受谋略属性影响），并各自恢复一定兵力。
+   * 官方：scripts/skill_extra.json id 200824（指挥 S / 距离 4 / 自己 / 兵种步；1 级 75%）。
+   * 官方攻略（stzb.163.com/strategy/zfxq/2019/10/09/21006_836478.html，17173 转载同文）补充口径：
+   *  - 属于 **Ⅱ 类指挥战法**、「战斗中执行效果类」→ 每回合行动时判定（混乱/犹豫不阻止执行）→ `phase:'round'`；
+   *  - 伤害由**被施加效果的友军（代打者）自身属性**决定，并吃代打者自己的增伤（如马超【血溅黄沙】+120%）；
+   *  - 恢复为**立即型急救**：与任何恢复类战法不冲突，「恢复量与任何属性无关，仅由武将执行时的自身兵力决定，
+   *    9000 兵力时单口最大恢复量在 300 左右」。
+   * 口径（本次认定，待复核）：官方技能文本只有**一处**「每回合有 50.0% 的几率使 …，…」（攻略分列 1./2. 只是列举）
+   *   → 50% 由二类指挥自身 `triggerRate` 承载（走士气），两段同时结算，**不再叠 chance_group**；
+   *   若实际为两段各自独立 50%，改动 = 把两段包进 chance_group(chance .5)。
+   * 恢复率：官方技能文本**未给**恢复率 → 取基值 100%（无缩放），恢复量 = calcHealAmount(代打者当前兵力, 100)；
+   *   9000 兵力 = 216。⚠️ 与攻略「9000 兵力约 300」有差距，已记入 OFFLINE 说明待复核。
+   * 成长率：谋略攻击 150% 段「受谋略属性影响」成长未确认 → 按基值（strategyScaled 在、growthRate 缺）
+   *   → 登记 OFFLINE_MAIN_SKILLS（陆抗下架）。
+   * 引擎配套：`physical_damage.attacker` 新增 `'highest_attack_ally'`、`strategy_damage.attacker` 新增
+   *   `'highest_strategy_ally'`（我军当前攻击 / 谋略最高者代打，**含施法者自身**——官方「也有可能施加给陆抗自己」），
+   *   两段新增 `healSource`（代打者按自身当前兵力立即恢复，heal 事件归属施法者）。
+   */
+  xiling_kejin: {
+    id: 'xiling_kejin',
+    name: '西陵克晋',
+    type: 'command',
+    phase: 'round',
+    roundTrigger: 'on_act',
+    range: 4,
+    triggerRate: 1,
+    // 二类指挥的固定 50% 发动率走 dynamicTriggerRate（CommandSkill.triggerRate 定型为 1；increment 0 = 恒定）
+    dynamicTriggerRate: { base: 0.5, increment: 0 },
+    targetMode: 'self',
+    tags: ['damage', 'heal'],
+    output: [
+      // ① 攻击最高友军（含自身）代打 150% + 按自身当前兵力恢复
+      {
+        kind: 'physical_damage',
+        rate: 150,
+        attacker: 'highest_attack_ally',
+        targetMode: 'random_single',
+        healSource: { rate: 100 },
+      },
+      // ② 谋略最高友军（含自身）代打策略 150%（受谋略未确认 → 基值）+ 按自身当前兵力恢复
+      {
+        kind: 'strategy_damage',
+        rate: 150,
+        strategyScaled: true,
+        attacker: 'highest_strategy_ally',
+        targetMode: 'random_single',
+        healSource: { rate: 100 },
+      },
+    ],
+  },
+  /**
+   * 缚父临危（吕姬·群步 h634·主动 B）：距离 4，35%，敌军群体（有效距离内 2 个目标）。
+   * 对敌军群体发动一次攻击（210%），并使自身及友军攻击属性最高的单体下两次攻击造成的伤害提升 30.0%。
+   * 同时使友军中吕布下一次造成的伤害无视规避。
+   * 官方：scripts/skill_extra.json id 200902（主动 B / 距离 4 / 敌军群体2 / 兵种步；1 级 105% / 15%）。
+   * 口径（用户确认）：
+   *  - 「攻击」= 普通攻击 / 物理主动战法 / 追击战法（同侵掠如火，不含分兵溅射 / 反击 / 指挥代打 / DoT）；
+   *  - 「无视规避」覆盖**任意伤害类型**（攻击与策略都算）；
+   *  - 「友军中吕布」按**武将名**匹配，两张卡（h3 汉骑 / h479 群弓 SP 吕布）都算；队里无吕布则该句空转。
+   * 成长率：210% 与 30% 两段均无「受…属性影响」→ 无待确认成长率，**吕姬上架**（不登记 OFFLINE）。
+   * 引擎配套：
+   *  ① `inflict_status.targetPick`：`'highest_attack_ally'`（我军攻击最高单体，含施法者自身）/
+   *     `'ally_named'`（配合 targetPickName 按武将名匹配）；
+   *  ② `damage_boost.attackOnly`（仅「进行攻击」，复用侵掠如火建立的 isAttackHitForProc 口径）
+   *     + `charges: 2`（下**两**次攻击，由既有 consumeAttackCharges 逐次消耗）；
+   *  ③ 新状态 `ignore_evasion`：下一次造成伤害无视规避，在所有伤害路径的统一入口 consumeEvasion 内消耗。
+   */
+  fufu_linwei: {
+    id: 'fufu_linwei',
+    name: '缚父临危',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.35,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage', 'damage_boost'],
+    output: [
+      // ① 对敌军群体（有效距离内 2 目标）发动一次攻击 210%
+      { kind: 'physical_damage', rate: 210, targetMode: 'group', groupCount: 2 },
+      // ② 自身及友军攻击属性最高的单体：下两次「进行攻击」造成的伤害 +30%
+      {
+        kind: 'inflict_status',
+        targetSide: 'ally',
+        targetPick: 'highest_attack_ally',
+        status: {
+          type: 'damage_boost',
+          rate: 0.3,
+          duration: 999,
+          direction: 'caused',
+          charges: 2,
+          attackOnly: true,
+        },
+      },
+      // ③ 友军中吕布：下一次造成的伤害无视规避（按名匹配，两张吕布卡都算）
+      {
+        kind: 'inflict_status',
+        targetSide: 'ally',
+        targetPick: 'ally_named',
+        targetPickName: '吕布',
+        status: { type: 'ignore_evasion', duration: 999 },
+      },
+    ],
+  },
 };

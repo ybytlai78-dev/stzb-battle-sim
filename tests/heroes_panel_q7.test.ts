@@ -1,7 +1,7 @@
 /**
  * 七将面板入库（2026-09-14）：只挂面板 / 成长 / 互斥。
  * 贾充已挂主战法赏顺伐逆，因策略反击成长未确认仍下架；
- * 曹纯 / 羊祜 / 马谡 / 汉荀彧 空槽；马岱保持空槽；于禁、魏荀彧修正成长。
+ * 曹纯 / 羊祜 / 马谡 / 汉荀彧 空槽；马岱 2026-09-18 已实现奉令护蜀（受属性成长未确认 → 下架）；于禁、魏荀彧修正成长。
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { initHeroDB, HERO_RECORDS, HERO_REGISTRY, getGeneral, validateMutualExclusion } from '../src/data/heroes';
@@ -89,7 +89,7 @@ describe('七将面板入库（空槽 / 取基值下架）', () => {
     expect(isHeroListed(rec)).toBe(false);
   });
 
-  it('汉荀彧 h794 举贤决机空槽；与魏荀彧**不再互斥**（2026-09-16 互斥改白名单制）', () => {
+  it('汉荀彧 h794 举贤决机已挂槽（受谋略成长未确认 → 下架）；与魏荀彧**不再互斥**（2026-09-16 互斥改白名单制）', () => {
     const rec = HERO_RECORDS['h794'];
     const g = HERO_REGISTRY['h794'];
     expect(g.name).toBe('荀彧');
@@ -98,7 +98,8 @@ describe('七将面板入库（空槽 / 取基值下架）', () => {
     expect(g.cost).toBe(3.5);
     expect(rec.baseStrategy).toBe(99);
     expect(rec.growthStrategy).toBe(2.55);
-    expect(rec.mainSkillId).toBe('');
+    // 2026-09-18 实现：举贤决机挂槽；恢复 60% / 策略 100% 受谋略成长未确认 → 仍在 OFFLINE 名单（下架）
+    expect(rec.mainSkillId).toBe('juxian_jueji');
     expect(rec.mainSkillName).toBe('举贤决机');
     expect(rec.mutualExclusionGroup).toBeNull();
     expect(HERO_RECORDS['h24'].mutualExclusionGroup).toBeNull();
@@ -107,10 +108,11 @@ describe('七将面板入库（空槽 / 取基值下架）', () => {
     expect(err).toBeNull();
   });
 
-  it('马岱 h615 仍空槽（奉令护蜀不实现）', () => {
+  it('马岱 h615 奉令护蜀已挂槽（受攻击 / 受防御成长未确认 → 下架）', () => {
     const rec = HERO_RECORDS['h615'];
     expect(rec.name).toBe('马岱');
-    expect(rec.mainSkillId).toBe('');
+    // 2026-09-18 实现：叠层增伤 35%（受攻击）/ 受击减伤 20%（受防御）成长率未确认 → 仍在 OFFLINE 名单（下架）
+    expect(rec.mainSkillId).toBe('fengling_hushu');
     expect(rec.mainSkillName).toBe('奉令护蜀');
     expect(isHeroListed(rec)).toBe(false);
   });

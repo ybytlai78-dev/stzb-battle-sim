@@ -217,7 +217,7 @@
     "growthDefense": 1.94,
     "growthStrategy": 2.87,
     "growthSpeed": 0.54,
-    "mainSkillId": "",
+    "mainSkillId": "qixu_rulin",
     "mainSkillName": "其徐如林",
     "skillDesc": "我军全体在正式回合后施加的策略伤害，在生效时会对目标相邻的敌军额外造成一次策略伤害（伤害率为原伤害率的15.0%，受谋略属性影响），此比例每回合结束时额外提升5.0%（受谋略属性影响），可叠加，持续至战斗结束"
   },
@@ -437,7 +437,7 @@
     "growthDefense": 1.58,
     "growthStrategy": 2.29,
     "growthSpeed": 0.92,
-    "mainSkillId": "",
+    "mainSkillId": "sanjun_duoshuai",
     "mainSkillName": "三军夺帅",
     "skillDesc": "自身每成功发动普通攻击、主动及追击战法后，自身对距离5以内敌军单体发动一次攻击（伤害率180.0%）并使自身攻击属性提高10.0，或对敌军群体2目标发动一次策略攻击（伤害率100.0%，受谋略属性影响）并使目标谋略属性降低5.0，属性变化可叠加，持续到战斗结束"
   },
@@ -503,7 +503,7 @@
     "growthDefense": 1.82,
     "growthStrategy": 2.55,
     "growthSpeed": 0.48,
-    "mainSkillId": "",
+    "mainSkillId": "juxian_jueji",
     "mainSkillName": "举贤决机",
     "skillDesc": "首回合起，我军全体在被成功施加属性提升效果前，有40.0%几率使其恢复一定兵力（恢复率60.0%，受谋略属性影响），敌军全体在被成功施加属性下降效果前，有40.0%几率对其造成一次策略伤害（伤害率100.0%，受谋略属性影响），每种属性单独计算"
   },
@@ -547,7 +547,7 @@
     "growthDefense": 1.15,
     "growthStrategy": 1.53,
     "growthSpeed": 1.23,
-    "mainSkillId": "",
+    "mainSkillId": "weizhen_heshuo",
     "mainSkillName": "威震河朔",
     "skillDesc": "对敌军群体发动一次攻击（伤害率200.0%），使自身与友军单体的主动战法伤害提升20.0%（受攻击属性影响），持续2回合。此战法每发动一次，其发动率降低10.0%"
   },
@@ -1235,7 +1235,7 @@
     "growthDefense": 1.7,
     "growthStrategy": 2.25,
     "growthSpeed": 0.6,
-    "mainSkillId": "",
+    "mainSkillId": "huiyan_longfeng",
     "mainSkillName": "徽言龙凤",
     "skillDesc": "友军全体共计造成6次伤害后，使友军全体获得以下效果：士气提升10.0（受谋略属性影响）；每回合行动时造成的所有伤害提升7.0%（受谋略属性影响），可叠加；每回合行动时有60.0%的几率对随机敌军单体造成1次攻击伤害（伤害率150.0%）或策略攻击伤害（伤害率120.0%，受谋略属性影响），由攻击或谋略属性中较高的属性决定"
   },
@@ -1257,7 +1257,7 @@
     "growthDefense": 1.85,
     "growthStrategy": 2.3,
     "growthSpeed": 0.39,
-    "mainSkillId": "",
+    "mainSkillId": "po_huang",
     "mainSkillName": "破凰",
     "skillDesc": "立即引发敌军全体由破凰带来的剩余妖术效果，同时对敌军单体发动一次策略攻击（伤害率155.0%，受谋略属性影响），并使其每受到伤害时，额外引发一次妖术伤害（伤害率130.0%，受谋略属性影响），最多生效3次，持续3回合"
   },
@@ -1301,7 +1301,7 @@
     "growthDefense": 1.49,
     "growthStrategy": 0.59,
     "growthSpeed": 0.53,
-    "mainSkillId": "",
+    "mainSkillId": "fufu_linwei",
     "mainSkillName": "缚父临危",
     "skillDesc": "对敌军群体发动一次攻击（伤害率210.0%），并使自身及友军攻击属性最高的单体下两次攻击造成的伤害提升30.0%。同时使友军中吕布下一次造成的伤害无视规避"
   },
@@ -1477,7 +1477,7 @@
     "growthDefense": 1.75,
     "growthStrategy": 0.83,
     "growthSpeed": 1.44,
-    "mainSkillId": "",
+    "mainSkillId": "bawang_dujiang",
     "mainSkillName": "霸王渡江",
     "skillDesc": "每回合有40.0%的几率对有效距离5以内的敌军单体发动三次猛烈攻击（伤害率150.0%），每次攻击目标独立判定，本场战斗中，自身无法发动主动战法，每次攻击造成伤害后可使霸王渡江发动率提升3.0%，该效果可叠加5次"
   },
@@ -1499,7 +1499,7 @@
     "growthDefense": 1.44,
     "growthStrategy": 1.53,
     "growthSpeed": 1.09,
-    "mainSkillId": "",
+    "mainSkillId": "quanzhu_weiyi",
     "mainSkillName": "全主诿异",
     "skillDesc": "使敌军全体被施加的燃烧、恐慌和妖术诅咒伤害提升20.0%（受谋略属性影响），持续3回合，同时对敌军群体1-2目标额外发动1次策略攻击（伤害率197.0%，受谋略属性影响）"
   },
@@ -1631,7 +1631,7 @@
     "growthDefense": 2,
     "growthStrategy": 0.73,
     "growthSpeed": 0.54,
-    "mainSkillId": "",
+    "mainSkillId": "rengong_jiangjun",
     "mainSkillName": "人公将军",
     "skillDesc": "战斗前4回合，使我军全体的防御属性提高60.0，并使我军前锋、中军受到普通攻击时会进行反击（伤害率75.0%），在此期间，敌方武将存在妖术效果时造成的攻击伤害降低20.0%"
   },
@@ -1917,7 +1917,7 @@
     "growthDefense": 1.92,
     "growthStrategy": 0.78,
     "growthSpeed": 0.67,
-    "mainSkillId": "",
+    "mainSkillId": "qinlue_ruhuo",
     "mainSkillName": "侵掠如火",
     "skillDesc": "在战斗中可以优先行动，攻击类主动战法发动率提升20.0%，进行攻击时有30.0%的几率使本次攻击伤害提高50.0%"
   },
@@ -2115,7 +2115,7 @@
     "growthDefense": 1.63,
     "growthStrategy": 1.05,
     "growthSpeed": 0.57,
-    "mainSkillId": "",
+    "mainSkillId": "sishisan_gong",
     "mainSkillName": "四世三公",
     "skillDesc": "使我军全体分别对距离5以内的敌军单体发动一次攻击（伤害率150.0%），每次目标独立判定，额外使我军攻击属性最高单体，对敌军防御最低单体发动一次攻击（伤害率160.0%）"
   },
@@ -2203,7 +2203,7 @@
     "growthDefense": 1.94,
     "growthStrategy": 1.71,
     "growthSpeed": 0.73,
-    "mainSkillId": "",
+    "mainSkillId": "jiding_shanyue",
     "mainSkillName": "计定山越",
     "skillDesc": "1回合准备，使敌军群体陷入恐慌状态，每回合失去一定兵力（伤害率134.0%，受谋略属性影响），若敌军群体士气一般或低落，则额外使其陷入围困状态，无法恢复兵力，持续2回合。使自身和友军单体恢复一定兵力（恢复率98.0%，受谋略属性影响）。"
   },
@@ -2313,7 +2313,7 @@
     "growthDefense": 1.77,
     "growthStrategy": 2.05,
     "growthSpeed": 0.56,
-    "mainSkillId": "",
+    "mainSkillId": "xiling_kejin",
     "mainSkillName": "西陵克晋",
     "skillDesc": "战斗中，每回合有50.0%的几率使我军当前攻击属性最高的武将对距离4以内的敌军发动一次攻击（伤害率150.0%），我军当前谋略属性最高的武将对距离4以内的敌军发动一次策略攻击（伤害率150.0%，受谋略属性影响），并各自恢复一定兵力"
   },
@@ -2357,7 +2357,7 @@
     "growthDefense": 1.75,
     "growthStrategy": 1.2,
     "growthSpeed": 0.74,
-    "mainSkillId": "",
+    "mainSkillId": "zhongke_menglie",
     "mainSkillName": "忠克猛烈",
     "skillDesc": "本战法造成的伤害无视兵种相克及目标的防御属性；对敌军单体发动1次攻击（伤害率300.0%），并使其陷入犹豫状态，持续1回合；直到陈到下回合行动前，目标每受到1次攻击伤害，陈到对其发动1次攻击(伤害率120.0%)，期间最多可触发2次"
   },
@@ -2401,7 +2401,7 @@
     "growthDefense": 1.77,
     "growthStrategy": 0.94,
     "growthSpeed": 1.41,
-    "mainSkillId": "",
+    "mainSkillId": "fengling_hushu",
     "mainSkillName": "奉令护蜀",
     "skillDesc": "战斗中，任意友军发动普通攻击、主动战法、追击战法后，马岱的下1次普通攻击造成的伤害提升35.0%（受攻击属性影响），下1次受到的所有伤害降低20.0%（受防御属性影响），以上效果可叠加5次"
   },
@@ -3051,7 +3051,7 @@
     "growthDefense": 1.31,
     "growthStrategy": 1.88,
     "growthSpeed": 0.75,
-    "mainSkillId": "",
+    "mainSkillId": "digong_jiangjun",
     "mainSkillName": "地公将军",
     "skillDesc": "对敌军群体发动策略攻击（伤害率136.0%，受谋略属性影响），并吸取其24.0的防御、谋略属性并附加于友军群体（受谋略属性影响），若有目标存在妖术效果，则额外附加属性至自身，持续2回合"
   },
@@ -3557,7 +3557,7 @@
     "growthDefense": 1.13,
     "growthStrategy": 1.9,
     "growthSpeed": 0.47,
-    "mainSkillId": "",
+    "mainSkillId": "jiangxin_bujie",
     "mainSkillName": "匠心不竭",
     "skillDesc": "战斗开始后，使敌军全体从第1、3、5回合开始，逐渐陷入恐慌（伤害率34.0%，受谋略属性影响）、燃烧（伤害率41.0%，受谋略属性影响）与妖术（伤害率44.0%，受谋略属性影响）的状态，每回合开始时损失一定兵力，持续直到战斗结束，所造成的伤害无视规避"
   }
