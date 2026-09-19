@@ -9604,7 +9604,7 @@
         5618,
         7248
       ],
-      "eventCount": 257,
+      "eventCount": 256,
       "events": [
         {
           "type": "battle_start",
@@ -11990,12 +11990,6 @@
           }
         },
         {
-          "type": "status_inflicted",
-          "unitId": "enemy-back",
-          "statusType": "confusion",
-          "detail": "混乱 1 回合"
-        },
-        {
           "type": "unit_act_end",
           "unitId": "taishici"
         },
@@ -12221,7 +12215,7 @@
         1935,
         4714
       ],
-      "eventCount": 401,
+      "eventCount": 397,
       "events": [
         {
           "type": "battle_start",
@@ -14430,24 +14424,6 @@
           }
         },
         {
-          "type": "status_inflicted",
-          "unitId": "enemy-front",
-          "statusType": "cowardice",
-          "detail": "怯战 2 回合"
-        },
-        {
-          "type": "status_inflicted",
-          "unitId": "enemy-mid",
-          "statusType": "cowardice",
-          "detail": "怯战 2 回合"
-        },
-        {
-          "type": "status_inflicted",
-          "unitId": "enemy-back",
-          "statusType": "cowardice",
-          "detail": "怯战 2 回合"
-        },
-        {
           "type": "unit_act_start",
           "unitId": "zhouyu",
           "name": "周瑜",
@@ -15962,12 +15938,6 @@
           "unitId": "zhouyu",
           "skillId": "hunshui_moyu",
           "skillName": "浑水摸鱼"
-        },
-        {
-          "type": "status_inflicted",
-          "unitId": "enemy-front",
-          "statusType": "confusion",
-          "detail": "混乱 2 回合"
         },
         {
           "type": "status_inflicted",

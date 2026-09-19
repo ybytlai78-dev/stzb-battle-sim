@@ -272,7 +272,7 @@ describe('奋疾先登（乐进·二类指挥·行动叠层）', () => {
       inflictStatus(
         ctx,
         lejin,
-        { type: 'damage_boost', rate: 0.08, duration: 999, direction: 'caused' },
+        { type: 'damage_boost', rate: 0.08, duration: 999, direction: 'caused', stack: true },
         'command',
         'fenji_xiandeng',
         'lejin'
@@ -347,7 +347,7 @@ describe('奋疾先登（乐进·二类指挥·行动叠层）', () => {
       inflictStatus(
         ctx,
         lejin,
-        { type: 'damage_boost', rate: 0.08, duration: 999, direction: 'caused' },
+        { type: 'damage_boost', rate: 0.08, duration: 999, direction: 'caused', stack: true },
         'command',
         'fenji_xiandeng',
         'lejin'

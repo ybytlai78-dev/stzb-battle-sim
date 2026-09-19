@@ -363,9 +363,9 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       firstGuaranteed: true,
       applyTo: 'victim',
       output: [
-        { kind: 'inflict_status', status: { type: 'attack_buff', amount: 20, duration: 999 } },
-        { kind: 'inflict_status', status: { type: 'defense_buff', amount: 20, duration: 999 } },
-        { kind: 'inflict_status', status: { type: 'strategy_buff', amount: 20, duration: 999 } },
+        { kind: 'inflict_status', status: { type: 'attack_buff', amount: 20, duration: 999, stack: true } },
+        { kind: 'inflict_status', status: { type: 'defense_buff', amount: 20, duration: 999, stack: true } },
+        { kind: 'inflict_status', status: { type: 'strategy_buff', amount: 20, duration: 999, stack: true } },
       ],
     },
   },
@@ -379,7 +379,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     timing: 'round_start',
     targetMode: 'self',
     tags: ['damage_reduce'],
-    output: [{ kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.11, duration: 999 } }],
+    output: [{ kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.11, duration: 999, stack: true } }],
   },
   /** 青囊秘要（B 被动）：战斗中每回合都会恢复一定兵力（恢复率 150%，固定倍率，不受谋略） */
   qingnang_miyao: {
@@ -555,6 +555,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
             direction: 'taken',
             defenseScaled: true,
             growthRate: 0.026,
+            stack: true,
           },
         },
       ],
@@ -631,7 +632,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.3, duration: 2, strategyScaled: true, growthRate: 0.13 } },
       { kind: 'inflict_status', status: { type: 'panic', duration: 2, rate: 143, growthRate: 1.125 } },
       { kind: 'inflict_status', status: { type: 'curse', duration: 2, rate: 133, growthRate: 1.225 } },
-      { kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.05, duration: 999, direction: 'caused', strategyScaled: true, growthRate: 0.15 }, targetSide: 'self' },
+      { kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.05, duration: 999, direction: 'caused', strategyScaled: true, growthRate: 0.15, stack: true }, targetSide: 'self' },
     ],
   },
   /** 火势风威（陆逊主战法，S2）：1 回合准备，敌军全体策略攻击 111%（受谋略，成长率 0.95/点）+ 引燃标记 221%（受谋略，成长率 2.45/点：
@@ -728,11 +729,11 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     retainAfterDeath: true,
     tags: ['damage_reduce', 'morale_boost'],
     roundStartRepeat: {
-      output: [{ kind: 'inflict_status', status: { type: 'morale_boost', amount: 8, duration: 999 } }],
+      output: [{ kind: 'inflict_status', status: { type: 'morale_boost', amount: 8, duration: 999, stack: true } }],
     },
     output: [
       { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.3, duration: 999, strategyScaled: true, growthRate: 0.175, decayEighths: 8 } },
-      { kind: 'inflict_status', status: { type: 'morale_boost', amount: 8, duration: 999 } },
+      { kind: 'inflict_status', status: { type: 'morale_boost', amount: 8, duration: 999, stack: true } },
     ],
   },
   /** 皇裔流离（刘备主战法·一类指挥）：开始前准备回合阶段释放一次，使我军全体（三目标）受到伤害时有 50% 几率恢复一定兵力
@@ -1449,7 +1450,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['sorcery', 'damage_boost'],
     output: [
       { kind: 'inflict_status', status: { type: 'sorcery', duration: 2, rate: 108, growthRate: 1.075 } },
-      { kind: 'grant_damage_boost', rate: -18, growthRate: 0, duration: 999, direction: 'caused' },
+      { kind: 'grant_damage_boost', rate: -18, growthRate: 0, duration: 999, direction: 'caused', stack: true },
     ],
   },
 
@@ -1868,7 +1869,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     timing: 'round_start',
     targetMode: 'self',
     tags: ['damage_boost'],
-    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.1, duration: 999, direction: 'caused' }, target: 'self' }],
+    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.1, duration: 999, direction: 'caused', stack: true }, target: 'self' }],
   },
   /** 擅兵不寡（A 被动·round_start）：每回合恢复兵力（180%，30% 额外 300% 近似为必恢复） */
   shanbing_bugua: {
@@ -1892,7 +1893,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     timing: 'round_start',
     targetMode: 'self',
     tags: ['damage_boost'],
-    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.11, duration: 999, direction: 'caused' }, target: 'self' }],
+    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.11, duration: 999, direction: 'caused', stack: true }, target: 'self' }],
   },
   /** 百战精兵（B 被动·battle_start）：使自身攻击、防御、谋略、速度属性全部提高 32 */
   baizhan_jingbing: {
@@ -3186,7 +3187,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
       {
         kind: 'inflict_status',
-        status: { type: 'damage_reduce', rate: 0.02, duration: 999, strategyScaled: true, growthRate: 0.01 },
+        status: { type: 'damage_reduce', rate: 0.02, duration: 999, strategyScaled: true, growthRate: 0.01, stack: true },
       },
     ],
   },
@@ -3211,10 +3212,10 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     },
     tags: ['debuff_attack', 'debuff_defense', 'debuff_strategy', 'debuff_speed'],
     output: [
-      { kind: 'inflict_status', status: { type: 'attack_buff', amount: -20, duration: 999 } },
-      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -20, duration: 999 } },
-      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -20, duration: 999 } },
-      { kind: 'inflict_status', status: { type: 'speed_buff', amount: -20, duration: 999 } },
+      { kind: 'inflict_status', status: { type: 'attack_buff', amount: -20, duration: 999, stack: true } },
+      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -20, duration: 999, stack: true } },
+      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -20, duration: 999, stack: true } },
+      { kind: 'inflict_status', status: { type: 'speed_buff', amount: -20, duration: 999, stack: true } },
     ],
   },
 
@@ -5064,7 +5065,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
               {
                 kind: 'inflict_status',
                 target: 'self',
-                status: { type: 'attack_buff', amount: 10, duration: 999 },
+                status: { type: 'attack_buff', amount: 10, duration: 999, stack: true },
               },
             ],
             // ② 敌军群体 2 目标策略攻击 100%（受谋略）+ 目标谋略 −5（同一批目标）
@@ -5079,7 +5080,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
               {
                 kind: 'inflict_status',
                 sameTargetsAsLastDamage: true,
-                status: { type: 'strategy_buff', amount: -5, duration: 999 },
+                status: { type: 'strategy_buff', amount: -5, duration: 999, stack: true },
               },
             ],
           ],
@@ -5587,11 +5588,11 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         { kind: 'heal', rate: 100, strategyScaled: true, growthRate: 0, target: 'self' },
         {
           kind: 'inflict_status',
-          status: { type: 'strategy_buff', amount: 15, duration: 999, strategyScaled: true, growthRate: 0 },
+          status: { type: 'strategy_buff', amount: 15, duration: 999, strategyScaled: true, growthRate: 0, stack: true },
         },
         {
           kind: 'inflict_status',
-          status: { type: 'defense_buff', amount: 15, duration: 999, strategyScaled: true, growthRate: 0 },
+          status: { type: 'defense_buff', amount: 15, duration: 999, strategyScaled: true, growthRate: 0, stack: true },
         },
       ],
     },

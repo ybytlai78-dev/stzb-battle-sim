@@ -171,8 +171,8 @@ describe('谋议宏图（司马炎，一类指挥：全军减伤 8/8 衰减 + �
 
     const ctx = makeCtx();
     const u = makeUnit('a');
-    inflictStatus(ctx, u, { type: 'morale_boost', amount: 8, duration: 999 }, 'command', 'mouyi_hongtu');
-    inflictStatus(ctx, u, { type: 'morale_boost', amount: 8, duration: 999 }, 'command', 'mouyi_hongtu');
+    inflictStatus(ctx, u, { type: 'morale_boost', amount: 8, duration: 999, stack: true }, 'command', 'mouyi_hongtu');
+    inflictStatus(ctx, u, { type: 'morale_boost', amount: 8, duration: 999, stack: true }, 'command', 'mouyi_hongtu');
     expect(getStatus(u, 'morale_boost')!.amount).toBe(16);
     expect(effectiveMorale(u)).toBe(116);
 
@@ -181,7 +181,7 @@ describe('谋议宏图（司马炎，一类指挥：全军减伤 8/8 衰减 + �
     expect(getStatus(u, 'morale_boost')!.sourceSkillId).toBe('mouyi_hongtu');
 
     const u2 = makeUnit('b');
-    inflictStatus(ctx, u2, { type: 'morale_boost', amount: 8, duration: 999 }, 'command', 'mouyi_hongtu');
+    inflictStatus(ctx, u2, { type: 'morale_boost', amount: 8, duration: 999, stack: true }, 'command', 'mouyi_hongtu');
     inflictStatus(ctx, u2, { type: 'morale_boost', amount: 20, duration: 999 }, 'command', 'other_morale');
     expect(getStatus(u2, 'morale_boost')!.amount).toBe(20);
     expect(getStatus(u2, 'morale_boost')!.sourceSkillId).toBe('other_morale');
@@ -200,7 +200,7 @@ describe('谋议宏图回合前衰减（单元）', () => {
       'command',
       'mouyi_hongtu'
     );
-    inflictStatus(ctx, u, { type: 'morale_boost', amount: 8, duration: 999 }, 'command', 'mouyi_hongtu');
+    inflictStatus(ctx, u, { type: 'morale_boost', amount: 8, duration: 999, stack: true }, 'command', 'mouyi_hongtu');
     ctx.lockedCommands.push({
       skill: SKILL_REGISTRY['mouyi_hongtu'] as Extract<(typeof SKILL_REGISTRY)[string], { type: 'command' }>,
       casterId: 'a',

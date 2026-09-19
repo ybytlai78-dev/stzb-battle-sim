@@ -137,9 +137,9 @@ describe('效果冲突规则', () => {
     // 反向：奋疾先登先叠满（40% > 30%）→ 大赏三军被拒（奋疾先登保留）
     const ctx2 = makeCtx();
     const u2 = makeUnit('e2');
-    // 同战法 5 次施加累加成 40%（奋疾先登叠层自身可叠加）
+    // 同战法 5 次施加累加成 40%（奋疾先登 actLayer 带显式 `stack: true` 标记，官方可叠加）
     for (let i = 0; i < 5; i++) {
-      inflictStatus(ctx2, u2, { type: 'damage_boost', rate: 0.08, duration: 999, direction: 'caused' }, 'command', 'fenji_xiandeng', 'lejin');
+      inflictStatus(ctx2, u2, { type: 'damage_boost', rate: 0.08, duration: 999, direction: 'caused', stack: true }, 'command', 'fenji_xiandeng', 'lejin');
     }
     expect(getStatus(u2, 'damage_boost')!.rate).toBe(0.4);
     expect(countConflict(ctx2, 'damage_boost')).toBe(0);
@@ -157,12 +157,12 @@ describe('效果冲突规则', () => {
     // 无心恋战（指挥）造成侧减伤 30%（负增伤）先施加
     inflictStatus(ctx, u, { type: 'damage_boost', rate: -0.3, duration: 3, direction: 'caused' }, 'command', 'wuxin_lianzhan', 'liubei');
     // 奋疾先登（指挥）造成侧增伤 8% → 正负相反：不冲突，新增独立实例共存
-    inflictStatus(ctx, u, { type: 'damage_boost', rate: 0.08, duration: 999, direction: 'caused' }, 'command', 'fenji_xiandeng', 'lejin');
+    inflictStatus(ctx, u, { type: 'damage_boost', rate: 0.08, duration: 999, direction: 'caused', stack: true }, 'command', 'fenji_xiandeng', 'lejin');
     expect(countConflict(ctx, 'damage_boost')).toBe(0);
     expect(u.statuses.filter((s) => s.type === 'damage_boost').length).toBe(2);
     // 同战法继续叠层：累加到 32%，仍不与无心恋战冲突（无「增伤冲突」误报）
     for (let i = 1; i < 4; i++) {
-      inflictStatus(ctx, u, { type: 'damage_boost', rate: 0.08, duration: 999, direction: 'caused' }, 'command', 'fenji_xiandeng', 'lejin');
+      inflictStatus(ctx, u, { type: 'damage_boost', rate: 0.08, duration: 999, direction: 'caused', stack: true }, 'command', 'fenji_xiandeng', 'lejin');
     }
     const caused = u.statuses.filter(
       (s): s is Extract<Status, { type: 'damage_boost' }> => s.type === 'damage_boost' && s.direction === 'caused'
@@ -196,5 +196,108 @@ describe('效果冲突规则', () => {
     expect(hasStatus(u, 'confusion')).toBe(true);
     // 伤害标签（damage）本身不产生任何状态冲突
     expect(ctx.events.filter((e) => e.type === 'status_conflict').length).toBe(0);
+  });
+});
+
+describe('重复施加：默认刷新 / 显式叠层才累加（用户口径）', () => {
+  it('同源属性增益默认刷新：数值替换为本次值、remaining 取 max、状态实例不增加', () => {
+    const ctx = makeCtx();
+    const u = makeUnit('r1');
+    // 第一次 +10 持续 3
+    inflictStatus(ctx, u, { type: 'attack_buff', amount: 10, duration: 3 }, 'active', 'test_attr');
+    // 第二次 +20 持续 1：刷新（不是 +30），remaining 取较大者 3
+    inflictStatus(ctx, u, { type: 'attack_buff', amount: 20, duration: 1 }, 'active', 'test_attr');
+    const list = u.statuses.filter((s) => s.type === 'attack_buff');
+    expect(list).toHaveLength(1);
+    expect((list[0] as { amount: number }).amount).toBe(20);
+    expect(list[0].remaining).toBe(3);
+    // 刷新事件可见（同首次施加一样发 status_inflicted）
+    const refreshed = ctx.events.filter(
+      (e): e is Extract<(typeof ctx.events)[number], { type: 'status_inflicted' }> =>
+        e.type === 'status_inflicted' && e.statusType === 'attack_buff'
+    );
+    expect(refreshed).toHaveLength(2);
+    expect(refreshed[1].detail).toContain('提高了20');
+    expect(refreshed[1].detail).toContain('刷新');
+  });
+
+  it('同源减伤默认刷新：rate 替换（0.30 → 0.28），不累加成 0.58', () => {
+    const ctx = makeCtx();
+    const u = makeUnit('r2');
+    inflictStatus(ctx, u, { type: 'damage_reduce', rate: 0.3, duration: 3 }, 'command', 'test_reduce');
+    inflictStatus(ctx, u, { type: 'damage_reduce', rate: 0.28, duration: 1 }, 'command', 'test_reduce');
+    const list = u.statuses.filter((s) => s.type === 'damage_reduce');
+    expect(list).toHaveLength(1);
+    expect((list[0] as { rate: number }).rate).toBe(0.28);
+    expect(list[0].remaining).toBe(3);
+  });
+
+  it('带显式 stack 标记的属性类才累加（官方「可叠加」）', () => {
+    const ctx = makeCtx();
+    const u = makeUnit('r3');
+    inflictStatus(ctx, u, { type: 'attack_buff', amount: 10, duration: 999, stack: true }, 'passive', 'test_stack_attr');
+    inflictStatus(ctx, u, { type: 'attack_buff', amount: 10, duration: 999, stack: true }, 'passive', 'test_stack_attr');
+    const list = u.statuses.filter((s) => s.type === 'attack_buff');
+    expect(list).toHaveLength(1);
+    expect((list[0] as { amount: number }).amount).toBe(20);
+  });
+
+  it('带 stack 的士气提高同源累加：8 → 16 → 24（谋议宏图口径）', () => {
+    const ctx = makeCtx();
+    const u = makeUnit('r4');
+    for (let i = 0; i < 3; i++) {
+      inflictStatus(ctx, u, { type: 'morale_boost', amount: 8, duration: 999, stack: true }, 'command', 'mouyi_hongtu');
+    }
+    const list = u.statuses.filter((s) => s.type === 'morale_boost');
+    expect(list).toHaveLength(1);
+    expect((list[0] as { amount: number }).amount).toBe(24);
+  });
+
+  it('概率规避（evade_chance）同源重挂：冲突被拒、不刷新、状态数不增加', () => {
+    const ctx = makeCtx();
+    const u = makeUnit('ev');
+    const ev: CreateStatus = { type: 'evade_chance', rate: 0.5, charges: 3, duration: 2 };
+    inflictStatus(ctx, u, ev, 'active', 'lieying_shouxian', 'jiangwei');
+    // 同战法第二次释放：拒绝，不施加、不刷新 remaining
+    inflictStatus(ctx, u, ev, 'active', 'lieying_shouxian', 'jiangwei');
+    const list = u.statuses.filter((s) => s.type === 'evade_chance');
+    expect(list).toHaveLength(1);
+    expect(list[0].remaining).toBe(2);
+    expect((list[0] as { charges: number }).charges).toBe(3);
+    const conflicts = ctx.events.filter(
+      (e) => e.type === 'status_conflict' && 'statusType' in e && e.statusType === 'evade_chance'
+    );
+    expect(conflicts).toHaveLength(1);
+    expect((conflicts[0] as { detail: string }).detail).toContain('先施加者生效');
+  });
+
+  it('概率规避（evade_chance）同类型不同战法：同样先施加者生效', () => {
+    const ctx = makeCtx();
+    const u = makeUnit('ev2');
+    inflictStatus(ctx, u, { type: 'evade_chance', rate: 0.5, charges: 3, duration: 2 }, 'active', 'skill_a');
+    inflictStatus(ctx, u, { type: 'evade_chance', rate: 0.6, charges: 5, duration: 3 }, 'active', 'skill_b');
+    const list = u.statuses.filter((s) => s.type === 'evade_chance');
+    expect(list).toHaveLength(1);
+    expect((list[0] as { rate: number }).rate).toBe(0.5);
+    expect(countConflict(ctx, 'evade_chance')).toBe(1);
+  });
+
+  it('规避（evasion 层数式必挡）同源加层语义不变', () => {
+    const ctx = makeCtx();
+    const u = makeUnit('ev3');
+    inflictStatus(ctx, u, { type: 'evasion', stacks: 1 }, 'passive', 'xuefen_duanbing');
+    inflictStatus(ctx, u, { type: 'evasion', stacks: 2 }, 'passive', 'xuefen_duanbing');
+    const list = u.statuses.filter((s) => s.type === 'evasion');
+    expect(list).toHaveLength(1);
+    expect((list[0] as { stacks: number }).stacks).toBe(3);
+  });
+
+  it('同源控制类仍刷新 remaining（不叠加实例）', () => {
+    const ctx = makeCtx();
+    const u = makeUnit('r5');
+    inflictStatus(ctx, u, { type: 'confusion', duration: 2 }, 'active', 'same_skill');
+    inflictStatus(ctx, u, { type: 'confusion', duration: 3 }, 'active', 'same_skill');
+    expect(u.statuses.filter((s) => s.type === 'confusion')).toHaveLength(1);
+    expect(getStatus(u, 'confusion')!.remaining).toBe(3);
   });
 });

@@ -114,7 +114,24 @@ describe('怀橘遗亲（陆绩，一类指挥：每回合开始时大营 +20 / 
     expect(r2).toBeGreaterThan(0);
     expect(statEvents(report.events.slice(0, r2))).toHaveLength(9);
     // 新口径（行动结束后递减）：第 1 回合施加的属性在携带者行动结束时到期，
-    // 第 2 回合开始重新施加 → 再推 9 条（「持续至该回合结束」不再依赖静默刷新路径）
+    // 第 2 回合开始重新施加（同源刷新）→ 再推 9 条（「持续至该回合结束」不再依赖静默刷新路径）
     expect(statEvents(report.events.slice(r2))).toHaveLength(9);
+  });
+
+  it('数值（重复施加默认刷新）：怀橘遗亲每回合重挂仍是 −10（不是 −20/−30）、大营 +20（不是 +40）', () => {
+    const report = run(teamWithLuAt('前锋'), 1, 3);
+    const attackOf = (unitId: string) =>
+      report.events.filter(
+        (e): e is Inflicted => e.type === 'status_inflicted' && e.statusType === 'attack_buff' && e.unitId === unitId
+      );
+    const self = attackOf('h789');
+    expect(self.length).toBeGreaterThanOrEqual(3); // 每回合 1 条 attack_buff
+    expect(self.every((e) => e.detail.includes('降低了10'))).toBe(true);
+    expect(self.some((e) => e.detail.includes('降低了20') || e.detail.includes('降低了30'))).toBe(false);
+
+    const back = attackOf('ally-back');
+    expect(back.length).toBeGreaterThanOrEqual(3);
+    expect(back.every((e) => e.detail.includes('提高了20'))).toBe(true);
+    expect(back.some((e) => e.detail.includes('提高了40'))).toBe(false);
   });
 });

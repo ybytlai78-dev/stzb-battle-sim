@@ -177,8 +177,12 @@ describe('帝临回光（灵帝，一类指挥：围困 + 攻击距离 +1 + 分�
     expect(attackRangeOf(u)).toBe(2);
     inflictStatus(ctx, u, { type: 'range_buff', amount: 1, duration: 999 }, 'command', 'diling_huiguang', 'h101');
     expect(attackRangeOf(u)).toBe(3);
-    // 叠加（第二段来源）：3 → 4
+    // 同源重挂：默认刷新（数值替换为本次 1，不累加成 2）→ 射程仍 3、状态实例不增加
     inflictStatus(ctx, u, { type: 'range_buff', amount: 1, duration: 999 }, 'command', 'diling_huiguang', 'h101');
+    expect(u.statuses.filter((s) => s.type === 'range_buff')).toHaveLength(1);
+    expect(attackRangeOf(u)).toBe(3);
+    // 不同战法类型各自共存 → attackRangeOf 求和口径：3 → 4
+    inflictStatus(ctx, u, { type: 'range_buff', amount: 1, duration: 999 }, 'passive', 'other_range', 'h999');
     expect(attackRangeOf(u)).toBe(4);
     expect(SKILL_REGISTRY['diling_huiguang'].range).toBe(5);
   });

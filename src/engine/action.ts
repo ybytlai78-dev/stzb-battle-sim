@@ -1005,7 +1005,7 @@ function executeActLayer(ctx: CombatContext, unit: UnitState, skill: CommandSkil
         inflictStatus(
           ctx,
           t,
-          { type: 'speed_buff', amount: -cfg.speedReduce, duration: 999 },
+          { type: 'speed_buff', amount: -cfg.speedReduce, duration: 999, stack: true },
           skill.type,
           skill.id,
           unit.general.id
@@ -1020,11 +1020,11 @@ function executeActLayer(ctx: CombatContext, unit: UnitState, skill: CommandSkil
   // 叠 1 层后立即检查阈值：达到 cap 立即触发攻击并清空，随后继续判定
   const addLayerAndCheck = (): void => {
     layers += 1;
-    // 每层 8% 造成侧增伤（同战法重复施加数值累加）
+    // 每层 8% 造成侧增伤（官方「可叠加」，同战法重复施加数值累加）
     inflictStatus(
       ctx,
       unit,
-      { type: 'damage_boost', rate: cfg.perLayer / 100, duration: 999, direction: 'caused' },
+      { type: 'damage_boost', rate: cfg.perLayer / 100, duration: 999, direction: 'caused', stack: true },
       skill.type,
       skill.id,
       unit.general.id
@@ -2009,8 +2009,10 @@ export function getStatus<T extends StatusType>(
 
 /** 施加状态（带冲突判定）：
  *  规则：先判战法类型（被动/指挥/主动/追击），再判非「伤害」标签是否冲突
- *  - 同一战法重复触发 → 增益累加 / 控制刷新剩余（步步为营每回合叠加）
- *  - 同类型不同战法 → 冲突：控制先施加者生效、增益数值替换取较高（战必 vs 措手不及 / 避其锋芒 vs 共饮避世）
+ *  - 同一战法重复触发（同源重挂）：**数值型默认刷新**（数值替换、remaining 取 max，不累加）；
+ *    仅带显式叠层标记的（`stack` / `stacks` / `chargesStack`）才累加（步步为营、谋议宏图、银龙冲阵…）；
+ *    控制类刷新剩余、规避（evasion）同源加层、概率规避（evade_chance）同源也冲突被拒
+ *  - 同类型不同战法 → 冲突：控制/概率规避先施加者生效、增益数值替换取较高（战必 vs 措手不及 / 避其锋芒 vs 共饮避世）
  *  - 不同类型 → 各自计数共存（战必指挥怯战 vs 玄武洰流主动怯战）
  */
 export function inflictStatus(
@@ -2027,15 +2029,9 @@ export function inflictStatus(
   }
   const type = create.type;
 
-  // 第 2 组里「已到期待移除」的状态（remaining ≤ 0，正等携带者下次行动开始时清理）在**同名新状态施加**时
-  // 先清掉：语义上它们已经到期，只是移除时点被推迟；不清会让同源重挂累加到僵尸状态上
-  // （怀橘遗亲每回合重挂 −10 → −20 → −30），同类型冲突也会被僵尸状态挡住。
-  if (isNextActTickType(type)) {
-    target.statuses = target.statuses.filter(
-      (s) => !(s.type === type && isNextActTickStatus(s) && s.appliedRound !== 0 && s.remaining <= 0)
-    );
-  }
-
+  // 注：曾在此清理 remaining ≤ 0 的「僵尸」同名状态（防止同源重挂累加到已到期实例上）。
+  // 新口径（同源默认刷新）下不再需要：刷新会把僵尸实例的 amount/rate 替换为本次值、
+  // remaining 取 max，既不累加也不新增实例（怀橘遗亲每回合仍 −10）。
   // 属性升降「之前」判定（举贤决机）：属性状态成功施加**之前**（冲突判定之前）先判一次。
   // 「每种属性单独计算」= 攻击/防御/谋略/速度各是一个状态，这里每个状态各触发一次。
   const ATTR_STATUS_TYPES: StatusType[] = ['attack_buff', 'defense_buff', 'strategy_buff', 'speed_buff'];
@@ -2201,6 +2197,18 @@ export function inflictStatus(
   const diffType = target.statuses.find((s) => s.type !== 'first_aid' && s.type !== 'rest' && s.type === type && s.sourceSkillType !== sourceSkillType);
 
   if (sameSource) {
+    // 概率规避（列营守险）：状态类，同源重挂同样冲突——不施加、不刷新（用户口径）。
+    // 旧实现会落到下方「刷新 remaining、保留旧 charges」兜底分支，等于静默续命。
+    if (type === 'evade_chance') {
+      ctx.events.push({
+        type: 'status_conflict',
+        unitId: target.general.id,
+        statusType: type,
+        sourceSkillType,
+        detail: '规避效果冲突（已有同来源的概率规避），先施加者生效，未生效',
+      });
+      return;
+    }
     // 次数型下一次增减伤 / 待生效暴走：已有则不刷新，避免叠加或永控
     if (type === 'damage_boost' && create.type === 'damage_boost' && create.charges != null && !create.chargesStack) return;
     if (type === 'rampage' && create.type === 'rampage' && create.pendingNextAct) return;
@@ -2209,10 +2217,13 @@ export function inflictStatus(
       const stacks = (sameSource as { stacks?: number }).stacks ?? 1;
       if (stacks >= create.maxStacks) return;
     }
-    // 同一战法重复触发：数值类累加，规避加层，控制刷新剩余
+    // 规避（层数式必挡）：官方「层数」口径，同源重复施加加层（不同源由 sameType 分支取较高替换）
     if (sameSource.type === 'evasion') {
       if (create.type === 'evasion') sameSource.stacks += create.stacks;
-    } else if (sameSource.type === 'attack_buff' || sameSource.type === 'defense_buff' || sameSource.type === 'strategy_buff' || sameSource.type === 'speed_buff' || sameSource.type === 'damage_reduce' || sameSource.type === 'damage_boost' || sameSource.type === 'trigger_boost' || sameSource.type === 'morale_boost' || sameSource.type === 'range_buff') {
+      return;
+    }
+    // 显式叠层标记（官方文案写「可叠加」/「层数」）→ 数值累加；其余默认刷新
+    if (isExplicitStackCreate(create)) {
       if ('amount' in sameSource && 'amount' in create) {
         sameSource.amount += create.amount;
         // 官方口径（疮痍累身截图）：同类属性增益重复施加 → 「【周泰】的攻击属性提高效果刷新了」
@@ -2232,53 +2243,87 @@ export function inflictStatus(
           (sameSource as { stacks?: number }).stacks = (sameSource.stacks ?? 1) + ('stacks' in create ? (create.stacks ?? 1) : 1);
         }
       }
-      if (create.type !== 'evasion') sameSource.remaining = Math.max(sameSource.remaining, remainingFromDuration(create.duration));
-    } else if (create.type !== 'evasion' && 'remaining' in sameSource) {
-      sameSource.remaining = Math.max(sameSource.remaining, remainingFromDuration(create.duration));
+      if ('remaining' in sameSource) {
+        sameSource.remaining = Math.max(sameSource.remaining, 'duration' in create ? remainingFromDuration(create.duration) : sameSource.remaining);
+      }
+      /**
+       * 反击同战法重挂：刷新 appliedRound，并沿用本次 rate。
+       * 否则第 2 回合 roundStartRepeat 只续 remaining，行动开始时 markStatusesOnActStart
+       * 会把 appliedRound=1 当成「上回合施加」递减掉，本回合行动后反击失效。
+       */
+      if (sameSource.type === 'counter' && create.type === 'counter') {
+        sameSource.appliedRound = ctx.currentRound;
+        sameSource.rate = create.rate;
+      }
+      // 士气提高同战法累加需发战报（谋议宏图：8→16→32），否则回合前叠层无事件
+      if (sameSource.type === 'morale_boost' && 'amount' in sameSource) {
+        const durText = sameSource.remaining >= 999 ? '持续至战斗结束' : `持续 ${sameSource.remaining} 回合`;
+        ctx.events.push({
+          type: 'status_inflicted',
+          unitId: target.general.id,
+          statusType: 'morale_boost',
+          detail: `${sameSource.amount < 0 ? '士气降低' : '士气提高'} ${Math.abs(sameSource.amount)} ${durText}`,
+        });
+      }
+      if (sameSource.type === 'damage_boost' && create.type === 'damage_boost' && create.chargesStack && 'rate' in sameSource) {
+        const pct = Math.round(Math.abs(sameSource.rate) * 100);
+        const dirName = sameSource.direction === 'caused' ? '造成的' : '受到的';
+        const verb = sameSource.rate < 0 && pct > 90 ? '大幅降低' : `${sameSource.rate >= 0 ? '提高' : '降低'} ${pct}%`;
+        ctx.events.push({
+          type: 'status_inflicted',
+          unitId: target.general.id,
+          statusType: 'damage_boost',
+          detail: `下一次${dirName}伤害${verb}`,
+        });
+      }
+      return;
     }
-    /**
-     * 反击同战法重挂：刷新 appliedRound，并沿用本次 rate。
-     * 否则第 2 回合 roundStartRepeat 只续 remaining，行动开始时 markStatusesOnActStart
-     * 会把 appliedRound=1 当成「上回合施加」递减掉，本回合行动后反击失效。
-     */
-    if (sameSource.type === 'counter' && create.type === 'counter') {
-      sameSource.appliedRound = ctx.currentRound;
+
+    // —— 默认刷新（同源重复施加同一数值型效果）——
+    // 数值替换为本次的 amount / rate（不回加），remaining = max(旧, 新)（用户口径）。
+    if ('amount' in sameSource && 'amount' in create) {
+      sameSource.amount = create.amount;
+      if ('percent' in sameSource || 'percent' in create) {
+        (sameSource as { percent?: boolean }).percent = Boolean('percent' in create && create.percent);
+      }
+      // 属性刷新：发与首次施加同类型的事件（战报可见「降低了10（刷新）」，不新增状态实例）
+      if (type in ATTR_STAT_LABEL) {
+        const label = ATTR_STAT_LABEL[type as keyof typeof ATTR_STAT_LABEL];
+        const pctText = 'percent' in create && create.percent ? '%' : '';
+        ctx.events.push({
+          type: 'status_inflicted',
+          unitId: target.general.id,
+          statusType: type,
+          detail: `${label}${create.amount >= 0 ? '提高' : '降低'}了${Math.abs(create.amount)}${pctText}（刷新）`,
+        });
+      }
+    } else if ('rate' in sameSource && 'rate' in create) {
       sameSource.rate = create.rate;
     }
-    // 士气提高同战法累加需发战报（谋议宏图：8→16→32），否则回合前叠层无事件
-    if (sameSource.type === 'morale_boost' && 'amount' in sameSource) {
-      const durText = sameSource.remaining >= 999 ? '持续至战斗结束' : `持续 ${sameSource.remaining} 回合`;
-      ctx.events.push({
-        type: 'status_inflicted',
-        unitId: target.general.id,
-        statusType: 'morale_boost',
-        detail: `${sameSource.amount < 0 ? '士气降低' : '士气提高'} ${Math.abs(sameSource.amount)} ${durText}`,
-      });
+    if ('remaining' in sameSource) {
+      sameSource.remaining = Math.max(sameSource.remaining, 'duration' in create ? remainingFromDuration(create.duration) : sameSource.remaining);
     }
-    if (sameSource.type === 'damage_boost' && create.type === 'damage_boost' && create.chargesStack && 'rate' in sameSource) {
-      const pct = Math.round(Math.abs(sameSource.rate) * 100);
-      const dirName = sameSource.direction === 'caused' ? '造成的' : '受到的';
-      const verb = sameSource.rate < 0 && pct > 90 ? '大幅降低' : `${sameSource.rate >= 0 ? '提高' : '降低'} ${pct}%`;
-      ctx.events.push({
-        type: 'status_inflicted',
-        unitId: target.general.id,
-        statusType: 'damage_boost',
-        detail: `下一次${dirName}伤害${verb}`,
-      });
+    // 反击同战法重挂：刷新 appliedRound（原因同上；rate 已在上方替换）
+    if (sameSource.type === 'counter' && create.type === 'counter') {
+      sameSource.appliedRound = ctx.currentRound;
     }
     return;
   }
 
   if (sameType) {
     // 同类型不同战法：冲突
-    if (sameType.type === 'confusion' || sameType.type === 'rampage' || sameType.type === 'cowardice' || sameType.type === 'hesitation' || sameType.type === 'combo') {
+    // 概率规避（列营守险）是状态类：不同来源同样先施加者生效、后施加者被拒（与同源冲突口径一致）
+    if (sameType.type === 'confusion' || sameType.type === 'rampage' || sameType.type === 'cowardice' || sameType.type === 'hesitation' || sameType.type === 'combo' || sameType.type === 'evade_chance') {
       // 控制：先施加者生效，后施加者被拒
+      const detail = sameType.type === 'evade_chance'
+        ? '规避效果冲突（已有效果），先施加者生效，未生效'
+        : `${statusName(sameType.type)}冲突（已有${skillTypeName(sameType.sourceSkillType)}战法施加的${statusName(sameType.type)}），未生效`;
       ctx.events.push({
         type: 'status_conflict',
         unitId: target.general.id,
         statusType: sameType.type,
         sourceSkillType,
-        detail: `${statusName(sameType.type)}冲突（已有${skillTypeName(sameType.sourceSkillType)}战法施加的${statusName(sameType.type)}），未生效`,
+        detail,
       });
       return;
     }
@@ -2467,6 +2512,21 @@ function conflictSign(v: number): -1 | 0 | 1 {
 function statusValue(x: CreateStatus | Status): number {
   if (x.type === 'evasion') return x.stacks;
   return 'amount' in x ? x.amount : 'rate' in x ? x.rate : 0;
+}
+
+/**
+ * 是否带**显式叠层标记**（同源重复施加才累加；否则走默认刷新，见 CreateStatus 顶部口径）。
+ *  - 通用 `stack: true`：官方文案写「可叠加」/「层数」的属性类、减伤、士气、范围、增伤等；
+ *  - `damage_boost` 既有层数语义：`stacks`（银龙冲阵 / 攻其不备 / 文德椒房 / 九伐中原 / 徽言龙凤 /
+ *    恃强淬锋 / 七步释嫌）或 `chargesStack`（七步释嫌：带 charges 仍累加）。
+ * `evasion` 的「层数式必挡」在 sameSource 分支单独处理，不依赖本函数。
+ */
+function isExplicitStackCreate(create: CreateStatus): boolean {
+  if (create.type === 'damage_boost') {
+    if (create.chargesStack) return true;
+    if (create.stacks != null) return true;
+  }
+  return 'stack' in create && create.stack === true;
 }
 
 function pushStatus(
@@ -2920,7 +2980,7 @@ export function triggerRangeDecayPassives(ctx: CombatContext): void {
       inflictStatus(
         ctx,
         unit,
-        { type: 'range_buff', amount: -skill.rangeDecayPerRound.perRound, duration: 999 },
+        { type: 'range_buff', amount: -skill.rangeDecayPerRound.perRound, duration: 999, stack: true },
         'passive',
         skill.id,
         unit.general.id
@@ -3672,7 +3732,7 @@ function triggerHealOnDamageCommands(
           inflictStatus(
             ctx,
             target,
-            { type: 'morale_boost', amount: -cfg.moraleReduce, duration: 999 },
+            { type: 'morale_boost', amount: -cfg.moraleReduce, duration: 999, stack: true },
             skill!.type,
             skill!.id,
             holder.general.id
@@ -4639,7 +4699,7 @@ function executeSkillOutputs(
         const direction = out.direction ?? 'taken';
         for (const t of pool) {
           if (!t.alive) continue;
-          inflictStatus(ctx, t, { type: 'damage_boost', rate, duration: out.duration, direction }, skill.type, skill.id, caster.general.id);
+          inflictStatus(ctx, t, { type: 'damage_boost', rate, duration: out.duration, direction, stack: out.stack }, skill.type, skill.id, caster.general.id);
         }
         break;
       }

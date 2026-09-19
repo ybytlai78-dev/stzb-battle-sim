@@ -412,6 +412,8 @@ export type SkillOutput =
       target?: 'self';
       /** 只对这些兵种的当前目标池结算 */
       troopTypes?: TroopType[];
+      /** 透传给 damage_boost 的显式「可叠加」标记（未笄难言 −18% 可叠加至战斗结束）；缺省刷新 */
+      stack?: true;
     }
   /**
    * 按目标生效士气分支（盛气横凌）：
@@ -438,7 +440,18 @@ export type SkillOutput =
       options: SkillOutput[][];
     };
 
-/** 状态施加模板 */
+/**
+ * 状态施加模板。
+ *
+ * **重复施加口径（用户确认）**：同源（同一战法）重复施加同一数值型效果
+ * **默认刷新**——数值替换为本次的 amount / rate（不回加），`remaining = max(旧, 新)`；
+ * 只有带**显式叠层标记**的才累加：
+ *  - 通用 `stack: true`（属性类 / 减伤 / 士气 / 范围 / 增伤等官方明确写「可叠加」的）；
+ *  - `damage_boost` 既有语义：`stacks`（带上限的层数计数，银龙冲阵/攻其不备/文德椒房…）
+ *    或 `chargesStack`（七步释嫌：带 charges 仍累加）。
+ * 官方未写「可叠加」/「层数」的（如 列营守险 四维增益）不写 stack，走刷新。
+ * 控制 / 概率规避等状态类仍走冲突规则（先施加者生效）。
+ */
 export type CreateStatus =
   | { type: 'confusion'; duration: number | [number, number] }
   | { type: 'rampage'; duration: number; /** 待下次行动才生效（青丘媚祸），避免挂上即控、重复刷新永控 */ pendingNextAct?: boolean }
@@ -451,11 +464,11 @@ export type CreateStatus =
   | { type: 'combo'; duration: number }
   /** amount 为谋略 80 时的基础值；strategyScaled=true 且给 growthRate 时，实际数值按 scaledValue 缩放。
    *  percent=true 时 amount 为百分比（如 15 = 15%），按目标当前生效属性（含点数增减后）结算 */
-  | { type: 'attack_buff'; amount: number; duration: number; strategyScaled?: boolean; growthRate?: number; percent?: boolean }
-  | { type: 'defense_buff'; amount: number; duration: number; strategyScaled?: boolean; growthRate?: number; percent?: boolean }
-  | { type: 'strategy_buff'; amount: number; duration: number; strategyScaled?: boolean; growthRate?: number; percent?: boolean }
-  | { type: 'speed_buff'; amount: number; duration: number; strategyScaled?: boolean; growthRate?: number; percent?: boolean }
-  | { type: 'damage_reduce'; rate: number; duration: number; strategyScaled?: boolean; /** 受攻击缩放（对称字段） */ attackScaled?: boolean; /**
+  | { type: 'attack_buff'; amount: number; duration: number; strategyScaled?: boolean; growthRate?: number; percent?: boolean; /** 显式「可叠加」（官方文案写「可叠加」/「层数」）：同源重复施加时数值累加；缺省刷新 */ stack?: true }
+  | { type: 'defense_buff'; amount: number; duration: number; strategyScaled?: boolean; growthRate?: number; percent?: boolean; stack?: true }
+  | { type: 'strategy_buff'; amount: number; duration: number; strategyScaled?: boolean; growthRate?: number; percent?: boolean; stack?: true }
+  | { type: 'speed_buff'; amount: number; duration: number; strategyScaled?: boolean; growthRate?: number; percent?: boolean; stack?: true }
+  | { type: 'damage_reduce'; rate: number; duration: number; /** 显式「可叠加」（同仇敌忾等官方写「可叠加」/「层数」）：同源重复施加累加；缺省刷新 */ stack?: true; strategyScaled?: boolean; /** 受攻击缩放（对称字段） */ attackScaled?: boolean; /**
    * 受防御缩放（蛮王御众「受到的所有伤害降低 30.0%（受防御属性影响）」）：公式同受谋略，属性换生效防御；
    * growthRate === undefined 时不缩放、用基值（官方未给成长系数时按基值 + 登记 listing.OFFLINE_MAIN_SKILLS）。 */
   defenseScaled?: boolean; growthRate?: number; /** 按 8 份衰减（谋议宏图）：第 1 回合 8/8，第 2 回合起每回合回合前 −1/8（第 8 回合 1/8） */ decayEighths?: number; /** 按 N 份受击衰减（疮痍累身 12）：受匹配伤害且实际扣兵后 −1 份，rate = baseRate × 剩余/初始 */ decayFifths?: number; /** 伤害来源过滤：basic=普攻（分类键小类「普通」）/ skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效（分类键小类「主动/追击/指挥」）；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省攻击+策略都吃（分类键「大类」，见 action.ts damageClassKey） */ damageType?: 'physical' | 'strategy'; /** 只对这些 DoT 类型生效（全主诿异：被施加的燃烧/恐慌/妖术诅咒伤害提升 20%）；缺省不限（非 DoT 伤害也吃） */ dotTypes?: DotType[]; /** 条件减伤（人公将军「敌方武将存在妖术效果时造成的攻击伤害降低 20%」）：仅当**携带者自身**带该状态时本减伤才生效 */ requireSelfStatus?: StatusType }
@@ -469,7 +482,7 @@ export type CreateStatus =
    *  attackScaled=true（万箭 −50% / 恃强 −30%）：受攻击缩放；growthRate === undefined 时不缩放、用基值
    *  decayFifths：按 N 份衰减（恃强 5）：挂上时满额，每次受到匹配伤害且实际扣兵 > 0 则 −1 份，rate = baseRate × fifths/N
    *  chargesStack：同战法重复施加时累加 rate（七步释嫌）；缺省不叠加（青丘媚祸） */
-  | { type: 'damage_boost'; rate: number; duration: number; direction?: 'caused' | 'taken'; stacks?: number; /** 同战法同过滤维叠层达到此上限后不再加 rate；文德椒房 3 */ maxStacks?: number; /** 按 8 份衰减（虎豹督军）：第 1 回合 8/8，第 2 回合起每回合回合前 −1/8（同谋议宏图口径） */ decayEighths?: number; strategyScaled?: boolean; /** 受防御缩放（当敌制决 +8%，公式同受谋略，属性换生效防御） */ defenseScaled?: boolean; /** 受速度缩放（攻其不备 +11.6%）；growthRate === undefined 时不缩放、用基值 */ speedScaled?: boolean; /** 受攻击缩放（万箭齐发 −50%、恃强淬锋 −30% / +3.4%）；growthRate === undefined 时不缩放、用基值 */ attackScaled?: boolean; growthRate?: number; charges?: number; chargesStack?: boolean; /** 按 N 份衰减（恃强淬锋 5）：挂上满额，每次匹配受击实际扣兵后 −1 份 */ decayFifths?: number; /** 伤害来源过滤：basic=普攻（分类键小类「普通」）/ skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效（分类键小类「主动/追击/指挥」）；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省攻击+策略都吃（分类键「大类」，见 action.ts damageClassKey） */ damageType?: 'physical' | 'strategy'; /** 只对这些 DoT 类型生效（全主诿异：被施加的燃烧/恐慌/妖术诅咒伤害提升 20%）；缺省不限（非 DoT 伤害也吃） */ dotTypes?: DotType[]; /** 仅「进行攻击」（普攻/物理主动/追击，口径见 action.isAttackHitForProc；不含分兵溅射/反击/指挥代打/DoT）——缚父临危「下两次攻击造成的伤害提升 30%」 */ attackOnly?: boolean }
+  | { type: 'damage_boost'; rate: number; duration: number; direction?: 'caused' | 'taken'; stacks?: number; /** 同战法同过滤维叠层达到此上限后不再加 rate；文德椒房 3 */ maxStacks?: number; /** 按 8 份衰减（虎豹督军）：第 1 回合 8/8，第 2 回合起每回合回合前 −1/8（同谋议宏图口径） */ decayEighths?: number; strategyScaled?: boolean; /** 受防御缩放（当敌制决 +8%，公式同受谋略，属性换生效防御） */ defenseScaled?: boolean; /** 受速度缩放（攻其不备 +11.6%）；growthRate === undefined 时不缩放、用基值 */ speedScaled?: boolean; /** 受攻击缩放（万箭齐发 −50%、恃强淬锋 −30% / +3.4%）；growthRate === undefined 时不缩放、用基值 */ attackScaled?: boolean; growthRate?: number; charges?: number; chargesStack?: boolean; /** 显式「可叠加」标记：同源重复施加累加 rate（与 stacks / chargesStack 等价；官方写「可叠加」的非层数增减伤用） */ stack?: true; /** 按 N 份衰减（恃强淬锋 5）：挂上满额，每次匹配受击实际扣兵后 −1 份 */ decayFifths?: number; /** 伤害来源过滤：basic=普攻（分类键小类「普通」）/ skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效（分类键小类「主动/追击/指挥」）；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省攻击+策略都吃（分类键「大类」，见 action.ts damageClassKey） */ damageType?: 'physical' | 'strategy'; /** 只对这些 DoT 类型生效（全主诿异：被施加的燃烧/恐慌/妖术诅咒伤害提升 20%）；缺省不限（非 DoT 伤害也吃） */ dotTypes?: DotType[]; /** 仅「进行攻击」（普攻/物理主动/追击，口径见 action.isAttackHitForProc；不含分兵溅射/反击/指挥代打/DoT）——缚父临危「下两次攻击造成的伤害提升 30%」 */ attackOnly?: boolean }
   /**
    * 发动率提升。rate 为小数（1.2 = +120% / ×2.2）。
    * skillTypes：只对这些战法类型生效（动如雷震仅追击）；缺省主动+追击都吃（难知如阴）。
@@ -477,7 +490,7 @@ export type CreateStatus =
    * 超过 100% 由发动率判定封顶为必定发动。
    * additive：仅 `false` 有意义——显式退回乘算 基础率 × (1+rate)。
    */
-  | { type: 'trigger_boost'; rate: number; duration: number; skillTypes?: SkillType[]; /** 仅 false 生效：退回乘算；缺省加法 */ additive?: boolean; /** 只对「攻击类」战法生效（输出段含物理伤害）——侵掠如火「攻击类主动战法发动率提升 20%」 */ attackSkillsOnly?: boolean }
+  | { type: 'trigger_boost'; rate: number; duration: number; skillTypes?: SkillType[]; /** 仅 false 生效：退回乘算；缺省加法 */ additive?: boolean; /** 只对「攻击类」战法生效（输出段含物理伤害）——侵掠如火「攻击类主动战法发动率提升 20%」 */ attackSkillsOnly?: boolean; /** 显式「可叠加」：同源重复施加累加 rate；缺省刷新 */ stack?: true }
   | { type: 'insight'; duration: number }
   /** 免疫怯战（魏武之泽）：持续期间无法被施加怯战 */
   | { type: 'cowardice_immune'; duration: number }
@@ -523,11 +536,11 @@ export type CreateStatus =
   /** 士气提高（谋议宏图）：amount 为士气点数；同战法累加，不同指挥战法冲突取较高。
    *  **amount 为负 = 士气降低**（心战为上：每次伤害使目标 −5，整场常驻、同战法累加）；
    *  正负相反（士气提高 vs 士气降低）不冲突、各自共存，由 `effectiveMorale` 相加得净士气 */
-  | { type: 'morale_boost'; amount: number; duration: number }
+  | { type: 'morale_boost'; amount: number; duration: number; /** 显式「可叠加」（谋议宏图 每回合 +8 / 心战为上 每次 −5）：同源重复施加累加；缺省刷新 */ stack?: true }
   /** 无视防御比例（0.6 = 60%），自身攻击时目标防御 × (1 − rate) */
   | { type: 'ignore_def'; rate: number; duration: number }
   /** 攻击距离提高（帝临回光「攻击距离 +1」）：普攻可达距离上限 +amount，见 target.ts attackRangeOf */
-  | { type: 'range_buff'; amount: number; duration: number }
+  | { type: 'range_buff'; amount: number; duration: number; /** 显式「可叠加」（雪奋短兵 每回合攻击距离 −1）：同源重复施加累加；缺省刷新 */ stack?: true }
   /**
    * 受击追加攻击标记（忠克猛烈）：携带者每受到 1 次**攻击伤害**（普攻/战法/反击均可），
    * 由标记施法者对其追加 1 次攻击（伤害率 rate，无视兵种相克与目标防御 —— 与该战法主动段同口径），
