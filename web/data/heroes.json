@@ -615,7 +615,7 @@
     "growthDefense": 1.85,
     "growthStrategy": 0.76,
     "growthSpeed": 2.04,
-    "mainSkillId": "",
+    "mainSkillId": "dingjun_juezhan",
     "mainSkillName": "定军绝战",
     "skillDesc": "对敌军单体发动一次攻击（伤害率140.0%）"
   },

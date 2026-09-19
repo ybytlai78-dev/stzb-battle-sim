@@ -7826,4 +7826,30 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     copyRandomActive: true,
     output: [],
   },
+  /**
+   * 定军绝战（SP夏侯渊·魏骑 h102002 主战法）：主动 B，距离 3，目标敌军单体，官方发动几率栏 120%。
+   * 满级：对敌军单体发动一次攻击（伤害率 140.0%）；1 级：伤害率 70.0%。
+   * 官方：scripts/skill_extra.json id 200705（主动 B / 距离 3 / 敌军单体 / 兵种骑；effect 标签 攻击伤害）。
+   *   来源 https://stzb.163.com/m/skilllist/200705.html
+   *
+   * 口径（策略 A，2026-09-20，照仓库既有先例）：
+   *   ① 官方发动几率栏 120%（>100%）→ 照**虎步关右（h435，同为官方 120%）**先例按 `triggerRate: 1.2` 实装；
+   *      判定走 `moraleTriggerRate` 封顶 100%（实际必定发动），`skill_trigger` 事件仍带 baseRate 120。
+   *   ② 「敌军单体」= `targetSide:'enemy'` + `targetMode:'random_single'`
+   *      （率土「敌军单体」为距离内均匀随机，仓库口径）。
+   *   ③ 无「受属性影响」段、无数值缺口 → **上架**（不登记 OFFLINE_MAIN_SKILLS，上架池 78 → 79）。
+   *   ④ SP 卡 iconId 冲突按策略 A ⑤：沿用 web/data/portrait_map.json 口径（= 102002），不改画像数据。
+   */
+  dingjun_juezhan: {
+    id: 'dingjun_juezhan',
+    name: '定军绝战',
+    type: 'active',
+    prepare: false,
+    range: 3,
+    triggerRate: 1.2, // 官方发动几率栏 120%（>100%，同虎步关右先例；判定封顶 100% 必定发动）
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['damage'],
+    output: [{ kind: 'physical_damage', rate: 140 }],
+  },
 };

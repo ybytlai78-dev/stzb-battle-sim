@@ -167,6 +167,7 @@ const SKILL_ID_BY_NAME = {
   断首何怒: 'duanshou_henu',
   勇挚刚毅: 'yongzhi_gangyi',
   奇门遁甲: 'qimen_dunjia',
+  定军绝战: 'dingjun_juezhan',
 };
 
 /** 现有 8 个武将固定拼音 id（测试直接引用 HERO_REGISTRY.<id>） */
