@@ -35,6 +35,9 @@ function troopCounterReduceOf(source: UnitState, target: UnitState): number {
   return troopCounterReduce(source.general.troopType, target.general.troopType);
 }
 
+/** 四种控制状态（混乱/犹豫/暴走/怯战）：洞察免疫、控制冲突、鸾凤和鸣「控制 +1 目标」共用同一口径 */
+const CONTROL_STATUS_TYPES: StatusType[] = ['confusion', 'rampage', 'cowardice', 'hesitation'];
+
 /** skillTargets 能吃的四种选敌；`self` 等回退 fallback，避免 random_single 被降成 all/group */
 type CombatTargetMode = 'single' | 'random_single' | 'group' | 'all';
 function resolveCombatTargetMode(mode: string | undefined, fallback: CombatTargetMode): CombatTargetMode {
@@ -1598,6 +1601,8 @@ function tickStatusesOnActStart(ctx: CombatContext, unit: UnitState): void {
     if (s.type === 'pending_stacks') continue;
     // 下一次伤害无视规避（缚父临危）：消耗制，不按回合递减
     if (s.type === 'ignore_evasion') continue;
+    // 控制效果 +1 目标（鸾凤和鸣）：消耗制，不按回合递减
+    if (s.type === 'control_spread') continue;
     // 次数型下一次攻击：不按回合递减，打出后由 consumeAttackCharges 移除
     if (s.type === 'damage_boost' && 'charges' in s && s.charges != null) continue;
     // 次数型分兵：不按回合递减，打出后由 consumeSplitCharges 移除
@@ -1859,8 +1864,7 @@ export function inflictStatus(
   }
 
   // 洞察：免疫控制类效果（混乱/怯战/暴走/犹豫）
-  const CONTROL_TYPES: StatusType[] = ['confusion', 'rampage', 'cowardice', 'hesitation'];
-  if (CONTROL_TYPES.includes(type) && hasStatus(target, 'insight')) {
+  if (CONTROL_STATUS_TYPES.includes(type) && hasStatus(target, 'insight')) {
     ctx.events.push({
       type: 'insight_blocked',
       unitId: target.general.id,
@@ -1943,6 +1947,12 @@ export function inflictStatus(
 
   // 受击追加攻击标记（忠克猛烈）：独立共存，不参与冲突判定
   if (type === 'retaliate') {
+    pushStatus(ctx, target, create, sourceSkillType, sourceSkillId, casterId);
+    return;
+  }
+
+  // 控制效果额外 +1 目标（鸾凤和鸣）：正面标记，独立共存、不参与冲突判定（同战法重复施加只刷新，不叠加）
+  if (type === 'control_spread') {
     pushStatus(ctx, target, create, sourceSkillType, sourceSkillId, casterId);
     return;
   }
@@ -2314,6 +2324,20 @@ function pushStatus(
       unitId: target.general.id,
       statusType: type,
       detail: '下一次造成的伤害无视规避',
+    });
+    return;
+  }
+  if (type === 'control_spread') {
+    // 控制效果 +1 目标（鸾凤和鸣）：消耗制；同战法重复施加只刷新，不叠加（不同战法各自独立共存）
+    const dup = target.statuses.some((s) => s.type === 'control_spread' && s.sourceSkillId === sourceSkillId);
+    if (!dup) {
+      target.statuses.push({ type: 'control_spread', remaining, appliedRound, sourceSkillType, sourceSkillId, sourceUnitId: casterId });
+    }
+    ctx.events.push({
+      type: 'status_inflicted',
+      unitId: target.general.id,
+      statusType: type,
+      detail: '下一次造成的控制效果额外对 1 个目标生效',
     });
     return;
   }
@@ -2709,6 +2733,8 @@ export function tickStatuses(ctx: CombatContext, units: UnitState[]): void {
       if (s.appliedRound !== 0) continue; // 行动中施加：下次行动开始前递减
       if (s.type === 'pending_stacks') continue; // 叠层待发：不按回合递减（奉令护蜀）
       if (s.type === 'ignore_evasion') continue; // 无视规避：消耗制，不按回合递减（缚父临危）
+      // 控制 +1 目标（鸾凤和鸣）：消耗制，不按回合递减
+      if (s.type === 'control_spread') continue;
       if (s.type === 'rest') continue; // 休整 remaining 只在跳恢复时递减
       // 次数型分兵（准备阶段施加）：不按回合递减
       if (s.type === 'split' && 'charges' in s && s.charges != null) continue;
@@ -3108,6 +3134,7 @@ function statusName(type: StatusType): string {
     case 'retaliate': return '受击追加攻击';
     case 'pending_stacks': return '叠层待发';
     case 'ignore_evasion': return '无视规避';
+    case 'control_spread': return '控制效果 +1 目标';
     case 'range_buff': return '攻击距离';
   }
 }
@@ -3329,6 +3356,34 @@ function runChainSkills(ctx: CombatContext, caster: UnitState, skill: Skill, tar
     executeSkillOutputs(ctx, caster, ref, pool, ref.output, false);
     if (!caster.alive) break;
   }
+}
+
+/**
+ * 「控制效果 +1 目标」的额外目标（鸾凤和鸣）：施法者**距离内**、未在本段目标池内的随机 1 个存活敌军。
+ * 无可用目标时返回 undefined（标记照常消耗——「下一次控制」已用掉）。
+ */
+function pickExtraControlTarget(
+  ctx: CombatContext,
+  caster: UnitState,
+  range: number,
+  hitIds: string[]
+): UnitState | undefined {
+  const enemies = caster.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
+  const candidates = enemies.filter(
+    (e) => e.alive && !hitIds.includes(e.general.id) && distanceBetween(ctx, caster, e) <= range
+  );
+  if (candidates.length === 0) return undefined;
+  return candidates[ctx.rng.int(candidates.length)];
+}
+
+/** 消耗「控制效果 +1 目标」标记（鸾凤和鸣）：打出控制后移除并记 status_expired */
+function consumeControlSpread(ctx: CombatContext, holder: UnitState, status: Status): void {
+  holder.statuses = holder.statuses.filter((s) => s !== status);
+  ctx.events.push({
+    type: 'status_expired',
+    unitId: holder.general.id,
+    statusType: 'control_spread',
+  });
 }
 
 function executeSkillOutputs(
@@ -3964,14 +4019,21 @@ function executeSkillOutputs(
         break;
       }
       case 'inflict_status': {
+        // 控制效果 +1 目标（鸾凤和鸣）：携带者本段实际打出控制（混乱/犹豫/暴走/怯战）后，
+        // 额外对 1 个敌军目标生效，随后消耗该标记（未打出控制则不消耗）
+        const controlSpread = getStatus(caster, 'control_spread');
+        let spreadCreate: CreateStatus | undefined;
+        const hitIds: string[] = [];
         for (const t of pool) {
           if (!t.alive) continue;
+          hitIds.push(t.general.id);
           // 状态数组：缺省每个目标随机 1 个（奇佐鬼谋）；applyAll 则全部施加（黄天余音四维）
           const creates: CreateStatus[] = Array.isArray(out.status)
             ? (out.applyAll ? out.status : [out.status[ctx.rng.int(out.status.length)]])
             : [out.status];
           for (const create of creates) {
           if (!t.alive) break;
+          if (controlSpread && !spreadCreate && CONTROL_STATUS_TYPES.includes(create.type)) spreadCreate = create;
           // DoT/诅咒/引燃 类型：预缩放 rate + 冻结 caster 谋略
           if (create.type === 'sorcery' || create.type === 'burning' || create.type === 'panic' || create.type === 'curse' || create.type === 'ignite') {
             const effStrategy = effectiveStat(caster, 'strategy');
@@ -4089,6 +4151,12 @@ function executeSkillOutputs(
             inflictStatus(ctx, t, create, skill.type, skill.id, caster.general.id);
           }
           }
+        }
+        // 控制效果 +1 目标（鸾凤和鸣）：额外命中 1 个「距离内、未在本段目标池内」的随机敌军，随后消耗
+        if (controlSpread && spreadCreate) {
+          const extra = pickExtraControlTarget(ctx, caster, skill.range, hitIds);
+          if (extra) inflictStatus(ctx, extra, spreadCreate, skill.type, skill.id, caster.general.id);
+          consumeControlSpread(ctx, caster, controlSpread);
         }
         break;
       }
@@ -4287,7 +4355,10 @@ function triggerAfterFirstActiveCommands(ctx: CombatContext, unit: UnitState): v
   for (const id of unit.general.commandSkillIds) {
     const skill = resolveSkill(ctx, id);
     if (skill?.type !== 'command' || skill.phase !== 'round') continue;
-    if (skill.roundTrigger !== 'after_first_active') continue;
+    // 主判定时机为 after_first_active 的走 skill.output；否则仅在声明了附加段（鸾凤和鸣）时执行
+    const mainAfterFirstActive = skill.roundTrigger === 'after_first_active';
+    const extraOutput = skill.afterFirstActiveOutput;
+    if (!mainAfterFirstActive && !(extraOutput && extraOutput.length > 0)) continue;
     const side = skill.targetSide ?? 'ally';
     const pool = side === 'ally' ? allies : enemies;
     const mode = resolveCombatTargetMode(skill.targetMode, 'group');
@@ -4298,7 +4369,7 @@ function triggerAfterFirstActiveCommands(ctx: CombatContext, unit: UnitState): v
       skillId: skill.id,
       skillName: skill.name,
     });
-    executeSkillOutputs(ctx, unit, skill, selected);
+    executeSkillOutputs(ctx, unit, skill, selected, mainAfterFirstActive ? skill.output : extraOutput);
   }
 }
 

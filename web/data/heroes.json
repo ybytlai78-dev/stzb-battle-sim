@@ -3007,7 +3007,7 @@
     "growthDefense": 1.21,
     "growthStrategy": 1.64,
     "growthSpeed": 0.67,
-    "mainSkillId": "",
+    "mainSkillId": "luanfeng_heming",
     "mainSkillName": "鸾凤和鸣",
     "skillDesc": "战斗中，自身每回合首次发动主动战法后，使我军群体2目标恢复一定兵力（恢复率85.0%，受谋略属性影响）；每回合自身行动时，使我军全体3目标造成的下一次随机目标的控制效果（混乱、犹豫、暴走、怯战）额外对一个目标生效"
   },

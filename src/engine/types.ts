@@ -460,6 +460,11 @@ export type CreateStatus =
   /** 下一次造成伤害无视规避（缚父临危）：无 duration——消耗制，不按回合递减 */
   /** 下一次造成伤害无视规避（缚父临危）：duration 仅占位——消耗制，不按回合递减（两个 tick 函数显式跳过） */
   | { type: 'ignore_evasion'; duration: number }
+  /**
+   * 控制效果额外 +1 目标（鸾凤和鸣）：携带者「下一次造成的控制效果（混乱/犹豫/暴走/怯战）
+   * 额外对一个目标生效」。消耗制（duration 仅占位，不按回合递减），由携带者打出控制时消耗并移除。
+   */
+  | { type: 'control_spread'; duration: number }
   | { type: 'taunt'; duration: number; targetId: string }
   /** 反击资格（反击之策）：携带者被普攻实际扣兵后，对来源打 rate% 攻击。不消耗。rate 与 physical_damage 同口径（100=100%） */
   | { type: 'counter'; duration: number; rate: number }
@@ -676,6 +681,13 @@ export interface CommandSkill extends BaseSkill {
   };
   /** 二类指挥动态发动率：初始 base，未生效每回合 +increment，生效后重置（奇兵拒北 30% 起始，未生效+5%） */
   dynamicTriggerRate?: { base: number; increment: number };
+  /**
+   * 二类指挥·附加「本回合首次主动战法实际释放成功后」段（鸾凤和鸣）：
+   * 与 `roundTrigger` 解耦——主判定时机走 on_act / after_first_active 时，本段仍会在携带者本回合
+   * **首次成功释放主动战法后**执行一次（目标池按段内 targetSide/targetMode/groupCount 覆盖）。
+   * 用于「同一指挥战法兼具『每回合行动时』与『每回合首次主动后』两个时机」的场景。
+   */
+  afterFirstActiveOutput?: SkillOutput[];
   /** 每 N 回合判定一次（难知如阴「每2回合」）：只在 currentRound % everyNRounds === 0 时判定。缺省每回合 */
   everyNRounds?: number;
   /** 先手：先驱突击前 3 回合先手。回合内先比「携带先手标签」单位的出手顺序，再比其余单位 */
@@ -1126,7 +1138,9 @@ export type StatusType =
   /** 叠层待发（奉令护蜀）：友军每次成功发动叠 1 层（上限 5），下次普攻增伤 / 下次受击减伤后清空全部层数 */
   | 'pending_stacks'
   /** 下一次伤害无视规避（缚父临危：友军中吕布下一次造成的伤害无视规避；覆盖任意伤害类型，由该单位下次造成伤害时消耗） */
-  | 'ignore_evasion';
+  | 'ignore_evasion'
+  /** 下一次造成的控制效果额外 +1 目标（鸾凤和鸣）：消耗制，由携带者打出控制时消耗 */
+  | 'control_spread';
 
 /** DoT（妖术/燃烧/恐慌）挂上时冻结的每次伤害（滞后触发）：
  *  伤害在「挂上时」结算并冻结——按当时的增伤合计（造成侧 + 受到侧）、施法者兵力、
@@ -1229,7 +1243,9 @@ export type Status =
    * 覆盖**任意伤害类型**（攻击/策略），由携带者下一次造成伤害时消耗（consumeEvasion 内统一处理，
    * 携带者自己带此标记则跳过规避判定）；不按回合递减（两个 tick 函数显式跳过）。
    */
-  | { type: 'ignore_evasion'; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string };
+  | { type: 'ignore_evasion'; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
+  /** 控制效果额外 +1 目标（鸾凤和鸣）：消耗制，不按回合递减（两个 tick 函数显式跳过） */
+  | { type: 'control_spread'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string };
 
 export interface UnitState {
   readonly general: General;

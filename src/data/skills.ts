@@ -5345,4 +5345,46 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+  /**
+   * 鸾凤和鸣（小乔·吴弓 h687·指挥 A）：距离 3，我军全体。
+   * 战斗中，自身每回合首次发动主动战法后，使我军群体 2 目标恢复一定兵力（恢复率 85.0%，受谋略属性影响）；
+   * 每回合自身行动时，使我军全体 3 目标造成的下一次随机目标的控制效果（混乱、犹豫、暴走、怯战）额外对一个目标生效。
+   * 官方：scripts/skill_extra.json id 200960（指挥 A / 距离 3 / 我军全体 / 兵种弓；1 级 42.5%）。
+   * 入档判断：**下架** —— 85% 恢复率「受谋略属性影响」而官方未给成长系数 → 按基值不缩放 +
+   *   登记 OFFLINE_MAIN_SKILLS，待反解确认后移出。
+   * 引擎配套：
+   *   ① 新状态 `control_spread`（控制效果 +1 目标）：消耗制标记，携带者打出控制（混乱/犹豫/暴走/怯战）时
+   *      额外对 1 个「距离内、未在本段目标池内」的随机敌军生效（段级在 executeSkillOutputs 的 inflict_status
+   *      分支统一处理，覆盖主动/追击/指挥各来源的控制段），随后消耗；
+   *   ② `CommandSkill.afterFirstActiveOutput`：与 `roundTrigger` 解耦的「本回合首次主动战法成功释放后」附加段
+   *      —— 本战法主判定走 on_act（②「每回合自身行动时」），① 的恢复段走该附加钩子。
+   */
+  luanfeng_heming: {
+    id: 'luanfeng_heming',
+    name: '鸾凤和鸣',
+    type: 'command',
+    phase: 'round',
+    roundTrigger: 'on_act',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['heal'],
+    output: [
+      // ② 每回合自身行动时：我军全体获得「下一次造成的控制效果额外 +1 目标」（消耗制）
+      { kind: 'inflict_status', status: { type: 'control_spread', duration: 999 } },
+    ],
+    afterFirstActiveOutput: [
+      // ① 自身每回合首次发动主动战法后：我军群体 2 目标恢复 85%（受谋略；成长率未确认 → 0 基值不缩放）
+      {
+        kind: 'heal',
+        rate: 85,
+        strategyScaled: true,
+        growthRate: 0,
+        targetSide: 'ally',
+        targetMode: 'group',
+        groupCount: 2,
+      },
+    ],
+  },
 };

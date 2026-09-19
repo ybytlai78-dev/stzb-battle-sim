@@ -146,6 +146,7 @@ const SKILL_ID_BY_NAME = {
   缚父临危: 'fufu_linwei',
   连环计: 'lianhuanji',
   率尔方雅: 'lv_er_fang_ya',
+  鸾凤和鸣: 'luanfeng_heming',
   万箭齐发: 'wanjian_qifa',
   文伐: 'wenfa',
   不攻: 'bugong',
