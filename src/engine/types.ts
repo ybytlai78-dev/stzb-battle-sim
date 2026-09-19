@@ -583,6 +583,13 @@ export type CreateStatus =
    *  与 evasion 的「层数式必挡」不同：判定失败也消耗 1 次机会。 */
   | { type: 'evade_chance'; rate: number; charges: number; duration: number }
   | { type: 'combo'; duration: number }
+  /**
+   * 避锐（疲兵沮意，XP陆逊）：层数式「受到伤害前消耗 1 层」减伤 —— 携带者每次受到伤害（伤害结算前）
+   * 消耗 1 层，令**该次**伤害降低 `perStackRate`（受谋略缩放：strategyScaled + growthRate 给定时按
+   * 施法者谋略缩放并冻结，growthRate 缺省 = 基值）；消耗时按 `CommandSkill.avoidOnConsume` 结算附加效果。
+   * duration：状态存续回合（整场 = 999）；层数只在受击时消耗，不按回合递减。
+   */
+  | { type: 'avoid_charge'; stacks: number; perStackRate: number; duration: number; strategyScaled?: boolean; growthRate?: number }
   /** amount 为谋略 80 时的基础值；strategyScaled=true 且给 growthRate 时，实际数值按 scaledValue 缩放。
    *  percent=true 时 amount 为百分比（如 15 = 15%），按目标当前生效属性（含点数增减后）结算。
    *  decayOnDeal：按 N 份「造成伤害」衰减（抚民励德 4）——携带者每次造成伤害（实际扣兵 > 0）后 −1 份。 */
@@ -1038,6 +1045,13 @@ export interface CommandSkill extends BaseSkill {
   afterFirstActiveOutput?: SkillOutput[];
   /** 每 N 回合判定一次（难知如阴「每2回合」）：只在 currentRound % everyNRounds === 0 时判定。缺省每回合 */
   everyNRounds?: number;
+  /**
+   * 避锐消耗后的附加效果（疲兵沮意「避锐效果生效后有 50% 几率令敌军单体陷入燃烧状态…并使其后续
+   * 受到疲兵沮意的燃烧伤害伤害率提升 80%，可叠加至战斗结束」）：携带者的 `avoid_charge` 状态
+   * 消耗 1 层时，由施法者按 `chance` 判定（走士气修正，同 actLayer 口径）；命中则对**战法距离内
+   * 随机敌军单体**结算 `output`（燃烧 + 「受到本战法燃烧伤害提升」同源叠层，同一目标）。
+   */
+  avoidOnConsume?: { chance: number; output: SkillOutput[] };
   /**
    * 只在列出的回合**自身行动时**判定（抚民励德「第 2、4、6 回合自身行动时」）：
    * `currentRound ∉ actRounds` 时整次跳过；缺省不限（每回合）。
@@ -1565,6 +1579,8 @@ export type StatusType =
   | 'speed_buff'
   | 'damage_reduce'
   | 'damage_boost'
+  /** 避锐（疲兵沮意）：层数式「受到伤害前消耗 1 层」减伤，消耗时结算附加效果（燃烧 + 递增） */
+  | 'avoid_charge'
   /** 受到恢复效果提升（勇挚刚毅）：rate 为恢复量加成比例，recoverTroops 统一收口 */
   | 'heal_boost'
   | 'trigger_boost'
@@ -1625,6 +1641,8 @@ export type Status =
   /** 概率规避（列营守险）：charges = 剩余机会；每次受击消耗 1，命中则免疫该次伤害，用尽即移除 */
   | { type: 'evade_chance'; rate: number; charges: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   | { type: 'combo'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  /** 避锐（疲兵沮意）：吸收层数（每回合 +2）；受击前消耗 1 层令该次伤害降低 perStackRate，不按回合递减 */
+  | { type: 'avoid_charge'; stacks: number; perStackRate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   | { type: 'attack_buff'; amount: number; percent?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; /** 造成伤害衰减：满额数值（抚民励德 80） */ baseAmount?: number; /** 剩余份数（抚民励德 4→3→…） */ dealParts?: number; /** 份数初始值（4） */ dealPartsBase?: number }
   | { type: 'defense_buff'; amount: number; percent?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; baseAmount?: number; dealParts?: number; dealPartsBase?: number }
   | { type: 'strategy_buff'; amount: number; percent?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; /** 造成伤害衰减：满额数值（抚民励德 80） */ baseAmount?: number; /** 剩余份数（抚民励德 4→3→…）；无此字段则不按造成伤害衰减 */ dealParts?: number; /** 份数初始值（4），衰减公式分母 */ dealPartsBase?: number }

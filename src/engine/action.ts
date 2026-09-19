@@ -574,7 +574,8 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
       !skill.strategyAdjacentBonus &&
       !skill.sealTransfer &&
       !skill.settleOnFirstRound &&
-      !skill.healOnDamage
+      !skill.healOnDamage &&
+      !skill.avoidOnConsume
     ) {
       executeSkillOutputs(ctx, unit, skill, targets);
     }
@@ -1679,6 +1680,8 @@ function computeDotTickDamage(
     damageSource: 'skill',
     damageType: 'strategy',
     ...(skillType ? { skillType } : {}),
+    // 指定战法维（疲兵沮意「使其后续受到疲兵沮意的燃烧伤害提升」按 skillIds 过滤）
+    ...(dot.sourceSkillId ? { skillId: dot.sourceSkillId } : {}),
     // DoT 类型维（全主诿异「被施加的燃烧/恐慌/妖术诅咒伤害提升」按此过滤）
     ...(dot.dotType ? { dotType: dot.dotType } : {}),
   };
@@ -1905,7 +1908,7 @@ function executeSplitAttack(
 
 /** 行动结束递减的状态类型：有 `remaining` 的计数器型。
  *  规避（按层数）、叠层待发 / 无视规避（消耗制）没有 remaining，已在标记阶段跳过。 */
-type ActEndCountingStatus = Exclude<Status, { type: 'evasion' | 'pending_stacks' | 'ignore_evasion' }>;
+type ActEndCountingStatus = Exclude<Status, { type: 'evasion' | 'pending_stacks' | 'ignore_evasion' | 'avoid_charge' }>;
 
 /** 第 2 组「**下次行动前递减**」的状态（用户口径 2026-09-20）：控制 / 属性 / 增减伤。
  *  语义：duration N = 生效目标接下来 **N 次行动**；第 N 次生效行动结束后状态**仍在身**，
@@ -1961,6 +1964,8 @@ function markStatusesOnActStart(ctx: CombatContext, unit: UnitState): ActEndCoun
     if (s.type === 'ignore_evasion') continue;
     // 控制效果 +1 目标（鸾凤和鸣）：消耗制，不按回合递减
     if (s.type === 'control_spread') continue;
+    // 避锐（疲兵沮意）：层数只在受击时消耗，不按回合递减
+    if (s.type === 'avoid_charge') continue;
     // 次数型下一次攻击：不按回合递减，打出后由 consumeAttackCharges 移除
     if (s.type === 'damage_boost' && 'charges' in s && s.charges != null) continue;
     // 次数型分兵：不按回合递减，打出后由 consumeSplitCharges 移除
@@ -2416,6 +2421,12 @@ export function inflictStatus(
 
   // 控制效果额外 +1 目标（鸾凤和鸣）：正面标记，独立共存、不参与冲突判定（同战法重复施加只刷新，不叠加）
   if (type === 'control_spread') {
+    pushStatus(ctx, target, create, sourceSkillType, sourceSkillId, casterId);
+    return;
+  }
+
+  // 避锐（疲兵沮意）：层数型吸收标记，不参与冲突判定；同战法重复施加 = 层数累加（每回合 +2）
+  if (type === 'avoid_charge') {
     pushStatus(ctx, target, create, sourceSkillType, sourceSkillId, casterId);
     return;
   }
@@ -2930,6 +2941,41 @@ function pushStatus(
     });
     return;
   }
+  if (type === 'avoid_charge') {
+    // 避锐（疲兵沮意）：层数型吸收；同战法重复施加 = 层数累加（每回合 +2），数值刷新（受谋略缩放结果）
+    const existing = target.statuses.find(
+      (s): s is Extract<Status, { type: 'avoid_charge' }> => s.type === 'avoid_charge' && s.sourceSkillId === sourceSkillId
+    );
+    if (existing) {
+      existing.stacks += create.stacks;
+      existing.perStackRate = create.perStackRate;
+      existing.remaining = Math.max(existing.remaining, remaining);
+      ctx.events.push({
+        type: 'status_inflicted',
+        unitId: target.general.id,
+        statusType: type,
+        detail: `避锐 +${create.stacks} 层（共 ${existing.stacks} 层，每层减伤 ${Math.round(create.perStackRate * 100)}%）`,
+      });
+    } else {
+      target.statuses.push({
+        type: 'avoid_charge',
+        stacks: create.stacks,
+        perStackRate: create.perStackRate,
+        remaining,
+        appliedRound,
+        sourceSkillType,
+        sourceSkillId,
+        sourceUnitId: casterId,
+      });
+      ctx.events.push({
+        type: 'status_inflicted',
+        unitId: target.general.id,
+        statusType: type,
+        detail: `避锐 +${create.stacks} 层（每层减伤 ${Math.round(create.perStackRate * 100)}%）`,
+      });
+    }
+    return;
+  }
   if (type === 'evade_chance') {
     // 概率规避（列营守险）：受击时消耗 1 次机会并掷 rate，命中则完全免疫该次伤害（见 consumeEvasion）
     const push: Status = { type, remaining, appliedRound, sourceSkillType, sourceSkillId } as Status;
@@ -3437,6 +3483,8 @@ export function tickStatuses(ctx: CombatContext, units: UnitState[]): void {
       if (s.type === 'ignore_evasion') continue; // 无视规避：消耗制，不按回合递减（缚父临危）
       // 控制 +1 目标（鸾凤和鸣）：消耗制，不按回合递减
       if (s.type === 'control_spread') continue;
+      // 避锐（疲兵沮意）：层数只在受击时消耗，不按回合递减
+      if (s.type === 'avoid_charge') continue;
       if (s.type === 'rest') continue; // 休整 remaining 只在跳恢复时递减
       // 次数型分兵（准备阶段施加）：不按回合递减
       if (s.type === 'split' && 'charges' in s && s.charges != null) continue;
@@ -3625,6 +3673,7 @@ export function isBeneficialStatus(s: Status): boolean {
     case 'retaliate':
     case 'pending_stacks':
     case 'ignore_evasion':
+    case 'avoid_charge':
     case 'control_spread':
     case 'jump_prep':
       return true;
@@ -3953,6 +4002,7 @@ function statusName(type: StatusType): string {
     case 'ignore_def': return '无视防御';
     case 'retaliate': return '受击追加攻击';
     case 'pending_stacks': return '叠层待发';
+    case 'avoid_charge': return '避锐';
     case 'ignore_evasion': return '无视规避';
     case 'control_spread': return '控制效果 +1 目标';
     case 'range_buff': return '攻击距离';
@@ -5735,6 +5785,10 @@ function executeSkillOutputs(
             /** 减伤受防御影响（蛮王御众 30%，成长率未确认 → 缺省走下方 else 用基值）：公式同受谋略，属性换生效防御 */
             const scaled = roundRate(scaledValue(create.rate * 100, create.growthRate, effectiveStat(caster, 'defense'))) / 100;
             inflictStatus(ctx, t, { ...create, rate: scaled }, skill.type, skill.id, caster.general.id);
+          } else if (create.type === 'avoid_charge' && create.strategyScaled && create.growthRate !== undefined) {
+            /** 避锐每层减伤受谋略影响（疲兵沮意）：施加时按施法者谋略缩放并冻结（同 damage_reduce 写法） */
+            const scaled = roundRate(scaledValue(create.perStackRate * 100, create.growthRate, effectiveStat(caster, 'strategy'))) / 100;
+            inflictStatus(ctx, t, { ...create, perStackRate: scaled }, skill.type, skill.id, caster.general.id);
           } else if (create.type === 'heal_boost' && create.strategyScaled && create.growthRate !== undefined) {
             /** 恢复提高受谋略影响（守静却敌）：百分比按 1% 粒度八舍九入后转小数（同 damage_reduce 写法） */
             const scaled = roundRate(scaledValue(create.rate * 100, create.growthRate, effectiveStat(caster, 'strategy'))) / 100;
@@ -6907,6 +6961,39 @@ function triggerCurseOnPursuit(ctx: CombatContext, unit: UnitState): void {
 
 /** 引燃标记（火势风威）：携带者受到伤害时触发——额外引发一次燃烧伤害（挂上时冻结），
  *  随后标记移除（一次性）。 */
+/**
+ * 避锐消耗后的附加效果（疲兵沮意「避锐效果生效后有 50% 几率令敌军单体陷入燃烧状态（伤害率 150%，
+ * 受谋略），持续 1 回合，并使其后续受到疲兵沮意的燃烧伤害伤害率提升 80%，可叠加至战斗结束」）：
+ * 由消耗该层的施法者按 `avoidOnConsume.chance` 判定（士气修正，同 actLayer 口径），命中则对
+ * **战法距离内随机敌军单体**结算 output —— 燃烧与「受到本战法燃烧伤害提升」同源叠层落在同一目标。
+ */
+function triggerAvoidConsume(ctx: CombatContext, status: Extract<Status, { type: 'avoid_charge' }>): void {
+  const skill = resolveSkill(ctx, status.sourceSkillId);
+  if (skill?.type !== 'command' || !skill.avoidOnConsume) return;
+  const caster = status.sourceUnitId ? castUnit(ctx, status.sourceUnitId) : undefined;
+  if (!caster) return;
+  const enemies = caster.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
+  const pool = skillTargets(ctx, caster, enemies, skill.range, 'random_single');
+  if (pool.length === 0) return;
+  const target = pool[0];
+  const morale = effectiveMorale(caster);
+  const rate = moraleTriggerRate(morale, skill.avoidOnConsume.chance);
+  const success = ctx.rng.chance(rate);
+  ctx.events.push({
+    type: 'skill_trigger',
+    unitId: caster.general.id,
+    targetId: target.general.id,
+    skillId: skill.id,
+    skillName: skill.name,
+    success,
+    rate: Math.round(rate * 100),
+    baseRate: Math.round(skill.avoidOnConsume.chance * 100),
+    morale,
+  });
+  if (!success) return;
+  executeSkillOutputs(ctx, caster, skill, [target], skill.avoidOnConsume.output);
+}
+
 function triggerIgniteOnHurt(ctx: CombatContext, target: UnitState): void {
   const ignites = target.statuses.filter((s): s is Extract<Status, { type: 'ignite' }> => s.type === 'ignite');
   if (ignites.length === 0) return;
@@ -7326,6 +7413,25 @@ export function applyDamage(
     const before = triggerOnHurt(ctx, target, source, damageType, damageSource, 'before_damage');
     if (before.evasionBlocked) return;
     reduceRate = before.thisHitReduce;
+    // 避锐（疲兵沮意）：受到伤害前消耗 1 层，令**该次**伤害降低 perStackRate（受谋略，施加时冻结）
+    const avoid = target.statuses.find(
+      (s): s is Extract<Status, { type: 'avoid_charge' }> => s.type === 'avoid_charge' && s.stacks > 0
+    );
+    if (avoid) {
+      avoid.stacks -= 1;
+      reduceRate += avoid.perStackRate;
+      ctx.events.push({
+        type: 'status_changed',
+        unitId: target.general.id,
+        statusType: 'avoid_charge',
+        detail: `避锐效果生效（剩余 ${avoid.stacks} 层），本次伤害降低 ${Math.round(avoid.perStackRate * 100)}%`,
+      });
+      if (avoid.stacks <= 0) {
+        target.statuses = target.statuses.filter((x) => x !== avoid);
+        ctx.events.push({ type: 'status_expired', unitId: target.general.id, statusType: 'avoid_charge' });
+      }
+      triggerAvoidConsume(ctx, avoid);
+    }
   }
   const incoming = Math.round(Math.max(0, damage) * (1 - reduceRate));
   let actual = Math.min(incoming, target.troops);

@@ -8395,4 +8395,70 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.2, duration: 2, strategyScaled: true, decayOnDeal: 4 } },
     ],
   },
+
+  /**
+   * 疲兵沮意（XP陆逊·吴弓 h791 主战法）：指挥 S（一类指挥 prep），距离 5，我军群体（推定 2 目标），
+   * 发动率 --。
+   * 满级「每回合开始时，为我军群体叠加 2 层避锐效果，在其受到伤害前，消耗 1 层避锐效果令该次伤害
+   *   降低 10.0%（受谋略属性影响），避锐效果生效后有 50% 几率令敌军单体陷入燃烧状态（伤害率 150.0%，
+   *   受谋略属性影响），持续 1 回合，并使其后续受到疲兵沮意的燃烧伤害伤害率提升 80.0%，可叠加至战斗结束」；
+   * 1 级：避锐 5.0% / 燃烧 75.0% / 递增 40.0%（每回合仍 +2 层、50% 相同）。
+   * 官方：scripts/skill_extra.json id 200264（指挥 / 距离 5 / 我军群体 / 兵种弓；effect 受到攻击伤害降低;
+   *   受到策略攻击伤害降低;燃烧）。来源 https://stzb.163.com/m/skilllist/200264.html
+   *
+   * 口径（策略 A，2026-09-20；推定处已标注）：
+   *   ① 目标：官方只写「我军群体」（未写 N）→ 按官方体系惯例取 **2 目标**（`targetMode:'group'`,
+   *      groupCount 2），**推定**；
+   *   ② 「每回合开始时叠加 2 层避锐」→ 一类指挥 + 既有 `roundStartRepeat`（回合前对锁定目标再结算）；
+   *      避锐走**新状态 `avoid_charge`**：层数型吸收，受击前消耗 1 层、令该次伤害降低 perStackRate
+   *      （受谋略，施加时按施法者谋略冻结；成长率未确认 → 基值 10%）；
+   *   ③ 「避锐效果生效后 50%」→ 新引擎件 `CommandSkill.avoidOnConsume`：消耗 1 层时由施法者按
+   *      chance 判定（走士气修正，同 actLayer 口径，**推定**），命中则对**距离内随机敌军单体**结算
+   *      output：燃烧 150%（受谋略，duration 1）+「受到本战法燃烧伤害提升 80%」（`damage_boost`
+   *      direction:'taken' + dotTypes:['burning'] + skillIds:['pibing_juyi'] + `stack:true`，
+   *      **同一目标**、无上限叠加至战斗结束；「加算叠加」为推定；
+   *   ④ 三处「受谋略属性影响」成长系数官方未给 → 一律基值不缩放（avoidCharges / 燃烧 growthRate 0 /
+   *      递增段无属性标注）→ 登记 OFFLINE_MAIN_SKILLS（陆逊下架）。
+   */
+  pibing_juyi: {
+    id: 'pibing_juyi',
+    name: '疲兵沮意',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'ally',
+    tags: ['damage_reduce', 'burning'],
+    // ② 每回合开始（回合前结算）：为我军群体叠加 2 层避锐（每层受击前 −10%，受谋略未确认 → 基值）
+    roundStartRepeat: {
+      output: [
+        {
+          kind: 'inflict_status',
+          status: { type: 'avoid_charge', stacks: 2, perStackRate: 0.1, duration: 999, strategyScaled: true },
+        },
+      ],
+    },
+    // ③ 避锐生效（消耗 1 层）后 50%：随机敌军单体燃烧 150% + 该目标后续受到本战法燃烧伤害 +80%（可叠加）
+    avoidOnConsume: {
+      chance: 0.5,
+      output: [
+        { kind: 'inflict_status', status: { type: 'burning', duration: 1, rate: 150, growthRate: 0 } },
+        {
+          kind: 'inflict_status',
+          status: {
+            type: 'damage_boost',
+            rate: 0.8,
+            duration: 999,
+            direction: 'taken',
+            dotTypes: ['burning'],
+            skillIds: ['pibing_juyi'],
+            stack: true,
+          },
+        },
+      ],
+    },
+    output: [],
+  },
 };
