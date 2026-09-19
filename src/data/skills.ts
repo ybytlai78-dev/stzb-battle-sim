@@ -8349,4 +8349,50 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.6, duration: 999, damageType: 'strategy', decayFifths: 5 } },
     ],
   },
+
+  /**
+   * 抚民励德（XP刘表·汉弓 h675 主战法）：指挥 S（二类指挥：第 2/4/6 回合自身行动时判定），
+   * 距离 3，我军全体，发动率 --。
+   * 满级「第 2、4、6 回合自身行动时，使我军全体谋略、防御属性提升 80.0，并且受到的所有伤害减少
+   *   20.0%（受谋略属性影响），持续 2 回合。武将每次造成伤害时，自身该效果降低 1/4。
+   *   每次施加可刷新由抚民励德带来的属性与减伤效果」；1 级：属性 +40.0 / 减伤 10.0%。
+   * 官方：scripts/skill_extra.json id 200952（指挥 / 距离 3 / 我军全体 / 兵种弓；effect 防御属性提高;
+   *   谋略属性提高;受到攻击伤害降低;受到策略攻击伤害降低）。来源 https://stzb.163.com/m/skilllist/200952.html
+   *
+   * 口径（策略 A，2026-09-20；推定处已标注）：
+   *   ① 「第 2、4、6 回合自身行动时」→ 二类指挥 `roundTrigger:'on_act'` + 新引擎件 `actRounds:[2,4,6]`
+   *      （只在列出的回合判定）；
+   *   ② 减伤段口径：官方 desc 写「受到的所有伤害减少 20.0%」而 effect 标签拆攻/策两段 →
+   *      按 **desc 全伤害单段**实现（`damage_reduce` 不限 `damageType`；标签视为分类展示，推定）；
+   *   ③ 属性点数段（谋略/防御 +80）官方未标「受…属性影响」→ 固定点数、不缩放；
+   *   ④ 「每次造成伤害时自身该效果降低 1/4」→ 新引擎件 `decayOnDeal: 4`：携带者**每次造成伤害**
+   *      （实际扣兵 > 0）后，其自身该三件套（谋略/防御/减伤）各 −1 份，
+   *      amount/rate = 满额 × 剩余份数 / 4（80→60→40→20→0；60%/45%/30%/15%/0）；
+   *      按**每次伤害事件**计 1 份（多目标战法逐目标各计 1 次）——与既有受击衰减 decayFifths 对称，推定；
+   *   ⑤ 「每次施加可刷新」→ 同源重挂走默认刷新（数值替换 + remaining 取 max），并由
+   *      `refreshDecayCounters` 把份数重置回 4/4（衰减类状态刷新重置口径，断首何怒先例）；
+   *   ⑥ 减伤段「受谋略属性影响」成长系数官方未给 → 基值不缩放（strategyScaled 在、不写 growthRate）
+   *      → 登记 OFFLINE_MAIN_SKILLS（刘表下架）。
+   */
+  fumin_lide: {
+    id: 'fumin_lide',
+    name: '抚民励德',
+    type: 'command',
+    phase: 'round',
+    roundTrigger: 'on_act',
+    // ① 只在第 2、4、6 回合自身行动时判定
+    actRounds: [2, 4, 6],
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['strategy_buff', 'defense_buff', 'damage_reduce'],
+    output: [
+      // 我军全体：谋略 +80 / 防御 +80（固定点数）——每次造成伤害各 −1/4 份
+      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: 80, duration: 2, decayOnDeal: 4 } },
+      { kind: 'inflict_status', status: { type: 'defense_buff', amount: 80, duration: 2, decayOnDeal: 4 } },
+      // 受到的所有伤害减少 20%（受谋略，成长率未确认 → 基值）——每次造成伤害 −1/4 份
+      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.2, duration: 2, strategyScaled: true, decayOnDeal: 4 } },
+    ],
+  },
 };

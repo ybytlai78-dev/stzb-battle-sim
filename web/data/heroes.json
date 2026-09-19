@@ -707,7 +707,7 @@
     "growthDefense": 1.71,
     "growthStrategy": 1.87,
     "growthSpeed": 0.76,
-    "mainSkillId": "",
+    "mainSkillId": "fumin_lide",
     "mainSkillName": "抚民励德",
     "skillDesc": "第2、4、6回合自身行动时，使我军全体谋略、防御属性提升80.0，并且受到的所有伤害减少20.0%（受谋略属性影响），持续2回合。武将每次造成伤害时，自身该效果降低1/4。每次施加可刷新由抚民励德带来的属性与减伤效果"
   },

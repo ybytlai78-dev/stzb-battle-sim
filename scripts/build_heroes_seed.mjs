@@ -178,6 +178,7 @@ const SKILL_ID_BY_NAME = {
   持刀从武: 'chidao_congwu',
   计谕废立: 'jiyu_fuili',
   中宫追玺: 'zhonggong_zhuixi',
+  抚民励德: 'fumin_lide',
 };
 
 /** 现有 8 个武将固定拼音 id（测试直接引用 HERO_REGISTRY.<id>） */

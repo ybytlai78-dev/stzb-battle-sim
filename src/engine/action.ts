@@ -858,6 +858,8 @@ export function triggerRoundCommandOnAct(ctx: CombatContext, unit: UnitState): v
     if (skill.battleStartOnce) continue; // 战斗开始一次性（当敌制决），不参与每回合判定
     // 每 N 回合判定一次（难知如阴「每2回合」）：1 起算，第 1/3/5...回合生效
     if (skill.everyNRounds && ctx.currentRound % skill.everyNRounds !== 1) continue;
+    // 只在列出的回合自身行动时判定（抚民励德「第 2、4、6 回合」）
+    if (skill.actRounds && !skill.actRounds.includes(ctx.currentRound)) continue;
 
     // 行动叠层（奋疾先登）：行动时稳定叠层（无发动率判定、不锁目标），满层触发攻击
     if (skill.actLayer) {
@@ -2826,6 +2828,22 @@ function refreshDecayCounters(same: Status, create: CreateStatus): void {
       same.baseRate = create.rate;
     }
   }
+  // 造成伤害按份衰减（抚民励德「每次施加可刷新」）：同源重挂 → 份数与满额数值一并重置
+  const dealParts = 'decayOnDeal' in create ? create.decayOnDeal : undefined;
+  if (dealParts) {
+    if (same.type === 'damage_reduce' && create.type === 'damage_reduce') {
+      same.dealParts = dealParts;
+      same.dealPartsBase = dealParts;
+      same.baseRate = create.rate;
+    } else if (
+      (same.type === 'attack_buff' || same.type === 'defense_buff' || same.type === 'strategy_buff' || same.type === 'speed_buff') &&
+      (create.type === 'attack_buff' || create.type === 'defense_buff' || create.type === 'strategy_buff' || create.type === 'speed_buff')
+    ) {
+      same.dealParts = dealParts;
+      same.dealPartsBase = dealParts;
+      same.baseAmount = create.amount;
+    }
+  }
 }
 
 /**
@@ -2983,6 +3001,12 @@ function pushStatus(
     const push: Status = { type, remaining, appliedRound, sourceSkillType, sourceSkillId } as Status;
     (push as { amount: number }).amount = create.amount;
     if (create.percent) (push as { percent?: boolean }).percent = true;
+    // 造成伤害衰减（抚民励德）：满额数值 + 份数（每次携带者造成伤害且实际扣兵后 −1 份）
+    if (create.decayOnDeal) {
+      (push as { baseAmount?: number }).baseAmount = create.amount;
+      (push as { dealParts?: number }).dealParts = create.decayOnDeal;
+      (push as { dealPartsBase?: number }).dealPartsBase = create.decayOnDeal;
+    }
     if (casterId) (push as { sourceUnitId?: string }).sourceUnitId = casterId;
     target.statuses.push(push);
     const after = effectiveStat(target, kind);
@@ -3062,6 +3086,12 @@ function pushStatus(
     if ((type === 'damage_boost' || type === 'damage_reduce') && 'decayFifths' in create && create.decayFifths) {
       (push as { fifths?: number }).fifths = create.decayFifths;
       (push as { fifthsBase?: number }).fifthsBase = create.decayFifths;
+      (push as { baseRate?: number }).baseRate = create.rate;
+    }
+    // 造成伤害按份衰减（抚民励德减伤轨）：满额 rate + 份数（携带者每次造成伤害且实际扣兵后 −1 份）
+    if (type === 'damage_reduce' && 'decayOnDeal' in create && create.decayOnDeal) {
+      (push as { dealParts?: number }).dealParts = create.decayOnDeal;
+      (push as { dealPartsBase?: number }).dealPartsBase = create.decayOnDeal;
       (push as { baseRate?: number }).baseRate = create.rate;
     }
     // 增减伤/发动率类状态记录施法者（战报归因用）：神兵天降/大赏三军/减伤/奋疾先登降速等
@@ -3987,6 +4017,38 @@ function consumeTakenCharges(target: UnitState, hit: DamageHitContext): void {
     if (!statusMatchesHit(s, hit)) continue;
     s.charges -= 1;
     if (s.charges <= 0) target.statuses = target.statuses.filter((x) => x !== s);
+  }
+}
+
+/**
+ * 造成伤害按份衰减（抚民励德「武将每次造成伤害时，自身该效果降低 1/4」）：
+ * 携带者每次**实际造成伤害**（扣兵 > 0）后，其身上带 `dealParts` 的状态 −1 份——
+ * 属性类 `amount = baseAmount × 剩余 / 初始`、减伤 `rate = baseRate × 剩余 / 初始`；归 0 移除。
+ * 口径（推定）：与既有受击衰减（decayFifths）对称，按**每次伤害事件**记 1 份（多目标战法逐目标各计 1 次）。
+ */
+function decayOnDealStatuses(ctx: CombatContext, source: UnitState): void {
+  for (const s of [...source.statuses]) {
+    if (!('dealParts' in s) || s.dealParts === undefined || s.dealPartsBase === undefined || s.dealPartsBase <= 0) continue;
+    const parts = s.dealParts;
+    const base = s.dealPartsBase;
+    const next = parts - 1;
+    if (next <= 0) {
+      source.statuses = source.statuses.filter((x) => x !== s);
+      ctx.events.push({ type: 'status_expired', unitId: source.general.id, statusType: s.type });
+      continue;
+    }
+    s.dealParts = next;
+    if ('rate' in s && s.baseRate !== undefined) {
+      s.rate = s.baseRate * (next / base);
+    } else if ('amount' in s && s.baseAmount !== undefined) {
+      s.amount = Math.round(s.baseAmount * (next / base));
+    }
+    ctx.events.push({
+      type: 'status_changed',
+      unitId: source.general.id,
+      statusType: s.type,
+      detail: `${statusName(s.type)}衰减（剩余 ${next}/${base}）`,
+    });
   }
 }
 
@@ -7305,6 +7367,8 @@ export function applyDamage(
       ctx.actDamageTargets ??= [];
       if (!ctx.actDamageTargets.includes(target.general.id)) ctx.actDamageTargets.push(target.general.id);
     }
+    // 造成伤害按份衰减（抚民励德）：携带者造成伤害后其自身属性/减伤 −1/4
+    if (source) decayOnDealStatuses(ctx, source);
     const hit: DamageHitContext = { damageSource, damageType };
     // 全队累计伤害门槛（徽言龙凤）：本侧造成伤害即计数，达到门槛激活光环
     if (source) noteTeamDamage(ctx, source);
