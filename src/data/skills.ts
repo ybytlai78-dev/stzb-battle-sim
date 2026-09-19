@@ -4470,6 +4470,294 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     },
   },
 
+  // ─── 拆解通用 B+ 第四阶段：距离 +1 与特殊目标选择（10 个）───
+
+  /**
+   * 远攻秘策（B 一类指挥·距离 3·目标自己）：
+   * ① 自身攻击 +20、谋略 +20、**攻击距离 +1**（整场常驻）；
+   * ② 友军全体在战斗开始后前 3 回合也获得同样增益（**不含自身**——描述「也获得」，
+   *    自身已由 ① 常驻；用户 2026-09-19 确认友军段 excludeSelf）。
+   * 引擎配套：**无需新机制**（`range_buff` = 攻击距离 buff，`attackRangeOf` 已读；
+   *   attack_buff / strategy_buff 点数额已有）。
+   * 数值为官方满级点数（skill_extra 200210：攻击 20 / 谋略 20 / 距离 +1），无「受属性影响」→ 不缩放。
+   */
+  yuangong_mice: {
+    id: 'yuangong_mice',
+    name: '远攻秘策',
+    type: 'command',
+    phase: 'prep',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['attack_buff', 'strategy_buff', 'range_buff'],
+    output: [
+      { kind: 'inflict_status', target: 'self', status: { type: 'attack_buff', amount: 20, duration: 999 } },
+      { kind: 'inflict_status', target: 'self', status: { type: 'strategy_buff', amount: 20, duration: 999 } },
+      { kind: 'inflict_status', target: 'self', status: { type: 'range_buff', amount: 1, duration: 999 } },
+      {
+        kind: 'inflict_status',
+        targetSide: 'ally',
+        targetMode: 'all',
+        excludeSelf: true,
+        applyAll: true,
+        status: [
+          { type: 'attack_buff', amount: 20, duration: 3 },
+          { type: 'strategy_buff', amount: 20, duration: 3 },
+          { type: 'range_buff', amount: 1, duration: 3 },
+        ],
+      },
+    ],
+  },
+  /**
+   * 远攻之策（C 一类指挥·距离 2·我军群体 2 目标）：
+   * 前 3 回合我军群体攻击 +20；每回合有几率**攻击距离 +1**（满级 100% → 必定，1 级 50%）持续本回合。
+   * 实现：攻击 +20 准备阶段 duration 3；距离 +1 走 `roundStartRepeat`（第 1~3 回合回合开始必定施加
+   *   `range_buff` duration 1——回合末 tick 掉，下回合重新刷，不叠层）。
+   * 引擎配套：**无需新机制**（roundStartRepeat + range_buff 已有，同其疾如风/鱼鳞口径）。
+   */
+  yuangong_zhiche: {
+    id: 'yuangong_zhiche',
+    name: '远攻之策',
+    type: 'command',
+    phase: 'prep',
+    range: 2,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'ally',
+    tags: ['attack_buff', 'range_buff'],
+    output: [
+      { kind: 'inflict_status', status: { type: 'attack_buff', amount: 20, duration: 3 } },
+    ],
+    roundStartRepeat: {
+      startRound: 1,
+      endRound: 3,
+      output: [
+        { kind: 'inflict_status', status: { type: 'range_buff', amount: 1, duration: 1 } },
+      ],
+    },
+  },
+  /**
+   * 远攻奇略（C 被动·距离 1·目标自己）：
+   * 自身攻击距离 +1（整场常驻）+ 进行策略攻击时伤害 +15%（固定值，无「受属性影响」→ 不缩放）。
+   * 引擎配套：**无需新机制**（battle_start 被动 output + range_buff + damage_boost caused/strategy）。
+   */
+  yuangong_qilue: {
+    id: 'yuangong_qilue',
+    name: '远攻奇略',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['range_buff', 'damage_boost'],
+    output: [
+      { kind: 'inflict_status', target: 'self', status: { type: 'range_buff', amount: 1, duration: 999 } },
+      {
+        kind: 'inflict_status',
+        target: 'self',
+        status: { type: 'damage_boost', rate: 0.15, duration: 999, direction: 'caused', damageType: 'strategy' },
+      },
+    ],
+  },
+  /**
+   * 远攻强化（C 被动·距离 1·目标自己）：
+   * 自身攻击距离 +1（整场常驻）+ 攻击属性 +15 点。
+   * 引擎配套：**无需新机制**（range_buff + attack_buff）。
+   */
+  yuangong_qianghua: {
+    id: 'yuangong_qianghua',
+    name: '远攻强化',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['range_buff', 'attack_buff'],
+    output: [
+      { kind: 'inflict_status', target: 'self', status: { type: 'range_buff', amount: 1, duration: 999 } },
+      { kind: 'inflict_status', target: 'self', status: { type: 'attack_buff', amount: 15, duration: 999 } },
+    ],
+  },
+  /**
+   * 近攻（C 主动·距离 3·30%·敌军单体）：对战法有效距离内**最近**的敌军攻击 200%（固定率，不缩放）。
+   * 引擎配套：**无需新机制**——`skillTargets` 新增显式 `nearest` 模式 = 有效距离内最近
+   *   （inRange 按距离升序取 [0]）。注意：旧 `targetMode:'single'` 是「最近优先」退役名，
+   *   `tests/listing.test.ts` 明文禁止登记表再出现；「最近」必须显式写 `nearest`。
+   */
+  jingong: {
+    id: 'jingong',
+    name: '近攻',
+    type: 'active',
+    prepare: false,
+    range: 3,
+    triggerRate: 0.3,
+    targetMode: 'nearest',
+    targetSide: 'enemy',
+    tags: ['damage'],
+    output: [{ kind: 'physical_damage', rate: 200 }],
+  },
+  /**
+   * 远射（C 准备主动·距离 3·35%·敌军单体）：对战法有效距离内**最远**的敌军攻击 255%。
+   * 引擎配套：**新增 `farthest` 目标模式**（target.ts：inRange 升序取末位；远射 / 连环段1 共用）。
+   */
+  yuanshe: {
+    id: 'yuanshe',
+    name: '远射',
+    type: 'active',
+    prepare: true,
+    range: 3,
+    triggerRate: 0.35,
+    targetMode: 'farthest',
+    targetSide: 'enemy',
+    tags: ['damage'],
+    output: [{ kind: 'physical_damage', rate: 255 }],
+  },
+  /**
+   * 连环（B 准备主动·距离 4·45%·敌军单体）：
+   * 段1：对战法有效距离内**最远**敌军单体策略攻击 132%（受谋略）；
+   * 段2：**再度**对有效距离内随机敌军单体策略攻击 198%（受谋略）——独立重选、可与段1 同目标（用户确认）。
+   * 成长率：两段官方均未给 → `strategyScaled` 标记在、`growthRate` 留空（按基值），
+   *   已登记 `docs/成长率待补名单.md` §三，待 `derive_growth_rate.mjs` 反解后统一补。
+   */
+  lianhuan: {
+    id: 'lianhuan',
+    name: '连环',
+    type: 'active',
+    prepare: true,
+    range: 4,
+    triggerRate: 0.45,
+    targetMode: 'farthest',
+    targetSide: 'enemy',
+    tags: ['damage'],
+    output: [
+      { kind: 'strategy_damage', rate: 132, strategyScaled: true },
+      { kind: 'strategy_damage', rate: 198, strategyScaled: true, targetMode: 'random_single' },
+    ],
+  },
+  /**
+   * 兼弱攻昧（A 主动·距离 4·35%·敌军单体）：
+   * 段1：对**有效距离内**生效防御最低的敌军攻击 200%；
+   * 段2：对**有效距离内**生效谋略最低的敌军策略攻击 159%（受谋略，成长率未确认 → 留空按基值）。
+   * 用户 2026-09-19 确认：两段都只在战法有效距离内选人；各自独立选取、可命中同一目标。
+   * 引擎配套：**新增伤害段 `targetPick: '*_in_range'`**（`DamageTargetPick`；
+   *   `physical_damage` / `strategy_damage` 共用，按 `unitsInSkillRange` + effectiveStat 取最低）。
+   */
+  jianruo_gongmei: {
+    id: 'jianruo_gongmei',
+    name: '兼弱攻昧',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.35,
+    // 外层 targetMode 仅占位（官方目标「敌军单体」= 距离内随机）；两段的实际目标由各自 targetPick 覆盖
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['damage'],
+    output: [
+      { kind: 'physical_damage', rate: 200, targetPick: 'lowest_defense_in_range' },
+      { kind: 'strategy_damage', rate: 159, strategyScaled: true, targetPick: 'lowest_strategy_in_range' },
+    ],
+  },
+  /**
+   * 始计（S 二类指挥·距离 5·目标自己）：
+   * 战斗前 4 回合、**自身行动时**（用户确认走 `roundTrigger:'on_act'`，非回合开始）：
+   *  ① 我军大营 下一次攻击或策略攻击伤害 +20%（受谋略，成长率未确认 → 留空按基值）；
+   *  ② 敌方**兵力最多**单体 下一次攻击或策略攻击伤害 −30%（受谋略，同上）；
+   *  ③ 自身受到攻击或策略攻击伤害后，于本回合内进入**洞察**（免疫混乱/犹豫/怯战/暴走/挑衅）。
+   * 实现：前 4 回合窗口走 `onActSegments(startRound:1,endRound:4)`（主 `output` 为空——
+   *   二类指挥 on_act 仍会锁 [自身] 目标并触发本段）；① 用 `positions:['大营']` + targetSide:'ally' 选我方大营；
+   *   ② 用 `targetPick:'highest_troops_enemy'`（**新增**，按当前兵力取最高，无视距离）+ charges:1（用后即消）；
+   *   ③ 用 `onHurt{ victim:'self', applyTo:'victim' }` → insight duration 1（回合末 tick 掉 = 本回合内）。
+   * 注：`charges` 次数型 damage_boost 同源重复施加是**不刷新不叠加**（inflictStatus 2124 行），
+   *   故每回合重挂安全。
+   */
+  shiji: {
+    id: 'shiji',
+    name: '始计',
+    type: 'command',
+    phase: 'round',
+    roundTrigger: 'on_act',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['damage_boost', 'insight'],
+    output: [],
+    onActSegments: [
+      {
+        startRound: 1,
+        endRound: 4,
+        output: [
+          {
+            kind: 'inflict_status',
+            targetSide: 'ally',
+            positions: ['大营'],
+            status: {
+              type: 'damage_boost',
+              rate: 0.2,
+              duration: 999,
+              direction: 'caused',
+              charges: 1,
+              strategyScaled: true,
+            },
+          },
+          {
+            kind: 'inflict_status',
+            targetSide: 'enemy',
+            targetMode: 'all',
+            targetPick: 'highest_troops_enemy',
+            status: {
+              type: 'damage_boost',
+              rate: -0.3,
+              duration: 999,
+              direction: 'taken',
+              charges: 1,
+              strategyScaled: true,
+            },
+          },
+        ],
+      },
+    ],
+    onHurt: {
+      victim: 'self',
+      applyTo: 'victim',
+      output: [
+        { kind: 'inflict_status', target: 'self', status: { type: 'insight', duration: 1 } },
+      ],
+    },
+  },
+  /**
+   * 铁戟金戈（B 准备主动·距离 4·35%·敌军群体 2-3 目标）：
+   * 每次释放 **50/50 随机**：2 目标 330% 或 3 目标 225%（用户 2026-09-19 口径，非「按存活数自动选」）。
+   * 实现：`random_pick count:1` 两组互斥输出（各带 `targetMode:'group'` + groupCount 2/3 独立重选目标）；
+   *   外层 `targetMode:'all'` 仅占位（不消耗 RNG，实际目标与目标数由内层段重选）。
+   *   （不用 `groupCount:[2,3]`：那会随机目标数但伤害率固定，无法「2目标配 330% / 3目标配 225%」。）
+   * 边界：有效距离内不足 3 人时，3 目标组按实际人数取满（skillTargets 截断）。
+   * 引擎配套：**无需新机制**（random_pick + 段级 targetMode/groupCount 已有）。
+   */
+  tieji_jinge: {
+    id: 'tieji_jinge',
+    name: '铁戟金戈',
+    type: 'active',
+    prepare: true,
+    range: 4,
+    triggerRate: 0.35,
+    // 外层仅占位（敌军群体候选）；实际 2/3 目标由内层 random_pick 段重选
+    targetMode: 'all',
+    targetSide: 'enemy',
+    tags: ['damage'],
+    output: [
+      {
+        kind: 'random_pick',
+        count: 1,
+        options: [
+          [{ kind: 'physical_damage', rate: 330, targetMode: 'group', groupCount: 2 }],
+          [{ kind: 'physical_damage', rate: 225, targetMode: 'group', groupCount: 3 }],
+        ],
+      },
+    ],
+  },
+
   // ─── 批量31：下架武将清单 §1.2「补 1 个机制」逐个实现 ───
 
   /**

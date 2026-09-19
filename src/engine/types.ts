@@ -10,9 +10,25 @@ export type Position = '大营' | '中军' | '前锋';
 
 export type SkillType = 'passive' | 'command' | 'active' | 'pursuit';
 
-export type TargetMode = 'single' | 'random_single' | 'group' | 'all' | 'self';
+/**
+ * 目标模式：`random_single` = 距离内均匀随机（率土「敌军/友军单体」口径）；
+ * `nearest` = 距离内**最近**（仅当描述明确写「最近」，如近攻）；
+ * `farthest` = 距离内**最远**（远射 / 连环段1）；
+ * `single` = 旧「最近优先」模式，已退役、登记表不得再出现（tests/listing.test.ts 把关）。
+ */
+export type TargetMode = 'single' | 'random_single' | 'group' | 'all' | 'self' | 'farthest' | 'nearest';
 
 export type DamageType = 'physical' | 'strategy';
+
+/**
+ * 伤害段选敌覆盖（`physical_damage` / `strategy_damage`）：
+ * - `'lowest_defense'`：当前存活敌军中防御属性最低者（**无视距离**，四世三公「对敌军防御最低单体」）；
+ * - `'lowest_defense_in_range'` / `'lowest_strategy_in_range'`：只在**本段有效距离内**取防御 / 谋略最低者
+ *   （兼弱攻昧「对敌军防御属性最低的武将发动一次攻击，同时对敌军谋略属性最低的武将发动一次策略攻击」
+ *    —— 用户确认：按战法有效距离内选人，取**生效属性**最低）。
+ * 设置后覆盖本段 targetMode 的目标池，只结算这 1 个目标。
+ */
+export type DamageTargetPick = 'lowest_defense' | 'lowest_defense_in_range' | 'lowest_strategy_in_range';
 
 /** DoT 类型（妖术 / 燃烧 / 恐慌 / 妖术诅咒 / 引燃）——「被施加的 DoT 伤害提升」按此维度过滤 */
 export type DotType = 'sorcery' | 'burning' | 'panic' | 'curse' | 'ignite';
@@ -134,10 +150,11 @@ export type SkillOutput =
        */
       attackerPick?: 'highest_attack';
       /**
-       * 选敌覆盖：`'lowest_defense'` = 直接取当前存活敌军中**防御属性最低**的单体（**无视距离**，
-       * 四世三公「对敌军防御最低单体发动一次攻击」）；缺省按 targetMode + 战法距离选。
+       * 选敌覆盖（见 `DamageTargetPick`）：`'lowest_defense'` = 取当前存活敌军中**防御属性最低**的单体
+       * （**无视距离**，四世三公「对敌军防御最低单体发动一次攻击」）；`'*_in_range'` = 战法有效距离内最低。
+       * 缺省按 targetMode + 战法距离选。
        */
-      targetPick?: 'lowest_defense';
+      targetPick?: DamageTargetPick;
       /**
        * 代打伤害按代打者自身属性孰高定轨（徽言龙凤「每回合行动时有 60% 几率对随机敌军单体造成 1 次
        * 攻击伤害（伤害率 150%）或策略攻击伤害（伤害率 120%），由攻击或谋略属性中较高的属性决定」）：
@@ -213,6 +230,11 @@ export type SkillOutput =
       range?: number;
       /** 选目标时无视战法距离（对称 physical_damage.ignoreRange） */
       ignoreRange?: boolean;
+      /**
+       * 选敌覆盖（见 `DamageTargetPick`）：兼弱攻昧「对敌军谋略属性最低的武将发动一次策略攻击」
+       * —— `'lowest_strategy_in_range'` 在战法有效距离内取生效谋略最低者（用户确认口径）。
+       */
+      targetPick?: DamageTargetPick;
       /** 兵力阈值条件：不满足的目标不结算本段（持玺兴兵「兵力低于 50% 才恢复」） */
       troopRatio?: TroopRatioCond;
       /**
@@ -336,7 +358,9 @@ export type SkillOutput =
         | 'highest_strategy_ally'
         | 'lowest_attack_enemy'
         | 'lowest_defense_enemy'
-        | 'lowest_strategy_enemy';
+        | 'lowest_strategy_enemy'
+        /** 敌军**当前兵力最多**的单体（始计「敌方兵力最多单体下一次攻击或策略攻击的伤害降低 30%」），无视距离 */
+        | 'highest_troops_enemy';
       /** `targetPick:'ally_named'` 时的武将名（如 '吕布'） */
       targetPickName?: string;
       /**
@@ -617,8 +641,9 @@ export interface PreparedActiveSkill extends BaseSkill {
    * 进入准备时 `prepareLeft = prepareTurns ?? 1`；下一行动 `prepareLeft > 1` 则再减 1 并继续准备。
    */
   prepareTurns?: number;
-  /** 含 `random_single`：率土「敌军/友军单体」为距离内均匀随机，不是最近优先 */
-  targetMode: 'all' | 'group' | 'single' | 'random_single';
+  /** 含 `random_single`：率土「敌军/友军单体」为距离内均匀随机，不是最近优先；
+   * `nearest` / `farthest` = 距离内最近 / 最远（仅描述明确写最近或最远时使用，如近攻 / 远射） */
+  targetMode: 'all' | 'group' | 'single' | 'random_single' | 'farthest' | 'nearest';
   /** 目标池覆盖：'enemy'=敌军、'ally'=友军。缺省按效果启发式推断 */
   targetSide?: 'enemy' | 'ally';
   output: SkillOutput[];

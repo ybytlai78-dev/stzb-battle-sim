@@ -60,9 +60,9 @@
     "targetDesc": "自己",
     "effectDesc": "战斗前4回合，在自身行动前，使我军大营下一次攻击或策略攻击时的伤害提高20.0%（受谋略属性影响），敌方兵力最多单体下一次攻击或策略攻击时的伤害降低30.0%（受谋略属性影响），并在自身受到攻击…",
     "sources": "【吴·周姬·弓】【群·张宁·步】【吴·周姬·步·SP】",
-    "status": "skipped",
-    "missingMechanics": "兵力最多目标+行动前",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "distance+target p4"
   },
   {
     "name": "战必断金",
@@ -437,9 +437,9 @@
     "targetDesc": "自己",
     "effectDesc": "使自身攻击属性提高20.0，谋略属性提高20.0，攻击距离+1，同时，使友军全体在战斗开始后前3回合也获得与自身同样的增益",
     "sources": "【魏·曹操·骑】【蜀·关银屏·步】",
-    "status": "skipped",
-    "missingMechanics": "距离+1",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "distance+target p4"
   },
   {
     "name": "锋矢",
@@ -515,9 +515,9 @@
     "targetDesc": "我军群体（有效距离内2个目标）",
     "effectDesc": "战斗开始后前3回合，使我军群体攻击属性提高20.0，并使其每回合有100.0%的几率攻击距离+1",
     "sources": "【吴·小乔·弓】【蜀·黄权·步】",
-    "status": "skipped",
-    "missingMechanics": "距离+1",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "distance+target p4"
   },
   {
     "name": "长驱直入",
@@ -736,9 +736,9 @@
     "targetDesc": "敌军单体",
     "effectDesc": "对敌军防御属性最低的武将发动一次攻击（伤害率200.0%），同时对敌军谋略属性最低的武将发动一次策略攻击（伤害率159.0%，受谋略属性影响）",
     "sources": "【蜀·法正·骑】",
-    "status": "skipped",
-    "missingMechanics": "特殊目标(防御/谋略最低)",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "distance+target p4"
   },
   {
     "name": "奇术折冲",
@@ -1165,9 +1165,9 @@
     "targetDesc": "敌军单体",
     "effectDesc": "1回合准备，对战法有效距离内最远的敌军单体发动一次策略攻击（伤害率132.0%，受谋略属性影响），并再度对随机敌军单体发动一次猛烈的策略攻击（伤害率198.0%，受谋略属性影响）",
     "sources": "【魏·戏志才·步】【吴·张昭·弓】",
-    "status": "skipped",
-    "missingMechanics": "最远目标",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "distance+target p4"
   },
   {
     "name": "铁戟金戈",
@@ -1178,9 +1178,9 @@
     "targetDesc": "敌军群体（有效距离内2-3个目标）",
     "effectDesc": "1回合准备，对敌军群体2目标发动一次猛烈攻击（伤害率330.0%）或对敌军全体3目标发动一次猛烈攻击（伤害率225.0%）",
     "sources": "【吴·陆抗·步】【汉·卫子夫·步】",
-    "status": "skipped",
-    "missingMechanics": "群体2目标或3目标选择",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "distance+target p4"
   },
   {
     "name": "闪击",
@@ -1594,9 +1594,9 @@
     "targetDesc": "敌军单体",
     "effectDesc": "对战法有效距离内最近的敌军发动一次攻击（伤害率200.0%）",
     "sources": "【群·蒯良＆蒯越·步】【群·严白虎·步】",
-    "status": "skipped",
-    "missingMechanics": "最近目标",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "distance+target p4"
   },
   {
     "name": "远射",
@@ -1607,9 +1607,9 @@
     "targetDesc": "敌军单体",
     "effectDesc": "1回合准备，对战法有效距离内最远的敌军发动一次攻击（伤害率255.0%）",
     "sources": "【群·刘豹·骑】【群·楼班·骑】",
-    "status": "skipped",
-    "missingMechanics": "最远目标",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "distance+target p4"
   },
   {
     "name": "迫近",
@@ -2270,9 +2270,9 @@
     "targetDesc": "自己",
     "effectDesc": "自身攻击距离+1，进行策略攻击时的伤害提高15.0%",
     "sources": "【蜀·甘皇后·步】【蜀·徐庶·骑】",
-    "status": "skipped",
-    "missingMechanics": "距离+1",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "distance+target p4"
   },
   {
     "name": "远攻强化",
@@ -2283,9 +2283,9 @@
     "targetDesc": "自己",
     "effectDesc": "自身攻击距离+1，并使攻击属性提高15.0",
     "sources": "【群·管亥·骑】【群·高顺·骑】",
-    "status": "skipped",
-    "missingMechanics": "距离+1",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "distance+target p4"
   },
   {
     "name": "速战兵法",

@@ -10,6 +10,7 @@ import type {
   DamageBreakdown,
   DamageModifierSource,
   DamageModifiers,
+  DamageTargetPick,
   DamageType,
   DotStoredDamage,
   DotType,
@@ -28,7 +29,7 @@ import type {
 } from './types';
 import type { Rng } from './rng';
 import { calcDamage, applyTroopCap, scaledValue, roundRate, sumRates, buffMult, calcHealAmount, moraleRate, applyIgnoreDef, troopCounterReduce } from './formulas';
-import { nearestEnemy, skillTargets, distanceBetween, adjacentUnits, sameSideDistance, attackRangeOf, POSITION_INDEX } from './target';
+import { nearestEnemy, skillTargets, distanceBetween, adjacentUnits, sameSideDistance, attackRangeOf, POSITION_INDEX, unitsInSkillRange } from './target';
 
 /** 施法者站位条件（潜谋远计「仅对自身处于前锋或中军位置时生效」）：不满足 → 本战法整次不生效 */
 function passesCasterPosition(skill: Skill, unit: UnitState): boolean {
@@ -63,11 +64,40 @@ function troopCounterReduceOf(source: UnitState, target: UnitState): number {
 /** 四种控制状态（混乱/犹豫/暴走/怯战）：洞察免疫、控制冲突、鸾凤和鸣「控制 +1 目标」共用同一口径 */
 const CONTROL_STATUS_TYPES: StatusType[] = ['confusion', 'rampage', 'cowardice', 'hesitation'];
 
-/** skillTargets 能吃的四种选敌；`self` 等回退 fallback，避免 random_single 被降成 all/group */
-type CombatTargetMode = 'single' | 'random_single' | 'group' | 'all';
+/** skillTargets 能吃的选敌模式；`self` 等回退 fallback，避免 random_single 被降成 all/group */
+type CombatTargetMode = 'single' | 'nearest' | 'random_single' | 'farthest' | 'group' | 'all';
 function resolveCombatTargetMode(mode: string | undefined, fallback: CombatTargetMode): CombatTargetMode {
-  if (mode === 'single' || mode === 'random_single' || mode === 'group' || mode === 'all') return mode;
+  if (
+    mode === 'single' ||
+    mode === 'nearest' ||
+    mode === 'random_single' ||
+    mode === 'farthest' ||
+    mode === 'group' ||
+    mode === 'all'
+  )
+    return mode;
   return fallback;
+}
+
+/**
+ * 伤害段选敌覆盖（兼弱攻昧 / 四世三公）：返回 0 或 1 个目标。
+ * - `'lowest_defense'`：存活敌军中**生效防御最低**者（无视距离，四世三公旧口径）；
+ * - `'lowest_defense_in_range'` / `'lowest_strategy_in_range'`：仅战法有效距离内的存活敌军，
+ *   取生效防御 / 生效谋略最低者（兼弱攻昧，用户确认口径：按有效距离内选人）。
+ */
+function pickEnemyByDamageTargetPick(
+  ctx: CombatContext,
+  caster: UnitState,
+  enemies: UnitState[],
+  range: number,
+  pick: DamageTargetPick
+): UnitState[] {
+  const pool = pick === 'lowest_defense' ? enemies.filter((u) => u.alive) : unitsInSkillRange(ctx, caster, enemies, range);
+  if (pool.length === 0) return [];
+  const stat = pick === 'lowest_strategy_in_range' ? 'strategy' : 'defense';
+  return [
+    pool.reduce((best, u) => (effectiveStat(u, stat) < effectiveStat(best, stat) ? u : best)),
+  ];
 }
 
 /**
@@ -3812,6 +3842,11 @@ function executeSkillOutputs(
                     'groupCount' in out ? out.groupCount : undefined
                   )
                 : targets;
+    // 伤害段选敌覆盖（兼弱攻昧：有效距离内生效防御/谋略最低者；四世三公走代打路径自理）
+    // 注：代打路径（attacker:'recipient'）稍后会把自己的池重置为战法目标，不受此处影响。
+    if ((out.kind === 'physical_damage' || out.kind === 'strategy_damage') && out.targetPick) {
+      pool = pickEnemyByDamageTargetPick(ctx, caster, enemies, outRange, out.targetPick);
+    }
     // 兵力阈值条件（段级 troopRatio）：不满足的目标从本段目标池剔除
     // （巧音唤蝶「兵力低于初始 50% 时恢复 82%」/ 持玺兴兵「兵力低于初始 50% 才恢复」）
     if ('troopRatio' in out && out.troopRatio) {
@@ -3855,6 +3890,10 @@ function executeSkillOutputs(
       } else if (pick === 'highest_attack_ally') {
         const best = highestStatAlly(allies, 'attack'); // 含施法者自身（「自身及友军攻击属性最高的单体」）
         pool = best ? [best] : [];
+      } else if (pick === 'highest_troops_enemy') {
+        // 始计「敌方兵力最多单体」：按**当前兵力**比较，无视距离
+        const alive = enemies.filter((u) => u.alive);
+        pool = alive.length ? [alive.reduce((best, u) => (u.troops > best.troops ? u : best))] : [];
       } else {
         const [, mode, stat, side] = /^(highest|lowest)_(attack|defense|strategy)_(ally|enemy)$/.exec(pick) ?? [];
         if (mode && stat && side) {
@@ -5685,7 +5724,12 @@ function applyOnHurtEffect(
     const enemies = caster.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
     const targetMode = 'targetMode' in skill ? skill.targetMode : 'group';
     const mode =
-      targetMode === 'single' || targetMode === 'random_single' || targetMode === 'group' || targetMode === 'all'
+      targetMode === 'single' ||
+      targetMode === 'nearest' ||
+      targetMode === 'random_single' ||
+      targetMode === 'farthest' ||
+      targetMode === 'group' ||
+      targetMode === 'all'
         ? targetMode
         : 'group';
     const targets = skillTargets(ctx, caster, enemies, skill.range, mode, 'groupCount' in skill ? skill.groupCount : 2);
