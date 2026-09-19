@@ -16,6 +16,7 @@ import type {
   DotType,
   OnHealConfig,
   OnHurtConfig,
+  PassiveSkill,
   Position,
   Skill,
   SkillOutput,
@@ -346,6 +347,16 @@ export interface CombatContext {
    * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
    */
   hurtTriggerCounters?: Map<string, number>;
+  /**
+   * 「上次行动阶段造成伤害的目标」记忆（持刀从武「友军大营上次行动阶段造成伤害的目标」）：
+   * unitId → 该单位**上一次行动阶段**实际造成伤害的敌军 id（去重、按首次命中顺序）。
+   * 由 `actUnit` 开始记账、`endUnitAct` 落账；可选字段，单元测试直接构造 ctx 时可省略。
+   */
+  lastActDamageTargets?: Map<string, string[]>;
+  /** 当前正在行动的单位 id（行动阶段记账用；仅 actUnit 期间有值） */
+  actingUnitId?: string;
+  /** 当前行动阶段内已造成伤害的目标缓冲（endUnitAct 时落账到 lastActDamageTargets） */
+  actDamageTargets?: string[];
 }
 
 /** 持续型急救战法级计数器（皇裔流离/金匮要略）：一个战法一个实例，全队共享。
@@ -1399,8 +1410,52 @@ export function triggerPassiveSkills(
   }
 }
 
-function casterName(ctx: CombatContext, casterId: string): string {
-  return ctx.myTeam.concat(ctx.enemyTeam).find((u) => u.general.id === casterId)?.general.name ?? casterId;
+/**
+ * 「友军大营上次行动阶段造成伤害的目标」独立重复攻击（持刀从武，XP周仓）：
+ * 携带者每回合行动阶段开始时按 `chance` **独立判定** `attempts` 次；每次从记忆池
+ * （大营**上一次行动阶段**实际造成伤害的敌军）中独立随机抽 1 人，按**自身**攻击属性打出 `rate` 攻击；
+ * 抽中目标**当前处于控制状态**（混乱/暴走/怯战/犹豫）时，本次伤害率再按「本次行动内对该**同一目标**
+ * 已打出的次数」递增 `ratePerRepeatOnControl`。池为空则整段空转（官方未写兜底，推定）。
+ * 每次判定发 `skill_trigger`（士气修正，同战法发动率口径）。
+ */
+export function triggerLastActStrike(ctx: CombatContext, unit: UnitState, skill: PassiveSkill): void {
+  const cfg = skill.lastActStrike;
+  if (!cfg) return;
+  const enemies = unit.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
+  const allies = unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+  const source = allies.find((a) => a.alive && a.general.position === (cfg.allyPosition ?? '大营'));
+  const remembered = source ? (ctx.lastActDamageTargets?.get(source.general.id) ?? []) : [];
+  const pool = enemies.filter((e) => e.alive && remembered.includes(e.general.id));
+  if (pool.length === 0) return;
+  const morale = effectiveMorale(unit);
+  const rate = moraleTriggerRate(morale, cfg.chance);
+  // 本次行动内对同一目标的已打出次数（仅控制状态下用于递增伤害率）
+  const hitsByTarget = new Map<string, number>();
+  for (let i = 0; i < cfg.attempts; i++) {
+    const alive = pool.filter((e) => e.alive);
+    if (alive.length === 0) break;
+    const success = ctx.rng.chance(rate);
+    ctx.events.push({
+      type: 'skill_trigger',
+      unitId: unit.general.id,
+      skillId: skill.id,
+      skillName: skill.name,
+      success,
+      rate: Math.round(rate * 100),
+      baseRate: Math.round(cfg.chance * 100),
+      morale,
+    });
+    if (!success) continue;
+    const target = alive[ctx.rng.int(alive.length)];
+    const controlled = CONTROL_STATUS_TYPES.some((t) => hasStatus(target, t));
+    const prior = hitsByTarget.get(target.general.id) ?? 0;
+    hitsByTarget.set(target.general.id, prior + 1);
+    const damageRate = cfg.rate + (controlled ? prior * cfg.ratePerRepeatOnControl : 0);
+    executeSkillOutputs(ctx, unit, skill, [target], [{ kind: 'physical_damage', rate: damageRate }]);
+  }
+}
+
+function casterName(ctx: CombatContext, casterId: string): string {  return ctx.myTeam.concat(ctx.enemyTeam).find((u) => u.general.id === casterId)?.general.name ?? casterId;
 }
 
 function castUnit(ctx: CombatContext, casterId: string): UnitState | undefined {
@@ -1985,6 +2040,13 @@ function endUnitAct(
     }
   }
   if (actEndMarked && statusesAtActStart) tickStatusesOnActEnd(unit, actEndMarked, statusesAtActStart);
+  // 「上次行动阶段造成伤害的目标」落账（持刀从武）：仅在本次调用确实为该单位的行动阶段时提交
+  if (ctx.actingUnitId === unit.general.id) {
+    ctx.lastActDamageTargets ??= new Map();
+    ctx.lastActDamageTargets.set(unit.general.id, [...(ctx.actDamageTargets ?? [])]);
+    ctx.actingUnitId = undefined;
+    ctx.actDamageTargets = undefined;
+  }
   unit.hasActedThisRound = true;
   ctx.events.push({ type: 'unit_act_end', unitId: unit.general.id });
 }
@@ -1992,6 +2054,10 @@ function endUnitAct(
 export function actUnit(ctx: CombatContext, unit: UnitState): void {
   const enemies = unit.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
   const allies = unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+  // 行动阶段伤害目标记账（持刀从武「上次行动阶段造成伤害的目标」）：本次行动内打出的伤害累积到
+  // actDamageTargets，行动结束时由 endUnitAct 落账到 lastActDamageTargets。
+  ctx.actingUnitId = unit.general.id;
+  ctx.actDamageTargets = [];
 
   // 延迟结算（道行险阻「目标下一次行动前」）：行动开始前由原施法者结算，可能致死 → 直接收尾
   triggerPendingStrikes(ctx, unit);
@@ -2025,6 +2091,11 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
       position: unit.general.position,
       phase: 'passive_skill',
     });
+    // 持刀从武：专用钩子（记忆池独立重复攻击），不走通用 output 路径
+    if (passive.lastActStrike) {
+      triggerLastActStrike(ctx, unit, passive);
+      continue;
+    }
     executeSkillWithTargets(ctx, unit, passive, enemies, allies, mixedPool(ctx, unit));
   }
 
@@ -7228,6 +7299,12 @@ export function applyDamage(
     target.totalDead += dead;
   }
   if (actual > 0) {
+    // 「上次行动阶段造成伤害的目标」记账（持刀从武）：只记录**当前正在行动的单位本人**打出的伤害，
+    // 且以实际扣兵（actual>0）为准；DoT 跳伤 / 反击 / 玉玺结转等非其行动阶段者不计入。
+    if (source && ctx.actingUnitId === source.general.id) {
+      ctx.actDamageTargets ??= [];
+      if (!ctx.actDamageTargets.includes(target.general.id)) ctx.actDamageTargets.push(target.general.id);
+    }
     const hit: DamageHitContext = { damageSource, damageType };
     // 全队累计伤害门槛（徽言龙凤）：本侧造成伤害即计数，达到门槛激活光环
     if (source) noteTeamDamage(ctx, source);

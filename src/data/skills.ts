@@ -8235,4 +8235,41 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     ],
     output: [],
   },
+
+  /**
+   * 持刀从武（XP周仓·蜀步 h691 主战法）：被动 A（`round_start`：自身每回合行动时），距离 5，敌军单体。
+   * 满级「自身每回合行动时，每次有 75.0% 概率对友军大营上次行动阶段造成伤害的目标发动一次攻击
+   *   （伤害率 100.0%），重复三次，每次目标独立判定。当该攻击目标处于控制状态时，对同一目标的
+   *   伤害率每次递增 20.0%」；1 级：伤害率 50.0%（概率 75% 与递增 20% 同值）。
+   * 官方：scripts/skill_extra.json id 200965（被动 / 距离 5 / 敌军单体 / 兵种步；effect 攻击伤害）。
+   *   来源 https://stzb.163.com/m/skilllist/200965.html
+   *
+   * 口径（策略 A，2026-09-20；推定处已标注）：
+   *   ① 新引擎件 `PassiveSkill.lastActStrike`：attempts 3 × chance 75%（逐次独立判定、士气修正）
+   *      + rate 100（攻击伤害，按自身攻击属性结算）+ ratePerRepeatOnControl 20；
+   *   ② 「友军大营上次行动阶段造成伤害的目标」= 新引擎件 `ctx.lastActDamageTargets` 记忆：
+   *      `actUnit` 期间记账、`endUnitAct` 落账，只记**该单位本人在其行动阶段内**实际扣兵的伤害
+   *      （DoT 跳伤 / 反击 / 指挥延迟等不计入）；取记忆池中仍存活的敌军。
+   *      池为空（大营本局尚未造成伤害 / 目标已阵亡）时整段空转——官方未写兜底，**推定**；
+   *   ③ 「每次目标独立判定」= 每次判定成功后从记忆池独立随机抽 1 人；
+   *   ④ 「当该攻击目标处于控制状态时，对同一目标的伤害率每次递增 20.0%」= 本次行动内对该**同一目标**
+   *      已打出的次数 × 20（首次 100% / 第 2 次 120% / 第 3 次 140%；目标不在控制状态则不递增）；
+   *      计数**不跨回合、不跨行动**（每次行动重新起算），**推定**；
+   *   ⑤ 控制状态 = 混乱 / 暴走 / 怯战 / 犹豫（引擎 `CONTROL_STATUS_TYPES`，按当前生效状态实时判定）；
+   *   ⑥ 无「受属性影响」段、无数值缺口 → **上架**（不登记 OFFLINE_MAIN_SKILLS）。
+   */
+  chidao_congwu: {
+    id: 'chidao_congwu',
+    name: '持刀从武',
+    type: 'passive',
+    timing: 'round_start',
+    range: 5,
+    triggerRate: 1,
+    // 官方目标行为「敌军单体」，但本战法全部攻击由 lastActStrike 钩子按记忆池自行选靶
+    // （PassiveSkill.targetMode 类型仅 'self' | 'all'；同西陵克晋以 'self' 占位，通用 output 路径不走）
+    targetMode: 'self',
+    tags: ['damage'],
+    output: [],
+    lastActStrike: { attempts: 3, chance: 0.75, rate: 100, ratePerRepeatOnControl: 20 },
+  },
 };

@@ -175,6 +175,7 @@ const SKILL_ID_BY_NAME = {
   银龙孤胆: 'yinlong_gudan',
   明其虚实: 'mingqi_xushi',
   守静却敌: 'shoujing_quedi',
+  持刀从武: 'chidao_congwu',
 };
 
 /** 现有 8 个武将固定拼音 id（测试直接引用 HERO_REGISTRY.<id>） */

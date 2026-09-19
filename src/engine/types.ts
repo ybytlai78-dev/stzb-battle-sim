@@ -1276,6 +1276,25 @@ export interface PassiveSkill extends BaseSkill {
   onHurt?: OnHurtConfig | OnHurtConfig[];
   onHeal?: OnHealConfig;
   /**
+   * 「友军大营上次行动阶段造成伤害的目标」独立重复攻击（持刀从武，XP周仓）：
+   * 携带者每回合行动阶段开始时（被动 `round_start`），按 `chance` **独立判定** `attempts` 次；
+   * 每次从「友军大营（`allyPosition`，缺省大营）**上一次行动阶段实际造成伤害**的敌军」池中独立随机抽 1 人，
+   * 按其攻击属性打出 `rate`（百分点）攻击伤害；抽中目标**当前处于控制状态**（混乱/暴走/怯战/犹豫）时，
+   * 本次伤害率再按「本次行动内对该**同一目标**已打出的次数」递增 `ratePerRepeatOnControl`（100→120→140）。
+   * 池为空（大营尚未行动/其上次行动未造成伤害/记忆目标已阵亡）时本次攻击跳过。
+   * 记忆走 `ctx.lastActDamageTargets`（actUnit 记账、endUnitAct 落账），本次行动内计数为调用局部变量。
+   */
+  lastActStrike?: {
+    attempts: number;
+    chance: number;
+    /** 攻击伤害率（百分点）：100 */
+    rate: number;
+    /** 控制状态下对同一目标的每次递增（百分点）：20 */
+    ratePerRepeatOnControl: number;
+    /** 记忆来源站位：缺省 '大营' */
+    allyPosition?: Position;
+  };
+  /**
    * 每受到 N 次伤害触发一次（蛮王御众「自身每受到 5 次伤害，则使友军攻击最高单体…发动一次攻击」）：
    * 受伤者自己的累计受击次数走 `ctx.hurtEveryCounters`（键 `${victimId}:${skillId}`，整场累计、不随回合重置），
    * 每满 `hits` 次即对携带者结算一次 `output`（典型：`physical_damage.attacker:'highest_attack_ally'`

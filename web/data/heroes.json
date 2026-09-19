@@ -729,7 +729,7 @@
     "growthDefense": 1.8,
     "growthStrategy": 0.89,
     "growthSpeed": 0.77,
-    "mainSkillId": "",
+    "mainSkillId": "chidao_congwu",
     "mainSkillName": "持刀从武",
     "skillDesc": "自身每回合行动时，每次有75.0%概率对友军大营上次行动阶段造成伤害的目标发动一次攻击（伤害率100.0%），重复三次，每次目标独立判定。当该攻击目标处于控制状态时，对同一目标的伤害率每次递增20.0%"
   },
