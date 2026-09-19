@@ -122,6 +122,15 @@ export function teamFactionsDistinct(team: UnitState[]): boolean {
   return new Set(team.map((u) => u.general.faction)).size === team.length;
 }
 
+/**
+ * 我军出战名单是否「3 名武将全部为该性别」（美人计「我方 3 名武将均为女武将时」）。
+ * 读部署名单（不论 alive）；名单不足 3 人视为不满足；无性别数据者视为不匹配。
+ */
+export function teamGendersMatch(team: UnitState[], gender: 'male' | 'female'): boolean {
+  if (team.length < 3) return false;
+  return team.every((u) => u.general.gender === gender);
+}
+
 /** 带发动率属性的战法生效概率 = 基础率 × 施法者士气系数（四舍五入取整到百分位），上限 100% */
 function moraleTriggerRate(morale: number, baseRate: number): number {
   return Math.min(1, Math.round(baseRate * moraleRate(morale) * 100) / 100);
@@ -429,6 +438,8 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
     )) continue;
     // 阵营条件（合纵连横）：我军出战 3 将阵营两两不同，否则整次不生效
     if (skill.teamFactionDistinct && !teamFactionsDistinct(unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam)) continue;
+    // 性别条件（美人计）：我军出战 3 将须全为指定性别，否则整次不生效
+    if (skill.teamGenderFilter && !teamGendersMatch(unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam, skill.teamGenderFilter)) continue;
     ctx.events.push({
       type: 'skill_target',
       unitId: unit.general.id,
@@ -4529,6 +4540,14 @@ function executeSkillOutputs(
       (out.kind === 'heal' || out.kind === 'inflict_status') && out.excludeSelf
         ? allies.filter((u) => u.general.id !== caster.general.id)
         : allies;
+    // 性别预过滤（美人计「随机使敌军单体**男武将**…」/ 辞后定朝）：
+    // 必须在**随机选人之前**剔除，否则会先随机到不符性别者、再被过滤掉而整段落空
+    const genderPre =
+      out.kind === 'inflict_status' && out.requireGender
+        ? (u: UnitState) => u.general.gender === out.requireGender
+        : undefined;
+    const enemyPickPool = genderPre ? enemies.filter(genderPre) : enemies;
+    const allyPickPool = genderPre ? allyPool.filter(genderPre) : allyPool;
     let pool =
       outTarget === 'self'
         ? [caster]
@@ -4537,12 +4556,12 @@ function executeSkillOutputs(
           : outSide === 'self'
             ? [caster]
             : outSide === 'enemy'
-              ? skillTargets(ctx, caster, enemies, skill.range, outSideMode ?? 'random_single')
+              ? skillTargets(ctx, caster, enemyPickPool, skill.range, outSideMode ?? 'random_single')
               : outSide === 'ally'
                 ? skillTargets(
                     ctx,
                     caster,
-                    allyPool,
+                    allyPickPool,
                     skill.range,
                     outSideMode ?? 'random_single',
                     'groupCount' in out ? out.groupCount : undefined
@@ -4567,6 +4586,10 @@ function executeSkillOutputs(
     // 性别过滤（辞后定朝：男性 / 女性武将各自一段）——无性别数据的单位不匹配任何一段
     if (out.kind === 'inflict_status' && out.requireGender) {
       pool = pool.filter((u) => u.general.gender === out.requireGender);
+    }
+    // 站位过滤（美人计：仅大营获得「造成的所有伤害提升 14%」）
+    if (out.kind === 'inflict_status' && out.requirePositions) {
+      pool = pool.filter((u) => out.requirePositions!.includes(u.general.position));
     }
     // 阵营过滤（合纵连横「对非自身阵营的武将普通攻击后…使目标陷入围困」）：同阵营目标不结算本段。
     // 「自身」取**实际行动者**（监听类调用传 statSource = 触发者，缺省与 caster 同体）
@@ -5937,6 +5960,8 @@ function executeSkillWithTargets(
   )) return;
   // 阵营条件（合纵连横）：我军出战 3 将阵营两两不同，否则整次不生效
   if (skill.teamFactionDistinct && !teamFactionsDistinct(unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam)) return;
+  // 性别条件（美人计）：我军出战 3 将须全为指定性别，否则整次不生效
+  if (skill.teamGenderFilter && !teamGendersMatch(unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam, skill.teamGenderFilter)) return;
 
   ctx.events.push({
     type: 'skill_cast',
@@ -6391,6 +6416,8 @@ function triggerOnHurt(
           if (cfg.startRound != null && ctx.currentRound < cfg.startRound) continue;
           if (cfg.endRound != null && ctx.currentRound > cfg.endRound) continue;
           if (!matchOnHurtVictim(ctx, skill, cfg, caster, victim)) continue;
+          // 站位条件（美人计：仅前锋）
+          if (cfg.victimPositions && !cfg.victimPositions.includes(victim.general.position)) continue;
           if (cfg.damageKind && damageType && cfg.damageKind !== damageType) continue;
           if (cfg.onlyIfActed && !victim.hasActedThisRound) continue;
           if (cfg.onlyIfSourceTauntsVictim) {

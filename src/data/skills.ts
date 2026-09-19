@@ -5991,6 +5991,76 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     },
   },
 
+  // ─── 拆解通用 B+ 第十九阶段：女将组合 / 段级站位 / 受击规避（B 级 1 个 · 美人计）───
+
+  /**
+   * 美人计（B 指挥·距离 5·一类指挥·我军全体）：**正式回合开始后**，我方 3 名武将均为女武将时——
+   * ① 大营造成的所有伤害提升 14%；② 中军每回合行动前随机使敌军单体**男武将**「下一次攻击或策略攻击
+   * 造成的伤害降低 60%」；③ 前 4 回合前锋**首次**受到伤害时进入规避状态，免疫该次伤害。
+   * 官方：scripts/skill_extra.json id 200853（1 级 7% / 30%）。
+   * 引擎配套（4 项）：
+   *   ① `BaseSkill.teamGenderFilter: 'female'` —— 我军出战 3 将全为女将，否则整次不生效
+   *      （与 `teamFactionDistinct` 同判定点；无性别数据者不匹配）；
+   *   ② `delayedOutputs: [{ atRound: 1 }]` —— 官方口径「**正式回合开始后**」（非准备阶段）：
+   *      大营增伤在第 1 回合回合开始、单位行动之前对锁定友军结算（匠心不竭既有链路），
+   *      段级新增 `inflict_status.requirePositions: ['大营']` 限定站位；
+   *   ③ `roundRepeat` + `onlyPositions: ['中军']`（p17 既有）—— 「中军每回合行动前」判定：
+   *      准备阶段锁定我军全体，判定只落在中军身上；`requireGender:'male'` 段在**随机选人之前**
+   *      预过滤敌军（否则会先随机到女将再被过滤掉而整段落空）；
+   *      减伤为「**下一次**攻击或策略攻击」→ `damage_boost caused −60%` + `charges:1`（青丘媚祸先例）；
+   *   ④ `onHurt{ timing:'before_damage', victim:'locked', victimPositions:['前锋'] }` + `grant_evasion`：
+   *      「首次受到伤害时进入规避状态，免疫该次伤害」＝ 受击前授予 1 层规避并当场消耗（applyDamage 既有链路），
+   *      `startRound:1 / endRound:4` ＝ 前 4 回合，`maxTriggers:1` ＝ 仅首次。
+   */
+  meiren_ji: {
+    id: 'meiren_ji',
+    name: '美人计',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    retainAfterDeath: true,
+    teamGenderFilter: 'female',
+    tags: ['damage_boost', 'evasion'],
+    // ③ 中军每回合行动前：随机敌军单体男将「下一次攻击或策略攻击造成伤害降低 60%」
+    output: [
+      {
+        kind: 'inflict_status',
+        targetSide: 'enemy',
+        targetMode: 'random_single',
+        requireGender: 'male',
+        status: { type: 'damage_boost', rate: -0.6, duration: 999, direction: 'caused', charges: 1 },
+      },
+    ],
+    roundRepeat: { startRound: 1, endRound: 8, rate: 1, onlyPositions: ['中军'] },
+    // ② 正式回合开始后（第 1 回合开始、单位行动前）：大营造成的所有伤害提升 14%（整场）
+    delayedOutputs: [
+      {
+        atRound: 1,
+        output: [
+          {
+            kind: 'inflict_status',
+            requirePositions: ['大营'],
+            status: { type: 'damage_boost', rate: 0.14, duration: 999, direction: 'caused' },
+          },
+        ],
+      },
+    ],
+    // ④ 前 4 回合前锋首次受到伤害 → 进入规避状态并免疫该次伤害
+    onHurt: {
+      victim: 'locked',
+      victimPositions: ['前锋'],
+      timing: 'before_damage',
+      startRound: 1,
+      endRound: 4,
+      maxTriggers: 1,
+      applyTo: 'victim',
+      output: [{ kind: 'grant_evasion', stacks: 1, target: 'self' }],
+    },
+  },
+
   // ─── 批量31：下架武将清单 §1.2「补 1 个机制」逐个实现 ───
 
   /**

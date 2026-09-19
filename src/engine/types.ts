@@ -305,6 +305,11 @@ export type SkillOutput =
       /** 只对指定性别的目标结算（辞后定朝：男性 / 女性武将各自一段）；无性别数据的单位不匹配 */
       requireGender?: 'male' | 'female';
       /**
+       * 只对指定站位的目标结算（美人计「大营造成的所有伤害提升 14%」：仅大营段）：
+       * 目标站位不在此列表内则跳过本段。
+       */
+      requirePositions?: Position[];
+      /**
        * 段级按阵营过滤**本战法整体（锁定）目标**（率尔方雅）：
        * 只结算锁定目标中与施法者**同侧**（'ally'）/ **对侧**（'enemy'）/ **自身**（'self'）者，
        * 不重选池、不按战法距离重新抽取（与 `targetSide` 的「重选池」语义不同）。
@@ -641,6 +646,11 @@ interface BaseSkill {
    * （合纵连横「我方出战的 3 名武将阵营均不相同时」）。读部署名单（不论 alive）；战斗中不再复查。
    */
   teamFactionDistinct?: boolean;
+  /**
+   * 我军**出战**的 3 名武将必须**全部为该性别**，否则本战法整次不生效
+   * （美人计「我方 3 名武将均为女武将时」）。读部署名单（不论 alive）；无性别数据者视为不匹配。
+   */
+  teamGenderFilter?: 'male' | 'female';
   /**
    * 施法者站位条件（潜谋远计「仅对自身处于前锋或中军位置时生效」）：
    * 施法者（开战时）站位不在此列表内 → **本战法整次不生效**（含受击监听、每回合段、准备阶段 output）。
@@ -1116,6 +1126,8 @@ export interface OnHurtConfig {
   /** 钩子生效回合窗口（空城 endRound:2） */
   startRound?: number;
   endRound?: number;
+  /** 只对这些站位的受伤者触发（美人计「前 4 回合**前锋**首次受到伤害时进入规避状态」） */
+  victimPositions?: Position[];
   /** before_damage 判定成功后，本段伤害乘 (1 − rate)。健卒 0.5 */
   thisHitReduce?: number;
   /** 仅当 source 带 taunt 且 targetId 为受伤者（以诱待来回血） */
