@@ -471,18 +471,19 @@ npx tsc --noEmit                    # 类型检查（strict）
 ### 下一次接续（2026-09-20 批次 · 策略 A 推进 §1.4）
 
 - **工作树/分支**：`.dsh/worktrees/c00d4f51acc5/战斗系统`（本会话 DSH 工作区，**detached HEAD**，起点 `main` `19fb1a7`）；
-  武将 33~37 逐个提交在**未命名分支的 detached HEAD** 上（**未 push、未合并**；落地方式待用户定，
+  武将 33~40 逐个提交在**未命名分支的 detached HEAD** 上（**未 push、未合并**；落地方式待用户定，
   合并前先看 `docs/工作树落地流程.md`，且合并回主仓库后必须重灌主库——见下）。
   提交一律**显式列路径**（`git add src/... tests/... web/data/...`），不要 `git add -A` / `git add web`。
-- **已验证基线**：`npx tsc --noEmit` clean；`npm test` **149 files / 1559 passed**（武将 37 后）；golden 字节一致。
+- **已验证基线**：`npx tsc --noEmit` clean；`npm test` **152 files / 1575 passed**（武将 40 后）；golden 字节一致。
 - **策略 A（用户已确认，勿再逐条询问）**：① 官方现页 > 本地旧数据；② 两版拼接描述取**前半**（仓库 dedupe 口径）；
   ③ `targetShow` 与描述冲突以**描述**为准；④ 官方未给数值的段**不实现**（整将缺关键数值则跳过并说明）；
   ⑤ SP 卡 `iconId` 沿用 `portrait_map.json`。另：「两者 / 每个效果独立判断」= **各段各自 roll**
   （鸟云山兵 `independentRolls` / 将门有将逐段独立先例）；含糊表述按最可辩护解读实现 + 注释标「推定」。
 - **§1.4「需先调研」45 位进度**（总表 `docs/research/README.md` + `heroes-research-merged.json`）：
-  - 已完成 **9 位**：h653 将门有将 / h495 二夫之勇 / h788 雪奋短兵 / h815 蛮王御众（武将 29~32，已在 main）
+  - 已完成 **12 位**：h653 将门有将 / h495 二夫之勇 / h788 雪奋短兵 / h815 蛮王御众（武将 29~32，已在 main）
     + **h803 知人待士（33）** / **h102011 胡笳离愁（34）** / **h631 断首何怒（35）** / **h805 勇挚刚毅（36）**
-    + **h802 奇门遁甲（37，上架）**；剩余 **36 位**（口径见重生成的 `docs/下架武将清单.md`）。
+    + **h802 奇门遁甲（37，上架）** / h102002 定军绝战（38，上架）/ h534 破阵强袭（39）/
+    **h810 万军取首（40，上架）**；剩余 **33 位**（口径见重生成的 `docs/下架武将清单.md`）。
   - 下一步优先（缺口 0、机制可补）：h800 守静却敌（`heal_boost` 已就位）/ h675 抚民励德 / h691 持刀从武 /
     h787 审时定计 / h791 疲兵沮意 / h814 敛微穷极 / h648 竭忠尽智 / h593 兵行巧变 / h645 统军畏慎 /
     h519 藤甲突击 / h534 破阵强袭 / h810 万军取首 / h102002 定军绝战 / sp_zhaoyun 银龙孤胆 …
@@ -495,11 +496,15 @@ npx tsc --noEmit                    # 类型检查（strict）
   - **`heal_boost` 状态**（受到恢复效果提升）：`recoverTroops` 唯一收口 `demand = floor(amount × (1 + Σrate))`，
     主动 heal / rest / first_aid / recoverEachRound / healSource 统一受益 ——`55c225b`；
   - **`copyRandomActive`**（随机复制发动主动战法：除自身外敌我存活单位 `activeSkillIds` 去重抽 1、
-    跳过准备直接执行 output、事件归属被复制战法）——武将 37。
+    跳过准备直接执行 output、事件归属被复制战法）——武将 37；
+  - **`positions?: Position[]`（伤害段站位定向）**：`physical_damage` / `strategy_damage` 直接锁定该站位存活敌军
+    （万军取首「敌方大营」），不按 targetMode 重选——武将 40。
+- **坑（本批踩过）**：`damage_boost.maxStacks` 必须**同时给 `stacks: 1`**（层计数初值），只给 `stack: true` 时
+  计数不递增、封顶失效（破阵强袭第 7 次仍 +5%）——文德椒房同款写法。
 - **每将流程**（沿用）：`skills.ts` 定义 → `build_heroes_seed.mjs` 挂槽 → 数据链三条命令
   （`build_heroes_seed` / `gen_skill_data` / `sync_hero_mainskill`，性别表变更再加 `sync_hero_meta`）
   → `tests/main_skills_bN.test.ts`（≥3 个，b63 起）→ `tsc` + 全量 `npm test` → 1 将 1 提交。
-  **上架将**（无受属性段且无数值缺口）还须同步：`tests/offline_pool.test.ts` 的 `HEROES.length`（现 78）+1、
+  **上架将**（无受属性段且无数值缺口）还须同步：`tests/offline_pool.test.ts` 的 `HEROES.length`（现 80）+1、
   `tests/heroes_panel_batch_20260916.test.ts` 的 XP 空槽表移除该将。
 - **⚠️ 合并回主仓库后必须重灌主库**：主仓库路径推导出**主库 `stzb战斗系统`**，MySQL 可达时**不会回退 JSON**，
   于是「工作树里全绿、合回主仓库就红」（`main_skill_id` 为空）。修法 = 在**主仓库**跑数据链四条命令
