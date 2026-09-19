@@ -224,6 +224,8 @@ export interface CombatContext {
   stacksReduceCounters?: Map<string, number>;
   /** 兵力阈值首次跨越去重（甚陷不惧）：key `${skillId}:${unitId}:${threshold}` */
   troopThresholdKeys?: Set<string>;
+  /** 「每回合首次造成伤害」去重（以直报怨）：key `${回合}:${skillId}:${casterId}` */
+  dealFirstKeys?: Set<string>;
   /** 持续型急救计数器（皇裔流离）：战法级共享触发率与总生效次数（全队合计，每达到 N 次提升）。
    *  可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化 */
   firstAidCounters?: FirstAidCounter[];
@@ -453,6 +455,14 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
     // 常驻伤害前叠层（持节镇西）：准备阶段对持有者友军全体注册，友军伤害前按层叠属性
     if (skill.stackBuff) {
       ctx.stackBuffs.push({ skillId: skill.id, casterId: unit.general.id, config: skill.stackBuff });
+    }
+
+    // 友军「造成匹配伤害后叠层」（久战熟谋）：准备阶段把状态挂到锁定友军身上（之后每次造成匹配伤害同源叠加）
+    if (skill.allyDealStack) {
+      for (const t of targets) {
+        if (!t.alive) continue;
+        inflictStatus(ctx, t, skill.allyDealStack.status, skill.type, skill.id, unit.general.id);
+      }
     }
 
     // 玉玺账本（僭号天子）：准备阶段注册；之后我军受击按比例转入，回合开始时结转给持有者
@@ -3987,6 +3997,43 @@ function gainStacksReduceOnDeal(ctx: CombatContext, source?: UnitState): void {
 }
 
 /**
+ * 「每回合自身首次造成伤害后」钩子（以直报怨）：按「回合 × 战法 × 施法者」去重，
+ * 命中则对**本次伤害目标**执行 output（每次实际扣兵 > 0 计一次）。
+ */
+function triggerDealFirstPerRound(ctx: CombatContext, source: UnitState, target: UnitState): void {
+  if (!source.alive || !target.alive) return;
+  for (const id of [...source.general.commandSkillIds, ...source.general.passiveSkillIds]) {
+    const skill = resolveSkill(ctx, id);
+    if (!skill?.dealFirstPerRound) continue;
+    if (!passesCasterPosition(skill, source)) continue;
+    ctx.dealFirstKeys ??= new Set();
+    const key = `${ctx.currentRound}:${skill.id}:${source.general.id}`;
+    if (ctx.dealFirstKeys.has(key)) continue;
+    ctx.dealFirstKeys.add(key);
+    executeSkillOutputs(ctx, source, skill, [target], skill.dealFirstPerRound.output);
+  }
+}
+
+/**
+ * 友军「造成匹配伤害后叠层」（久战熟谋）：持有者每次造成匹配伤害（实际扣兵 > 0）后，
+ * 把「挂在其身上、来源战法带 `allyDealStack`」的状态**同源再施加一次**（叠层与上限由状态自身 `maxStacks` 控制）。
+ * 注意：状态挂在**友军**身上，而战法由指挥携带者持有——故按「持有者身上的状态 → 来源战法」回溯，
+ * 而不是查持有者自己的 commandSkillIds。归属沿用原施法者（`sourceUnitId`）。
+ */
+function triggerAllyDealStack(ctx: CombatContext, source: UnitState, damageType?: DamageType): void {
+  if (!source.alive) return;
+  for (const s of [...source.statuses]) {
+    const skill = resolveSkill(ctx, s.sourceSkillId);
+    const cfg = skill?.allyDealStack;
+    if (!skill || !cfg) continue;
+    if (cfg.damageType && cfg.damageType !== damageType) continue;
+    const casterId = 'sourceUnitId' in s ? s.sourceUnitId : undefined;
+    inflictStatus(ctx, source, cfg.status, skill.type, skill.id, casterId);
+    if (!source.alive) return;
+  }
+}
+
+/**
  * 「试图发动追击战法时」钩子（势无虚动 / 众谋不懈）：按携带者（被动 + 指挥）逐个执行 `output`，
  * 目标池缺省 = 本次追击的攻击目标（段内 `target:'self'` 可落回自身）。
  */
@@ -6370,6 +6417,10 @@ export function applyDamage(
     consumePendingStacks(ctx, target);
     // 百战无怯：造成伤害后 +1 层（封顶）
     gainStacksReduceOnDeal(ctx, source);
+    // 每回合首次造成伤害后（以直报怨）：对本次伤害目标结算 output
+    if (source) triggerDealFirstPerRound(ctx, source, target);
+    // 友军造成匹配伤害后同源叠层（久战熟谋）
+    if (source) triggerAllyDealStack(ctx, source, damageType);
     if (source && damageType === 'physical') {
       for (const id of source.general.passiveSkillIds) {
         const skill = resolveSkill(ctx, id);

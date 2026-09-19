@@ -5494,6 +5494,100 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     },
   },
 
+  // ─── 拆解通用 B+ 第十一阶段：叠层钩子（B/A 2 个）───
+
+  /**
+   * 以直报怨（B 一类指挥·距离 5·目标自己）：
+   * ① 每回合自身首次造成伤害后，使**目标单体**造成的所有伤害降低 10%；
+   * ② 自身首次受到伤害后，使**我军单体**受到的所有伤害降低 10%；
+   * 以上效果可叠加 6 次，持续直到战斗结束。
+   * 官方：scripts/skill_extra.json id 200935（1 级 5%）。
+   * 引擎配套：① **新增 `BaseSkill.dealFirstPerRound`**（每回合首次造成伤害后钩子，按「回合×战法×施法者」
+   *   去重，对**本次伤害目标**结算 output）；② 受伤侧复用既有 `onHurt{ victim:'self', oncePerRound:true }`
+   *   + 输出段 `targetSide:'ally', targetMode:'random_single'`（「我军单体」= 随机友军，含自身）。
+   * 数值为固定 10%、无「受属性影响」→ 不缩放；叠加用 `stacks/maxStacks:6`（同源重复施加累加）。
+   */
+  yizhibaoyuan: {
+    id: 'yizhibaoyuan',
+    name: '以直报怨',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['damage_boost'],
+    output: [],
+    dealFirstPerRound: {
+      output: [
+        {
+          kind: 'inflict_status',
+          status: {
+            type: 'damage_boost',
+            rate: -0.1,
+            duration: 999,
+            direction: 'caused',
+            stacks: 1,
+            maxStacks: 6,
+          },
+        },
+      ],
+    },
+    onHurt: {
+      victim: 'self',
+      oncePerRound: true,
+      applyTo: 'victim',
+      output: [
+        {
+          kind: 'inflict_status',
+          targetSide: 'ally',
+          targetMode: 'random_single',
+          status: {
+            type: 'damage_boost',
+            rate: -0.1,
+            duration: 999,
+            direction: 'taken',
+            stacks: 1,
+            maxStacks: 6,
+          },
+        },
+      ],
+    },
+  },
+  /**
+   * 久战熟谋（A 一类指挥·距离 3·友军群体 2 目标）：
+   * 使友军群体**每造成一次策略伤害后**，其策略伤害提高 5%（受谋略属性影响），最多叠加 5 次。
+   * 官方 id 200959（1 级 2.5%）。
+   * 引擎配套：**新增 `BaseSkill.allyDealStack`** —— 准备阶段把状态挂到锁定友军身上，
+   *   此后该单位每次造成匹配伤害（`damageType:'strategy'`）时同源再施加一次（叠层/上限由 `maxStacks:5` 控制）。
+   * 受谋略缩放但成长率未确认 → `growthRate` 留空（基值 5%；初始施加与叠层都按基值，待成长率确认后统一补）。
+   */
+  jiuzhan_shumou: {
+    id: 'jiuzhan_shumou',
+    name: '久战熟谋',
+    type: 'command',
+    phase: 'prep',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'ally',
+    tags: ['damage_boost'],
+    output: [],
+    allyDealStack: {
+      damageType: 'strategy',
+      status: {
+        type: 'damage_boost',
+        rate: 0.05,
+        duration: 999,
+        direction: 'caused',
+        damageType: 'strategy',
+        strategyScaled: true,
+        stacks: 1,
+        maxStacks: 5,
+      },
+    },
+  },
+
   // ─── 批量31：下架武将清单 §1.2「补 1 个机制」逐个实现 ───
 
   /**

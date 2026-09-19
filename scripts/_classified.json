@@ -164,9 +164,9 @@
     "targetDesc": "友军群体（有效距离内2个目标）",
     "effectDesc": "战斗中，使友军群体每造成一次策略伤害后，其策略伤害就提高5.0%（受谋略属性影响），此效果最多叠加5次",
     "sources": "【魏·曹彰·骑】【吴·程普·步】",
-    "status": "skipped",
-    "missingMechanics": "造成策略伤害后叠加",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "stack-hook p11"
   },
   {
     "name": "乘间击隙",
@@ -281,9 +281,9 @@
     "targetDesc": "自己",
     "effectDesc": "每回合自身首次造成伤害后，使目标单体造成的所有伤害降低10.0%；自身首次受到伤害后，使我军单体受到的所有伤害降低10.0%。以上效果可叠加6次，持续直到战斗结束",
     "sources": "【魏·王朗·弓】【蜀·关兴＆张苞·步】",
-    "status": "skipped",
-    "missingMechanics": "造成/受到伤害后触发",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "stack-hook p11"
   },
   {
     "name": "反击之策",

@@ -655,6 +655,17 @@ interface BaseSkill {
    */
   onPursuitAttempt?: { output: SkillOutput[] };
   /**
+   * 「每回合自身**首次造成伤害**后」钩子（以直报怨「每回合自身首次造成伤害后，使目标单体造成的所有伤害降低」）：
+   * 按 `${回合}:${战法}:${施法者}` 整场去重（每回合一次），命中则对**本次伤害目标**执行 output。
+   */
+  dealFirstPerRound?: { output: SkillOutput[] };
+  /**
+   * 友军「造成匹配伤害后叠层」（久战熟谋「使友军群体每造成一次策略伤害后，其策略伤害就提高 5%，最多叠加 5 次」）：
+   * 准备阶段把 `status` 挂到本战法锁定目标（友军）身上；此后该目标每次造成匹配伤害（实际扣兵 > 0）时
+   * 把同一状态**同源再施加一次**——叠层/上限由状态自身 `maxStacks` 控制。
+   */
+  allyDealStack?: { damageType?: DamageType; skillTypes?: SkillType[]; status: CreateStatus };
+  /**
    * 战法链（连环计「依次发动下列战法…每个战法的效果与原战法在同等级下效果相同」）：
    * 最外层发动时按顺序把**其他已注册战法**（`SKILL_REGISTRY`）的 `output` 当作本战法效果执行，
    * 事件 / 统计归属**被引用战法**（战报显示「发动了一次伐谋」）。
