@@ -8,7 +8,7 @@ import './lab.css';
 import { runBattle } from '../src/engine/combat';
 import type { General } from '../src/engine/types';
 import type { BattleReport } from '../src/engine/types';
-import { buildGeneral, freePointBudget, HEROES } from './heroes';
+import { buildGeneral, freePointBudget, getHeroById } from './heroes';
 import {
   emptyEditor,
   renderTeamEditor,
@@ -327,7 +327,7 @@ function renderBattleView(report: BattleReport, mode: 'summary' | 'stats' | 'det
 /** 战报 → SlotState 反推（与 buildGeneral 互逆）：面板 = round(基础 + (L-1)×成长) + 自由加点；
  *  等级/红度随战报透传还原；自由加点按该等级反推（面板精确还原）。 */
 function generalToSlot(g: General): SlotState {
-  const h = HEROES.find((x) => x.id === g.id);
+  const h = getHeroById(g.id);
   const level = g.level ?? 40;
   const redness = g.redness ?? 0;
   const mainId = h?.mainSkillId ?? '';
