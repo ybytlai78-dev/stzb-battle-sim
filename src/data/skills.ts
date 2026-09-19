@@ -8990,4 +8990,47 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+
+  /**
+   * 雅虑适时（XP马良·蜀步 h792 主战法）：指挥 A（一类指挥 prep + `roundStartRepeat` 指定回合窗口），
+   * 距离 5，我军全体，发动率 --。
+   * 满级「第 3、5、7 回合开始时，令我军全体受到所有伤害降低 24.0%（受谋略属性影响）并进入同心状态，
+   *   同心状态下任一武将受到伤害时，其余处于同心状态下武将为其分摊 15% 受到的伤害，持续 1 回合」；
+   * 1 级：减伤 12.0%（分摊 15% 同）。
+   * 官方：scripts/skill_extra.json id 200265（指挥 / 距离 5 / 兵种步；effect 受到策略攻击伤害降低;
+   *   受到攻击伤害降低）。来源 https://stzb.163.com/m/skilllist/200265.html
+   *
+   * 口径（策略 A，2026-09-20；推定处已标注）：
+   *   ① 「第 3、5、7 回合开始时」→ 一类指挥 `roundStartRepeat` + 新字段 `rounds:[3,5,7]`
+   *      （回合前结算，谋议宏图/徽言龙凤同入口）；
+   *   ② 目标口径：官方「目标」栏写「自己」而描述写「我军全体」——按**描述**取 `targetSide:'ally'` +
+   *      `targetMode:'all'`（策略 A ③：冲突以描述为准）；
+   *   ③ 「受到所有伤害降低 24%（受谋略）」= `damage_reduce`（不限 damageType，持续 1 回合）+
+   *      strategyScaled（成长率未确认 → 基值 24%）；
+   *   ④ 「同心状态下…其余…武将为其分摊 15%」= 复用新状态 `damage_share`（rate 0.15、无 charges =
+   *      持续内不限次、缺省 scope 同侧全体；因**每名同心持有者**各分摊一次 → 3 人队共 30%，
+   *      逐人按**原始伤害**的 15% 计，**推定**）；「分摊后受击主体仍承担剩余 85%」按字面解读；
+   *   ⑤ 减伤「受谋略属性影响」成长系数未给 → 基值不缩放 → 登记 OFFLINE_MAIN_SKILLS（XP马良下架）。
+   */
+  yalv_shishi: {
+    id: 'yalv_shishi',
+    name: '雅虑适时',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['damage_reduce'],
+    output: [],
+    roundStartRepeat: {
+      rounds: [3, 5, 7],
+      output: [
+        // ③ 受到所有伤害 −24%（受谋略未确认 → 基值），持续 1 回合
+        { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.24, duration: 1, strategyScaled: true } },
+        // ④ 同心：其余同心者各分摊 15%（持续 1 回合、不限次）
+        { kind: 'inflict_status', status: { type: 'damage_share', rate: 0.15, duration: 1 } },
+      ],
+    },
+  },
 };

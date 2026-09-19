@@ -1187,6 +1187,8 @@ export interface CommandSkill extends BaseSkill {
     endRound?: number;
     /** 仅奇数回合执行（鱼鳞） */
     oddRounds?: boolean;
+    /** 只在列出的回合执行（雅虑适时「第 3、5、7 回合开始时」）；缺省不限 */
+    rounds?: number[];
   };
   /**
    * 受击触发（盲侯奋勇/陷储立齐/缓师徐持）：准备阶段只登记，不立刻结算 output。
@@ -1424,6 +1426,8 @@ export interface PassiveSkill extends BaseSkill {
     startRound?: number;
     endRound?: number;
     oddRounds?: boolean;
+    /** 只在列出的回合执行（雅虑适时「第 3、5、7 回合开始时」）；缺省不限 */
+    rounds?: number[];
     /**
      * 仅当携带者**当前攻击距离 ≤ 此值**时才结算（雪奋短兵「攻击距离小于等于 1 时，不再触发攻击距离
      * 下降及规避效果，同时每回合自身行动时…」）：与 `rangeDecayPerRound` 配套，把「攻击距离门槛」

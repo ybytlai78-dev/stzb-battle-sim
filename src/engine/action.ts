@@ -4003,6 +4003,8 @@ export function tickRoundStartStatuses(ctx: CombatContext): void {
     const rs = skill.roundStartRepeat;
     if (rs.startRound != null && ctx.currentRound < rs.startRound) continue;
     if (rs.endRound != null && ctx.currentRound > rs.endRound) continue;
+    // 只在列出的回合执行（雅虑适时「第 3、5、7 回合开始时」）
+    if (rs.rounds && !rs.rounds.includes(ctx.currentRound)) continue;
     if (rs.oddRounds && ctx.currentRound % 2 === 0) continue;
     const caster = castUnit(ctx, locked.casterId);
     if (!caster) continue;
@@ -7957,6 +7959,8 @@ export function applyDamage(
     if (sharers.length > 0) {
       ctx.resolvingDamageShare = true;
       try {
+        // 各分摊者按**原始伤害**计算（雅虑适时：其余每名同心武将各分摊 15%），逐个扣减受击者的待扣量
+        const baseIncoming = incoming;
         for (const sharer of sharers) {
           if (incoming <= 0) break;
           const st = sharer.statuses.find(
@@ -7964,7 +7968,7 @@ export function applyDamage(
               s.type === 'damage_share' && (s.damageKind == null || s.damageKind === (damageType ?? 'physical'))
           );
           if (!st || (st.charges != null && st.charges <= 0)) continue;
-          const transfer = Math.min(sharer.troops, Math.round(incoming * st.rate));
+          const transfer = Math.min(sharer.troops, Math.round(baseIncoming * st.rate));
           if (transfer <= 0) continue;
           if (st.charges != null) {
             st.charges -= 1;

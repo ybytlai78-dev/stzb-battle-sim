@@ -2787,7 +2787,7 @@
     "growthDefense": 1.7,
     "growthStrategy": 1.71,
     "growthSpeed": 0.57,
-    "mainSkillId": "",
+    "mainSkillId": "yalv_shishi",
     "mainSkillName": "雅虑适时",
     "skillDesc": "第3、5、7回合开始时，令我军全体受到所有伤害降低24.0%（受谋略属性影响）并进入同心状态，同心状态下任一武将受到伤害时，其余处于同心状态下武将为其分摊15%受到的伤害，持续1回合"
   },

@@ -190,6 +190,7 @@ const SKILL_ID_BY_NAME = {
   敛微穷极: 'lianwei_qiongji',
   衔命建功: 'xianming_jiangong',
   言出必克: 'yanchu_bike',
+  雅虑适时: 'yalv_shishi',
 };
 
 /** 现有 8 个武将固定拼音 id（测试直接引用 HERO_REGISTRY.<id>） */
