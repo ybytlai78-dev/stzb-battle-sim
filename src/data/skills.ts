@@ -8713,4 +8713,61 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       ],
     },
   },
+
+  /**
+   * 佐命晋武（裴秀·晋步 h801 主战法）：指挥 A（一类指挥 prep），距离 5，我军全体，发动率 --。
+   * 满级「战斗开始后，我军全体士气提升时，造成的所有伤害提升 4.8%（受谋略属性影响），持续至战斗结束，
+   *   此效果最多叠加 8 次；每回合结束时，为我军兵力最低单体恢复 2 次兵力（恢复率 100.0%，受谋略属性影响），
+   *   每次目标独立判定」；1 级：伤害提升 2.4% / 恢复率 50.0%（叠加上限同为 8 次）。
+   * 官方：scripts/skill_extra.json id 200278（指挥 / 距离 5 / 我军全体 / 兵种弓步骑；effect 攻击伤害提高;
+   *   策略攻击伤害提高;急救）。来源 https://stzb.163.com/m/skilllist/200278.html
+   *
+   * 口径（策略 A，2026-09-20；推定处已标注）：
+   *   ① 「我军全体士气提升时」→ 新引擎件 `CommandSkill.onMoraleRaise`：**本侧任意单位**被施加正士气提升
+   *      （morale_boost amount > 0）后，由存活携带者对我军全体存活单位结算 output；每次触发叠 1 层、
+   *      上限 8 层（`damage_boost` stacks 1 + maxStacks 8；官方明写「最多叠加 8 次」→ 显式叠层；
+   *      触发粒度取「每次士气提升事件」而非每点士气，**推定**）；
+   *   ② 「造成的所有伤害提升 4.8%（受谋略）」= `damage_boost` direction:'caused'（不限伤害类型）+
+   *      strategyScaled（成长率未确认 → 基值 4.8%）；
+   *   ③ 「每回合结束时」→ 新引擎件 `CommandSkill.roundEndOutput`（回合结束、状态 tick 之前对锁定目标结算，
+   *      见 combat.ts `triggerRoundEndCommands`）；
+   *   ④ 「为我军兵力最低单体恢复 2 次兵力…每次目标独立判定」= 两条 `heal` 段，各带
+   *      `targetPick:'lowest_troops_ally'`（每次独立重选当前兵力最低友军，知人待士先例）；
+   *      「2 次」= 两段各恢复一次（非同一目标连发两次），**推定**；
+   *   ⑤ 两处「受谋略属性影响」成长系数官方未给 → 基值不缩放 → 登记 OFFLINE_MAIN_SKILLS（裴秀下架）。
+   */
+  zuoming_jinwu: {
+    id: 'zuoming_jinwu',
+    name: '佐命晋武',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['damage_boost', 'heal'],
+    // ① 我军全体士气提升时：我军全体造成伤害 +4.8%（受谋略未确认 → 基值），最多叠 8 层
+    onMoraleRaise: {
+      output: [
+        {
+          kind: 'inflict_status',
+          status: {
+            type: 'damage_boost',
+            rate: 0.048,
+            duration: 999,
+            direction: 'caused',
+            strategyScaled: true,
+            stacks: 1,
+            maxStacks: 8,
+          },
+        },
+      ],
+    },
+    // ③④ 每回合结束：为我军兵力最低单体恢复 2 次兵力（每次独立选靶；恢复率 100% 受谋略未确认 → 基值）
+    roundEndOutput: [
+      { kind: 'heal', rate: 100, strategyScaled: true, growthRate: 0, targetPick: 'lowest_troops_ally' },
+      { kind: 'heal', rate: 100, strategyScaled: true, growthRate: 0, targetPick: 'lowest_troops_ally' },
+    ],
+    output: [],
+  },
 };

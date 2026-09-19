@@ -1075,6 +1075,18 @@ export interface CommandSkill extends BaseSkill {
    */
   avoidOnConsume?: { chance: number; output: SkillOutput[] };
   /**
+   * 「我军全体士气提升时」触发（佐命晋武，裴秀）：**本侧任意单位**被施加正士气提升（morale_boost
+   * amount > 0）后，由存活携带者对**我军全体存活单位**结算 `output`。
+   * 每次触发叠 1 层（同源叠层与上限由状态自身 `maxStacks` 控制）；`ctx.resolvingMoraleRaise` 防递归。
+   */
+  onMoraleRaise?: { output: SkillOutput[] };
+  /**
+   * 一类指挥·每回合结束结算（佐命晋武「每回合结束时，为我军兵力最低单体恢复 2 次兵力，每次目标独立判定」）：
+   * 回合结束（攻击距离递减 / 状态 tick 之前）对**锁定目标**执行 output；段内可带
+   * `targetPick:'lowest_troops_ally'` 等覆盖（每次独立重选）。
+   */
+  roundEndOutput?: SkillOutput[];
+  /**
    * 只在列出的回合**自身行动时**判定（抚民励德「第 2、4、6 回合自身行动时」）：
    * `currentRound ∉ actRounds` 时整次跳过；缺省不限（每回合）。
    */

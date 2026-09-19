@@ -7,7 +7,7 @@
  */
 import type { BattleConfig, BattleEvent, BattleReport, General, Skill, UnitState } from './types';
 import { Rng } from './rng';
-import { actUnit, triggerCommandSkills, triggerPassiveSkills, triggerDelayedOutputs, triggerRangeDecayPassives, tickStatuses, tickRoundStartStatuses, effectiveStat, type CombatContext } from './action';
+import { actUnit, triggerCommandSkills, triggerPassiveSkills, triggerDelayedOutputs, triggerRangeDecayPassives, triggerRoundEndCommands, tickStatuses, tickRoundStartStatuses, effectiveStat, type CombatContext } from './action';
 import { computeStats } from './stats';
 import { SKILL_REGISTRY } from '../data/skills';
 import { validateMutualExclusion } from '../data/hero-utils';
@@ -121,8 +121,10 @@ export function runBattle(config: BattleConfig): BattleReport {
       actUnit(ctx, unit);
     }
 
-    // 回合结束：被动攻击距离递减（雪奋短兵「每回合结束时使自身攻击距离 −1」）→ 状态结算
+    // 回合结束：被动攻击距离递减（雪奋短兵「每回合结束时使自身攻击距离 −1」）→ 一类指挥回合末结算
+    // （佐命晋武「每回合结束时为我军兵力最低单体恢复 2 次」）→ 状态结算
     triggerRangeDecayPassives(ctx);
+    triggerRoundEndCommands(ctx);
     tickStatuses(ctx, [...myTeam, ...enemyTeam]);
 
     events.push({

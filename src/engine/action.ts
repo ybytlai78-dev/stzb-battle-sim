@@ -32,8 +32,55 @@ import type { Rng } from './rng';
 import { calcDamage, applyTroopCap, scaledValue, roundRate, sumRates, buffMult, calcHealAmount, moraleRate, applyIgnoreDef, troopCounterReduce } from './formulas';
 import { nearestEnemy, skillTargets, distanceBetween, adjacentUnits, sameSideDistance, attackRangeOf, POSITION_INDEX, unitsInSkillRange } from './target';
 
-/** 是否「不受敌方指挥战法影响」（藤甲突击）：携带者装有任何 commandImmune 被动即为真。 */
-function hasCommandImmune(ctx: CombatContext, unit: UnitState): boolean {
+/**
+ * 「我军全体士气提升时」触发（佐命晋武，裴秀）：本侧任意单位被施加**正**士气提升后，
+ * 由存活携带者对**我军全体存活单位**结算 `output`（每触发一次叠 1 层，上限由状态自身控制）。
+ * `ctx.resolvingMoraleRaise` 防递归（监听段自身再挂士气时不回灌）。
+ */
+function triggerOnMoraleRaise(ctx: CombatContext, raised: UnitState): void {
+  if (ctx.resolvingMoraleRaise) return;
+  ctx.resolvingMoraleRaise = true;
+  try {
+    const team = raised.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+    for (const caster of team) {
+      if (!caster.alive) continue;
+      for (const id of caster.general.commandSkillIds) {
+        const skill = resolveSkill(ctx, id);
+        if (skill?.type !== 'command' || !skill.onMoraleRaise) continue;
+        ctx.events.push({
+          type: 'skill_cast',
+          unitId: caster.general.id,
+          skillId: skill.id,
+          skillName: skill.name,
+        });
+        const allies = team.filter((u) => u.alive);
+        executeSkillOutputs(ctx, caster, skill, allies, skill.onMoraleRaise.output);
+      }
+    }
+  } finally {
+    ctx.resolvingMoraleRaise = false;
+  }
+}
+
+/**
+ * 一类指挥·每回合结束结算（佐命晋武「每回合结束时，为我军兵力最低单体恢复 2 次兵力」）：
+ * 在回合结束的状态 tick 之前，对**战法锁定目标**执行 `roundEndOutput`（施法者阵亡时按
+ * `retainAfterDeath` 判定，同一类指挥口径）。
+ */
+export function triggerRoundEndCommands(ctx: CombatContext): void {
+  for (const l of ctx.lockedCommands) {
+    const skill = l.skill;
+    if (skill.type !== 'command' || !skill.roundEndOutput) continue;
+    const caster = ctx.myTeam.concat(ctx.enemyTeam).find((u) => u.general.id === l.casterId);
+    if (!caster) continue;
+    if (!caster.alive && !skill.retainAfterDeath) continue;
+    const aliveTargets = l.targets.filter((t) => t.alive);
+    if (aliveTargets.length === 0) continue;
+    executeSkillOutputs(ctx, caster, skill, aliveTargets, skill.roundEndOutput);
+  }
+}
+
+/** 是否「不受敌方指挥战法影响」（藤甲突击）：携带者装有任何 commandImmune 被动即为真。 */function hasCommandImmune(ctx: CombatContext, unit: UnitState): boolean {
   return unit.general.passiveSkillIds.some((id) => {
     const s = resolveSkill(ctx, id);
     return s?.type === 'passive' && s.commandImmune === true;
@@ -371,6 +418,8 @@ export interface CombatContext {
   resolvingDealStrike?: boolean;
   /** 被动 afterActive「每回合首次」去重（藤甲突击）：key `${回合}:${skillId}:${unitId}` */
   afterActiveRoundKeys?: Set<string>;
+  /** 「我军全体士气提升时」重入保护（佐命晋武）：监听段自身再挂士气时不回灌 */
+  resolvingMoraleRaise?: boolean;
 }
 
 /** 持续型急救战法级计数器（皇裔流离/金匮要略）：一个战法一个实例，全队共享。
@@ -2321,7 +2370,7 @@ export function getStatus<T extends StatusType>(
  *  - 同类型不同战法 → 冲突：控制/概率规避先施加者生效、增益数值替换取较高（战必 vs 措手不及 / 避其锋芒 vs 共饮避世）
  *  - 不同类型 → 各自计数共存（战必指挥怯战 vs 玄武洰流主动怯战）
  */
-export function inflictStatus(
+function inflictStatusCore(
   ctx: CombatContext,
   target: UnitState,
   create: CreateStatus,
@@ -2738,6 +2787,25 @@ export function inflictStatus(
 
   // 不同类型：各自计数共存（新增独立实例）
   pushStatus(ctx, target, create, sourceSkillType, sourceSkillId, casterId);
+}
+
+/**
+ * 施加状态入口（包装 `inflictStatusCore`）：状态落库后再跑「我军全体士气提升时」监听
+ * （佐命晋武）——无论新建实例、同源刷新还是显式叠层，只要本次是**正士气提升**都算一次触发。
+ */
+export function inflictStatus(
+  ctx: CombatContext,
+  target: UnitState,
+  create: CreateStatus,
+  sourceSkillType: SkillType,
+  sourceSkillId: string,
+  casterId?: string
+): void {
+  inflictStatusCore(ctx, target, create, sourceSkillType, sourceSkillId, casterId);
+  const amount = 'amount' in create ? (create as { amount?: number }).amount : undefined;
+  if (create.type === 'morale_boost' && amount != null && amount > 0) {
+    triggerOnMoraleRaise(ctx, target);
+  }
 }
 
 /**

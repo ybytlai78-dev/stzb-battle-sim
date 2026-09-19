@@ -2137,7 +2137,7 @@
     "growthDefense": 1.45,
     "growthStrategy": 1.88,
     "growthSpeed": 0.78,
-    "mainSkillId": "",
+    "mainSkillId": "zuoming_jinwu",
     "mainSkillName": "佐命晋武",
     "skillDesc": "战斗开始后，我军全体士气提升时，造成的所有伤害提升4.8%（受谋略属性影响），持续至战斗结束，此效果最多叠加8次；每回合结束时，为我军兵力最低单体恢复2次兵力（恢复率100.0%，受谋略属性影响），每次目标独立判定"
   },

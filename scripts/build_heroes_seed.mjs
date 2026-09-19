@@ -185,6 +185,7 @@ const SKILL_ID_BY_NAME = {
   统军畏慎: 'tongjun_weishen',
   登锋陷阵: 'dengfeng_xianzhen',
   藤甲突击: 'tengjia_tuji',
+  佐命晋武: 'zuoming_jinwu',
 };
 
 /** 现有 8 个武将固定拼音 id（测试直接引用 HERO_REGISTRY.<id>） */
