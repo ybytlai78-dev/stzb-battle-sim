@@ -470,11 +470,12 @@ npx tsc --noEmit                    # 类型检查（strict）
 
 ### 下一次接续（2026-09-20 批次 · 策略 A 推进 §1.4）
 
-- **工作树/分支**：`.dsh/worktrees/c00d4f51acc5/战斗系统`（本会话 DSH 工作区，**detached HEAD**，起点 `main` `19fb1a7`）；
-  武将 33~44 逐个提交在**未命名分支的 detached HEAD** 上（**未 push、未合并**；落地方式待用户定，
+- **工作树/分支**：`.dsh/worktrees/79a0e3b64a07/战斗系统`（上一会话为 `.dsh/worktrees/c00d4f51acc5/战斗系统`，工作区换新但
+  起点同 `main` `19fb1a7`）；武将 33~61 全部逐个提交在**未命名分支的 detached HEAD** 上（**未 push、未合并**；落地方式待用户定，
   合并前先看 `docs/工作树落地流程.md`，且合并回主仓库后必须重灌主库——见下）。
   提交一律**显式列路径**（`git add src/... tests/... web/data/...`），不要 `git add -A` / `git add web`。
-- **已验证基线**：`npx tsc --noEmit` clean；`npm test` **156 files / 1598 passed**（武将 44 后）；golden 字节一致。
+- **已验证基线**：`npx tsc --noEmit` clean；`npm test` **173 files / 1689 passed**（武将 61 后）；golden 字节一致；
+  已实现主战法 **149**、上架池 **88**、《下架武将清单》重生成口径 **待实现 12 / 卡成长率下架 61 / 上架 88**。
 - **策略 A（用户已确认，勿再逐条询问）**：① 官方现页 > 本地旧数据；② 两版拼接描述取**前半**（仓库 dedupe 口径）；
   ③ `targetShow` 与描述冲突以**描述**为准；④ 官方未给数值的段**不实现**（整将缺关键数值则跳过并说明）；
   ⑤ SP 卡 `iconId` 沿用 `portrait_map.json`。另：「两者 / 每个效果独立判断」= **各段各自 roll**
@@ -485,17 +486,20 @@ npx tsc --noEmit                    # 类型检查（strict）
   **社区源（九游/17173/清风/光环等）只用于消歧与方向验证，数值一律不采信**；仍无官方数值的按策略 A ④ 跳过并登记。
   每将完成即 1 提交（`main_skills_b74` 起），收尾时重生成 `docs/下架武将清单.md` 并更新本交接块。
 - **§1.4「需先调研」45 位进度**（总表 `docs/research/README.md` + `heroes-research-merged.json`）：
-  - 已完成 **16 位**：h653 将门有将 / h495 二夫之勇 / h788 雪奋短兵 / h815 蛮王御众（武将 29~32，已在 main）
-    + **h803 知人待士（33）** / **h102011 胡笳离愁（34）** / **h631 断首何怒（35）** / **h805 勇挚刚毅（36）**
-    + **h802 奇门遁甲（37，上架）** / h102002 定军绝战（38，上架）/ h534 破阵强袭（39）/
-    **h810 万军取首（40，上架）** / h593 兵行巧变（41）/ **h648 竭忠尽智（42）** /
-    **sp_zhaoyun 银龙孤胆（43，上架；兵种骑→步修正）** / **h496 明其虚实（44，上架）**；
-    剩余 **29 位**（口径见重生成的 `docs/下架武将清单.md`）。
-  - 下一步优先（缺口 0、机制可补）：h800 守静却敌（`heal_boost` 已就位）/ h675 抚民励德 / h691 持刀从武 /
-    h787 审时定计 / h791 疲兵沮意 / h814 敛微穷极 / h648 竭忠尽智 / h593 兵行巧变 / h645 统军畏慎 /
-    h519 藤甲突击 / h534 破阵强袭 / h810 万军取首 / h102002 定军绝战 / sp_zhaoyun 银龙孤胆 …
-  - 需「官方无数值」跳过或后置：h2 乱政 / h33 遗志 / h684 鏖兵卫主 / h812 锦车持节 / h480 酒池肉林 /
-    h443 迟智难酬 / h795 天子诏令（两版取前半）/ SP卢植 中郎尽瘁 / SP太史慈 方阵掩杀；分摊类（h652 / h792）待机制。
+  - 已完成 **33 位**：h653 将门有将 / h495 二夫之勇 / h788 雪奋短兵 / h815 蛮王御众（武将 29~32，已在 main）
+    + h803 知人待士（33）/ h102011 胡笳离愁（34）/ h631 断首何怒（35）/ h805 勇挚刚毅（36）/
+    h802 奇门遁甲（37，上架）/ h102002 定军绝战（38，上架）/ h534 破阵强袭（39）/ h810 万军取首（40，上架）/
+    h593 兵行巧变（41）/ h648 竭忠尽智（42）/ sp_zhaoyun 银龙孤胆（43，上架）/ h496 明其虚实（44，上架）
+    + **本会话 17 位（45~61）**：h800 守静却敌 / h691 持刀从武（上架）/ h604 计谕废立 / h497 中宫追玺（上架）/
+    h675 抚民励德 / h791 疲兵沮意 / h647 将出关西（上架）/ h630 京观垒冢（上架）/ h645 统军畏慎 /
+    h656 登锋陷阵（上架）/ h519 藤甲突击（上架）/ h801 佐命晋武 / h787 审时定计 / h814 敛微穷极 /
+    h784 衔命建功 / h652 言出必克 / h792 雅虑适时；
+  - **剩余 12 位**（口径见重生成的 `docs/下架武将清单.md`，三类卡点）：
+    ① **机制可补、尚未做**：h795 天子诏令（需「每回合随机点名 + 我军本回合首击强制选靶 + 回合内受击 3 次追加」）；
+    ② **需用户拍板**：h808 自擅江表（官方「对友军群体发动一次攻击」疑为笔误，需确认）、
+       h683 五兵之烈（五兵分支互斥需宝物系统）、h692 尽言直谏（作用对象是「主动战法槽」，引擎无槽位机制）；
+    ③ **官方无数值（策略 A ④：不实现，待用户给口径）**：h2 乱政 / h33 遗志 / h684 鏖兵卫主 / h812 锦车持节 /
+       h480 酒池肉林 / h443 迟智难酬 / SP卢植 中郎尽瘁 / SP太史慈 方阵掩杀。
 - **本批（33~37）新增引擎件**：
   - `heal.targetPick:'lowest_troops_ally'` + `heal.attachStatus`（恢复与「并使其…」**同一目标**）——`15a54f1`；
   - `DamageTargetPick 'lowest_troops_in_range'`（战法距离内**当前兵力最低**敌军）——`15a54f1`；
@@ -512,6 +516,30 @@ npx tsc --noEmit                    # 类型检查（strict）
 - **数据修正（武将 43）**：`sp_zhaoyun` 兵种按策略 A ①（官方现页 > 本地旧数据）由 **骑 → 步**：
   源头 `scripts/build_heroes_seed.mjs` + 生成物 `scripts/seed_heroes.sql` / `web/data/heroes.json`（官方快照本就为步）；
   仍缺 `sp_zhaoyun_s.jpg` 小头像（官方 card_small 404，登记待补）。
+- **本会话（45~61）新增引擎件**（均为最小侵入、缺省路径零回归；每条附示例战法）：
+  - `strategy_damage.attacker:'recipient'`（锁定友军每人各自出手一次，守静却敌）——`a0974e1`；
+  - `damage_boost.skillIds`（只对指定战法造成的伤害生效；`DamageHitContext.skillId` 过滤，DoT 路径也带）
+    + `OnHealConfig.applyTo:'victim'`（受恢复触发只落在被恢复者身上）——`a0974e1`；
+  - 「上次行动阶段造成伤害的目标」记忆（`ctx.lastActDamageTargets`：actUnit 记账 / endUnitAct 落账）
+    + `PassiveSkill.lastActStrike`（记忆池独立重复攻击钩子，持刀从武）——`4d8c15c`；
+  - `decayOnDeal`（造成伤害按份衰减：属性四维 + 减伤，抚民励德）+ `CommandSkill.actRounds`（指定回合的行动窗口）——`0a74f3f`；
+  - 新状态 `avoid_charge`（避锐：层数型受击前消耗减伤）+ `CommandSkill.avoidOnConsume`（消耗后 50% 点燃 + 递增）——`3fe5a67`；
+  - `physical_damage.ignoresEvasionFirstRepeat`（repeats 首次攻击无视规避，将出关西）——`662ee36`；
+  - `PassiveSkill.dealExtraStrike`（造成伤害后对同一目标追加打击 + `ctx.resolvingDealStrike` 防递归，京观垒冢）——`fd8d18f`；
+  - `inflict_status.roundRampingChance`（段级回合概率递增/递减，clamp 0~1）+ `byHigherStatStatus`（按攻/谋孰高二选一）
+    + `ignore_def.damageType:'strategy'`（策略伤害用的目标谋略折减 `strategyTargetStrategy`，统军畏慎）——`05a9c03`；
+  - `PassiveSkill.commandImmune`（不受敌方指挥战法影响：状态 + 三类指挥伤害段拦截）+ `afterActive.oncePerRound`
+    （每回合首次）——`3eefba9`；
+  - `CommandSkill.onMoraleRaise`（我军士气提升时监听）+ `roundEndOutput`（一类指挥回合末结算，combat.ts 接入）
+    + `inflictStatusCore` 包装层（士气监听不改既有调用点）——`e485892`；
+  - `CommandSkill.specialDebuffBefore`（敌方被施加特殊负面前判定）+ `debuffResist`（我军被施加挑衅/围困/控制时整段抵御，
+    新事件 `status_resisted`）——`ef5c77f`；
+  - `damage_boost.decayRoundParts`（每回合按份衰减）+ 新状态 `strategy_flux`（策略伤害率 × 收敛区间随机，敛微穷极）——`3bdafab`；
+  - `CommandSkill.onDotReceived`（敌军每回合首次吃 DoT → 判定 + 策略攻击）+ `extraTickOnDotApply`（陷入 DoT 立即额外引爆一次）——`3283c9b`；
+  - 新状态 `damage_share`（伤害分摊：同侧友军受击时携带者按 rate 承担；`share_damage` 事件 + `resolvingDamageShare` 防递归；
+    `damageKind`/`charges` 过滤，言出必克 / 雅虑适时共用）+ `triggerOnActSegmentsForPrepCommands`
+    （一类指挥也支持「行动时分段」）——`d0937b0`；
+  - `roundStartRepeat.rounds?: number[]`（指定回合窗口，雅虑适时）——`6fc79a4`。
 - **坑（本批踩过）**：`damage_boost.maxStacks` 必须**同时给 `stacks: 1`**（层计数初值），只给 `stack: true` 时
   计数不递增、封顶失效（破阵强袭第 7 次仍 +5%）——文德椒房同款写法。
 - **每将流程**（沿用）：`skills.ts` 定义 → `build_heroes_seed.mjs` 挂槽 → 数据链三条命令  （`build_heroes_seed` / `gen_skill_data` / `sync_hero_mainskill`，性别表变更再加 `sync_hero_meta`）
