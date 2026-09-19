@@ -74,6 +74,19 @@ export function attackRangeOf(unit: UnitState): number {
   return unit.general.attackRange + bonus;
 }
 
+/**
+ * 战法有效距离（含 `skill_range_buff` 状态加成）：战法面板 range + Σ skill_range_buff.amount。
+ * 合纵连横「令我军全体武将战法距离 +1」用此口径——只影响战法选目标的距离上限，
+ * 不影响普攻可达范围（`attackRangeOf`，对应 `range_buff`）。
+ */
+export function skillRangeOf(unit: UnitState, base: number): number {
+  let bonus = 0;
+  for (const s of unit.statuses) {
+    if (s.type === 'skill_range_buff') bonus += s.amount;
+  }
+  return base + bonus;
+}
+
 /** 攻击范围内随机一个存活敌军（率土普攻目标选取：距离内均匀随机，非最近优先）。距离实时计算 */
 export function nearestEnemy(ctx: CombatContext, attacker: UnitState, enemies: UnitState[]): UnitState | null {
   const range = attackRangeOf(attacker);
@@ -96,6 +109,9 @@ function skillDistance(ctx: CombatContext, caster: UnitState, target: UnitState)
 /**
  * 战法目标选择：按战法有效距离（实时）+ 目标模式。
  * groupCount：仅 group 模式有效——目标数（缺省 2）；`[2,3]` = 50% 概率 2 目标 / 50% 概率 3 目标（辕门射戟 / 动如雷震）。
+ * 单体模式：`random_single` = 距离内均匀随机（率土「敌军/友军单体」默认口径）、
+ *   `nearest` = 距离内**最近**（近攻）、`farthest` = 距离内**最远**（远射 / 连环段1）；
+ *   `single` = 旧「最近优先」模式，已退役（等价 nearest，登记表不得再出现）。
  * 群体在有效距离内存活单位中均匀随机抽取（率土「三选二」），不是最近优先。
  */
 export function skillTargets(
@@ -103,7 +119,7 @@ export function skillTargets(
   caster: UnitState,
   enemies: UnitState[],
   range: number,
-  mode: 'single' | 'random_single' | 'group' | 'all',
+  mode: 'single' | 'nearest' | 'random_single' | 'farthest' | 'group' | 'all',
   groupCount: number | [number, number] = 2
 ): UnitState[] {
   const alive = enemies.filter((e) => e.alive);
@@ -111,8 +127,10 @@ export function skillTargets(
 
   if (mode === 'all') return alive;
 
+  // 战法有效距离 = 面板 range + Σ skill_range_buff（合纵连横「我军全体战法距离+1」）
+  const effRange = skillRangeOf(caster, range);
   const inRange = alive
-    .filter((e) => skillDistance(ctx, caster, e) <= range)
+    .filter((e) => skillDistance(ctx, caster, e) <= effRange)
     .sort((a, b) => skillDistance(ctx, caster, a) - skillDistance(ctx, caster, b) || sortByPosition(a, b));
 
   if (inRange.length === 0) return [];
@@ -121,7 +139,10 @@ export function skillTargets(
   if (mode === 'random_single') {
     return [inRange[ctx.rng.int(inRange.length)]];
   }
-  if (mode === 'single') return [inRange[0]];
+  // 最近单体（近攻「对战法有效距离内最近的敌军」）：显式 nearest；single 为退役旧名，行为等价
+  if (mode === 'nearest' || mode === 'single') return [inRange[0]];
+  // 最远单体（远射「对战法有效距离内最远的敌军」/ 连环段1）：inRange 已按距离升序，取末位
+  if (mode === 'farthest') return [inRange[inRange.length - 1]];
 
   // group：有效距离内不放回均匀抽取 want 个（大赏三军「我军群体 2 目标」= 三选二，含自身但不强制选自己）
   const want = Array.isArray(groupCount) ? (ctx.rng.chance(0.5) ? groupCount[0] : groupCount[1]) : groupCount;
@@ -141,6 +162,20 @@ function pickRandom(ctx: CombatContext, items: UnitState[], n: number): UnitStat
     group.push(pool.splice(idx, 1)[0]);
   }
   return group;
+}
+
+/**
+ * 战法有效距离内的存活单位（伤害段 `targetPick: '*_in_range'` 用；距离口径同 `skillTargets`）。
+ * 例：兼弱攻昧「对敌军有效距离内防御/谋略最低的武将」——先按本函数筛，再取最低者。
+ */
+export function unitsInSkillRange(
+  ctx: CombatContext,
+  caster: UnitState,
+  units: UnitState[],
+  range: number
+): UnitState[] {
+  const effRange = skillRangeOf(caster, range);
+  return units.filter((u) => u.alive && skillDistance(ctx, caster, u) <= effRange);
 }
 
 /** 分兵相邻目标：同队中与目标站位相邻的存活单位（前锋↔中军，中军↔前锋+大营，大营↔中军） */

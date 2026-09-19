@@ -1,5 +1,9 @@
 /**
- * 机制匹配分类 v3：判定 199 个通用战法可录入（implemented）或跳过（skipped）
+ * 机制匹配分类 v3：判定 `_universal_skills.json` 的 199 个通用战法可录入（implemented）或跳过（skipped）
+ * ⚠️ 本脚本会**整体覆盖** `scripts/_classified.json`（`skills.map` 全量重写）。
+ *    当前 `_classified.json` 已有 200 条（199 + 手工后补「恃强淬锋」）并含 p1~p19 批次的人工修订
+ *    （`implemented` / `note` / `missingMechanics`），**非必要不要重跑**——重跑会把它们回退成旧 skipped 口径。
+ *    要改清单请手工编辑 `_classified.json`（`docs/待补充机制清点.md` §五 同口径）。
  * 规则：只实现现有机制能做的；需要新增机制 → skipped + 缺失机制说明。
  * 可近似（用户先例「取基值」）：受属性影响数量 → 取基值；攻击/策略伤害增减全局近似。
  * 新增判断（v3）：混合目标池（伤害敌+治疗友）、持续恢复状态、主动先手、群体先手、

@@ -43,6 +43,7 @@ export function recordToGeneral(rec: HeroRecord): General {
     attackRange: rec.attackRange,
     maxTroops: 10000,
     mainSkillName: rec.mainSkillName,
+    mainSkillId: rec.mainSkillId,
     skillDesc: rec.skillDesc,
     activeSkillIds: [],
     passiveSkillIds: [],

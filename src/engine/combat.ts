@@ -34,6 +34,7 @@ export function runBattle(config: BattleConfig): BattleReport {
     skills,
     lockedCommands: [],
     stackBuffs: [],
+    basicHitProcs: [],
     currentRound: 0,
     actLayerCounters: new Map(),
     // 伤兵死亡机制：默认启用（第 1 回合 5%，每回合 +14%，封顶 100%）

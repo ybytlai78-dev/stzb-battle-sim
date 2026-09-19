@@ -276,6 +276,8 @@ function statusName(type: string): string {
     case 'cover': return '援護';
     case 'rest': return '休整';
     case 'ignore_def': return '无视防御';
+    case 'skill_range_buff': return '战法距离';
+    case 'range_buff': return '攻击距离';
     default: return type;
   }
 }

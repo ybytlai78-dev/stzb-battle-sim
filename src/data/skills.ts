@@ -4470,6 +4470,1597 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     },
   },
 
+  // ─── 拆解通用 B+ 第四阶段：距离 +1 与特殊目标选择（10 个）───
+
+  /**
+   * 远攻秘策（B 一类指挥·距离 3·目标自己）：
+   * ① 自身攻击 +20、谋略 +20、**攻击距离 +1**（整场常驻）；
+   * ② 友军全体在战斗开始后前 3 回合也获得同样增益（**不含自身**——描述「也获得」，
+   *    自身已由 ① 常驻；用户 2026-09-19 确认友军段 excludeSelf）。
+   * 引擎配套：**无需新机制**（`range_buff` = 攻击距离 buff，`attackRangeOf` 已读；
+   *   attack_buff / strategy_buff 点数额已有）。
+   * 数值为官方满级点数（skill_extra 200210：攻击 20 / 谋略 20 / 距离 +1），无「受属性影响」→ 不缩放。
+   */
+  yuangong_mice: {
+    id: 'yuangong_mice',
+    name: '远攻秘策',
+    type: 'command',
+    phase: 'prep',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['attack_buff', 'strategy_buff', 'range_buff'],
+    output: [
+      { kind: 'inflict_status', target: 'self', status: { type: 'attack_buff', amount: 20, duration: 999 } },
+      { kind: 'inflict_status', target: 'self', status: { type: 'strategy_buff', amount: 20, duration: 999 } },
+      { kind: 'inflict_status', target: 'self', status: { type: 'range_buff', amount: 1, duration: 999 } },
+      {
+        kind: 'inflict_status',
+        targetSide: 'ally',
+        targetMode: 'all',
+        excludeSelf: true,
+        applyAll: true,
+        status: [
+          { type: 'attack_buff', amount: 20, duration: 3 },
+          { type: 'strategy_buff', amount: 20, duration: 3 },
+          { type: 'range_buff', amount: 1, duration: 3 },
+        ],
+      },
+    ],
+  },
+  /**
+   * 远攻之策（C 一类指挥·距离 2·我军群体 2 目标）：
+   * 前 3 回合我军群体攻击 +20；每回合有几率**攻击距离 +1**（满级 100% → 必定，1 级 50%）持续本回合。
+   * 实现：攻击 +20 准备阶段 duration 3；距离 +1 走 `roundStartRepeat`（第 1~3 回合回合开始必定施加
+   *   `range_buff` duration 1——回合末 tick 掉，下回合重新刷，不叠层）。
+   * 引擎配套：**无需新机制**（roundStartRepeat + range_buff 已有，同其疾如风/鱼鳞口径）。
+   */
+  yuangong_zhiche: {
+    id: 'yuangong_zhiche',
+    name: '远攻之策',
+    type: 'command',
+    phase: 'prep',
+    range: 2,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'ally',
+    tags: ['attack_buff', 'range_buff'],
+    output: [
+      { kind: 'inflict_status', status: { type: 'attack_buff', amount: 20, duration: 3 } },
+    ],
+    roundStartRepeat: {
+      startRound: 1,
+      endRound: 3,
+      output: [
+        { kind: 'inflict_status', status: { type: 'range_buff', amount: 1, duration: 1 } },
+      ],
+    },
+  },
+  /**
+   * 远攻奇略（C 被动·距离 1·目标自己）：
+   * 自身攻击距离 +1（整场常驻）+ 进行策略攻击时伤害 +15%（固定值，无「受属性影响」→ 不缩放）。
+   * 引擎配套：**无需新机制**（battle_start 被动 output + range_buff + damage_boost caused/strategy）。
+   */
+  yuangong_qilue: {
+    id: 'yuangong_qilue',
+    name: '远攻奇略',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['range_buff', 'damage_boost'],
+    output: [
+      { kind: 'inflict_status', target: 'self', status: { type: 'range_buff', amount: 1, duration: 999 } },
+      {
+        kind: 'inflict_status',
+        target: 'self',
+        status: { type: 'damage_boost', rate: 0.15, duration: 999, direction: 'caused', damageType: 'strategy' },
+      },
+    ],
+  },
+  /**
+   * 远攻强化（C 被动·距离 1·目标自己）：
+   * 自身攻击距离 +1（整场常驻）+ 攻击属性 +15 点。
+   * 引擎配套：**无需新机制**（range_buff + attack_buff）。
+   */
+  yuangong_qianghua: {
+    id: 'yuangong_qianghua',
+    name: '远攻强化',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['range_buff', 'attack_buff'],
+    output: [
+      { kind: 'inflict_status', target: 'self', status: { type: 'range_buff', amount: 1, duration: 999 } },
+      { kind: 'inflict_status', target: 'self', status: { type: 'attack_buff', amount: 15, duration: 999 } },
+    ],
+  },
+  /**
+   * 近攻（C 主动·距离 3·30%·敌军单体）：对战法有效距离内**最近**的敌军攻击 200%（固定率，不缩放）。
+   * 引擎配套：**无需新机制**——`skillTargets` 新增显式 `nearest` 模式 = 有效距离内最近
+   *   （inRange 按距离升序取 [0]）。注意：旧 `targetMode:'single'` 是「最近优先」退役名，
+   *   `tests/listing.test.ts` 明文禁止登记表再出现；「最近」必须显式写 `nearest`。
+   */
+  jingong: {
+    id: 'jingong',
+    name: '近攻',
+    type: 'active',
+    prepare: false,
+    range: 3,
+    triggerRate: 0.3,
+    targetMode: 'nearest',
+    targetSide: 'enemy',
+    tags: ['damage'],
+    output: [{ kind: 'physical_damage', rate: 200 }],
+  },
+  /**
+   * 远射（C 准备主动·距离 3·35%·敌军单体）：对战法有效距离内**最远**的敌军攻击 255%。
+   * 引擎配套：**新增 `farthest` 目标模式**（target.ts：inRange 升序取末位；远射 / 连环段1 共用）。
+   */
+  yuanshe: {
+    id: 'yuanshe',
+    name: '远射',
+    type: 'active',
+    prepare: true,
+    range: 3,
+    triggerRate: 0.35,
+    targetMode: 'farthest',
+    targetSide: 'enemy',
+    tags: ['damage'],
+    output: [{ kind: 'physical_damage', rate: 255 }],
+  },
+  /**
+   * 连环（B 准备主动·距离 4·45%·敌军单体）：
+   * 段1：对战法有效距离内**最远**敌军单体策略攻击 132%（受谋略）；
+   * 段2：**再度**对有效距离内随机敌军单体策略攻击 198%（受谋略）——独立重选、可与段1 同目标（用户确认）。
+   * 成长率：两段官方均未给 → `strategyScaled` 标记在、`growthRate` 留空（按基值），
+   *   已登记 `docs/成长率待补名单.md` §三，待 `derive_growth_rate.mjs` 反解后统一补。
+   */
+  lianhuan: {
+    id: 'lianhuan',
+    name: '连环',
+    type: 'active',
+    prepare: true,
+    range: 4,
+    triggerRate: 0.45,
+    targetMode: 'farthest',
+    targetSide: 'enemy',
+    tags: ['damage'],
+    output: [
+      { kind: 'strategy_damage', rate: 132, strategyScaled: true },
+      { kind: 'strategy_damage', rate: 198, strategyScaled: true, targetMode: 'random_single' },
+    ],
+  },
+  /**
+   * 兼弱攻昧（A 主动·距离 4·35%·敌军单体）：
+   * 段1：对**有效距离内**生效防御最低的敌军攻击 200%；
+   * 段2：对**有效距离内**生效谋略最低的敌军策略攻击 159%（受谋略，成长率未确认 → 留空按基值）。
+   * 用户 2026-09-19 确认：两段都只在战法有效距离内选人；各自独立选取、可命中同一目标。
+   * 引擎配套：**新增伤害段 `targetPick: '*_in_range'`**（`DamageTargetPick`；
+   *   `physical_damage` / `strategy_damage` 共用，按 `unitsInSkillRange` + effectiveStat 取最低）。
+   */
+  jianruo_gongmei: {
+    id: 'jianruo_gongmei',
+    name: '兼弱攻昧',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.35,
+    // 外层 targetMode 仅占位（官方目标「敌军单体」= 距离内随机）；两段的实际目标由各自 targetPick 覆盖
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['damage'],
+    output: [
+      { kind: 'physical_damage', rate: 200, targetPick: 'lowest_defense_in_range' },
+      { kind: 'strategy_damage', rate: 159, strategyScaled: true, targetPick: 'lowest_strategy_in_range' },
+    ],
+  },
+  /**
+   * 始计（S 二类指挥·距离 5·目标自己）：
+   * 战斗前 4 回合、**自身行动时**（用户确认走 `roundTrigger:'on_act'`，非回合开始）：
+   *  ① 我军大营 下一次攻击或策略攻击伤害 +20%（受谋略，成长率未确认 → 留空按基值）；
+   *  ② 敌方**兵力最多**单体 下一次攻击或策略攻击伤害 −30%（受谋略，同上）；
+   *  ③ 自身受到攻击或策略攻击伤害后，于本回合内进入**洞察**（免疫混乱/犹豫/怯战/暴走/挑衅）。
+   * 实现：前 4 回合窗口走 `onActSegments(startRound:1,endRound:4)`（主 `output` 为空——
+   *   二类指挥 on_act 仍会锁 [自身] 目标并触发本段）；① 用 `positions:['大营']` + targetSide:'ally' 选我方大营；
+   *   ② 用 `targetPick:'highest_troops_enemy'`（**新增**，按当前兵力取最高，无视距离）+ charges:1（用后即消）；
+   *   ③ 用 `onHurt{ victim:'self', applyTo:'victim' }` → insight duration 1（回合末 tick 掉 = 本回合内）。
+   * 注：`charges` 次数型 damage_boost 同源重复施加是**不刷新不叠加**（inflictStatus 2124 行），
+   *   故每回合重挂安全。
+   */
+  shiji: {
+    id: 'shiji',
+    name: '始计',
+    type: 'command',
+    phase: 'round',
+    roundTrigger: 'on_act',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['damage_boost', 'insight'],
+    output: [],
+    onActSegments: [
+      {
+        startRound: 1,
+        endRound: 4,
+        output: [
+          {
+            kind: 'inflict_status',
+            targetSide: 'ally',
+            positions: ['大营'],
+            status: {
+              type: 'damage_boost',
+              rate: 0.2,
+              duration: 999,
+              direction: 'caused',
+              charges: 1,
+              strategyScaled: true,
+            },
+          },
+          {
+            kind: 'inflict_status',
+            targetSide: 'enemy',
+            targetMode: 'all',
+            targetPick: 'highest_troops_enemy',
+            status: {
+              type: 'damage_boost',
+              rate: -0.3,
+              duration: 999,
+              direction: 'taken',
+              charges: 1,
+              strategyScaled: true,
+            },
+          },
+        ],
+      },
+    ],
+    onHurt: {
+      victim: 'self',
+      applyTo: 'victim',
+      output: [
+        { kind: 'inflict_status', target: 'self', status: { type: 'insight', duration: 1 } },
+      ],
+    },
+  },
+  /**
+   * 铁戟金戈（B 准备主动·距离 4·35%·敌军群体 2-3 目标）：
+   * 每次释放 **50/50 随机**：2 目标 330% 或 3 目标 225%（用户 2026-09-19 口径，非「按存活数自动选」）。
+   * 实现：`random_pick count:1` 两组互斥输出（各带 `targetMode:'group'` + groupCount 2/3 独立重选目标）；
+   *   外层 `targetMode:'all'` 仅占位（不消耗 RNG，实际目标与目标数由内层段重选）。
+   *   （不用 `groupCount:[2,3]`：那会随机目标数但伤害率固定，无法「2目标配 330% / 3目标配 225%」。）
+   * 边界：有效距离内不足 3 人时，3 目标组按实际人数取满（skillTargets 截断）。
+   * 引擎配套：**无需新机制**（random_pick + 段级 targetMode/groupCount 已有）。
+   */
+  tieji_jinge: {
+    id: 'tieji_jinge',
+    name: '铁戟金戈',
+    type: 'active',
+    prepare: true,
+    range: 4,
+    triggerRate: 0.35,
+    // 外层仅占位（敌军群体候选）；实际 2/3 目标由内层 random_pick 段重选
+    targetMode: 'all',
+    targetSide: 'enemy',
+    tags: ['damage'],
+    output: [
+      {
+        kind: 'random_pick',
+        count: 1,
+        options: [
+          [{ kind: 'physical_damage', rate: 330, targetMode: 'group', groupCount: 2 }],
+          [{ kind: 'physical_damage', rate: 225, targetMode: 'group', groupCount: 3 }],
+        ],
+      },
+    ],
+  },
+
+  // ─── 拆解通用 B+ 第五阶段：士气组（5 个）───
+
+  /**
+   * 望风而降（A 主动·距离 5·40%·敌军单体）：
+   * ① 对敌军单体发动 **2 次**策略攻击（伤害率 108%，受谋略，成长率未确认 → 留空按基值）；
+   * ② 50% 几率使其陷入恐慌（伤害率 98%，受谋略，成长率未确认 → 0 = 不缩放），持续 1 回合；
+   *    **若目标士气低于自身，则此几率提升至 100%**。
+   * 官方：scripts/skill_extra.json id 200982（1 级 54% / 49%）。
+   * 注：`scripts/_classified.json` 里本战法的 effectDesc 是旧版（漏了「并有 50% 几率…提升至 100%」），
+   *   本次已按 extra 满级原文同步。
+   * 引擎配套：
+   *   ①「2 次」= 两段相同 `strategy_damage`（strategy_damage 无 repeats，两段各自独立结算，语义等价）；
+   *   ② `morale_branch.compareTo:'caster'`（**本次新增**）：逐目标与施法者当前生效士气比较——
+   *      目标士气**严格低于**自身走 low（必定恐慌），**不低于**（含相等）走 high（50% 几率）；
+   *   ③ 主动战法的输出级 `chance`（**本次扩展**：原仅被动/指挥生效）——士气修正，失败跳过本段；
+   *      用户 2026-09-19 口径：「凡是几率类的基本都吃士气加成」。
+   * 用户确认：「低于自身」= 严格小于（相等走 50% 分支）；恐慌「持续 1 回合」= DoT duration 1（焰焚箕轸口径）。
+   */
+  wangfeng_erjiang: {
+    id: 'wangfeng_erjiang',
+    name: '望风而降',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.4,
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['damage', 'panic'],
+    output: [
+      { kind: 'strategy_damage', rate: 108, strategyScaled: true },
+      { kind: 'strategy_damage', rate: 108, strategyScaled: true },
+      {
+        kind: 'morale_branch',
+        compareTo: 'caster',
+        by: 'target',
+        // 目标士气 ≥ 自身：50% 几率恐慌（士气修正后判定）；目标士气 < 自身：必定恐慌
+        high: [
+          { kind: 'inflict_status', chance: 0.5, status: { type: 'panic', duration: 1, rate: 98, growthRate: 0 } },
+        ],
+        low: [{ kind: 'inflict_status', status: { type: 'panic', duration: 1, rate: 98, growthRate: 0 } }],
+      },
+    ],
+  },
+  /**
+   * 激水之疾（A 主动·距离 4·35%·敌军群体 2 目标）：
+   * 对敌军群体发动一次策略攻击（伤害率 180%，受谋略，成长率未确认 → 留空按基值）；
+   * **若目标士气低于自身**，则使其谋略属性降低 20（受谋略，成长率未确认 → 留空按基值），持续 1 回合。
+   * 官方 id 200992（1 级 90% / −10）。
+   * 引擎配套：`morale_branch.compareTo:'caster'` 逐目标判定；high 段为空数组（不低于自身则不打 debuff）。
+   * 用户确认：「持续 1 回合」= duration 2（辕门射戟 / 举抑臧否口径，覆盖目标下一个行动回合）。
+   */
+  jishui_zhiji: {
+    id: 'jishui_zhiji',
+    name: '激水之疾',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.35,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage', 'debuff_strategy'],
+    output: [
+      { kind: 'strategy_damage', rate: 180, strategyScaled: true },
+      {
+        kind: 'morale_branch',
+        compareTo: 'caster',
+        by: 'target',
+        high: [],
+        low: [
+          {
+            kind: 'inflict_status',
+            status: { type: 'strategy_buff', amount: -20, duration: 2, strategyScaled: true },
+          },
+        ],
+      },
+    ],
+  },
+  /**
+   * 蓄盈待竭（B 主动·距离 4·35%·敌军单体）：
+   * 随机选择敌军单体：其士气**低于**自身 → 对该敌军发动一次攻击（伤害率 200%）；
+   * **否则**（不低于，含相等）→ 提升自身攻击、防御、谋略属性 60，持续 2 回合。
+   * 官方 id 200995（1 级 100% / +30）；无「受属性影响」→ 固定值不缩放。
+   * 引擎配套：`morale_branch.compareTo:'caster'`
+   *   （low = 目标士气 < 自身 → 攻击；high = 不低于 → 自身三维修正，段内 `target:'self'` 落回施法者）。
+   * 用户确认：随机敌军单体按战法有效距离 4 内均匀随机（`targetMode:'random_single'`）。
+   */
+  xuying_daijie: {
+    id: 'xuying_daijie',
+    name: '蓄盈待竭',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.35,
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['damage', 'attack_buff', 'defense_buff', 'strategy_buff'],
+    output: [
+      {
+        kind: 'morale_branch',
+        compareTo: 'caster',
+        by: 'target',
+        high: [
+          { kind: 'inflict_status', target: 'self', status: { type: 'attack_buff', amount: 60, duration: 2 } },
+          { kind: 'inflict_status', target: 'self', status: { type: 'defense_buff', amount: 60, duration: 2 } },
+          { kind: 'inflict_status', target: 'self', status: { type: 'strategy_buff', amount: 60, duration: 2 } },
+        ],
+        low: [{ kind: 'physical_damage', rate: 200 }],
+      },
+    ],
+  },
+  /**
+   * 胜负先征（A 被动·距离 1·目标自己）：
+   * 每回合自身行动时按**自身士气**分支（用户确认档位：>100 高昂 / =100 一般 / <100 低落）：
+   *  - 高昂 → 自身造成的主动、追击战法伤害 +40%，持续 1 回合；
+   *  - 一般/低落 → 自身受到伤害时恢复一定兵力（恢复率 75%，受谋略，成长率未确认 → 0 = 不缩放），持续 1 回合。
+   * 官方 id 200981（1 级 20% / 37.5%）。
+   * 引擎配套：**无需新机制**——被动 `timing:'round_start'`（每回合行动阶段、主动/普攻之前）
+   *   + `morale_branch`（compareTo 缺省 'threshold'、by:'caster'、threshold 100）
+   *   + `grant_first_aid`（受击触发恢复：触发率 100%、duration 1）。
+   * 时序：本段在自身行动**前**施加 → 「持续 1 回合」= duration 1 恰好覆盖本回合（回合末 tick 掉），
+   *   与「行动中施加给他人」的 duration 2 口径（辕门射戟）不同。
+   */
+  shengfu_xianzheng: {
+    id: 'shengfu_xianzheng',
+    name: '胜负先征',
+    type: 'passive',
+    timing: 'round_start',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['damage_boost', 'first_aid', 'heal'],
+    output: [
+      {
+        kind: 'morale_branch',
+        by: 'caster',
+        threshold: 100,
+        high: [
+          {
+            kind: 'inflict_status',
+            status: {
+              type: 'damage_boost',
+              rate: 0.4,
+              duration: 1,
+              direction: 'caused',
+              skillTypes: ['active', 'pursuit'],
+            },
+          },
+        ],
+        low: [
+          { kind: 'grant_first_aid', target: 'self', rate: 100, healRate: 75, healGrowthRate: 0, duration: 1 },
+        ],
+      },
+    ],
+  },
+  /**
+   * 及锋而试（S 主动·距离 5·35%·敌军群体 2 目标）：
+   * 对敌军群体发动一次攻击（伤害率 120%）并使其士气降低 10（整场常驻、同战法累加）；
+   * **每次发动后伤害率增加 40.0%**，不封顶、整场累计。
+   * 官方 id 200979（1 级 60% / −5）。
+   * 引擎配套：**新增 `BaseSkill.damageRatePerCast`**（本次成功发动后计数 +1，结算时
+   *   实际率 = 输出段 rate + 40 × 此前发动次数；计数走既有 `ctx.skillCastCounters`）。
+   * 士气降低复用 `morale_boost` 负值状态（心战为上先例：整场常驻、同战法累加、正负相反共存）。
+   * 用户确认：不封顶（第 N 次发动 = 120 + 40×(N-1)）。
+   */
+  jifeng_ershi: {
+    id: 'jifeng_ershi',
+    name: '及锋而试',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.35,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    damageRatePerCast: 40,
+    tags: ['damage', 'morale_boost'],
+    output: [
+      { kind: 'physical_damage', rate: 120 },
+      { kind: 'inflict_status', status: { type: 'morale_boost', amount: -10, duration: 999 } },
+    ],
+  },
+
+  // ─── 拆解通用 B+ 第六阶段：受击链路收尾（5 个）───
+
+  /**
+   * 垒实迎击（S 被动·距离 1·目标自己）：
+   * ① 受到**普通攻击**伤害时，50% 使自身恢复兵力（恢复率 200%，受谋略，成长率未确认 → 0 = 不缩放）；
+   * ② 50% 移除自身**由主动及追击战法带来的负面**效果；
+   * ③ 50% 使自身进入规避状态（免疫下 1 次受到的伤害）；
+   * ④ 同时当自身位于中军及前锋时，每回合开始 50% **援护友军全体**，持续 1 回合。
+   * 官方：scripts/skill_extra.json id 200900（1 级 25% / 100%）。
+   * 用户 2026-09-19 确认：①②③ 三个 50% **各自独立判定**（同一场受击可同时奶 + 解负面 + 规避）。
+   * 引擎配套：
+   *   - ①②③ 走 `onHurt` 数组（三段各自独立判定；`damageSource:'basic'` 只吃普攻）；
+   *   - ② 复用 `remove_by_source_skill_type` + **新增 `debuffsOnly`**（辞后定朝口径是有害+有益都移除，
+   *     垒实迎击只要移除负面）；
+   *   - ③ 复用 `grant_evasion`；④ 复用 `cover` 状态（普攻改由 cover 持有者承受）+ 段级 `casterPositions`；
+   *   - ④ 的 50% 走输出级 `chance`（士气修正）；
+   *   - ④ 每回合开始走被动 `roundStartRepeat`（行动阶段、主动/普攻之前），duration 1 恰覆盖本回合。
+   */
+  leishi_yingji: {
+    id: 'leishi_yingji',
+    name: '垒实迎击',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['heal', 'evasion', 'immunity', 'cover'],
+    output: [],
+    onHurt: [
+      {
+        victim: 'self',
+        rate: 0.5,
+        damageSource: 'basic',
+        applyTo: 'victim',
+        output: [{ kind: 'heal', rate: 200, strategyScaled: true, growthRate: 0, target: 'self' }],
+      },
+      {
+        victim: 'self',
+        rate: 0.5,
+        damageSource: 'basic',
+        applyTo: 'victim',
+        output: [
+          {
+            kind: 'remove_by_source_skill_type',
+            target: 'self',
+            skillTypes: ['active', 'pursuit'],
+            debuffsOnly: true,
+          },
+        ],
+      },
+      {
+        victim: 'self',
+        rate: 0.5,
+        damageSource: 'basic',
+        applyTo: 'victim',
+        output: [{ kind: 'grant_evasion', stacks: 1, target: 'self' }],
+      },
+    ],
+    roundStartRepeat: {
+      output: [
+        {
+          kind: 'inflict_status',
+          target: 'self',
+          casterPositions: ['中军', '前锋'],
+          chance: 0.5,
+          status: { type: 'cover', duration: 1 },
+        },
+      ],
+    },
+  },
+  /**
+   * 百战无怯（S 被动·距离 1·目标自己）：
+   * 自身位于中军或前锋时，战斗开始即获得 3 层「受到的攻击伤害与策略伤害降低 20%/层」（最多 3 层）；
+   * 造成伤害后 +1 层；**每回合开始**、以及**受到攻击或策略攻击伤害后**，失去 1 层并恢复兵力（恢复率 200%，
+   * 受谋略，成长率未确认 → 0 = 不缩放）。
+   * 官方：scripts/skill_extra.json id 200252（1 级 10% / 100%）。
+   * 用户 2026-09-19 确认：**0 层时既不掉层也不回血**（掉层与恢复绑定）。
+   * 引擎配套：**新增 `PassiveSkill.stacksReduceHeal`**（层数体系）——
+   *   开局满层挂一个 `damage_reduce`（rate = perStack × 层数）；
+   *   `applyDamage` 内：造成方 +1 层、受击方 −1 层（掉层才走 `heal`）；
+   *   `tickRoundStartStatuses` 每回合开始对所有单位 −1 层（掉层才回血）。
+   * 位置条件走 `BaseSkill.casterPositions`（整次生效；含开局挂层与所有钩子）。
+   * 注：DoT 跳伤也走 `applyDamage(strategy)` → 同样触发掉层回血（「受到策略攻击伤害」口径内）。
+   */
+  baizhan_wuqie: {
+    id: 'baizhan_wuqie',
+    name: '百战无怯',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    casterPositions: ['中军', '前锋'],
+    tags: ['damage_reduce', 'heal'],
+    output: [],
+    stacksReduceHeal: {
+      perStack: 0.2,
+      maxStacks: 3,
+      healRate: 200,
+      healGrowthRate: 0,
+    },
+  },
+  /**
+   * 疾风迅雷（B 一类指挥·距离 1·目标自己）：
+   * 战斗中能够**优先行动**；第 3 回合起，当**自身普通攻击命中目标后**有 40% 几率使其混乱，持续 1 回合。
+   * 官方：scripts/skill_extra.json id 200646（1 级 20%）。
+   * 用户 2026-09-19 确认：「普通攻击命中后」仅指**携带者自身**的普攻（非我军全体）。
+   * 引擎配套：
+   *   - 全程先手复用 `CommandSkill.priorityRounds: 999`（先驱突击同字段）；
+   *   - **新增 `BaseSkill.onBasicHit`**：`dealAttack` 命中并实际结算后（被规避不触发）按 rate 经士气修正判定，
+   *     命中则对**该普攻目标**执行 output；
+   *   - 「持续 1 回合」按行动中施加给他人口径 → duration 2（辕门射戟 / 举抑臧否）。
+   *   - 注：EffectTag 无「先手」项（同举抑臧否），故 tags 只标混乱。
+   */
+  jifeng_xunlei: {
+    id: 'jifeng_xunlei',
+    name: '疾风迅雷',
+    type: 'command',
+    phase: 'prep',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    priorityRounds: 999,
+    tags: ['confusion'],
+    output: [],
+    onBasicHit: {
+      rate: 0.4,
+      startRound: 3,
+      output: [{ kind: 'inflict_status', status: { type: 'confusion', duration: 2 } }],
+    },
+  },
+  /**
+   * 反击（D 主动·距离 1·发动 25%–30%·目标自己）：使自身受到普通攻击时能进行反击（伤害率 75%），持续 2 回合。
+   * 官方：scripts/skill_extra.json id 200221（1 级 37.5%）；发动率区间按仓库口径取**上界 30%**。
+   * 引擎配套：**无需新机制** —— `counter` 状态已实现（反击之策 / 一夫当关；`settleCounterOnHurt`）。
+   * 「持续 2 回合」按用户 2026-09-19 确认取 **duration 3**（行动中给自身施加，覆盖后续两个完整行动回合）。
+   */
+  fanji_counter: {
+    id: 'fanji_counter',
+    name: '反击',
+    type: 'active',
+    prepare: false,
+    range: 1,
+    triggerRate: 0.3,
+    targetMode: 'self',
+    tags: ['counter'],
+    output: [{ kind: 'inflict_status', status: { type: 'counter', duration: 3, rate: 75 } }],
+  },
+  /**
+   * 诱敌深入（A 一类指挥·距离 5·目标自己）：
+   * 战斗开始后第 3 回合起，自身在我军全体每回合首次受到伤害后，有 50% 几率对**伤害来源**
+   * 造成一次策略攻击（伤害率 136%，受谋略，成长率未确认 → 留空按基值）。
+   * 官方：scripts/skill_extra.json id 201008（1 级 68%）。
+   * 用户 2026-09-19 确认：「每回合首次」= **每名友军各自每回合首次**（复用 `onHurt.oncePerRound` 语义）。
+   * 引擎配套：**无需新机制** —— `onHurt`（`victim:'ally'` 含施法者自身 / `startRound:3` / `oncePerRound` /
+   *   `applyTo:'source'`）+ 既有 `strategy_damage`。
+   * 注：按一类指挥默认口径，施法者阵亡后本效果停止（未写 `retainAfterDeath`）。
+   */
+  youdi_shenru: {
+    id: 'youdi_shenru',
+    name: '诱敌深入',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['damage'],
+    output: [],
+    onHurt: {
+      victim: 'ally',
+      rate: 0.5,
+      startRound: 3,
+      oncePerRound: true,
+      applyTo: 'source',
+      output: [{ kind: 'strategy_damage', rate: 136, strategyScaled: true }],
+    },
+  },
+
+  // ─── 拆解通用 B+ 第七阶段：移除敌军有益（4）+ 援护（3）───
+
+  /**
+   * 看破（D 主动·距离 3·发动 30%–40%·敌军单体）：
+   * 移除敌军单体的**有益效果**，并使其防御属性下降 10，持续 1 回合。
+   * 官方：scripts/skill_extra.json id 200218（1 级 5%）；发动率区间按仓库口径取**上界 40%**。
+   * 引擎配套：**新增输出 `remove_buffs`**——移除**有益**状态（`isBeneficialStatus` 判定），
+   *   且按用户 2026-09-19 口径做**来源优先级过滤**（被动 > 指挥 > 主动 = 追击）：
+   *   看破是主动，只能清「主动/追击」带来的有益效果（大赏三军等指挥光环、被动增益清不掉）。
+   * 防御 −10 无「受属性影响」→ 固定；「持续 1 回合」按行动中施加口径 duration 2。
+   */
+  kanpo: {
+    id: 'kanpo',
+    name: '看破',
+    type: 'active',
+    prepare: false,
+    range: 3,
+    triggerRate: 0.4,
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['debuff_defense'],
+    output: [
+      { kind: 'remove_buffs' },
+      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -10, duration: 2 } },
+    ],
+  },
+  /**
+   * 索敌（D 主动·距离 3·35%·敌军群体 2 目标）：
+   * 移除敌军群体的有益效果，并对其发动一次攻击（伤害率 75%）。
+   * 官方 id 200735（1 级 37.5%）。
+   * 官方文本顺序「先移除、后攻击」→ output 顺序一致（移除后本次攻击不再吃到目标增益）。
+   */
+  suodi: {
+    id: 'suodi',
+    name: '索敌',
+    type: 'active',
+    prepare: false,
+    range: 3,
+    triggerRate: 0.35,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage'],
+    output: [{ kind: 'remove_buffs' }, { kind: 'physical_damage', rate: 75 }],
+  },
+  /**
+   * 驱逐（D 追击·40%·攻击目标）：
+   * 普通攻击后，对攻击目标再次发动策略攻击（伤害率 110%，受谋略，成长率未确认 → 留空按基值），
+   * 并移除其有益效果。
+   * 官方 id 200131（1 级 55%）；官方文本顺序「先伤害、后移除」→ output 顺序一致。
+   */
+  quzhu: {
+    id: 'quzhu',
+    name: '驱逐',
+    type: 'pursuit',
+    range: 0,
+    triggerRate: 0.4,
+    tags: ['damage'],
+    output: [
+      { kind: 'strategy_damage', rate: 110, strategyScaled: true },
+      { kind: 'remove_buffs' },
+    ],
+  },
+  /**
+   * 火积（B 追击·45%·攻击目标·弓）：
+   * 普通攻击后，使攻击目标**立即受到燃烧伤害**（伤害率 192%，受谋略，成长率未确认 → 留空按基值），
+   * 并移除其有益效果。
+   * 官方 id 200722（1 级 96%）。
+   * 用户 2026-09-19 确认：「立即受到」= **当场结算、不挂状态**，但走**燃烧（DoT）公式**
+   *   （新增 `strategy_damage.dotFormula`：兵力基础 ×1/3、谋略基础 ×0.25，并以 `dotType:'burning'`
+   *   参与「被施加的燃烧伤害提升」等过滤）。
+   */
+  huoji: {
+    id: 'huoji',
+    name: '火积',
+    type: 'pursuit',
+    range: 0,
+    triggerRate: 0.45,
+    tags: ['damage', 'burning'],
+    output: [
+      { kind: 'strategy_damage', rate: 192, strategyScaled: true, dotFormula: true },
+      { kind: 'remove_buffs' },
+    ],
+  },
+  /**
+   * 援护（D 主动·距离 2·发动 30%–45%·友军单体）：
+   * 援护友军单体，为其抵挡普通攻击，持续 2 回合。
+   * 官方 id 200238；发动率区间按仓库口径取**上界 45%**。
+   * 引擎配套：**新增输出 `grant_cover`** —— `cover` 挂在施法者自身（保护者），
+   *   `protectId` 记录被保护的友军（战法有效距离内随机 1 名、不含自身）；
+   *   `findCoverGuard` 据此只代受该友军的普攻（「援护友军全体」仍不填 protectId，走既有口径）。
+   * 「持续 2 回合」按行动中施加口径 duration 3（同反击）。
+   */
+  yuanhu: {
+    id: 'yuanhu',
+    name: '援护',
+    type: 'active',
+    prepare: false,
+    range: 2,
+    triggerRate: 0.45,
+    targetMode: 'self',
+    tags: ['cover'],
+    output: [{ kind: 'grant_cover', duration: 3 }],
+  },
+  /**
+   * 移花接木（C 主动·距离 2·发动 30%–40%·目标自己）：
+   * 移除自身有害效果，防御属性提升 50，并援护友军全体（为其抵挡普通攻击），持续 2 回合。
+   * 官方 id 200239（1 级 防御 +25）；发动率区间按仓库口径取**上界 40%**。
+   * 引擎配套：**无需新机制** —— `remove_debuffs` + `defense_buff` + 既有 `cover`（挂自身 = 保护者，
+   *   不填 protectId = 援护友军全体）。
+   * 「持续 2 回合」按行动中施加口径 duration 3（防御提升同）。
+   */
+  yihuajiemu: {
+    id: 'yihuajiemu',
+    name: '移花接木',
+    type: 'active',
+    prepare: false,
+    range: 2,
+    triggerRate: 0.4,
+    targetMode: 'self',
+    tags: ['immunity', 'defense_buff', 'cover'],
+    output: [
+      { kind: 'remove_debuffs', target: 'self' },
+      { kind: 'inflict_status', target: 'self', status: { type: 'defense_buff', amount: 50, duration: 3 } },
+      { kind: 'inflict_status', target: 'self', status: { type: 'cover', duration: 3 } },
+    ],
+  },
+  /**
+   * 一夫当关（A 一类指挥·距离 3·目标自己）：
+   * 战斗开始后前 2 回合，援护友军全体，使自身受到**攻击**伤害降低 50%（受防御属性影响）；
+   * **仅对自身处于前锋位置时生效**。
+   * 官方 id 200674（1 级 25%）。
+   * 引擎配套：**新增 `damage_reduce.defenseScaled`**（受防御缩放；成长率未确认 → 留空按基值 0.5）；
+   *   援护友军全体复用既有 `cover` 口径（挂自身）；站位条件走 skill 级 `casterPositions:['前锋']`。
+   * 「前 2 回合」= 准备阶段施加 duration 2（appliedRound 0，回合末递减）。
+   */
+  yifudangguan: {
+    id: 'yifudangguan',
+    name: '一夫当关',
+    type: 'command',
+    phase: 'prep',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'self',
+    casterPositions: ['前锋'],
+    tags: ['cover', 'damage_reduce'],
+    output: [
+      { kind: 'inflict_status', target: 'self', status: { type: 'cover', duration: 2 } },
+      {
+        kind: 'inflict_status',
+        target: 'self',
+        status: {
+          type: 'damage_reduce',
+          rate: 0.5,
+          duration: 2,
+          defenseScaled: true,
+          damageType: 'physical',
+        },
+      },
+    ],
+  },
+
+  // ─── 拆解通用 B+ 第八阶段：兵力比例 / 闪击（B 级 2 个）───
+
+  /**
+   * 亡命一搏（B 主动·距离 3·25%·敌军群体 2 目标）：
+   * 对敌军群体发动一次猛击（伤害率 160%）；当**自身兵力低于初始兵力 25%** 时，伤害率变为 460%。
+   * 官方：scripts/skill_extra.json id 200996（1 级 80% / 230%）。
+   * 引擎配套：**新增 `physical_damage.rateBySelfTroopRatio`**（按施法者当前兵力比例替换本段伤害率；
+   *   `troopRatioMatches` 口径：`below` = 比例**低于**该值才满足）。
+   * 无「受属性影响」→ 两档伤害率均固定，不缩放。
+   */
+  wangming_yibo: {
+    id: 'wangming_yibo',
+    name: '亡命一搏',
+    type: 'active',
+    prepare: false,
+    range: 3,
+    triggerRate: 0.25,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage'],
+    output: [
+      {
+        kind: 'physical_damage',
+        rate: 160,
+        rateBySelfTroopRatio: { cond: { below: 25 }, rate: 460 },
+      },
+    ],
+  },
+  /**
+   * 闪击（B 主动·距离 4·50%·敌军群体 2 目标）：
+   * 对敌军群体发动一次攻击（伤害率 50%），并使**敌军单体**进行下一次攻击的伤害大幅度降低。
+   * 官方 id 200690（1 级 25%）；「大幅度降低」官方未给数值 → 用户 2026-09-19 口径：
+   *   按辕门射戟同款「伤害降至引擎下限 10%」建模（`damage_boost caused -99.99` → buffMult 下限 10%）。
+   * 引擎配套：**无需新机制** —— 既有 `damage_boost` + `attackOnly`（仅「进行攻击」：普攻/物理主动/追击）
+   *   + `charges: 1`（下次攻击打出后消耗）；debuff 目标为敌军单体（`targetSide:'enemy'` + `random_single`，
+   *   独立于本次攻击的 2 个目标）。
+   */
+  shanji: {
+    id: 'shanji',
+    name: '闪击',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.5,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage', 'damage_boost'],
+    output: [
+      { kind: 'physical_damage', rate: 50 },
+      {
+        kind: 'inflict_status',
+        targetSide: 'enemy',
+        targetMode: 'random_single',
+        status: {
+          type: 'damage_boost',
+          rate: -99.99,
+          duration: 999,
+          direction: 'caused',
+          attackOnly: true,
+          charges: 1,
+        },
+      },
+    ],
+  },
+
+  // ─── 拆解通用 B+ 第九阶段：兵力阈值 / 恢复次数（A 级 2 个）───
+
+  /**
+   * 甚陷不惧（A 被动·距离 1·目标自己）：
+   * 当自身兵力**首次**低于初始兵力的 90%、70%、50%、30% 时，使自身**下次行动时**武将主战法发动率
+   * 提高 50%（仅对可造成攻击伤害或策略伤害的战法生效）。
+   * 官方：scripts/skill_extra.json id 200941（1 级 25%）。
+   * 用户 2026-09-19 确认：该效果**消耗于自身下次行动**（行动结束清除，不按回合递减）。
+   * 引擎配套：① **新增 `PassiveSkill.troopThresholdBuff`**（受击实际扣兵后逐档检查、每档去重；
+   *   同一次结算跨越多档只结算一次）；② `trigger_boost` 新增 `mainSkillOnly`（只对携带者主战法）、
+   *   `damageSkillsOnly`（输出含物理/策略伤害段）、`expireAfterOwnAct`（行动末清除）；
+   *   ③ `General.mainSkillId`（原先只有 mainSkillName，无法按 id 过滤，本次补上并由 hero-utils 注入）。
+   */
+  shenxian_bujv: {
+    id: 'shenxian_bujv',
+    name: '甚陷不惧',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['damage_boost'],
+    output: [],
+    troopThresholdBuff: {
+      thresholds: [90, 70, 50, 30],
+      output: [
+        {
+          kind: 'inflict_status',
+          target: 'self',
+          status: {
+            type: 'trigger_boost',
+            rate: 0.5,
+            duration: 999,
+            mainSkillOnly: true,
+            damageSkillsOnly: true,
+            expireAfterOwnAct: true,
+          },
+        },
+      ],
+    },
+  },
+  /**
+   * 胜敌益强（A 被动·距离 1·目标自己）：
+   * 每回合行动时使自身恢复 1 次兵力（恢复率 120%，受防御属性影响）；
+   * 第 2、4、6 回合起恢复次数提升至 2、3、4 次，持续到战斗结束。
+   * 官方 id 200261（1 级 60%）。
+   * 引擎配套：① **新增 `PassiveSkill.recoverEachRound`**（按回合取次数、逐次结算；围困拦截）；
+   *   ② `heal` 新增 `defenseScaled`（受防御缩放；成长率未确认 → 留空按基值 120%，必填字段给 0）。
+   */
+  shengdi_yiqiang: {
+    id: 'shengdi_yiqiang',
+    name: '胜敌益强',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['heal'],
+    output: [],
+    recoverEachRound: {
+      tiers: [
+        { startRound: 1, times: 1 },
+        { startRound: 2, times: 2 },
+        { startRound: 4, times: 3 },
+        { startRound: 6, times: 4 },
+      ],
+      rate: 120,
+      growthRate: 0,
+      defenseScaled: true,
+    },
+  },
+
+  // ─── 拆解通用 B+ 第十阶段：追击链路（S/A 2 个）───
+
+  /**
+   * 乘胜追击（S 追击·发动 25%–35%·攻击目标）：
+   * 普通攻击后对攻击目标发动一次攻击（伤害率 150%）；每次发动攻击后有 **60% 概率**对攻击目标再次发动攻击
+   * （伤害率 100%），此概率每次降低 20%（60→40→20→0），战法结束后概率重置。
+   * 官方：scripts/skill_extra.json id 200980（1 级 75% / 50%）；发动率区间按仓库口径取**上界 35%**
+   * （与「温酒斩将 20–35 → 0.35」同口径）。
+   * 引擎配套：① 复用既有 `physical_damage.chain`（`chance` + `decay`，按士气修正逐次判定、成功重打同一段）；
+   *   **新增 `chain.sameTarget`**（乘胜追击是「对攻击目标」，既有连锁默认按战法距离随机单体）；
+   *   ② 首次额外攻击（60%）用输出级 `chance: 0.6`（**本次把输出级 chance 扩展到追击战法**），
+   *   连锁从 40% 起递减（60 → 40 → 20 → 0），与原描述「每次发动攻击后有 60% 概率…每次降低 20%」一致。
+   * 无「受属性影响」→ 150% / 100% 均固定，不缩放。
+   */
+  chengsheng_zhuiji: {
+    id: 'chengsheng_zhuiji',
+    name: '乘胜追击',
+    type: 'pursuit',
+    range: 0,
+    triggerRate: 0.35,
+    tags: ['damage'],
+    output: [
+      { kind: 'physical_damage', rate: 150 },
+      {
+        kind: 'physical_damage',
+        rate: 100,
+        chance: 0.6,
+        chain: { chance: 0.4, decay: 0.2, sameTarget: true },
+      },
+    ],
+  },
+  /**
+   * 势无虚动（A 被动·距离 1·目标自己）：
+   * 自身**每次试图发动追击战法时**：① 使下一次造成伤害无视规避；② 下一次发动追击战法造成伤害提升 40%，
+   * 最多叠加 3 次（伤害提升效果在下一次追击打出后清空）。
+   * 官方 id 200949（1 级 20%）。
+   * 用户 2026-09-19 确认：② 为**消耗制**——层数累加（最多 3 层），下一次追击实际打出后清空全部层数。
+   * 引擎配套：**新增 `BaseSkill.onPursuitAttempt`**（进入追击发动率判定前，无论结果，逐战法执行 output）。
+   *   ① 复用既有 `ignore_evasion`（消耗制：下次造成伤害时移除）；
+   *   ② 复用 `damage_boost`（`direction:'caused'` + `skillTypes:['pursuit']` + `stacks/maxStacks:3`
+   *   + `charges:1` + `chargesStack:true`）：每次试图发动 +1 层并累加 rate，追击打出消耗 charges 即整条移除。
+   */
+  shiwu_xudong: {
+    id: 'shiwu_xudong',
+    name: '势无虚动',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['damage_boost'],
+    output: [],
+    onPursuitAttempt: {
+      output: [
+        { kind: 'inflict_status', target: 'self', status: { type: 'ignore_evasion', duration: 999 } },
+        {
+          kind: 'inflict_status',
+          target: 'self',
+          status: {
+            type: 'damage_boost',
+            rate: 0.4,
+            duration: 999,
+            direction: 'caused',
+            skillTypes: ['pursuit'],
+            stacks: 1,
+            maxStacks: 3,
+            charges: 1,
+            chargesStack: true,
+          },
+        },
+      ],
+    },
+  },
+
+  // ─── 拆解通用 B+ 第十一阶段：叠层钩子（B/A 2 个）───
+
+  /**
+   * 以直报怨（B 一类指挥·距离 5·目标自己）：
+   * ① 每回合自身首次造成伤害后，使**目标单体**造成的所有伤害降低 10%；
+   * ② 自身首次受到伤害后，使**我军单体**受到的所有伤害降低 10%；
+   * 以上效果可叠加 6 次，持续直到战斗结束。
+   * 官方：scripts/skill_extra.json id 200935（1 级 5%）。
+   * 引擎配套：① **新增 `BaseSkill.dealFirstPerRound`**（每回合首次造成伤害后钩子，按「回合×战法×施法者」
+   *   去重，对**本次伤害目标**结算 output）；② 受伤侧复用既有 `onHurt{ victim:'self', oncePerRound:true }`
+   *   + 输出段 `targetSide:'ally', targetMode:'random_single'`（「我军单体」= 随机友军，含自身）。
+   * 数值为固定 10%、无「受属性影响」→ 不缩放；叠加用 `stacks/maxStacks:6`（同源重复施加累加）。
+   */
+  yizhibaoyuan: {
+    id: 'yizhibaoyuan',
+    name: '以直报怨',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['damage_boost'],
+    output: [],
+    dealFirstPerRound: {
+      output: [
+        {
+          kind: 'inflict_status',
+          status: {
+            type: 'damage_boost',
+            rate: -0.1,
+            duration: 999,
+            direction: 'caused',
+            stacks: 1,
+            maxStacks: 6,
+          },
+        },
+      ],
+    },
+    onHurt: {
+      victim: 'self',
+      oncePerRound: true,
+      applyTo: 'victim',
+      output: [
+        {
+          kind: 'inflict_status',
+          targetSide: 'ally',
+          targetMode: 'random_single',
+          status: {
+            type: 'damage_boost',
+            rate: -0.1,
+            duration: 999,
+            direction: 'taken',
+            stacks: 1,
+            maxStacks: 6,
+          },
+        },
+      ],
+    },
+  },
+  /**
+   * 久战熟谋（A 一类指挥·距离 3·友军群体 2 目标）：
+   * 使友军群体**每造成一次策略伤害后**，其策略伤害提高 5%（受谋略属性影响），最多叠加 5 次。
+   * 官方 id 200959（1 级 2.5%）。
+   * 引擎配套：**新增 `BaseSkill.allyDealStack`** —— 准备阶段把状态挂到锁定友军身上，
+   *   此后该单位每次造成匹配伤害（`damageType:'strategy'`）时同源再施加一次（叠层/上限由 `maxStacks:5` 控制）。
+   * 受谋略缩放但成长率未确认 → `growthRate` 留空（基值 5%；初始施加与叠层都按基值，待成长率确认后统一补）。
+   */
+  jiuzhan_shumou: {
+    id: 'jiuzhan_shumou',
+    name: '久战熟谋',
+    type: 'command',
+    phase: 'prep',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'ally',
+    tags: ['damage_boost'],
+    output: [],
+    allyDealStack: {
+      damageType: 'strategy',
+      status: {
+        type: 'damage_boost',
+        rate: 0.05,
+        duration: 999,
+        direction: 'caused',
+        damageType: 'strategy',
+        strategyScaled: true,
+        stacks: 1,
+        maxStacks: 5,
+      },
+    },
+  },
+
+  // ─── 拆解通用 B+ 第十二阶段：行动后叠层（A 级 2 个）───
+
+  /**
+   * 乘间击隙（A 一类指挥·距离 4·目标自己）：
+   * 自身每发动**主动主战法**后，使自身造成的**攻击伤害提升 15%**，最多叠加 3 次；
+   * 该效果每叠加 3 次后，对敌军群体发动 1 次攻击（伤害率 240%），发动后攻击伤害提升效果消失。
+   * 官方：scripts/skill_extra.json id 200259（1 级 7.5% / 120%）。
+   * 引擎配套：**新增 `CommandSkill.afterMainActiveStacks`** —— 携带者主动主战法发动后同源叠层
+   *   （`status` + `maxStacks`），满层执行 `triggerOutput`（段内自带 `targetMode` 重选敌军群体）后清空状态。
+   * 无「受属性影响」→ 15% / 240% 固定，不缩放。
+   */
+  chengjian_jixi: {
+    id: 'chengjian_jixi',
+    name: '乘间击隙',
+    type: 'command',
+    phase: 'prep',
+    range: 4,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['damage_boost', 'damage'],
+    output: [],
+    afterMainActiveStacks: {
+      maxStacks: 3,
+      status: {
+        type: 'damage_boost',
+        rate: 0.15,
+        duration: 999,
+        direction: 'caused',
+        attackOnly: true,
+        stacks: 1,
+        maxStacks: 3,
+      },
+      triggerOutput: [{ kind: 'physical_damage', rate: 240, targetMode: 'group', groupCount: 3 }],
+    },
+  },
+  /**
+   * 勠力同心（A 一类指挥·距离 2·我军全体）：
+   * 我方**大营**每次发动主动战法或追击战法后，**前锋和中军**下次行动阶段主动和追击战法造成的伤害
+   * 提升 40%，此效果可额外叠加 1 次（最多 2 层）。
+   * 官方 id 200967（1 级 20%）。
+   * 引擎配套：**新增 `CommandSkill.dapingCastBuff`** —— 「成功发动主动/追击战法后」钩子里判定
+   *   `actorPositions:['大营']`，给 `targetPositions:['前锋','中军']` 的友军同源叠层（`maxStacks:2`）。
+   *   「下次行动阶段」按行动中施加给他人口径取 duration 2（覆盖其下一次行动；辕门射戟/反击同口径）。
+   * 无「受属性影响」→ 40% 固定，不缩放。
+   */
+  luli_tongxin: {
+    id: 'luli_tongxin',
+    name: '勠力同心',
+    type: 'command',
+    phase: 'prep',
+    range: 2,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['damage_boost'],
+    output: [],
+    dapingCastBuff: {
+      actorPositions: ['大营'],
+      targetPositions: ['前锋', '中军'],
+      status: {
+        type: 'damage_boost',
+        rate: 0.4,
+        duration: 2,
+        direction: 'caused',
+        skillTypes: ['active', 'pursuit'],
+        stacks: 1,
+        maxStacks: 2,
+      },
+    },
+  },
+
+  // ─── 拆解通用 B+ 第十三阶段：准备战法时机（B 级 2 个）───
+
+  /**
+   * 谋定后动（B 被动·距离 2·目标自己）：
+   * ① 每当发动**需要准备的主战法**时，100% 使自身进入洞察状态（免疫混乱/犹豫/怯战/暴走/挑衅），持续 2 回合；
+   * ② 当自身发动主动战法后，100% 使我军群体攻击、防御、谋略属性提高 55，持续 2 回合。
+   * 官方：scripts/skill_extra.json id 200767（1 级 50% / +27.5）。
+   * 引擎配套：① **新增 `BaseSkill.onPrepareStart`**（进入准备时判定/生效——用户 2026-09-19 确认时点；
+   *   `mainSkillOnly` 只对主战法生效）；② 「发动主动战法后」部分复用既有 `PassiveSkill.afterActive`
+   *   （每次成功发动主动战法后触发，准备战法释放也算；输出段 `targetSide:'ally'` 覆盖我军群体）。
+   * 无「受属性影响」→ 洞察 2 回合 / +55 固定，不缩放。
+   */
+  mouding_houdong: {
+    id: 'mouding_houdong',
+    name: '谋定后动',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 2,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['insight', 'buff_attack', 'buff_defense', 'buff_strategy'],
+    output: [],
+    onPrepareStart: {
+      mainSkillOnly: true,
+      output: [
+        { kind: 'inflict_status', target: 'self', status: { type: 'insight', duration: 2 } },
+      ],
+    },
+    afterActive: {
+      output: [
+        { kind: 'inflict_status', targetSide: 'ally', targetMode: 'all', status: { type: 'attack_buff', amount: 55, duration: 2 } },
+        { kind: 'inflict_status', targetSide: 'ally', targetMode: 'all', status: { type: 'defense_buff', amount: 55, duration: 2 } },
+        { kind: 'inflict_status', targetSide: 'ally', targetMode: 'all', status: { type: 'strategy_buff', amount: 55, duration: 2 } },
+      ],
+    },
+  },
+  /**
+   * 胜兵求战（B 一类指挥·距离 2·目标自己）：
+   * ① 战斗中每当自身发动**需要准备的主战法**时，有 80% 几率跳过 1 回合准备时间；
+   * ② 任意友军发动主动战法后，自身下一个主动战法造成的伤害提高 15%，此效果最多叠加 3 次。
+   * 官方 id 200754（1 级 40% / 7.5%）。
+   * 引擎配套：① 准备阶段给自身挂 `jump_prep`（准备跳过；`triggerActiveSkill` 每次发动准备战法时按 rate 掷骰，
+   *   与「每当」语义一致；注：该状态对所有准备战法生效，不区分主战法）；
+   *   ② **新增 `BaseSkill.allyActiveCastStack`**（任意友军成功发动主动战法后给携带者自身同源叠层；
+   *   「任意友军」按仓库口径**含自己**——自己发动主动时先消耗旧层、随后本次发动又叠 1 层）。
+   * ② 的「下一个主动战法」为消耗制：`charges:1` + `chargesStack:true` + `maxStacks:3`（同势无虚动的追击版）。
+   */
+  shengbing_qiuzhan: {
+    id: 'shengbing_qiuzhan',
+    name: '胜兵求战',
+    type: 'command',
+    phase: 'prep',
+    range: 2,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['damage_boost'],
+    output: [
+      { kind: 'inflict_status', target: 'self', status: { type: 'jump_prep', duration: 999, rate: 0.8 } },
+    ],
+    allyActiveCastStack: {
+      status: {
+        type: 'damage_boost',
+        rate: 0.15,
+        duration: 999,
+        direction: 'caused',
+        skillTypes: ['active'],
+        stacks: 1,
+        maxStacks: 3,
+        charges: 1,
+        chargesStack: true,
+      },
+    },
+  },
+
+  // ─── 拆解通用 B+ 第十四阶段：指挥时机（S 级 2 个）───
+
+  /**
+   * 众谋不懈（S 二类指挥·距离 5·敌军单体）：
+   * 战斗中，每当自身**试图发动主动及追击战法前**，有 40% 几率对距离 5 以内的敌军单体发动一次策略攻击
+   * （伤害率 194%，受谋略属性影响）。
+   * 官方：scripts/skill_extra.json id 200800（1 级 97%；官方文本两处条件几率均为 40%）。
+   * 引擎配套：① 主动侧复用既有 `roundTrigger:'before_active'`（每次试图发动主动战法前逐段按 `chance`
+   *   判定，运筹决胜同链路）；② 追击侧复用 p10 新增的 `BaseSkill.onPursuitAttempt`，段内用
+   *   `chance_group{chance:0.4}` 承载「40% 几率」（before_active 走独立链路、不走通用 chance 闸门）。
+   * 受谋略缩放但成长率未确认 → `growthRate` 留空（基值 194%），登记《成长率待补名单》§三。
+   */
+  zhongmou_buxie: {
+    id: 'zhongmou_buxie',
+    name: '众谋不懈',
+    type: 'command',
+    phase: 'round',
+    roundTrigger: 'before_active',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['damage'],
+    output: [
+      { kind: 'strategy_damage', rate: 194, strategyScaled: true, chance: 0.4, targetMode: 'random_single' },
+    ],
+    onPursuitAttempt: {
+      output: [
+        {
+          kind: 'chance_group',
+          chance: 0.4,
+          outputs: [{ kind: 'strategy_damage', rate: 194, strategyScaled: true, targetMode: 'random_single' }],
+        },
+      ],
+    },
+  },
+  /**
+   * 反计之策（S 一类指挥·距离 4·敌军群体 2 目标）：
+   * 战斗开始后前 3 回合，使敌军群体**发动主动战法时造成的伤害大幅下降**；
+   * 并在**首回合**有 100% 几率使其陷入犹豫状态，无法发动主动战法。
+   * 官方 id 200220（1 级 50%；「大幅下降」官方未给数值）。
+   * 引擎配套：**无需新机制** —— ① 主动伤害大幅下降按用户 2026-09-19 口径取辕门射戟同款
+   *   「伤害降至引擎下限 10%」（`damage_boost caused -99.99` + `skillTypes:['active']`，duration 3 = 前 3 回合）；
+   *   ② 首回合犹豫（满级 100%）= `hesitation` duration 1（准备阶段施加、回合末递减掉）。
+   */
+  fanji_zhence: {
+    id: 'fanji_zhence',
+    name: '反计之策',
+    type: 'command',
+    phase: 'prep',
+    range: 4,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage_boost', 'hesitation'],
+    output: [
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'damage_boost',
+          rate: -99.99,
+          duration: 3,
+          direction: 'caused',
+          skillTypes: ['active'],
+        },
+      },
+      { kind: 'inflict_status', status: { type: 'hesitation', duration: 1 } },
+    ],
+  },
+
+  // ─── 拆解通用 B+ 第十五阶段：延迟结算（A 级 1 个）───
+
+  /**
+   * 翕处还张（A 准备主动·距离 5·40%·敌军群体 2-3 目标）：
+   * 1 回合准备，对敌军群体发动一次策略攻击（伤害率 132%，受谋略，成长率未确认 → 留空按基值），
+   * 并使敌军群体 **1-2 目标**「**下一次造成伤害后**，再受到一次策略伤害」（伤害率 165%，受谋略，同上）。
+   * 官方：scripts/skill_extra.json id 200917（1 级 66% / 82.5%）。
+   * 引擎配套：**新增输出 `mark_deal_punish`** —— 给 1~2 名敌军挂「出手反噬」标记（目标独立于主段攻击，
+   *   `groupCount:[1,2]`），标记持有者**下一次造成伤害**（实际扣兵 > 0，任意来源）时由本战法施法者
+   *   对其打出一次策略伤害（按触发时双方生效属性/增减伤实时计算），随后标记消耗；
+   *   标记队列走 `ctx.dealPunishMarks`（不新增状态类型，避免状态冲突/驱散口径牵连）。
+   */
+  xichu_haizhang: {
+    id: 'xichu_haizhang',
+    name: '翕处还张',
+    type: 'active',
+    prepare: true,
+    range: 5,
+    triggerRate: 0.4,
+    targetMode: 'group',
+    groupCount: [2, 3],
+    targetSide: 'enemy',
+    tags: ['damage'],
+    output: [
+      { kind: 'strategy_damage', rate: 132, strategyScaled: true },
+      { kind: 'mark_deal_punish', rate: 165, strategyScaled: true, groupCount: [1, 2] },
+    ],
+  },
+
+  // ─── 拆解通用 B+ 第十六阶段：延迟结算（A 级 1 个 · 道行险阻）───
+
+  /**
+   * 道行险阻（A 主动·距离 4·40%·敌军单体）：
+   * 使敌军单体防御属性降低 50（**受攻击属性影响**）、谋略属性降低 50（**受谋略属性影响**），持续 1 回合；
+   * 同时在**目标下一次行动前**对其发动一次策略攻击（伤害率 150%，受谋略）和一次攻击（伤害率 150%）。
+   * 官方：scripts/skill_extra.json id 200684（1 级 25% / 75%）。
+   * 引擎配套：① **新增输出 `schedule_strike`** —— 把后续段排入 `ctx.pendingStrikes`，
+   *   目标下次行动开始前由原施法者结算（`triggerPendingStrikes` 接在 `tickStatusesOnActStart` 之后）；
+   *   ② 属性 buff 新增 **`attackScaled`**（受攻击缩放；原先只有 strategyScaled），
+   *   `inflict_status` 缩放分支按 `attackScaled ? 生效攻击 : 生效谋略` 取属性。
+   * 「持续 1 回合」按行动中施加给他人口径 duration 2（辕门射戟）。两段「受属性影响」的成长率均未确认
+   * → `growthRate` 留空（基值 50 / 150%），登记《成长率待补名单》§三。
+   */
+  daoxing_xianzu: {
+    id: 'daoxing_xianzu',
+    name: '道行险阻',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.4,
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['debuff_defense', 'debuff_strategy', 'damage'],
+    output: [
+      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -50, duration: 2, attackScaled: true } },
+      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -50, duration: 2, strategyScaled: true } },
+      {
+        kind: 'schedule_strike',
+        output: [
+          { kind: 'strategy_damage', rate: 150, strategyScaled: true },
+          { kind: 'physical_damage', rate: 150 },
+        ],
+      },
+    ],
+  },
+
+  // ─── 拆解通用 B+ 第十七阶段：每回合递增几率 / 逐段独立判定 / 全体+S 级准备（2 个）───
+
+  /**
+   * 鸟云山兵（A 指挥·距离 2·一类指挥·我军群体〔有效距离内 2 个目标〕）：
+   * 战斗开始后，我军群体每回合行动时有 30% 几率使自身受到的攻击和策略攻击降低 60%，
+   * 持续 1 回合，**两个效果独立判断**，该效果生效几率每回合提升 10%。
+   * 官方：scripts/skill_extra.json id 200883（1 级 30% / 30%，满级 30% / 60%）。
+   * 引擎配套：`roundRepeat` 新增 ①`rateIncrementPerRound`（每回合几率递增，先加算再走士气，封顶 100%）；
+   *   ②`independentRolls`（对 `skill.output` 每段各掷一次、命中段单独结算 = 「两个效果独立判断」）。
+   * 生效对象为**携带者自身**（我军群体 2 目标各自行动时独立判定）→ roundRepeat 沿用战法目标池
+   * （准备阶段锁定的 2 名友军，`targetSide:'ally'` + `targetMode:'group'`）。
+   * 「持续 1 回合」按**自身行动时施加**口径 duration 1（覆盖其下一次行动之前，即整段被攻击窗口）。
+   */
+  niaoyun_shanbing: {
+    id: 'niaoyun_shanbing',
+    name: '鸟云山兵',
+    type: 'command',
+    phase: 'prep',
+    range: 2,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'ally',
+    tags: ['damage_reduce'],
+    roundRepeat: {
+      startRound: 1,
+      endRound: 8, // 第 1 回合 30% → 每回合 +10% → 第 8 回合 100%（封顶 100%）
+      rate: 0.3,
+      rateIncrementPerRound: 0.1,
+      independentRolls: true,
+    },
+    output: [
+      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.6, duration: 1, damageType: 'physical' } },
+      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.6, duration: 1, damageType: 'strategy' } },
+    ],
+  },
+
+  /**
+   * 十面埋伏（S 主动·1 回合准备·距离 5·40%）：对敌军全体发动一次策略攻击（伤害率 130%，受谋略属性影响），
+   * 并随机使敌军群体 1-2 目标**造成的所有伤害大幅度降低**，持续 1 回合。
+   * 官方：scripts/skill_extra.json id 200715（1 级 65%，满级 130%）；
+   * targetShow 写「敌军群体（有效距离内 3 个目标）」，但满级 desc 明确伤害段为**敌军全体**（距离 5 已覆盖全场）
+   * → 战法目标取 `'all'`，减伤段用输出级 `targetMode:'group'` + `groupCount:[1,2]` 另选 1-2 目标
+   * （全主诿异既有先例）。
+   * 「大幅度降低」无官方数值 → 沿用用户口径 `caused -99.99`（`buffMult` 下限 10%，Web 显示「造成的伤害大幅降低」）；
+   * 减伤对象为敌军、在自身行动中施加 → 「持续 1 回合」按 duration 2（辕门射戟口径）。
+   * 策略伤害 130% 受谋略缩放，官方未给成长率 → `growthRate` 留空（登记《成长率待补名单》§三）。
+   */
+  shimian_maifu: {
+    id: 'shimian_maifu',
+    name: '十面埋伏',
+    type: 'active',
+    prepare: true,
+    range: 5,
+    triggerRate: 0.4,
+    targetMode: 'all',
+    targetSide: 'enemy',
+    tags: ['damage', 'damage_boost'],
+    output: [
+      { kind: 'strategy_damage', rate: 130, strategyScaled: true },
+      {
+        kind: 'inflict_status',
+        targetSide: 'enemy',
+        targetMode: 'group',
+        groupCount: [1, 2],
+        status: { type: 'damage_boost', rate: -99.99, duration: 2, direction: 'caused' },
+      },
+    ],
+  },
+
+  // ─── 拆解通用 B+ 第十八阶段：阵营条件 / 战法距离 / 普攻后围困（A 级 1 个 · 合纵连横）───
+
+  /**
+   * 合纵连横（A 指挥·距离 3·一类指挥·我军全体）：我方出战 3 名武将**阵营均不相同**时——
+   * ① 我军全体武将**战法距离 +1**；② 对**非自身阵营**的武将造成攻击与策略伤害提升 10%；
+   * ③ 对非自身阵营的武将**普通攻击后** 40% 几率使目标陷入围困，持续 1 回合。
+   * 官方：scripts/skill_extra.json id 200964（1 级 5% / 20%，满级 10% / 40%）。
+   * 引擎配套（4 项）：
+   *   ① `BaseSkill.teamFactionDistinct` —— 阵营条件整次开关（与 `teamTroopFilter` 同判定点）；
+   *   ② 新状态 `skill_range_buff` + `target.ts skillRangeOf` —— 战法选目标距离上限加算
+   *      （`skillTargets` / `unitsInSkillRange` 均生效；普攻距离仍走 `range_buff` / `attackRangeOf`，互不影响）；
+   *   ③ `damage_boost.targetFactionNotSelf` —— 增伤过滤维，按**携带者阵营 vs 受击者阵营**实时判定
+   *      （同阵营则该增伤不生效；与全域增伤是同名不同轨，不判同源累加）；
+   *   ④ `inflict_status.targetFactionNotSelf`（段级阵营过滤）+ `BaseSkill.basicHitProc`
+   *      —— 第三个效果作用于**我军全体**（非携带者本人），故不能用只认携带者自身的 `onBasicHit`：
+   *      准备阶段按锁定友军逐单位注册到 `ctx.basicHitProcs`，任一被注册友军普攻命中后按 40% 判定。
+   * 「持续 1 回合」的围困在自身行动中施加给他人口径 → duration 2（辕门射戟 / 举抑臧否口径）；
+   * 战法距离 +1 与增伤为「战斗中」常驻 → duration 999。
+   * 阵营条件（3 将互不相同）读**部署名单**（不论 alive），战斗中不再复查。
+   */
+  hezong_lianheng: {
+    id: 'hezong_lianheng',
+    name: '合纵连横',
+    type: 'command',
+    phase: 'prep',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    retainAfterDeath: true,
+    teamFactionDistinct: true,
+    tags: ['range_buff', 'damage_boost', 'siege'],
+    output: [
+      { kind: 'inflict_status', status: { type: 'skill_range_buff', amount: 1, duration: 999 } },
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'damage_boost',
+          rate: 0.1,
+          duration: 999,
+          direction: 'caused',
+          targetFactionNotSelf: true,
+        },
+      },
+    ],
+    basicHitProc: {
+      rate: 0.4,
+      targetFactionNotSelf: true,
+      output: [{ kind: 'inflict_status', targetFactionNotSelf: true, status: { type: 'siege', duration: 2 } }],
+    },
+  },
+
+  // ─── 拆解通用 B+ 第十九阶段：女将组合 / 段级站位 / 受击规避（B 级 1 个 · 美人计）───
+
+  /**
+   * 美人计（B 指挥·距离 5·一类指挥·我军全体）：**正式回合开始后**，我方 3 名武将均为女武将时——
+   * ① 大营造成的所有伤害提升 14%；② 中军每回合行动前随机使敌军单体**男武将**「下一次攻击或策略攻击
+   * 造成的伤害降低 60%」；③ 前 4 回合前锋**首次**受到伤害时进入规避状态，免疫该次伤害。
+   * 官方：scripts/skill_extra.json id 200853（1 级 7% / 30%）。
+   * 引擎配套（4 项）：
+   *   ① `BaseSkill.teamGenderFilter: 'female'` —— 我军出战 3 将全为女将，否则整次不生效
+   *      （与 `teamFactionDistinct` 同判定点；无性别数据者不匹配）；
+   *   ② `delayedOutputs: [{ atRound: 1 }]` —— 官方口径「**正式回合开始后**」（非准备阶段）：
+   *      大营增伤在第 1 回合回合开始、单位行动之前对锁定友军结算（匠心不竭既有链路），
+   *      段级新增 `inflict_status.requirePositions: ['大营']` 限定站位；
+   *   ③ `roundRepeat` + `onlyPositions: ['中军']`（p17 既有）—— 「中军每回合行动前」判定：
+   *      准备阶段锁定我军全体，判定只落在中军身上；`requireGender:'male'` 段在**随机选人之前**
+   *      预过滤敌军（否则会先随机到女将再被过滤掉而整段落空）；
+   *      减伤为「**下一次**攻击或策略攻击」→ `damage_boost caused −60%` + `charges:1`（青丘媚祸先例）；
+   *   ④ `onHurt{ timing:'before_damage', victim:'locked', victimPositions:['前锋'] }` + `grant_evasion`：
+   *      「首次受到伤害时进入规避状态，免疫该次伤害」＝ 受击前授予 1 层规避并当场消耗（applyDamage 既有链路），
+   *      `startRound:1 / endRound:4` ＝ 前 4 回合，`maxTriggers:1` ＝ 仅首次。
+   */
+  meiren_ji: {
+    id: 'meiren_ji',
+    name: '美人计',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    retainAfterDeath: true,
+    teamGenderFilter: 'female',
+    tags: ['damage_boost', 'evasion'],
+    // ③ 中军每回合行动前：随机敌军单体男将「下一次攻击或策略攻击造成伤害降低 60%」
+    output: [
+      {
+        kind: 'inflict_status',
+        targetSide: 'enemy',
+        targetMode: 'random_single',
+        requireGender: 'male',
+        status: { type: 'damage_boost', rate: -0.6, duration: 999, direction: 'caused', charges: 1 },
+      },
+    ],
+    roundRepeat: { startRound: 1, endRound: 8, rate: 1, onlyPositions: ['中军'] },
+    // ② 正式回合开始后（第 1 回合开始、单位行动前）：大营造成的所有伤害提升 14%（整场）
+    delayedOutputs: [
+      {
+        atRound: 1,
+        output: [
+          {
+            kind: 'inflict_status',
+            requirePositions: ['大营'],
+            status: { type: 'damage_boost', rate: 0.14, duration: 999, direction: 'caused' },
+          },
+        ],
+      },
+    ],
+    // ④ 前 4 回合前锋首次受到伤害 → 进入规避状态并免疫该次伤害
+    onHurt: {
+      victim: 'locked',
+      victimPositions: ['前锋'],
+      timing: 'before_damage',
+      startRound: 1,
+      endRound: 4,
+      maxTriggers: 1,
+      applyTo: 'victim',
+      output: [{ kind: 'grant_evasion', stacks: 1, target: 'self' }],
+    },
+  },
+
   // ─── 批量31：下架武将清单 §1.2「补 1 个机制」逐个实现 ───
 
   /**
