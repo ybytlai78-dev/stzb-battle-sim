@@ -230,6 +230,10 @@ export interface CombatContext {
    * 「造成伤害后再受一次策略伤害」标记（翕处还张）：按持有者记录，命中其**下一次造成伤害**时结算并消耗。
    */
   dealPunishMarks?: Array<{ holderId: string; casterId: string; skillId: string; rate: number }>;
+  /**
+   * 「目标下次行动前结算」延迟队列（道行险阻）：目标行动开始前由施法者结算排入的 output。
+   */
+  pendingStrikes?: Array<{ targetId: string; casterId: string; skillId: string; output: SkillOutput[] }>;
   /** 持续型急救计数器（皇裔流离）：战法级共享触发率与总生效次数（全队合计，每达到 N 次提升）。
    *  可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化 */
   firstAidCounters?: FirstAidCounter[];
@@ -1811,6 +1815,12 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
 
   // 0. 行动中施加的状态递减：计数器回合持续到下次行动开始前（连击/行动中怯战等）
   tickStatusesOnActStart(ctx, unit);
+  // 延迟结算（道行险阻「目标下一次行动前」）：行动开始前由原施法者结算，可能致死 → 直接收尾
+  triggerPendingStrikes(ctx, unit);
+  if (!unit.alive) {
+    endUnitAct(ctx, unit);
+    return;
+  }
   // 忠克猛烈：施法者行动时清除其施加的受击追加攻击标记（窗口「直到施法者下回合行动前」）
   expireRetaliateOnCasterAct(ctx, unit);
 
@@ -4093,6 +4103,23 @@ function triggerCastKindHooks(
 }
 
 /**
+ * 「目标下一次行动前」延迟结算（道行险阻）：目标行动开始前，由原施法者对其结算排入的 output
+ * （目标或施法者已阵亡则跳过；结算后条目消耗）。
+ */
+function triggerPendingStrikes(ctx: CombatContext, unit: UnitState): void {
+  const list = ctx.pendingStrikes?.filter((p) => p.targetId === unit.general.id) ?? [];
+  if (list.length === 0) return;
+  ctx.pendingStrikes = ctx.pendingStrikes!.filter((p) => p.targetId !== unit.general.id);
+  for (const p of list) {
+    if (!unit.alive) return;
+    const caster = castUnit(ctx, p.casterId);
+    const skill = resolveSkill(ctx, p.skillId);
+    if (!caster || !caster.alive || !skill) continue;
+    executeSkillOutputs(ctx, caster, skill, [unit], p.output);
+  }
+}
+
+/**
  * 「造成伤害后再受一次策略伤害」标记结算（翕处还张）：持有者**下一次造成伤害**（实际扣兵 > 0）时，
  * 先摘掉其全部标记（防递归），再由原施法者对其打出一次策略伤害（按**触发时**双方生效属性/增减伤实时计算）。
  */
@@ -4364,7 +4391,7 @@ function executeSkillOutputs(
     // 单输出目标池：target:'self' → 施法者；targetMode 覆盖 → 按战法距离重新选敌/友军目标
     const enemies = caster.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
     const allies = caster.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
-    const outTarget = out.kind === 'positional_physical_damage' || out.kind === 'morale_branch' || out.kind === 'detonate_sorcery_marks' || out.kind === 'grant_cover' || out.kind === 'mark_deal_punish' ? undefined : out.target;
+    const outTarget = out.kind === 'positional_physical_damage' || out.kind === 'morale_branch' || out.kind === 'detonate_sorcery_marks' || out.kind === 'grant_cover' || out.kind === 'mark_deal_punish' || out.kind === 'schedule_strike' ? undefined : out.target;
     const outMode =
       out.kind === 'physical_damage' || out.kind === 'strategy_damage' ? out.targetMode : undefined;
     const outIgnoreRange =
@@ -5065,13 +5092,15 @@ function executeSkillOutputs(
             }
           } else if (
             (create.type === 'attack_buff' || create.type === 'defense_buff' || create.type === 'strategy_buff' || create.type === 'speed_buff') &&
-            create.strategyScaled && create.growthRate !== undefined
+            ((create.strategyScaled && create.growthRate !== undefined) ||
+              (create.attackScaled && create.growthRate !== undefined))
           ) {
-            // 属性 buff 受谋略影响（其疾如风速度+41 / 魏武之世四维-15%）：
-            // 实际数值 = 基础 + 成长率×(生效谋略-80)；按绝对值缩放后恢复符号
-            // （减益类基础值为负，效果幅度随谋略增强：如 -15% 谋略216 → -35%）
+            // 属性 buff 受谋略 / 受攻击影响（其疾如风速度+41 / 魏武之世四维-15% / 道行险阻防御 −50 受攻击）：
+            // 实际数值 = 基础 + 成长率×(生效属性-80)；按绝对值缩放后恢复符号
+            // （减益类基础值为负，效果幅度随属性增强：如 -15% 谋略216 → -35%）
             // 百分比类（percent）按 1% 粒度「八舍九入」取整；点数类四舍五入
-            const scaled = scaledValue(Math.abs(create.amount), create.growthRate, effectiveStat(caster, 'strategy'));
+            const attr = create.attackScaled ? effectiveStat(caster, 'attack') : effectiveStat(caster, 'strategy');
+            const scaled = scaledValue(Math.abs(create.amount), create.growthRate, attr);
             const amount = (create.percent ? roundRate(scaled) : Math.round(scaled)) * Math.sign(create.amount);
             inflictStatus(ctx, t, { ...create, amount }, skill.type, skill.id);
           } else {
@@ -5130,6 +5159,20 @@ function executeSkillOutputs(
           skill.type,
           skill.id
         );
+        break;
+      }
+      case 'schedule_strike': {
+        // 道行险阻：把后续段排入延迟队列，目标下次行动开始前由施法者结算
+        ctx.pendingStrikes ??= [];
+        for (const t of pool) {
+          if (!t.alive) continue;
+          ctx.pendingStrikes.push({
+            targetId: t.general.id,
+            casterId: caster.general.id,
+            skillId: skill.id,
+            output: out.output,
+          });
+        }
         break;
       }
       case 'mark_deal_punish': {
@@ -5720,6 +5763,7 @@ function executeSkillWithTargets(
         o.kind !== 'detonate_sorcery_marks' &&
         o.kind !== 'grant_cover' &&
         o.kind !== 'mark_deal_punish' &&
+        o.kind !== 'schedule_strike' &&
         o.target !== 'self' &&
         // 单输出已覆盖目标池的 heal/inflict 不决定战法整体目标（利兵谋胜：伤敌 + 治友）
         !('targetSide' in o && o.targetSide) &&

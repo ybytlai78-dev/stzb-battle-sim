@@ -5832,6 +5832,43 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     ],
   },
 
+  // ─── 拆解通用 B+ 第十六阶段：延迟结算（A 级 1 个 · 道行险阻）───
+
+  /**
+   * 道行险阻（A 主动·距离 4·40%·敌军单体）：
+   * 使敌军单体防御属性降低 50（**受攻击属性影响**）、谋略属性降低 50（**受谋略属性影响**），持续 1 回合；
+   * 同时在**目标下一次行动前**对其发动一次策略攻击（伤害率 150%，受谋略）和一次攻击（伤害率 150%）。
+   * 官方：scripts/skill_extra.json id 200684（1 级 25% / 75%）。
+   * 引擎配套：① **新增输出 `schedule_strike`** —— 把后续段排入 `ctx.pendingStrikes`，
+   *   目标下次行动开始前由原施法者结算（`triggerPendingStrikes` 接在 `tickStatusesOnActStart` 之后）；
+   *   ② 属性 buff 新增 **`attackScaled`**（受攻击缩放；原先只有 strategyScaled），
+   *   `inflict_status` 缩放分支按 `attackScaled ? 生效攻击 : 生效谋略` 取属性。
+   * 「持续 1 回合」按行动中施加给他人口径 duration 2（辕门射戟）。两段「受属性影响」的成长率均未确认
+   * → `growthRate` 留空（基值 50 / 150%），登记《成长率待补名单》§三。
+   */
+  daoxing_xianzu: {
+    id: 'daoxing_xianzu',
+    name: '道行险阻',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.4,
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['debuff_defense', 'debuff_strategy', 'damage'],
+    output: [
+      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -50, duration: 2, attackScaled: true } },
+      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -50, duration: 2, strategyScaled: true } },
+      {
+        kind: 'schedule_strike',
+        output: [
+          { kind: 'strategy_damage', rate: 150, strategyScaled: true },
+          { kind: 'physical_damage', rate: 150 },
+        ],
+      },
+    ],
+  },
+
   // ─── 批量31：下架武将清单 §1.2「补 1 个机制」逐个实现 ───
 
   /**

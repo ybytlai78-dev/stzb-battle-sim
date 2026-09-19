@@ -905,9 +905,9 @@
     "targetDesc": "敌军单体",
     "effectDesc": "使敌军单体防御属性降低50.0（受攻击属性影响）、谋略属性降低50.0（受谋略属性影响），持续1回合，同时在目标下一次行动前对其发动一次策略攻击（伤害率150.0%，受谋略属性影响）和一次攻击（…",
     "sources": "【群·妺喜·骑】【吴·小乔＆大乔·步】【蜀·徐庶·骑·SP】",
-    "status": "skipped",
-    "missingMechanics": "目标下次行动前结算",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "delay-settle p16"
   },
   {
     "name": "雄兵破敌",
