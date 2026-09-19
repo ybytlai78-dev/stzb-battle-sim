@@ -791,6 +791,13 @@ interface BaseSkill {
     requireTargetStatus?: StatusType;
   }>;
   /**
+   * 随机复制发动（奇门遁甲「使自身随机发动除自身外的敌我全体所有主动战法中的1个，跳过全部准备回合」）：
+   * 最外层发动时收集**除施法者自身外**敌我全体存活单位的 `activeSkillIds`（去重，仅注册表里 type='active' 者），
+   * 随机取 1 个，直接执行其 `output`（跳过准备段与发动率判定）——事件/战报归属**被复制战法**
+   * （skill_target + skill_cast，同 chainSkills 口径）；无候选则空转。
+   */
+  copyRandomActive?: true;
+  /**
    * 按「造成伤害次数」递增本战法 `chance_group` 的基础发动率（霸王渡江「每次攻击造成伤害后可使
    * 霸王渡江发动率提升 3.0%，该效果可叠加 5 次」）：
    * 本战法每造成 1 次伤害（实际扣兵 > 0）计 1 层（上限 maxStacks），

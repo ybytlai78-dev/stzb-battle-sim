@@ -7794,4 +7794,36 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       ],
     },
   },
+  /**
+   * 奇门遁甲（XP左慈·群骑 h802 主战法）：主动 A，距离 5，目标自己，发动率 65%。
+   * 满级 = 1 级（无等级数值差）：「使自身随机发动除自身外的敌我全体所有主动战法中的 1 个，跳过全部准备回合」。
+   * 官方：scripts/skill_extra.json id 200279（主动 A / 距离 5 / 目标自己；`effect` 标签为空字符串，
+   *   发动几率区间 30%-65%）。
+   *   来源 https://stzb.163.com/m/skilllist/200279.html
+   *
+   * 口径（策略 A，2026-09-20，逐条推定）：
+   *   ① 官方 `effect` 为空 → 本战法**无固有 effect 标签**，`tags: []`
+   *      （被复制战法的效果不参与本战法的冲突判定）。
+   *   ② 无「受属性影响」段、无数值缺口 → **上架**（不登记 OFFLINE_MAIN_SKILLS）。
+   *   ③ 候选池 = 除自身外**敌我全体存活单位**的主动战法（`activeSkillIds`，同一战法去重；
+   *      只收注册表里 `type === 'active'` 的，含准备型主动）。
+   *   ④ 「跳过全部准备回合」= 直接执行被复制战法的 `output`（不进入准备、不掷其 `triggerRate`）；
+   *      被复制战法各段自身的 `chance` / `chance_group` 照常判定。
+   *   ⑤ 无候选（场上除左慈外没有任何主动战法）时本战法**空转**（不抛错、不发被复制战法的事件）。
+   *   ⑥ 发动率官方区间 30%-65% → 仓库口径**取上界** = 0.65（已查证确认）。
+   *
+   * `output: []` + `copyRandomActive` 承载全部效果；官方「跳过全部准备回合」由直接执行 output 实现。
+   */
+  qimen_dunjia: {
+    id: 'qimen_dunjia',
+    name: '奇门遁甲',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.65,
+    targetMode: 'self',
+    tags: [],
+    copyRandomActive: true,
+    output: [],
+  },
 };

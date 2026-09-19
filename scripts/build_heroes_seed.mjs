@@ -166,6 +166,7 @@ const SKILL_ID_BY_NAME = {
   胡笳离愁: 'hujia_lichou',
   断首何怒: 'duanshou_henu',
   勇挚刚毅: 'yongzhi_gangyi',
+  奇门遁甲: 'qimen_dunjia',
 };
 
 /** 现有 8 个武将固定拼音 id（测试直接引用 HERO_REGISTRY.<id>） */

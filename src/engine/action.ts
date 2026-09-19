@@ -4035,6 +4035,57 @@ function runChainSkills(ctx: CombatContext, caster: UnitState, skill: Skill, tar
   }
 }
 
+/**
+ * 随机复制发动（奇门遁甲）：最外层发动时收集**除施法者自身外**敌我全体存活单位的主动战法
+ * （`activeSkillIds` 去重，仅注册表里 `type === 'active'` 者，含准备型主动），用 `ctx.rng` 随机取 1 个，
+ * 直接执行其 `output`（**跳过准备段与发动率判定**）——事件/战报归属**被复制战法**
+ * （skill_target + skill_cast，同 runChainSkills 口径）；无候选则空转（不抛错、不发事件）。
+ * 目标池按**被复制战法自身**的 `targetMode` / `targetSide`（缺省 enemy）/ `range ?? skill.range` /
+ * `groupCount` 用 `skillTargets` 现算；`targetMode === 'self'` 时固定为施法者自身；空池则不发事件。
+ * `targets` 仅为与 runChainSkills 调用点同签名保留（复制哪一战法不知道会命中谁，无法沿用本战法目标池）。
+ */
+function runCopyRandomActive(ctx: CombatContext, caster: UnitState, skill: Skill, targets: UnitState[]): void {
+  void targets;
+  if (!('copyRandomActive' in skill) || !skill.copyRandomActive) return;
+  const seen = new Set<string>();
+  const candidates: Extract<Skill, { type: 'active' }>[] = [];
+  for (const unit of [...ctx.myTeam, ...ctx.enemyTeam]) {
+    if (!unit.alive || unit.general.id === caster.general.id) continue;
+    for (const id of unit.general.activeSkillIds) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const ref = resolveSkill(ctx, id);
+      if (ref && ref.type === 'active') candidates.push(ref);
+    }
+  }
+  if (candidates.length === 0) return;
+  const ref = candidates[ctx.rng.int(candidates.length)];
+  if (!ref) return;
+  const allies = caster.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+  const enemies = caster.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
+  let pool: UnitState[];
+  if (ref.targetMode === 'self') {
+    pool = [caster];
+  } else {
+    const source = ref.targetSide === 'ally' ? allies : enemies;
+    pool = skillTargets(ctx, caster, source, ref.range ?? skill.range, ref.targetMode, ref.groupCount ?? 2);
+  }
+  if (pool.length === 0) return;
+  ctx.events.push({
+    type: 'skill_target',
+    unitId: caster.general.id,
+    skillId: ref.id,
+    targetIds: pool.map((t) => t.general.id),
+  });
+  ctx.events.push({
+    type: 'skill_cast',
+    unitId: caster.general.id,
+    skillId: ref.id,
+    skillName: ref.name,
+  });
+  executeSkillOutputs(ctx, caster, ref, pool, ref.output, false);
+}
+
 /** 【扬砂】额外普攻单次行动上限（安全阀：层数可在额外普攻中继续累计） */
 const YANGSHA_MAX_EXTRA_ATTACKS = 20;
 
@@ -4699,6 +4750,8 @@ function executeSkillOutputs(
   const list = outputs ?? skill.output;
   // 战法链（连环计）：仅最外层发动执行（nested 调用都带显式 outputs，故不会递归触发）
   if (!outputs) runChainSkills(ctx, caster, skill, targets);
+  // 随机复制发动（奇门遁甲）：同样仅最外层执行；显式 outputs 传入被复制战法 → 其自身 chain/copy 不递归
+  if (!outputs) runCopyRandomActive(ctx, caster, skill, targets);
   /** 属性/兵力/增减伤的读取来源；缺省与施法者同体（旧口径） */
   const statU = statSource ?? caster;
   /** 上两段伤害输出的实际目标，供 onlyIfOverlapPrevious（怀德畏威重合混乱）取交集 */
