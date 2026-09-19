@@ -133,7 +133,7 @@ combat.ts   主循环 → 生成事件流
 ```bash
 npm install
 
-npm test                      # 全部测试（1,121 个测试用例）
+npm test                      # 全部测试（1,239 个测试用例）
 npm run dev                   # 跑默认测试集，输出文本战报
 npm run dev -- T1_PURE_ATTACK # 指定内置测试集
 npx tsc --noEmit              # 类型检查（strict）
