@@ -64,6 +64,9 @@
   .slot-skill { gap: 1px; }
   .slot-skill-name { font-size: 8.5px; padding: 0 3px; }
   .slot .hint, .slot .tip { font-size: 9px; margin-top: 0; }
+  /* 空槽加号素材：矮视口缩小，避免撑高槽位 */
+  .slot-add-icon { width: 24px; height: 24px; }
+  .slot.empty { gap: 4px; letter-spacing: 1px; }
 
   /* 武将池：卡片缩小，一屏看更多 */
   .hero-pool { padding: 8px; }

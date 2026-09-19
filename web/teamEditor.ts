@@ -13,6 +13,7 @@ import { computeTroopBonuses, ZERO_BONUS } from '../src/engine/troopBonus';
 import { showNotice } from './notice';
 import { createBattleView } from './battleView';
 import { createBattleSummary, createStatsView } from './battleSummary';
+import { asset } from './assets';
 
 export interface SlotState {
   heroId: string | null;
@@ -511,7 +512,7 @@ export function renderSlot(team: 'red' | 'blue', i: number, slot: SlotState, lab
 
   if (!slot.heroId) {
     el.classList.add('empty');
-    el.innerHTML = `<span>+ 点击选择 ${label}</span>`;
+    el.innerHTML = `<img class="slot-add-icon" src="${asset('/skills/slot-add.png')}" alt="" /><span>点击选择 ${label}</span>`;
     el.onclick = () => openHeroPicker(team, i, h);
     return el;
   }
@@ -724,7 +725,7 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
         const canAdd = s.extraSkillIds.length < 2;
         return `
           <div class="skill-slot-row add ${cfg.editable && canAdd ? '' : 'disabled'}" data-slot="${i}" title="${cfg.editable ? '装配战法' : '放入阵容后可装配'}">
-            <span class="sslot-add">＋</span>
+            <img class="sslot-add" src="${asset('/skills/slot-add.png')}" alt="" />
             <span class="sslot-empty-tip">未装配</span>
           </div>`;
       }

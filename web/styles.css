@@ -515,6 +515,8 @@ main {
 }
 .slot.empty {
   display: flex;
+  flex-direction: column;
+  gap: 8px;
   align-items: center;
   justify-content: center;
   color: var(--color-text-muted);
@@ -525,6 +527,18 @@ main {
   border-bottom: var(--card-accent);
   background: var(--color-surface);
   font-family: var(--font-kai);
+}
+/* 武将空槽加号：与战法槽共用同一素材（slot-add.png） */
+.slot-add-icon {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  opacity: .85;
+  transition: opacity .12s, filter .12s;
+}
+.slot.empty:hover .slot-add-icon {
+  opacity: 1;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--gold) 70%, transparent));
 }
 .slot-inner { display: flex; gap: 8px; width: 100%; height: 100%; min-height: 0; }
 .slot-art {
@@ -2261,18 +2275,20 @@ main {
   user-select: none;
 }
 .sslot-rm:hover { border-color: var(--red); color: var(--red); background: var(--red-soft); }
+/* 未装配加号：官方素材 slot-add.png（圆形，白底已抠），替换原「虚线圆 + 文字＋」 */
 .sslot-add {
   width: 40px;
   height: 40px;
-  border-radius: 50%;
-  border: 1px dashed var(--line-strong);
-  color: var(--text-dim);
-  font-size: 20px;
-  line-height: 38px;
-  text-align: center;
+  display: block;
+  object-fit: contain;
   margin: 4px 0;
+  opacity: .85;
+  transition: opacity .12s, filter .12s;
 }
-.skill-slot-row.add:hover .sslot-add { border-color: var(--gold); color: var(--gold-bright); }
+.skill-slot-row.add:hover .sslot-add {
+  opacity: 1;
+  filter: drop-shadow(0 0 5px color-mix(in srgb, var(--gold) 70%, transparent));
+}
 .sslot-empty-tip { font-size: 11px; color: var(--text-weak); margin-bottom: 2px; }
 .sslot-icon { position: relative; display: block; flex-shrink: 0; }
 .sslot-icon .ti { position: absolute; inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px); object-fit: contain; }
