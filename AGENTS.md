@@ -49,7 +49,7 @@ npx tsc --noEmit                    # 类型检查（strict）
 | 武将面板值 / 攻击距离 | `src/data/heroes.ts` | `dateyuan/武将数据调研.md` |
 | 伤害公式 | `src/engine/formulas.ts` | `dateyuan/战斗伤害公式调研.md` + `dateyuan/谋略战法受谋略成长调研.md` |
 | **兵力恢复公式（§四：恢复率 + 恢复值，含 `calcHealAmount`）** | `src/engine/formulas.ts` | `dateyuan/战斗伤害公式调研.md` §四 |
-| **待补充机制清点（88 个 skipped 通用战法按缺失机制分组）** | `docs/待补充机制清点.md` | 由 `scripts/seed_universal_skills.mjs` 的 `mechanism_key` 联动 DB `skills.mechanism_key` 列 |
+| **待补充机制清点（`_classified.json` 200 条通用战法 = 原始调研 199 + 后补「恃强淬锋」；现 190 已实现 / 10 skipped 全为 C/D；另有 4 个 A/S 清单外未实现见其 §五）** | `docs/待补充机制清点.md` | 由 `scripts/seed_universal_skills.mjs` 的 `mechanism_key` 联动 DB `skills.mechanism_key` 列（⚠️ 勿重跑 `scripts/_classify.mjs`，会覆盖清单） |
 | **下架武将 / 战法清单（58 个下架武将 + 31 个下架战法的卡点、缺失机制分布）** | `docs/下架武将清单.md` | 由 `npx tsx scripts/gen_offline_report.mts` 按 `listing.ts` 口径生成 |
 
 `dateyuan/战斗系统设计文档.md` 是决策记录与整体设计（v0.1 起步，现引擎已超出其范围：指挥/被动/追击/状态/冲突已实现）。
