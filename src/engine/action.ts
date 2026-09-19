@@ -4880,6 +4880,10 @@ function executeSkillOutputs(
     if ((out.kind === 'physical_damage' || out.kind === 'strategy_damage') && out.targetPick) {
       pool = pickEnemyByDamageTargetPick(ctx, caster, enemies, outRange, out.targetPick);
     }
+    // 站位定向伤害段（万军取首「对敌方大营」）：直接锁定该站位的存活敌军，不按 targetMode 重选
+    if ((out.kind === 'physical_damage' || out.kind === 'strategy_damage') && out.positions && out.positions.length > 0) {
+      pool = enemies.filter((u) => u.alive && out.positions!.includes(u.general.position));
+    }
     // 恢复段选人覆盖（知人待士「我军兵力最低单体恢复一定兵力」）：按**当前兵力**取最低的存活友军
     // （含施法者自身；与 inflict_status.targetPick 的池无关，直接锁定 1 人）
     if (out.kind === 'heal' && out.targetPick === 'lowest_troops_ally') {

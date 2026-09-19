@@ -162,6 +162,11 @@ export type SkillOutput =
        */
       targetPick?: DamageTargetPick;
       /**
+       * 站位定向（万军取首「额外对敌方大营再发动一次猛烈攻击」）：设置后**直接取该站位的存活敌军**，
+       * 不按 targetMode 重选（与 inflict_status.positions 同口径，但用于伤害段）。缺省 undefined = 不限制。
+       */
+      positions?: Position[];
+      /**
        * 代打伤害按代打者自身属性孰高定轨（徽言龙凤「每回合行动时有 60% 几率对随机敌军单体造成 1 次
        * 攻击伤害（伤害率 150%）或策略攻击伤害（伤害率 120%），由攻击或谋略属性中较高的属性决定」）：
        * 设置后**忽略 `rate`**，逐代打者判断其生效攻击 > 生效谋略 → 用 attackRate（攻击伤害），
@@ -253,6 +258,11 @@ export type SkillOutput =
        * —— `'lowest_strategy_in_range'` 在战法有效距离内取生效谋略最低者（用户确认口径）。
        */
       targetPick?: DamageTargetPick;
+      /**
+       * 站位定向（万军取首「额外对敌方大营再发动一次猛烈攻击」）：设置后**直接取该站位的存活敌军**，
+       * 不按 targetMode 重选（与 inflict_status.positions 同口径，但用于伤害段）。缺省 undefined = 不限制。
+       */
+      positions?: Position[];
       /** 兵力阈值条件：不满足的目标不结算本段（持玺兴兵「兵力低于 50% 才恢复」） */
       troopRatio?: TroopRatioCond;
       /**

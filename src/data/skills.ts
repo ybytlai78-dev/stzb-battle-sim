@@ -7901,4 +7901,39 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'inflict_status', target: 'self', status: { type: 'damage_boost', rate: 0.05, duration: 999, direction: 'caused', damageType: 'strategy', stack: true, stacks: 1, maxStacks: 6 } },
     ],
   },
+  /**
+   * 万军取首（XP黄忠·蜀弓 h810 主战法）：追击 S，官方有效距离栏「--」（追击战法不适用），发动率 40%。
+   * 满级：普通攻击后，对攻击目标再次发动猛烈攻击（伤害率 160.0%），第四回合起，会额外对 5 距离内敌军
+   *   单体发动一次攻击（伤害率 100.0%），同时有 50.0% 几率额外对敌方大营再发动一次猛烈攻击（伤害率 160.0%）。
+   * 1 级：160% → 80% / 100% → 50% / 160% → 80%（三段同比例减半）。
+   * 官方：scripts/skill_extra.json id 200292（追击 S / 距离 -- / 攻击目标 / 兵种弓步骑；
+   *   effect 标签 攻击伤害）。来源 https://stzb.163.com/m/skilllist/200292.html
+   *
+   * 口径（策略 A，2026-09-20；推定处已标注）：
+   *   ① 追击主段沿用**本战法整体目标 `[hitTarget]`**（普攻目标），不受距离约束——追击战法不适用普攻距离语义
+   *      （官方有效距离栏「--」）。战法级 `range: 5` 与第二段段级 `range: 5` 一致（不改变主段选靶）。
+   *   ② 「第四回合起，会额外对 5 距离内敌军单体发动一次攻击（100%）」→ **每次追击触发都追加**
+   *      （段级 `startRound: 4` + `targetMode:'random_single'` + 段级 `range: 5`），**不是「每回合一次」**——
+   *      官方未写「每回合」，句法属追击效果列举（**推定**）。
+   *   ③ 「同时有 50.0% 几率额外对敌方大营再发动一次猛烈攻击（160%）」→ 独立段 `chance: 0.5` +
+   *      `positions: ['大营']`（引擎件「伤害段站位定向」：直接锁定敌方大营站位的存活敌军，不按
+   *      targetMode 重选）；**敌方大营已阵亡 → 池为空 → 该段空转**（主段 / 追加段照常结算）。
+   *   ④ 三段均无「受属性影响」→ 不缩放、无数值缺口 → **上架**（不登记 OFFLINE_MAIN_SKILLS）。
+   */
+  wanjun_qushou: {
+    id: 'wanjun_qushou',
+    name: '万军取首',
+    type: 'pursuit',
+    range: 5, // 官方「--」：追击主段不受约束；与第二段段级 range 5 一致
+    triggerRate: 0.4, // 官方 40%
+    tags: ['damage'],
+    output: [
+      // ① 追击主段：对普攻目标再次发动猛烈攻击 160%
+      { kind: 'physical_damage', rate: 160 },
+      // ② 第 4 回合起每次触发追加：5 距离内随机敌军单体 100%（段级 range 5）
+      { kind: 'physical_damage', rate: 100, startRound: 4, targetMode: 'random_single', range: 5 },
+      // ③ 50% 额外对敌方大营再发动一次猛烈攻击 160%（站位定向；大营阵亡则空转）
+      { kind: 'physical_damage', rate: 160, chance: 0.5, positions: ['大营'] },
+    ],
+  },
 };

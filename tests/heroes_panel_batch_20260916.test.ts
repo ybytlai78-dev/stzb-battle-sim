@@ -133,7 +133,8 @@ describe('批量补入 · XP 卡（season=XP，100xxx 段）', () => {
     // h788（XP丁奉·雪奋短兵）已实现（因动摇成长率未确认暂下架，2026-09-19 武将 31）→ 从本表移出
     // h815（XP孟获·蛮王御众）已实现（因减伤受防御成长未确认暂下架，2026-09-19 武将 32）→ 从本表移出
     // h802（XP左慈·奇门遁甲）已实现并上架（2026-09-20 武将 37）→ 从本表移出
-    for (const id of ['h652', 'h675', 'h684', 'h691', 'h784', 'h787', 'h791', 'h792', 'h795', 'h800', 'h808', 'h810']) {
+    // h810（XP黄忠·万军取首）已实现并上架（2026-09-20 武将 40）→ 从本表移出
+    for (const id of ['h652', 'h675', 'h684', 'h691', 'h784', 'h787', 'h791', 'h792', 'h795', 'h800', 'h808']) {
       const r = HERO_RECORDS[id];
       expect(r, `${id} 应已入库`).toBeTruthy();
       expect(r.name.startsWith('XP'), `${id} 应以 XP 前缀命名`).toBe(true);
@@ -171,6 +172,16 @@ describe('批量补入 · XP 卡（season=XP，100xxx 段）', () => {
     expect(r.name).toBe('XP左慈');
     expect(r.mainSkillName).toBe('奇门遁甲');
     expect(r.mainSkillId).toBe('qimen_dunjia');
+    expect(isHeroListed(r)).toBe(true);
+  });
+
+  it('XP黄忠 h810：主战法万军取首已实现 → 上架（不再空槽）', () => {
+    const r = HERO_RECORDS['h810'];
+    expect(r.name).toBe('XP黄忠');
+    expect(r.faction).toBe('蜀');
+    expect(r.troopType).toBe('archer');
+    expect(r.mainSkillName).toBe('万军取首');
+    expect(r.mainSkillId).toBe('wanjun_qushou');
     expect(isHeroListed(r)).toBe(true);
   });
 });

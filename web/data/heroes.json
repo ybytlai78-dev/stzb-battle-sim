@@ -905,7 +905,7 @@
     "growthDefense": 1.88,
     "growthStrategy": 0.56,
     "growthSpeed": 0.88,
-    "mainSkillId": "",
+    "mainSkillId": "wanjun_qushou",
     "mainSkillName": "万军取首",
     "skillDesc": "普通攻击后，对攻击目标再次发动猛烈攻击（伤害率160.0%），第四回合起，会额外对5距离内敌军单体发动一次攻击（伤害率100.0%），同时有50.0%几率额外对敌方大营再发动一次猛烈攻击（伤害率160.0%）"
   },
