@@ -909,6 +909,47 @@ main {
 .hero-card .bar .lv i { font-style: normal; color: var(--gold); margin-right: 1px; }
 .hero-card .bar .troop { flex: 0 0 auto; color: var(--gold-bright); }
 
+/* ── 「显示下架武将」调试开关 + 下架卡标示 ──
+  下架 = 主战法已实现、但受属性影响的成长率未确认（数值按基值不缩放）；
+  默认不进池，勾选开关后可显示并配将（用于在 App 里验证机制）。 */
+.offline-toggle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.offline-toggle:hover { color: var(--color-gold); }
+.offline-toggle input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--color-gold);
+  cursor: pointer;
+}
+.hero-card.offline {
+  border-style: dashed;
+}
+.hero-card.offline .art {
+  filter: grayscale(.7);
+  opacity: .82;
+}
+.offline-tag {
+  font-size: 9px;
+  font-weight: 400;
+  letter-spacing: 0;
+  color: #d8a34a;
+  border: 1px solid #a8792f;
+  border-radius: 3px;
+  padding: 0 3px;
+  margin-left: 4px;
+  vertical-align: 1px;
+}
+
 /* ── 底栏（士气 + 开始模拟；对齐套2 botbar，扁平表面）── */
 .control-bar {
   flex-shrink: 0;

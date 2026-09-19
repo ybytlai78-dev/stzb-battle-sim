@@ -4,7 +4,7 @@
  * 点击武将 → 率土风武将详情页（左画像右数据：四维+成长 / 加点 / 红度 / 兵种转换占位 / 三战法栏）
  * 战法判定顺序：被动 > 指挥 > 主动 > 追击；同类型内主战法先判定、装配战法按添加顺序。
  */
-import { HEROES, getHeroById, SKILL_TYPE_NAME, avatarSrc, portraitSrc, isFemale, freePointBudget, troopCapacity, skillGrade, skillTypeIcon, gradeFrame, gradeRibbon, gradePlate, SKILL_DESCS, isMainSkill, isLearnableSkillListed, rednessStars, buildGeneral, TROOP_CHAR as TYPE_CHAR, FACTION_CLASS, cardFrameSrc } from './heroes';
+import { HEROES, SLOTTED_HEROES, OFFLINE_HEROES, offlineReason, getHeroById, SKILL_TYPE_NAME, avatarSrc, portraitSrc, isFemale, freePointBudget, troopCapacity, skillGrade, skillTypeIcon, gradeFrame, gradeRibbon, gradePlate, SKILL_DESCS, isMainSkill, isLearnableSkillListed, rednessStars, buildGeneral, TROOP_CHAR as TYPE_CHAR, FACTION_CLASS, cardFrameSrc } from './heroes';
 import type { HeroJson } from './heroes';
 import pinyinJson from './data/pinyin.json';
 import { SKILL_REGISTRY } from '../src/data/skills';
@@ -288,18 +288,20 @@ export function heroMainSkillName(hero: HeroJson): string {
  *  结构对齐官方卡（wujiang5 卡框）：左上势力字 + 竖排名、右上五星、底部 Lv·兵种。
  *  ⚠️ 主战法名**不进卡面**（2026-09-19 回退「卡上画战法名」的决策）：卡面只留 势力/姓名/星级/Lv/兵种，
  *     战法名与描述走 `card.title` 悬浮提示。
- *  @param level 展示等级（武将池传该武将当前上阵等级，缺省 40＝引擎默认等级） */
-function heroCardHtml(hero: HeroJson, level = 40): string {
+ *  @param level 展示等级（武将池传该武将当前上阵等级，缺省 40＝引擎默认等级）
+ *  @param offlineNote 下架原因；有值时姓名后加「下架」角标（配将池「显示下架武将」开关打开时） */
+function heroCardHtml(hero: HeroJson, level = 40, offlineNote?: string): string {
   const art = portraitSrc(hero.id) || '';
   const frame = cardFrameSrc();
   const sp = hero.tags.includes('sp');
   const facCls = FACTION_CLASS[hero.faction] ?? 'qun';
+  const tag = offlineNote ? ' <span class="offline-tag">下架</span>' : '';
   return `
       <div class="art" style="background-image:url('${art}')"></div>
       <div class="frame" style="background-image:url('${frame}')"></div>
       <div class="plate">
         <div class="fac ${facCls}">${hero.faction}</div>
-        <div class="n">${hero.name}</div>
+        <div class="n">${hero.name}${tag}</div>
         ${sp ? '<div class="sp-badge">SP</div>' : ''}
         <div class="stars">★★★★★</div>
         <div class="bar">
@@ -627,6 +629,31 @@ export function renderSlot(team: 'red' | 'blue', i: number, slot: SlotState, lab
   return el;
 }
 
+/** 「显示下架武将」调试开关状态（跨重渲染保持；默认关）。
+ *  下架 = 主战法已实现、但「受属性影响」的成长率未确认（`OFFLINE_MAIN_SKILLS`，数值按基值不缩放），
+ *  默认不进池；打开后可显示并配将，用于在 App 里验证这些武将的机制。 */
+let poolShowOffline = false;
+
+/** 开关 HTML（勾选状态跟随 `poolShowOffline`）；也用于「选择武将」弹窗 */
+function offlineToggleHtml(): string {
+  return `
+      <label class="offline-toggle" title="下架武将＝主战法已实现、但受属性影响的成长率未确认（数值按基值不缩放）。勾选后可显示并配将（调试用）。">
+        <input type="checkbox" class="offline-toggle-input"${poolShowOffline ? ' checked' : ''} />显示下架武将（${OFFLINE_HEROES.length}）
+      </label>`;
+}
+
+/** 绑定开关：变更写回 `poolShowOffline` 并重画 */
+function bindOfflineToggle(root: HTMLElement, draw: () => void): void {
+  const cb = root.querySelector('.offline-toggle-input') as HTMLInputElement | null;
+  if (!cb) return;
+  cb.addEventListener('change', () => { poolShowOffline = cb.checked; draw(); });
+}
+
+/** 当前池子展示的武将集合：默认上架池；开关打开时并入下架武将 */
+function poolHeroes(): HeroJson[] {
+  return poolShowOffline ? SLOTTED_HEROES : HEROES;
+}
+
 /** 武将池（含搜索/筛选/详情弹窗），供主站与伤害测试实验室复用。
  *  池内卡可拖入槽位；已入队卡可拖回本池卸下（onRemoveHero）。 */
 /**
@@ -641,6 +668,7 @@ export function renderHeroPool(state: EditorState, h: EditorHandlers, searchSlot
       <input type="text" placeholder="搜索武将名 / 拼音 / 势力 / SP…" />
     </div>
     ${heroFilterHtml()}
+    ${offlineToggleHtml()}
     <div class="hero-grid"></div>
   `;
   const toolbar = pool.querySelector('.toolbar') as HTMLElement;
@@ -685,12 +713,15 @@ export function renderHeroPool(state: EditorState, h: EditorHandlers, searchSlot
   const draw = () => {
     grid.innerHTML = '';
     const q = input.value.trim().toLowerCase();
-    for (const hero of HEROES) {
+    for (const hero of poolHeroes()) {
       if (!heroMatchesFilter(hero, selected, q)) continue;
+      const reason = offlineReason(hero);
       const card = document.createElement('div');
-      card.className = 'hero-card' + (picked.has(hero.id) ? ' picked' : '');
-      card.innerHTML = heroCardHtml(hero, levelOf.get(hero.id) ?? 40);
-      card.title = `${heroMainSkillName(hero)}｜${hero.skillDesc || ''}`;
+      card.className = 'hero-card' + (reason ? ' offline' : '') + (picked.has(hero.id) ? ' picked' : '');
+      card.innerHTML = heroCardHtml(hero, levelOf.get(hero.id) ?? 40, reason);
+      card.title = reason
+        ? `【已下架 · 调试显示】${reason}\n${heroMainSkillName(hero)}｜${hero.skillDesc || ''}`
+        : `${heroMainSkillName(hero)}｜${hero.skillDesc || ''}`;
       card.draggable = true;
       card.dataset.heroId = hero.id;
       card.addEventListener('dragstart', (e) => {
@@ -706,6 +737,7 @@ export function renderHeroPool(state: EditorState, h: EditorHandlers, searchSlot
   };
   input.addEventListener('input', draw);
   bindHeroFilter(pool, selected, draw);
+  bindOfflineToggle(pool, draw);
   draw();
   return pool;
 }
@@ -1218,6 +1250,7 @@ export function openHeroPicker(team: 'red' | 'blue', slotIndex: number, h: Edito
       <span class="m-close">×</span>
     </div>
     <div class="m-body">
+      ${offlineToggleHtml()}
       ${heroFilterHtml()}
       <div class="pick-grid"></div>
     </div>
@@ -1228,18 +1261,22 @@ export function openHeroPicker(team: 'red' | 'blue', slotIndex: number, h: Edito
   const draw = () => {
     grid.innerHTML = '';
     const q = input.value.trim().toLowerCase();
-    for (const hero of HEROES) {
+    for (const hero of poolHeroes()) {
       if (!heroMatchesFilter(hero, selected, q)) continue;
+      const reason = offlineReason(hero);
       const card = document.createElement('div');
-      card.className = 'hero-card';
-      card.innerHTML = heroCardHtml(hero);
-      card.title = `${heroMainSkillName(hero)}｜${hero.skillDesc || ''}`;
+      card.className = 'hero-card' + (reason ? ' offline' : '');
+      card.innerHTML = heroCardHtml(hero, 40, reason);
+      card.title = reason
+        ? `【已下架 · 调试显示】${reason}\n${heroMainSkillName(hero)}｜${hero.skillDesc || ''}`
+        : `${heroMainSkillName(hero)}｜${hero.skillDesc || ''}`;
       card.onclick = () => { close(); openHeroDetail(hero.id, { target: { team, idx: slotIndex }, handlers: h }); };
       grid.appendChild(card);
     }
   };
   input.addEventListener('input', draw);
   bindHeroFilter(modal, selected, draw);
+  bindOfflineToggle(modal, draw);
   const close = () => mask.remove();
   modal.querySelector('.m-close')!.addEventListener('click', close);
   mask.appendChild(modal);

@@ -322,7 +322,7 @@ npx tsc --noEmit                    # 类型检查（strict）
 > 生成物（`web/data/*.json`、`scripts/seed_heroes.sql`）随提交入库；受属性缩放的段成长率留空
 > （`strategyScaled`/`attackScaled` 标记在，可选字段不写、必填字段给 0）并登记 `OFFLINE_MAIN_SKILLS`。
 
-### 已完成 19 个（§1.2 10 个 + §1.3 1 个 + 歧义澄清后 7 个 + 连环计）
+### 已完成 26 个（§1.2 10 个 + §1.3 1 个 + 歧义澄清后 7 个 + §1.2 收官 5 个〔率尔方雅～伏波扬砂〕+ 落地追加 2 个〔潜谋远计/心战为上〕）
 
 | 武将 | 战法 | 新机制（引擎字段） | 上线 |
 |---|---|---|---|
@@ -350,12 +350,15 @@ npx tsc --noEmit                    # 类型检查（strict）
 | 刘禅 h689 | 赐剑长驱 | `CommandSkill.allyRecast`（友军每回合首次主动成功后按几率**再次发动**：跳准备 + 伤害/恢复 ×factor）+ 准备阶段自身犹豫/怯战封禁 | 下架 |
 | 袁术 h790 | 僭号天子 | `CommandSkill.sealTransfer` + `ctx.sealLedgers`（玉玺按比例承担我方受击伤害）+ 回合结转（`tickRoundStartStatuses`）+ 独立事件 `seal_settle` | 下架 |
 | 马腾 h785 | 伏波扬砂 | `CommandSkill.stacksConsume` + `ctx.stacksConsumeCounters`（普攻**增减伤净幅度**累计 → 每满 40% 得 1 层【扬砂】→ 普攻后每 4 层换 1 次额外普攻） | 下架 |
+| 羊祜 h709 | 潜谋远计 | `BaseSkill.casterPositions`（**整次生效**的站位条件：仅前锋/中军）+ `strategy_damage.requireTargetStrategyBelowSelf`（按**生效谋略**逐目标过滤）；前 4 回合受击段复用 `onHurt`、第 5 回合起走 `roundStartRepeat(startRound:5)` | 下架 |
+| 马谡 h799 | 心战为上 | `healOnDamage`（攻心：按本次**造成的伤害值**恢复，计数走 `ctx.healOnDamageTriggers`）+ 目标士气降低（复用 `morale_boost` 负值，正负相反各自共存） | 下架 |
 
-计数：已实现主战法 **112**（基线 88）；上架池 67 → **75**（`docs/下架武将清单.md` 重生成口径：
-未实现 **49** / 卡成长率下架 **37** / 上架 **75**；待实现分档「补 1 个」**0** / 「需多个」4 / 「需调研」45；缺失机制 7 类）；
-测试 91 files/1121 → **115 files/1268**。本批提交：`e919d1b`(破凰) `a5c1dfe`(侵掠如火) `b0a9896`(三军夺帅)
+计数：已实现主战法 **114**（基线 88）；上架池 67 → **75**（`docs/下架武将清单.md` 重生成口径：
+未实现 **47** / 卡成长率下架 **39** / 上架 **75**；待实现分档「补 1 个」**0** / 「需多个」**2** / 「需调研」45；缺失机制 **5** 类）；
+测试 91 files/1121 → **121 files/1307**。本批提交：`e919d1b`(破凰) `a5c1dfe`(侵掠如火) `b0a9896`(三军夺帅)
 `b6f555f`(奉令护蜀) `2e3f495`(地公将军) `f791b8c`(西陵克晋) `bbba8df`(缚父临危) `2ca1a61`(4 处复核收敛) `5d57689`(连环计)
-`83874d7`(率尔方雅) `321fdd7`(鸾凤和鸣) `edcfa71`(赐剑长驱) `a1611a4`(僭号天子) `5c6a1c5`(批次文档收尾) `be00c55`(伏波扬砂)。
+`83874d7`(率尔方雅) `321fdd7`(鸾凤和鸣) `edcfa71`(赐剑长驱) `a1611a4`(僭号天子) `5c6a1c5`(批次文档收尾) `be00c55`(伏波扬砂)
+`aa88231`(AGENTS.md 修正) `537aa2b`(潜谋远计) `501d4e3`(配将池「显示下架武将」开关) `1cbf7d9`(心战为上)。
 
 ### 7 处歧义已全部澄清（2026-09-18 用户逐条确认，勿再重复询问）
 
@@ -418,16 +421,46 @@ npx tsc --noEmit                    # 类型检查（strict）
   单次行动上限 20 次防失控）。
 - 25% 普攻增伤段「受攻击属性影响」官方未给系数 → 基值 25% + 登记 `OFFLINE_MAIN_SKILLS`（马腾下架）。
 
+### UI 里看不到新武将？先查这几条（2026-09-19 排查结论）
+
+1. **「下架」武将在配将池里默认不显示**：`web/heroes.ts` 的
+   `export const HEROES: HeroJson[] = heroesJson.filter(isHeroListed)` ——
+   进池条件 = 「主战法已实现 **且** 不在 `OFFLINE_MAIN_SKILLS`」（全量在 `ALL_HEROES`）。
+   故若某批某将「实现了但池里找不到」，先查 `listing.ts` 有没有登记下架；
+   受属性缩放段成长率未确认的将**默认不显示**，不是 bug。
+   - **想看/想配这些将**：配将池（与「选择武将」弹窗）有「**显示下架武将（N）**」开关
+     （`renderHeroPool` / `openHeroPicker` 共用，状态跨重渲染保持；开关打开时用 `SLOTTED_HEROES`，
+     卡上带 `.offline` + 「下架」角标 + 原因 tooltip）。
+     `HERO_RECORDS` 覆盖全部已挂主战法的武将、`getHeroById` 查 `ALL_HEROES`，故下架将可正常配将/进战报。
+2. **搜索框只搜武将名 / 拼音 / 势力 / SP**，搜**战法名**找不到（战法名只在卡 `title` 提示里）。
+3. **确认起服务/打包的是哪一棵树**：`web/data/heroes.json` 由 Vite **编译期内联**进产物，
+   在旧树起 `npm run web`（或旧树里执行 APK 打包）时，池里一个新将都不会有。
+   - 本地端口：`npm run web` 必须在**含本批提交的树**里跑；曾有 vite 从
+     `.dsh/worktrees/075773c90805`（停在 main `a924e55`，`heroes.json` 命中 0/7）起来的先例。
+   - APK：`android/`（**Capacitor**）打包 Vite 产物 → `android/app/src/main/assets/public/`，
+     产物落 `android/app/build/outputs/apk/release/app-release.apk`。验证某份产物是否含目标武将：
+     ```powershell
+     # ① 战法定义是否在产物里（内联的 SKILL_REGISTRY）
+     Select-String -Path "<产物>/assets/index-*.js" -Pattern "xiling_kejin" -SimpleMatch
+     # ② 武将挂槽是否连上（内联的 heroes.json，形如 {id:"h574",…,mainSkillId:"xiling_kejin"}）
+     Select-String -Path "<产物>/assets/index-*.js" -Pattern 'mainSkillId:"xiling_kejin"' -SimpleMatch
+     ```
+     两条都命中 = 数据没问题，剩下只需确认「手机里装的是不是这份新包」。
+4. **主仓库里看不到**：合并回 main 后若只在 `Desktop/战斗系统` 跑，注意主库重灌（见上「下一次接续」）。
+
 ### 下一次接续（新对话从这里开始）
 
 - **工作树/分支**：`.dsh/worktrees/a6e643de830a/战斗系统`，分支 `hero-mechanics-cont`
-  （领先 `origin/feat/hero-mechanics` **17 个提交，未 push**；`feat/hero-mechanics` 仍被
-  `.dsh/worktrees/adc7079ab513` 占用 —— push / 合并方式待用户决定）。
-- **已验证基线**：`npx tsc --noEmit` clean；`npm test` **115 files / 1268 passed**；golden 字节一致。
+  （领先 `origin/feat/hero-mechanics` **23 个提交，未 push**；`feat/hero-mechanics` 仍被
+  `.dsh/worktrees/adc7079ab513` 占用 —— push 方式待用户决定；**已合并进 `main`**）。
+- **已验证基线**：`npx tsc --noEmit` clean；`npm test` **121 files / 1307 passed**（main 合入后重测）；golden 字节一致。
+- **⚠️ 合并回主仓库后必须重灌主库**：主仓库路径 → 主库 `stzb战斗系统`，MySQL 可达时**不会回退 JSON**，
+  于是「工作树里全绿、合回主仓库就红」（main_skill_id 为空）。修法 = 数据链四条命令，
+  详见 `docs/工作树落地流程.md` §二.2（2026-09-19 本次落地又踩了一次）。
 - **§1.2「补 1 个机制」已全部完成**（19 → 24 将，`docs/下架武将清单.md` 分档「补 1 个」= **0**）。
 - **下一步候选**（`docs/下架武将清单.md` §1.3 / §1.4）：
-  - 「需多个机制」**4** 个 + 「需调研」**45** 个（缺失机制聚类 **7 类**：位置条件 `position_cond`（2 个战法，最多）/
-    攻心 `heal_on_damage`（2）/ 先手洞察随机 `insight_priority`（2）/ 其余 4 类各 1）。
+  - 「需多个机制」**2** 个 + 「需调研」**45** 个（缺失机制聚类 **5 类**：先手洞察随机 `insight_priority` 等，
+    以重生成后的清单为准）。
   - 建议顺序 = 解锁数降序，同数时优先成本低的（属性/状态类 < 目标选择类 < 全新钩子类）。
   - 每个新战法沿用本批流程；**遇含糊表述先问用户**（本批伏波扬砂即因此先问后做，口径已记录在上）。
 - **动手前先核对工作区**：本次会话的 DSH 工作区被创建为 `.dsh/worktrees/01883b91ece5`（detached main），

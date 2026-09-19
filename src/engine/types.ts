@@ -216,6 +216,11 @@ export type SkillOutput =
       /** 兵力阈值条件：不满足的目标不结算本段（持玺兴兵「兵力低于 50% 才恢复」） */
       troopRatio?: TroopRatioCond;
       /**
+       * 仅对**生效谋略低于施法者**的目标结算（潜谋远计「对谋略低于自身的敌军全体」）：
+       * 按 `effectiveStat(target,'strategy') < effectiveStat(caster,'strategy')` 逐目标过滤。
+       */
+      requireTargetStrategyBelowSelf?: boolean;
+      /**
        * 代打者：`'highest_strategy_ally'` = 由我**当前谋略属性最高**的存活武将出手结算本段
        * （西陵克晋「我军当前谋略属性最高的武将对距离 4 以内的敌军发动一次策略攻击」；
        * 含施法者自身，官方「也有可能施加给陆抗自己」）。缺省 = 施法者自身（statSource 口径不变）。
@@ -484,7 +489,9 @@ export type CreateStatus =
    * startRound：第 N 回合起才跳恢复（重整旗鼓/援军秘策 = 5）。
    */
   | { type: 'rest'; rate: number; growthRate: number; duration: number; startRound?: number; strategyScaled?: boolean; troopRatio?: TroopRatioCond }
-  /** 士气提高（谋议宏图）：amount 为士气点数；同战法累加，不同指挥战法冲突取较高 */
+  /** 士气提高（谋议宏图）：amount 为士气点数；同战法累加，不同指挥战法冲突取较高。
+   *  **amount 为负 = 士气降低**（心战为上：每次伤害使目标 −5，整场常驻、同战法累加）；
+   *  正负相反（士气提高 vs 士气降低）不冲突、各自共存，由 `effectiveMorale` 相加得净士气 */
   | { type: 'morale_boost'; amount: number; duration: number }
   /** 无视防御比例（0.6 = 60%），自身攻击时目标防御 × (1 − rate) */
   | { type: 'ignore_def'; rate: number; duration: number }
@@ -522,6 +529,12 @@ interface BaseSkill {
    * 读部署名单（不论 alive）；战斗中不再复查。
    */
   teamTroopFilter?: TroopType[];
+  /**
+   * 施法者站位条件（潜谋远计「仅对自身处于前锋或中军位置时生效」）：
+   * 施法者（开战时）站位不在此列表内 → **本战法整次不生效**（含受击监听、每回合段、准备阶段 output）。
+   * 站位战斗中不变，故只在准备阶段 / 监听入口判定一次。
+   */
+  casterPositions?: Position[];
   /**
    * 重复施加奖励（诸葛锦囊「若发动时目标已有诸葛锦囊效果，则额外恢复目标一定兵力」）：
    * 战法每次发动时逐目标判定，目标身上已带**本战法**施加的状态则追加结算这段 output；
@@ -689,6 +702,23 @@ export interface CommandSkill extends BaseSkill {
   };
   /** 二类指挥动态发动率：初始 base，未生效每回合 +increment，生效后重置（奇兵拒北 30% 起始，未生效+5%） */
   dynamicTriggerRate?: { base: number; increment: number };
+  /**
+   * 攻心 + 士气降低（心战为上）：我军每次**对敌军造成伤害**后 ——
+   * ① `moraleReduce` > 0 时使伤害目标士气 −该值（走 `morale_boost` 负值状态，整场常驻；
+   *    同一战法重复触发累加），全队累计最多 `maxTriggers` 次；
+   * ② 本次为**攻击伤害**（`damageType:'physical'`）时，造成伤害者按 `healRate`%（受施法者谋略缩放，
+   *    `growthRate` 缺省 = 按基值）恢复兵力，恢复量 = 本次实际扣兵 × 恢复率。
+   * 计数走 `ctx.healOnDamageTriggers`（键 `${casterId}:${skillId}`，整场累计不重置）。
+   */
+  healOnDamage?: {
+    /** 每次伤害使目标士气降低点数（心战为上 5） */
+    moraleReduce?: number;
+    /** 全队累计触发上限（心战为上 9） */
+    maxTriggers?: number;
+    /** 攻心恢复率（心战为上 50，受施法者谋略缩放） */
+    healRate: number;
+    growthRate?: number;
+  };
   /**
    * 【扬砂】层数累计 + 消耗触发（伏波扬砂，马腾）：我军（含携带者）每次**普通攻击命中**后，把该次普攻的
    * **增减伤净幅度**（总增伤 − 总减伤，百分点，即 `buffMult(...) − 1`）×100 累入计数器；

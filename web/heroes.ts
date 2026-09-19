@@ -5,7 +5,7 @@
 import type { General, HeroRecord } from '../src/engine/types';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import { recordToGeneral, leveledFromRecord } from '../src/data/hero-utils';
-import { isHeroListed, isLearnableSkillListed } from '../src/data/listing';
+import { isHeroListed, isLearnableSkillListed, OFFLINE_MAIN_SKILLS } from '../src/data/listing';
 import { asset } from './assets';
 import heroesJson from './data/heroes.json';
 import portraitsJson from './data/portraits.json';
@@ -32,6 +32,20 @@ export const ALL_HEROES: HeroJson[] = heroesJson;
 
 /** 上架武将池：主战法已实现且受谋略成长率已确认 */
 export const HEROES: HeroJson[] = heroesJson.filter(isHeroListed);
+
+/** 已实现主战法的全部武将（上架 + 下架）：配将池「显示下架武将」开关打开时的池子 */
+export const SLOTTED_HEROES: HeroJson[] = heroesJson.filter((h) => Boolean(h.mainSkillId));
+
+/** 下架武将（主战法已实现、成长率未确认 → 默认不进池；开关打开可显示/选配） */
+export const OFFLINE_HEROES: HeroJson[] = SLOTTED_HEROES.filter((h) => !isHeroListed(h));
+
+/**
+ * 下架原因（口径与 `src/data/listing.ts` 的 `OFFLINE_MAIN_SKILLS` 一致）；未下架返回 undefined。
+ * 用于配将池下架卡的角标 tooltip。
+ */
+export function offlineReason(hero: { mainSkillId: string }): string | undefined {
+  return hero.mainSkillId ? OFFLINE_MAIN_SKILLS[hero.mainSkillId] : undefined;
+}
 
 /** 主战法 ID 集合（战法背包不展示任何武将主战法，含下架武将的主战法） */
 export const MAIN_SKILL_IDS: Set<string> = new Set(
@@ -185,14 +199,18 @@ export function portraitSrc(heroId: string): string {
   return asset(PORTRAITS[heroId]?.portrait ?? '');
 }
 
-/** id → HeroRecord（字段名与 DB 导出一致，已为 camelCase） */
+/**
+ * id → HeroRecord（字段名与 DB 导出一致，已为 camelCase）。
+ * 覆盖**全部已挂主战法的武将**（含下架）——「显示下架武将」开关打开后，下架武将也要能配将上阵。
+ */
 export const HERO_RECORDS: Record<string, HeroRecord> = {};
-for (const h of HEROES) {
+for (const h of SLOTTED_HEROES) {
   HERO_RECORDS[h.id] = h as unknown as HeroRecord;
 }
 
+/** id → 武将（含下架：战报/槽位卡渲染要用到全部武将的姓名与画像） */
 export function getHeroById(id: string): HeroJson | undefined {
-  return HEROES.find((h) => h.id === id);
+  return ALL_HEROES.find((h) => h.id === id);
 }
 
 /** 战法类型中文名 */

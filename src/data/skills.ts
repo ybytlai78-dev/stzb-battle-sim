@@ -5517,4 +5517,95 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     // 【扬砂】：每次普攻按「增减伤净幅度」累计，每满 40% 得 1 层（上限 20）；普攻后每 4 层换 1 次额外普攻
     stacksConsume: { threshold: 40, maxStacks: 20, consumePerAttack: 4 },
   },
+  /**
+   * 潜谋远计（羊祜·晋步 h709·指挥 S）：距离 5，官方目标「自己」。
+   * 战斗中前 4 回合自身受到伤害时，有 60.0% 几率使自身恢复一定兵力（恢复率 100.0%，受谋略属性影响）
+   * 并使谋略属性和防御属性提高 15.0，可叠加，持续至战斗结束；第 5 回合起，每回合行动时，
+   * 对谋略低于自身的敌军全体有 60.0% 几率造成一次策略攻击（伤害率 140.0%，受谋略属性影响）。
+   * 仅对自身处于前锋或中军位置时生效。
+   * 官方：scripts/skill_extra.json id 200991（指挥 S / 距离 5 / 自己 / 兵种步；1 级 恢复 50% / 属性 7.5 / 伤害 70%）。
+   * 入档判断：**下架** —— 恢复率 100% / 策略伤害 140% / 属性 +15 均「受谋略属性影响」而官方未给成长系数 →
+   *   按基值不缩放 + 登记 OFFLINE_MAIN_SKILLS，待反解确认后移出。
+   * 引擎配套：
+   *   ① `BaseSkill.casterPositions`（整次生效的站位条件：仅前锋/中军；准备阶段与受击监听/被动入口统一判定）；
+   *   ② `strategy_damage.requireTargetStrategyBelowSelf`（「谋略低于自身」逐目标过滤，按**生效谋略**比较）；
+   *   ③ 前 4 回合受击段复用既有 `onHurt`（victim:'self' + endRound:4 + applyTo:'victim' + output）——
+   *      60% 受击判定、恢复（受谋略）+ 谋略/防御各 +15（可叠加至战斗结束）；
+   *   ④ 第 5 回合起「每回合行动时」段走 `roundStartRepeat`（startRound:5）——沿用徽言龙凤既有口径
+   *      （官方「每回合行动时」在引擎里以回合前结算实现）；60% 走输出级 `chance`（士气修正后逐段判定）。
+   */
+  qianmou_yuanji: {
+    id: 'qianmou_yuanji',
+    name: '潜谋远计',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'enemy',
+    casterPositions: ['前锋', '中军'],
+    tags: ['heal', 'strategy_buff', 'defense_buff', 'damage'],
+    // 前 4 回合自身受击 60%：恢复 + 谋略/防御 +15（可叠加，持续至战斗结束）
+    onHurt: {
+      victim: 'self',
+      rate: 0.6,
+      endRound: 4,
+      applyTo: 'victim',
+      output: [
+        { kind: 'heal', rate: 100, strategyScaled: true, growthRate: 0, target: 'self' },
+        {
+          kind: 'inflict_status',
+          status: { type: 'strategy_buff', amount: 15, duration: 999, strategyScaled: true, growthRate: 0 },
+        },
+        {
+          kind: 'inflict_status',
+          status: { type: 'defense_buff', amount: 15, duration: 999, strategyScaled: true, growthRate: 0 },
+        },
+      ],
+    },
+    output: [],
+    // 第 5 回合起每回合行动时：对谋略低于自身的敌军全体 60% 造成策略攻击 140%（受谋略）
+    roundStartRepeat: {
+      startRound: 5,
+      output: [
+        {
+          kind: 'strategy_damage',
+          rate: 140,
+          strategyScaled: true,
+          growthRate: 0,
+          chance: 0.6,
+          requireTargetStrategyBelowSelf: true,
+        },
+      ],
+    },
+  },
+  /**
+   * 心战为上（马谡·蜀骑 h799·指挥 A）：距离 5，我军全体。
+   * 使我军全体每对敌军造成一次伤害时，伤害目标士气降低 5 点，我军全体累计可触发 9 次；
+   * 使我军全体对敌军造成攻击伤害后，借此恢复相当于伤害值 50.0%（受谋略属性影响）的兵力。
+   * 官方：scripts/skill_extra.json id 200275（指挥 A / 距离 5 / 我军全体 / 兵种弓步骑；1 级 25%）。
+   * 入档判断：**下架** —— 攻心恢复率 50%「受谋略属性影响」而官方未给成长系数 → 按基值不缩放 +
+   *   登记 OFFLINE_MAIN_SKILLS，待反解确认后移出。
+   * 引擎配套（新机制「攻心 + 士气降低」）：
+   *   ① `CommandSkill.healOnDamage` + `ctx.healOnDamageTriggers`：`applyDamage` 内我军对敌军造成实际伤害后，
+   *      使伤害目标士气 −5（走 `morale_boost` **负值**状态，整场常驻、同战法累加），全队累计最多 9 次；
+   *   ② 同一次伤害若为**攻击伤害**（physical），造成伤害者按 50%（受施法者谋略缩放）恢复本次伤害值对应的兵力
+   *      （heal 事件归属施法者，计入战报恢复统计）；
+   *   ③ 士气正负共存：`morale_boost` 纳入「正负相反不冲突、各自共存」口径（士气提高 vs 士气降低由
+   *      effectiveMorale 相加得净士气）。
+   */
+  xinzhan_weishang: {
+    id: 'xinzhan_weishang',
+    name: '心战为上',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['heal'],
+    output: [],
+    // 攻心（攻击伤害后按 50% 恢复，受谋略）+ 士气降低（每次伤害使目标 −5，全队累计 9 次）
+    healOnDamage: { moraleReduce: 5, maxTriggers: 9, healRate: 50 },
+  },
 };
