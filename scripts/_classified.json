@@ -866,9 +866,9 @@
     "targetDesc": "敌军群体（有效距离内2-3个目标）",
     "effectDesc": "1回合准备，对敌军群体发动一次策略攻击（伤害率132.0%，受谋略属性影响），并使敌军群体1-2目标下一次造成伤害后，再受到一次策略伤害（伤害率165.0%，受谋略属性影响）",
     "sources": "【群·李儒·弓】【魏·徐晃·骑】",
-    "status": "skipped",
-    "missingMechanics": "下次造成伤害后再结算",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "delay-settle p15"
   },
   {
     "name": "落雷",

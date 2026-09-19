@@ -399,6 +399,13 @@ export type SkillOutput =
    */
   | { kind: 'grant_cover'; duration: number }
   /**
+   * 「下一次**造成伤害后**再受到一次策略伤害」标记（翕处还张「使敌军群体 1-2 目标下一次造成伤害后，
+   * 再受到一次策略伤害（165%，受谋略）」）：对标记目标的**下一次造成伤害**（实际扣兵 > 0，任意来源）
+   * 结算一次策略伤害（由本战法施法者打出，伤害按**触发时**双方生效属性/增减伤实时计算），随后标记消耗。
+   * 目标另选（`groupCount` 缺省 2，可 `[1,2]` 随机 1~2 个），与主段攻击目标独立。
+   */
+  | { kind: 'mark_deal_punish'; rate: number; strategyScaled?: boolean; growthRate?: number; groupCount?: number | [number, number] }
+  /**
    * 移除目标身上**由指定来源战法类型施加**的状态（辞后定朝「移除自身受到的由指挥、主动、追击战法
    * 带来的有害和有益效果」）：有害与有益都移除、被动/战法自带（准备阶段）的不动；逐条记 status_expired。
    */

@@ -5803,6 +5803,35 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     ],
   },
 
+  // ─── 拆解通用 B+ 第十五阶段：延迟结算（A 级 1 个）───
+
+  /**
+   * 翕处还张（A 准备主动·距离 5·40%·敌军群体 2-3 目标）：
+   * 1 回合准备，对敌军群体发动一次策略攻击（伤害率 132%，受谋略，成长率未确认 → 留空按基值），
+   * 并使敌军群体 **1-2 目标**「**下一次造成伤害后**，再受到一次策略伤害」（伤害率 165%，受谋略，同上）。
+   * 官方：scripts/skill_extra.json id 200917（1 级 66% / 82.5%）。
+   * 引擎配套：**新增输出 `mark_deal_punish`** —— 给 1~2 名敌军挂「出手反噬」标记（目标独立于主段攻击，
+   *   `groupCount:[1,2]`），标记持有者**下一次造成伤害**（实际扣兵 > 0，任意来源）时由本战法施法者
+   *   对其打出一次策略伤害（按触发时双方生效属性/增减伤实时计算），随后标记消耗；
+   *   标记队列走 `ctx.dealPunishMarks`（不新增状态类型，避免状态冲突/驱散口径牵连）。
+   */
+  xichu_haizhang: {
+    id: 'xichu_haizhang',
+    name: '翕处还张',
+    type: 'active',
+    prepare: true,
+    range: 5,
+    triggerRate: 0.4,
+    targetMode: 'group',
+    groupCount: [2, 3],
+    targetSide: 'enemy',
+    tags: ['damage'],
+    output: [
+      { kind: 'strategy_damage', rate: 132, strategyScaled: true },
+      { kind: 'mark_deal_punish', rate: 165, strategyScaled: true, groupCount: [1, 2] },
+    ],
+  },
+
   // ─── 批量31：下架武将清单 §1.2「补 1 个机制」逐个实现 ───
 
   /**

@@ -226,6 +226,10 @@ export interface CombatContext {
   troopThresholdKeys?: Set<string>;
   /** 「每回合首次造成伤害」去重（以直报怨）：key `${回合}:${skillId}:${casterId}` */
   dealFirstKeys?: Set<string>;
+  /**
+   * 「造成伤害后再受一次策略伤害」标记（翕处还张）：按持有者记录，命中其**下一次造成伤害**时结算并消耗。
+   */
+  dealPunishMarks?: Array<{ holderId: string; casterId: string; skillId: string; rate: number }>;
   /** 持续型急救计数器（皇裔流离）：战法级共享触发率与总生效次数（全队合计，每达到 N 次提升）。
    *  可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化 */
   firstAidCounters?: FirstAidCounter[];
@@ -4089,6 +4093,51 @@ function triggerCastKindHooks(
 }
 
 /**
+ * 「造成伤害后再受一次策略伤害」标记结算（翕处还张）：持有者**下一次造成伤害**（实际扣兵 > 0）时，
+ * 先摘掉其全部标记（防递归），再由原施法者对其打出一次策略伤害（按**触发时**双方生效属性/增减伤实时计算）。
+ */
+function triggerDealPunish(ctx: CombatContext, source: UnitState): void {
+  const marks = ctx.dealPunishMarks?.filter((m) => m.holderId === source.general.id) ?? [];
+  if (marks.length === 0 || !source.alive) return;
+  ctx.dealPunishMarks = ctx.dealPunishMarks!.filter((m) => m.holderId !== source.general.id);
+  for (const m of marks) {
+    if (!source.alive) break;
+    const caster = castUnit(ctx, m.casterId);
+    const skill = resolveSkill(ctx, m.skillId);
+    if (!caster || !caster.alive || !skill) continue;
+    const hit: DamageHitContext = { damageSource: 'skill', damageType: 'strategy', skillType: skill.type };
+    const { causedMult, takenMult } = damageBoosts(ctx, caster, source, hit);
+    const reduce = sumReduce(source, hit) + troopCounterReduceOf(caster, source);
+    const { damage, breakdown } = calcDamage(
+      {
+        damageType: 'strategy',
+        rate: m.rate,
+        attackerAttack: effectiveStat(caster, 'attack'),
+        attackerStrategy: effectiveStat(caster, 'strategy'),
+        attackerTroops: caster.troops,
+        targetDefense: effectiveStat(source, 'defense'),
+        targetStrategy: effectiveStat(source, 'strategy'),
+        mult: buffMult(causedMult, takenMult, reduce),
+      },
+      ctx.rng
+    );
+    const capped = applyTroopCap(damage, source.troops);
+    ctx.events.push({
+      type: 'damage',
+      sourceId: caster.general.id,
+      targetId: source.general.id,
+      skillId: skill.id,
+      skillName: skill.name,
+      damageType: 'strategy',
+      damage: capped,
+      breakdown,
+      modifiers: collectDamageModifiers(ctx, caster, source, true, hit),
+    });
+    applyDamage(ctx, source, capped, caster, 'strategy', 'skill');
+  }
+}
+
+/**
  * 「每回合自身首次造成伤害后」钩子（以直报怨）：按「回合 × 战法 × 施法者」去重，
  * 命中则对**本次伤害目标**执行 output（每次实际扣兵 > 0 计一次）。
  */
@@ -4315,7 +4364,7 @@ function executeSkillOutputs(
     // 单输出目标池：target:'self' → 施法者；targetMode 覆盖 → 按战法距离重新选敌/友军目标
     const enemies = caster.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
     const allies = caster.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
-    const outTarget = out.kind === 'positional_physical_damage' || out.kind === 'morale_branch' || out.kind === 'detonate_sorcery_marks' || out.kind === 'grant_cover' ? undefined : out.target;
+    const outTarget = out.kind === 'positional_physical_damage' || out.kind === 'morale_branch' || out.kind === 'detonate_sorcery_marks' || out.kind === 'grant_cover' || out.kind === 'mark_deal_punish' ? undefined : out.target;
     const outMode =
       out.kind === 'physical_damage' || out.kind === 'strategy_damage' ? out.targetMode : undefined;
     const outIgnoreRange =
@@ -5083,6 +5132,25 @@ function executeSkillOutputs(
         );
         break;
       }
+      case 'mark_deal_punish': {
+        // 翕处还张：给 1~2 名敌军挂「下一次造成伤害后再受一次策略伤害」标记（目标独立于主段攻击）
+        const rate =
+          out.strategyScaled && out.growthRate != null
+            ? roundRate(scaledValue(out.rate, out.growthRate, effectiveStat(caster, 'strategy')))
+            : out.rate;
+        const picks = skillTargets(ctx, caster, enemies, skill.range, 'group', out.groupCount ?? 2);
+        ctx.dealPunishMarks ??= [];
+        for (const t of picks) {
+          if (!t.alive) continue;
+          ctx.dealPunishMarks.push({
+            holderId: t.general.id,
+            casterId: caster.general.id,
+            skillId: skill.id,
+            rate,
+          });
+        }
+        break;
+      }
       case 'remove_debuffs':
         removeDebuffs(ctx, pool);
         break;
@@ -5651,6 +5719,7 @@ function executeSkillWithTargets(
         o.kind !== 'chance_group' &&
         o.kind !== 'detonate_sorcery_marks' &&
         o.kind !== 'grant_cover' &&
+        o.kind !== 'mark_deal_punish' &&
         o.target !== 'self' &&
         // 单输出已覆盖目标池的 heal/inflict 不决定战法整体目标（利兵谋胜：伤敌 + 治友）
         !('targetSide' in o && o.targetSide) &&
@@ -6519,6 +6588,8 @@ export function applyDamage(
     gainStacksReduceOnDeal(ctx, source);
     // 每回合首次造成伤害后（以直报怨）：对本次伤害目标结算 output
     if (source) triggerDealFirstPerRound(ctx, source, target);
+    // 造成伤害后再受一次策略伤害（翕处还张）：命中标记即结算并消耗
+    if (source) triggerDealPunish(ctx, source);
     // 友军造成匹配伤害后同源叠层（久战熟谋）
     if (source) triggerAllyDealStack(ctx, source, damageType);
     if (source && damageType === 'physical') {
