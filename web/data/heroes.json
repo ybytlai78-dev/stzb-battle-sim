@@ -39,7 +39,7 @@
     "growthDefense": 1.94,
     "growthStrategy": 0.66,
     "growthSpeed": 0.58,
-    "mainSkillId": "",
+    "mainSkillId": "jiangmen_youjiang",
     "mainSkillName": "将门有将",
     "skillDesc": "每回合自身行动时有30.0%的概率获得以下效果：获得连击效果，持续1回合；获得分兵效果（伤害率100.0%），持续1回合。此概率每回合结束时提高10.0%，每个效果独立判断"
   },
@@ -61,7 +61,7 @@
     "growthDefense": 1.95,
     "growthStrategy": 0.54,
     "growthSpeed": 1.18,
-    "mainSkillId": "",
+    "mainSkillId": "erfu_zhiyong",
     "mainSkillName": "二夫之勇",
     "skillDesc": "对敌军群体发动一次攻击（伤害率140.0%），并使其发动主动战法造成的伤害降低50.0%，受到主动战法的伤害提高25.0%，持续2回合"
   },
@@ -685,7 +685,7 @@
     "growthDefense": 1.58,
     "growthStrategy": 1.02,
     "growthSpeed": 0.7,
-    "mainSkillId": "",
+    "mainSkillId": "xuefen_duanbing",
     "mainSkillName": "雪奋短兵",
     "skillDesc": "自身受到伤害时有50.0%概率进入规避状态，每回合结束时使自身攻击距离-1。攻击距离小于等于1时，不再触发攻击距离下降及规避效果，同时每回合自身行动时，对攻击距离内的敌军单体造成2次攻击伤害（伤害率60.0%）,有70.0%几率使攻击距离外的敌军群体进入动摇状态，行动时损失一定兵力（伤害率180.0%），持续1回合"
   },
@@ -773,7 +773,7 @@
     "growthDefense": 1.85,
     "growthStrategy": 0.7,
     "growthSpeed": 0.61,
-    "mainSkillId": "",
+    "mainSkillId": "manwang_yuzhong",
     "mainSkillName": "蛮王御众",
     "skillDesc": "令自身受到的所有伤害降低30.0% (受防御属性影响)，前2回合援护友军全体；自身每受到5次伤害，则使友军攻击最高单体有60.0%几率对敌军群体发动一次攻击（伤害率120.0%）；若友军兵种为蛮兵/藤甲兵/象兵,则该友军前3回合也享受自身来自蛮王御众伤害降低效果的一半，对其援护效果提升至4回合，蛮王御众令其发动攻击时，变为必定发动且伤害率额外增加120.0%。"
   },

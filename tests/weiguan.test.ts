@@ -17,7 +17,7 @@ import {
   tickStatuses,
   type CombatContext,
 } from '../src/engine/action';
-import type { Position, Skill, UnitState } from '../src/engine/types';
+import type { CreateStatus, Position, Skill, UnitState } from '../src/engine/types';
 import { targetStratMitigation } from '../src/engine/formulas';
 import { Rng } from '../src/engine/rng';
 import { SKILL_REGISTRY } from '../src/data/skills';
@@ -94,6 +94,19 @@ function buffAmount(u: UnitState, type: 'attack_buff' | 'strategy_buff' | 'defen
   return u.statuses
     .filter((s) => s.type === type && s.sourceSkillId === 'chijie_zhenxi')
     .reduce((acc, s) => acc + ('amount' in s ? s.amount : 0), 0);
+}
+
+/** 测试用必中追击战法（每次普攻命中后 100% 再打一次攻击伤害 → 各叠 1 层） */
+function probePursuit(id: string): Skill {
+  return {
+    id,
+    name: id,
+    type: 'pursuit',
+    range: 0,
+    triggerRate: 1,
+    tags: ['damage'],
+    output: [{ kind: 'physical_damage', rate: 100 }],
+  };
 }
 
 describe('持节镇西：准备阶段注册', () => {
@@ -317,33 +330,62 @@ describe('持节镇西：叠层上限与衰减', () => {
     expect(buffLayers(ally, 'attack_buff')).toBeGreaterThan(0);
   });
 
-  it('至多 4 层封顶；每层各自持续 1 回合，回合结束掉 1 层', () => {
+  it('至多 4 层封顶：单次行动内 6 次攻击伤害也只保留 4 层', () => {
     const ctx = makeCtx();
     const wg = makeUnit('weiguan', { position: '中军', attack: 151 }); // 40级卫瓘攻击
     wg.general.commandSkillIds = ['chijie_zhenxi'];
     const ally = makeUnit('ally', { position: '前锋' });
+    // 连击 2 次普攻 + 每次普攻命中后 2 个必中追击 = 单次行动 6 次攻击伤害
+    ally.general.pursuitSkillIds = ['test_pursuit_a', 'test_pursuit_b'];
+    ctx.skills.set('test_pursuit_a', probePursuit('test_pursuit_a'));
+    ctx.skills.set('test_pursuit_b', probePursuit('test_pursuit_b'));
     ctx.myTeam = [wg, ally];
-    const e1 = makeUnit('e1', { position: '前锋', defense: 1000, troops: 100000 }); // 高防高血，保证 6 连击全中
+    const e1 = makeUnit('e1', { position: '前锋', defense: 1000, troops: 100000 }); // 高防高血，保证 6 次攻击全部命中
+    e1.side = 'enemy';
+    ctx.enemyTeam = [e1];
+    triggerCommandSkills(ctx, wg);
+    inflictStatus(ctx, ally, { type: 'combo', duration: 999 } as CreateStatus, 'passive', 'test_combo');
+
+    actUnit(ctx, ally);
+    // 6 次攻击伤害 → 同来源封顶 4 层
+    expect(buffLayers(ally, 'attack_buff')).toBe(4);
+    expect(buffAmount(ally, 'attack_buff')).toBe(4 * 33);
+  });
+
+  it('每层持续 1 回合（新口径）：本次行动叠的层本次享受，下次行动开始时移除', () => {
+    const ctx = makeCtx();
+    const wg = makeUnit('weiguan', { position: '中军', attack: 151 });
+    wg.general.commandSkillIds = ['chijie_zhenxi'];
+    const ally = makeUnit('ally', { position: '前锋' });
+    ctx.myTeam = [wg, ally];
+    const e1 = makeUnit('e1', { position: '前锋', defense: 1000, troops: 100000 });
     e1.side = 'enemy';
     ctx.enemyTeam = [e1];
     triggerCommandSkills(ctx, wg);
 
-    // 同一回合内连击：连续多次普攻叠层（模拟高频出手）
-    for (let i = 0; i < 6; i++) {
-      actUnit(ctx, ally);
-    }
-    // 同回合内每次普攻都叠 1 层，封顶 4 层
-    expect(buffLayers(ally, 'attack_buff')).toBe(4);
-    expect(buffAmount(ally, 'attack_buff')).toBe(4 * 33);
-
-    // 行动中施加的叠层：回合末不减，持续到该单位下次行动开始前
-    tickStatuses(ctx, [...ctx.myTeam, ...ctx.enemyTeam]);
-    expect(buffLayers(ally, 'attack_buff')).toBe(4);
-
-    // 下回合行动开始前：旧 4 层各减 1 → 全部消散；本次行动又叠 1 层
-    ctx.currentRound = 2;
+    // 回合 1：1 次普攻 → 1 层（盟友攻击 100 + 33 = 133）
     actUnit(ctx, ally);
     expect(buffLayers(ally, 'attack_buff')).toBe(1);
+    expect(buffAmount(ally, 'attack_buff')).toBe(33);
+
+    // 回合末不递减（第 2 组在携带者行动开始时递减）
+    tickStatuses(ctx, [...ctx.myTeam, ...ctx.enemyTeam]);
+    expect(buffLayers(ally, 'attack_buff')).toBe(1);
+
+    // 回合 2：上回合那层在「本次行动开始」时移除（行动之内施加的持续 1 回合只覆盖本次行动），
+    // 本次新层结算时攻击 100 + 33 = 133
+    ctx.currentRound = 2;
+    const mark = ctx.events.length;
+    actUnit(ctx, ally);
+    const layerEvents = ctx.events
+      .slice(mark)
+      .filter((e): e is Extract<typeof e, { type: 'status_inflicted' }> => e.type === 'status_inflicted' && e.statusType === 'attack_buff');
+    expect(layerEvents).toHaveLength(1);
+    expect(layerEvents[0].detail).toContain('攻击属性提高了33(133)');
+
+    // 行动结束：本次行动新叠的 1 层仍在身（已计入本次行动 → remaining 0，下次行动开始时移除）
+    expect(buffLayers(ally, 'attack_buff')).toBe(1);
+    expect(ally.statuses.find((s) => s.type === 'attack_buff')?.appliedRound).toBe(2);
   });
 });
 

@@ -232,16 +232,20 @@ describe('鸟云山兵（A 指挥：每回合行动时 30%+10%/回合，攻击/�
     expect(none).toBeGreaterThan(0);
   });
 
-  it('持续 1 回合：生效到其下一次行动开始前（行动开始即递减移除）', () => {
+  it('持续 1 回合：本次行动仍生效，失效于其下一次行动开始前（行动开始即递减移除）', () => {
     const ctx = makeCtx(commandTeam('niaoyun_shanbing'), 3);
     const target = ctx.myTeam[0];
     lock(ctx, withRepeatRate('niaoyun_shanbing', 1), target.general.id, [target]);
     triggerPreparedEffectOnAct(ctx, target);
     expect(reducesOf(target)).toHaveLength(2); // 必中 → 两段都生效
 
-    // 目标行动开始（下一回合）：先递减，再按当时几率重新判定
+    // 目标下一次行动（第 2 回合）：状态按「行动结束后递减」口径仍生效（保底让本次行动吃到减伤）
     ctx.lockedCommands = [];
     ctx.currentRound = 2;
+    actUnit(ctx, target);
+    expect(reducesOf(target)).toHaveLength(2);
+    // 其后的行动开始（第 3 回合）：递减到期的状态静默移除 + 按当时几率重新判定
+    ctx.currentRound = 3;
     actUnit(ctx, target);
     expect(reducesOf(target)).toHaveLength(0);
   });

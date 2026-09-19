@@ -377,7 +377,7 @@ describe('反击之策（B 一类指挥：前 3 回合 75% 友军反击 100%）'
 });
 
 describe('以诱待来（A 被动：50% 挑衅来源；来源挑衅自己时恢复 150%）', () => {
-  it('装配：数组两条，taunt duration 2，heal 不受谋略', () => {
+  it('装配：数组两条，taunt duration 1，heal 不受谋略', () => {
     expect(passiveTeam('yiyou_dailai')[0].passiveSkillIds).toContain('yiyou_dailai');
     const s = asPassive('yiyou_dailai');
     expect(Array.isArray(s.onHurt)).toBe(true);
@@ -386,7 +386,7 @@ describe('以诱待来（A 被动：50% 挑衅来源；来源挑衅自己时恢�
     expect(hooks).toHaveLength(2);
     const taunt = inflictStatusOf(hooks[0].output?.[0]);
     expect(taunt?.type).toBe('taunt');
-    if (taunt?.type === 'taunt') expect(taunt.duration).toBe(2);
+    if (taunt?.type === 'taunt') expect(taunt.duration).toBe(1); // 官方「1 回合」字面值（新口径 action-end 递减）
     const heal = hooks[1].output?.[0];
     expect(heal?.kind).toBe('heal');
     if (heal?.kind === 'heal') {
@@ -450,23 +450,28 @@ describe('先声夺人（A 被动：前 3 回合行动时连击 / 分兵 / 单�
   });
 
   it('窗口：效果只在回合 1～3；第 4 回合无 skill_cast / skill_trigger', () => {
-    const effectRounds: number[] = [];
+    const appliedRounds: number[] = [];
+    const splitDamageRounds: number[] = [];
     const lateCast: number[] = [];
     const lateTrig: number[] = [];
     for (let seed = 1; seed <= 40; seed++) {
       for (const { round, ev } of withRound(run(passiveTeam('xiansheng_duoren'), seed).events)) {
-        const isEffect =
+        const applied =
           (ev.type === 'status_inflicted' && (ev.statusType === 'combo' || ev.statusType === 'split')) ||
-          (ev.type === 'damage' && ev.skillName === '先声夺人') ||
-          (ev.type === 'split_damage');
-        if (isEffect) effectRounds.push(round);
+          (ev.type === 'damage' && ev.skillName === '先声夺人');
+        if (applied) appliedRounds.push(round);
+        if (ev.type === 'split_damage') splitDamageRounds.push(round);
         if (ev.type === 'skill_cast' && ev.skillName === '先声夺人' && round >= 4) lateCast.push(round);
         if (ev.type === 'skill_trigger' && ev.skillId === 'xiansheng_duoren' && round >= 4) lateTrig.push(round);
       }
     }
-    expect(effectRounds.length).toBeGreaterThan(0);
-    expect(effectRounds.every((r) => r >= 1 && r <= 3)).toBe(true);
+    expect(appliedRounds.length).toBeGreaterThan(0);
+    // 被动自身只在第 1~3 回合施加（endRound 3）
+    expect(appliedRounds.every((r) => r >= 1 && r <= 3)).toBe(true);
     expect(lateCast).toHaveLength(0);
     expect(lateTrig).toHaveLength(0);
+    // 新口径：第 3 回合施加的 duration 1（连击/分兵）覆盖到携带者第 4 回合的行动，
+    // 因此第 4 回合允许出现分兵伤害；但不该更晚（duration 1 = 接下来 1 次行动）
+    expect(splitDamageRounds.every((r) => r >= 1 && r <= 4)).toBe(true);
   });
 });

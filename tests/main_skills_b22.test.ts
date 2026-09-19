@@ -147,6 +147,7 @@ describe('令明负榇（庞德，一类指挥：前 3 回合叠增伤 → 第 4
       rate: 0.06,
       duration: 999,
       direction: 'caused' as const,
+      stacks: 1,
       maxStacks: 3,
     };
     const rates: number[] = [];
@@ -158,9 +159,9 @@ describe('令明负榇（庞德，一类指挥：前 3 回合叠增伤 → 第 4
     expect(rates[0]).toBeCloseTo(0.06, 6);
     expect(rates[1]).toBeCloseTo(0.12, 6);
     expect(rates[2]).toBeCloseTo(0.18, 6);
-    // 层数上限由战法层面保证（roundRepeat endRound: 3 → 只判定 3 次）。
-    // 注：引擎 maxStacks 目前在「同战法累加」分支未生效（累加路径不读 stacks），
-    // 故本用例不断言第 4 次施加；该限制已记入提交说明，待后续修引擎。
+    // 带 stacks + maxStacks 的显式叠层：第 4/5 次达到上限后不再累加（roundRepeat endRound:3 另有战法层封顶）
+    expect(rates[3]).toBeCloseTo(0.18, 6);
+    expect(rates[4]).toBeCloseTo(0.18, 6);
     expect(u.statuses.filter((s) => s.type === 'damage_boost')).toHaveLength(1);
   });
 });

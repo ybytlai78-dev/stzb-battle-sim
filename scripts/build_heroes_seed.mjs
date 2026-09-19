@@ -158,6 +158,10 @@ const SKILL_ID_BY_NAME = {
   文伐: 'wenfa',
   不攻: 'bugong',
   恃强淬锋: 'shiqiang_cuifeng',
+  将门有将: 'jiangmen_youjiang',
+  二夫之勇: 'erfu_zhiyong',
+  雪奋短兵: 'xuefen_duanbing',
+  蛮王御众: 'manwang_yuzhong',
 };
 
 /** 现有 8 个武将固定拼音 id（测试直接引用 HERO_REGISTRY.<id>） */

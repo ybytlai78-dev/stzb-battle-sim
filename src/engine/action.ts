@@ -264,6 +264,11 @@ export interface CombatContext {
   hurtOnceKeys?: Set<string>;
   /** 首次受击必触发已用标记（疮痍累身），键为 `skillId:casterId:victimId` */
   hurtFirstKeys?: Set<string>;
+  /**
+   * 「每受到 N 次伤害」累计计数（蛮王御众）：key `${victimId}:${skillId}` → 已受击次数（整场累计）。
+   * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
+   */
+  hurtEveryCounters?: Map<string, number>;
   /** 受击 hook 重入保护：反击/引爆等二次 applyDamage 不再触发 onHurt（防盲侯循环） */
   resolvingHurtHooks?: boolean;
   /** 受恢复 hook 重入保护：赏顺伐逆群体奶不再触发 onHeal */
@@ -1150,7 +1155,7 @@ function executeActLayer(ctx: CombatContext, unit: UnitState, skill: CommandSkil
         inflictStatus(
           ctx,
           t,
-          { type: 'speed_buff', amount: -cfg.speedReduce, duration: 999 },
+          { type: 'speed_buff', amount: -cfg.speedReduce, duration: 999, stack: true },
           skill.type,
           skill.id,
           unit.general.id
@@ -1165,11 +1170,11 @@ function executeActLayer(ctx: CombatContext, unit: UnitState, skill: CommandSkil
   // 叠 1 层后立即检查阈值：达到 cap 立即触发攻击并清空，随后继续判定
   const addLayerAndCheck = (): void => {
     layers += 1;
-    // 每层 8% 造成侧增伤（同战法重复施加数值累加）
+    // 每层 8% 造成侧增伤（官方「可叠加」，同战法重复施加数值累加）
     inflictStatus(
       ctx,
       unit,
-      { type: 'damage_boost', rate: cfg.perLayer / 100, duration: 999, direction: 'caused' },
+      { type: 'damage_boost', rate: cfg.perLayer / 100, duration: 999, direction: 'caused', stack: true },
       skill.type,
       skill.id,
       unit.general.id
@@ -1836,10 +1841,55 @@ function executeSplitAttack(
 
 // ─── 单武将行动 ───
 
-/** 行动中施加的状态（appliedRound>0）：该单位下次行动开始前计数器减一（非消耗型，remaining 到 0 移除）。
- *  仅递减「上一回合或更早施加」的状态（appliedRound < currentRound）——同一回合刚施加的不减（连击等持续到本回合行动结束）。
+/** 行动结束递减的状态类型：有 `remaining` 的计数器型。
+ *  规避（按层数）、叠层待发 / 无视规避（消耗制）没有 remaining，已在标记阶段跳过。 */
+type ActEndCountingStatus = Exclude<Status, { type: 'evasion' | 'pending_stacks' | 'ignore_evasion' }>;
+
+/** 第 2 组「**下次行动前递减**」的状态（用户口径 2026-09-20）：控制 / 属性 / 增减伤。
+ *  语义：duration N = 生效目标接下来 **N 次行动**；第 N 次生效行动结束后状态**仍在身**，
+ *  直到「再下一次行动开始前」才移除 —— 即 remaining 减到 ≤0 时**只打「下次行动开始时移除」标记**
+ *  （用 remaining ≤ 0 表达），本次行动照常生效，下一次行动开始时由 markStatusesOnActStart 开头清掉。
+ *  第 1 组（DoT sorcery/burning/panic/curse/ignite、治愈 first_aid/rest）与其余行动计数型
+ *  保持 8032010 的「携带者行动结束后递减」；priority / counter 仍是「行动开始前递减 + 即时移除」。 */
+const NEXT_ACT_TICK_TYPES = [
+  'hesitation', 'cowardice', 'confusion', 'rampage',
+  'attack_buff', 'defense_buff', 'strategy_buff', 'speed_buff',
+  'damage_boost', 'damage_reduce',
+] as const;
+type NextActTickStatus = Extract<Status, { type: (typeof NEXT_ACT_TICK_TYPES)[number] }>;
+
+/** 是否属于第 2 组类型（不看消耗制豁免） */
+function isNextActTickType(type: StatusType): boolean {
+  return (NEXT_ACT_TICK_TYPES as readonly string[]).includes(type);
+}
+
+/** 是否属于第 2 组（跳过项须与 markStatusesOnActStart 一致：次数型增减伤是消耗制，不算） */
+function isNextActTickStatus(s: Status): s is NextActTickStatus {
+  if (!isNextActTickType(s.type)) return false;
+  if (s.type === 'damage_boost' && 'charges' in s && s.charges != null) return false;
+  return true;
+}
+
+/** 行动中施加的状态（appliedRound>0）按**递减时点**分三路（用户口径 2026-09-20，承接 8032010）：
+ *  - **第 1 组 + 其余行动计数型**：携带者行动**结束**后递减、到 0 才移除 —— `duration N`
+ *    = 目标接下来 **N 次行动**都生效，与双方出手先后无关（旧实现在行动开始前递减，
+ *    目标已出手的时序会少生效 1 次）。标记函数只负责把这类状态收集进数组返回。
+ *    本行动开始时仍在身上的都算「接下来 N 次行动」里的 1 次——所以**不**沿用旧的
+ *    `appliedRound >= currentRound` 跳过：那个特例是为「行动开始前递减」服务的（会白挂），
+ *    改成行动结束后递减后不再需要，留着反而会让「出手在前」的时序多生效 1 次。
+ *  - **第 2 组**（`NEXT_ACT_TICK_TYPES`：控制 / 属性 / 增减伤）：行动**开始**时先清掉上一轮
+ *    到期项，再 `remaining -= 1`；减到 ≤0 只打标记、本次行动照常生效。
+ *  - **窗口/时点型例外**（`priority` / `counter`）：仍走「行动开始前递减 + 即时移除」原逻辑——
+ *    `priority` 的作用时点是回合初排序，改到行动结束后会被吃掉（实测 1→0）；`counter` 的窗口是
+ *    「直到携带者下回合行动前」，窗口一开就到点。
  *  行动前施加（appliedRound=0）由回合末 tickStatuses 递减，不在此处理。 */
-function tickStatusesOnActStart(ctx: CombatContext, unit: UnitState): void {
+function markStatusesOnActStart(ctx: CombatContext, unit: UnitState): ActEndCountingStatus[] {
+  const marked: ActEndCountingStatus[] = [];
+  // 第 0 步：第 2 组里「上一轮已到期」的状态（remaining 已减到 ≤0）在本次行动开始前移除。
+  // 准备阶段施加（appliedRound=0）的仍由回合末 tickStatuses 递减，不在此处理。
+  unit.statuses = unit.statuses.filter(
+    (s) => !(isNextActTickStatus(s) && s.appliedRound !== 0 && s.remaining <= 0)
+  );
   for (const s of [...unit.statuses]) {
     if (s.type === 'evasion') continue; // 规避按层数，不递减
     // 叠层待发（奉令护蜀）：只由「普攻打出 / 受到实际伤害」清空，不按回合递减
@@ -1852,28 +1902,75 @@ function tickStatusesOnActStart(ctx: CombatContext, unit: UnitState): void {
     if (s.type === 'damage_boost' && 'charges' in s && s.charges != null) continue;
     // 次数型分兵：不按回合递减，打出后由 consumeSplitCharges 移除
     if (s.type === 'split' && 'charges' in s && s.charges != null) continue;
-    // 待下次行动再生效的暴走（青丘媚祸）：本行动开始时激活，不递减；再下一次行动开始前才到期
+    // 待下次行动再生效的暴走（青丘媚祸）：本行动开始时激活，**并继续走下面的第 2 组递减**
+    // （激活当次生效，下一次行动开始前移除 = 官方「下次行动生效，持续到再下一次行动开始前」）
     if (s.type === 'rampage' && s.pendingNextAct) {
       s.pendingNextAct = false;
       s.appliedRound = ctx.currentRound;
-      continue;
     }
     // first_aid：remaining 递减（Infinity 整场常驻恒不减；金匮要略前 3 回合到期移除）
     if (s.type === 'rest') continue; // 休整 remaining 只在跳恢复时递减
     if (s.appliedRound === 0) continue; // 行动前施加：回合末递减
-    if (s.appliedRound >= ctx.currentRound) continue; // 本回合刚施加：持续到行动结束
+    // 窗口/时点型例外：保持旧的「行动开始前递减 + 即时移除」（同回合刚施加的仍不计数）
+    if (s.type === 'priority' || s.type === 'counter') {
+      if (s.appliedRound >= ctx.currentRound) continue;
+      s.remaining -= 1;
+      if (s.remaining <= 0) {
+        unit.statuses = unit.statuses.filter((x) => x !== s);
+        // 不 push status_expired（行动开始时静默失效，避免在行动事件流前插入状态过期事件干扰时序断言）
+      }
+      continue;
+    }
+    // 第 2 组（控制 / 属性 / 增减伤）：本次行动开始前递减；减到 ≤0 只打标记，本次行动仍生效，
+    // 下一次行动开始时由本函数第 0 步静默清掉（取消原「同一回合刚施加不递减」的跳过）
+    if (isNextActTickStatus(s)) {
+      s.remaining -= 1;
+      continue;
+    }
+    // 行动计数型（第 1 组 + 其余）：交给行动结束后的 tickStatusesOnActEnd 递减（保底先让本次行动生效）
+    marked.push(s);
+  }
+  return marked;
+}
+
+/** 行动结束时结算：
+ *  ① `markStatusesOnActStart` 标记的**第 1 组 + 其余行动计数型**状态：remaining -= 1，<=0 移除
+ *     （状态即使 remaining 已到 0，也先把本次行动生效完再移除）。
+ *  ② 本次行动**之内**（行动开始之后）才施加的第 2 组状态：本次行动已计入 1 次生效 → 这里补一次递减，
+ *     使「之内施加的持续 1 回合」也只生效本次行动，下一次行动开始时被静默移除。
+ *  静默移除（不 push `status_expired`），与行动开始前静默失效同口径，减少行动事件流噪音。 */
+function tickStatusesOnActEnd(
+  unit: UnitState,
+  marked: ActEndCountingStatus[],
+  statusesAtActStart: ReadonlySet<Status>
+): void {
+  for (const s of marked) {
     s.remaining -= 1;
     if (s.remaining <= 0) {
       unit.statuses = unit.statuses.filter((x) => x !== s);
-      // 不 push status_expired（行动开始时静默失效，避免在行动事件流前插入状态过期事件干扰时序断言）
     }
+  }
+  for (const s of [...unit.statuses]) {
+    if (statusesAtActStart.has(s)) continue; // 行动开始时已在身：已在行动开始处递减过
+    if (!isNextActTickStatus(s)) continue;
+    // 待下次行动再生效的暴走（青丘媚祸）：生效时点由 markStatusesOnActStart 的激活分支单独控制
+    if (s.type === 'rampage' && s.pendingNextAct) continue;
+    s.remaining -= 1;
   }
 }
 
 /**
- * 行动收尾：清除「仅本次行动有效」的发动率提升（甚陷不惧 expireAfterOwnAct）→ 标记已行动 → 发 unit_act_end。
+ * 行动收尾：清除「仅本次行动有效」的发动率提升（甚陷不惧 expireAfterOwnAct）→ 本次行动状态按
+ * 「行动结束后递减」口径结算（第 1 组 + 其余行动计数型；行动之内才施加的第 2 组补递减）→
+ * 标记已行动 → 发 unit_act_end。`actEndMarked` / `statusesAtActStart` 缺省时跳过状态递减
+ * （行动开始前即阵亡的出口：本次行动未生效，无需递减）。
  */
-function endUnitAct(ctx: CombatContext, unit: UnitState): void {
+function endUnitAct(
+  ctx: CombatContext,
+  unit: UnitState,
+  actEndMarked?: ActEndCountingStatus[],
+  statusesAtActStart?: ReadonlySet<Status>
+): void {
   const expiring = unit.statuses.filter((s) => s.type === 'trigger_boost' && s.expireAfterOwnAct);
   if (expiring.length > 0) {
     unit.statuses = unit.statuses.filter((s) => !(s.type === 'trigger_boost' && s.expireAfterOwnAct));
@@ -1881,6 +1978,7 @@ function endUnitAct(ctx: CombatContext, unit: UnitState): void {
       ctx.events.push({ type: 'status_expired', unitId: unit.general.id, statusType: s.type });
     }
   }
+  if (actEndMarked && statusesAtActStart) tickStatusesOnActEnd(unit, actEndMarked, statusesAtActStart);
   unit.hasActedThisRound = true;
   ctx.events.push({ type: 'unit_act_end', unitId: unit.general.id });
 }
@@ -1889,14 +1987,18 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
   const enemies = unit.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
   const allies = unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
 
-  // 0. 行动中施加的状态递减：计数器回合持续到下次行动开始前（连击/行动中怯战等）
-  tickStatusesOnActStart(ctx, unit);
   // 延迟结算（道行险阻「目标下一次行动前」）：行动开始前由原施法者结算，可能致死 → 直接收尾
   triggerPendingStrikes(ctx, unit);
   if (!unit.alive) {
-    endUnitAct(ctx, unit);
+    endUnitAct(ctx, unit); // 行动开始前阵亡：本次行动未生效，跳过状态递减
     return;
   }
+  // 0. 行动中施加的状态：在这里先结算「下次行动前递减」类——
+  //    第 2 组（控制/属性/增减伤）先清到期项、再递减；窗口/时点型（priority/counter）即时移除；
+  //    第 1 组 + 其余行动计数型只标记，待本次行动完全生效后再由 tickStatusesOnActEnd 递减（三出口统一调用）。
+  //    statusesAtActStart：判断「本次行动之内才施加」的第 2 组状态（见 tickStatusesOnActEnd ②）。
+  const statusesAtActStart = new Set(unit.statuses);
+  const actEndMarked = markStatusesOnActStart(ctx, unit);
   // 忠克猛烈：施法者行动时清除其施加的受击追加攻击标记（窗口「直到施法者下回合行动前」）
   expireRetaliateOnCasterAct(ctx, unit);
 
@@ -1929,6 +2031,8 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
     if (rs.startRound != null && ctx.currentRound < rs.startRound) continue;
     if (rs.endRound != null && ctx.currentRound > rs.endRound) continue;
     if (rs.oddRounds && ctx.currentRound % 2 === 0) continue;
+    // 攻击距离门槛（雪奋短兵「攻击距离小于等于 1 时…每回合自身行动时」）：未降到门槛内则整段不结算
+    if (rs.requireAttackRangeAtMost != null && attackRangeOf(unit) > rs.requireAttackRangeAtMost) continue;
     executeSkillOutputs(ctx, unit, p, [unit], rs.output);
   }
 
@@ -1960,7 +2064,7 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
   }
   tickDots(ctx, unit);
   if (!unit.alive) {
-    endUnitAct(ctx, unit);
+    endUnitAct(ctx, unit, actEndMarked, statusesAtActStart); // 阵亡出口：本次行动已生效，状态照常递减
     return;
   }
 
@@ -1972,7 +2076,7 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
       name: unit.general.name,
       reason: '混乱：无法行动',
     });
-    endUnitAct(ctx, unit);
+    endUnitAct(ctx, unit, actEndMarked, statusesAtActStart); // 混乱出口：状态照常递减
     return;
   }
 
@@ -2089,7 +2193,7 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
     }
   }
 
-  endUnitAct(ctx, unit);
+  endUnitAct(ctx, unit, actEndMarked, statusesAtActStart); // 正常出口：状态在行动结束后递减
 }
 
 function resolveSkill(ctx: CombatContext, id: string): Skill | null {
@@ -2111,8 +2215,10 @@ export function getStatus<T extends StatusType>(
 
 /** 施加状态（带冲突判定）：
  *  规则：先判战法类型（被动/指挥/主动/追击），再判非「伤害」标签是否冲突
- *  - 同一战法重复触发 → 增益累加 / 控制刷新剩余（步步为营每回合叠加）
- *  - 同类型不同战法 → 冲突：控制先施加者生效、增益数值替换取较高（战必 vs 措手不及 / 避其锋芒 vs 共饮避世）
+ *  - 同一战法重复触发（同源重挂）：**数值型默认刷新**（数值替换、remaining 取 max，不累加）；
+ *    仅带显式叠层标记的（`stack` / `stacks` / `chargesStack`）才累加（步步为营、谋议宏图、银龙冲阵…）；
+ *    控制类刷新剩余、规避（evasion）同源加层、概率规避（evade_chance）同源也冲突被拒
+ *  - 同类型不同战法 → 冲突：控制/概率规避先施加者生效、增益数值替换取较高（战必 vs 措手不及 / 避其锋芒 vs 共饮避世）
  *  - 不同类型 → 各自计数共存（战必指挥怯战 vs 玄武洰流主动怯战）
  */
 export function inflictStatus(
@@ -2129,6 +2235,9 @@ export function inflictStatus(
   }
   const type = create.type;
 
+  // 注：曾在此清理 remaining ≤ 0 的「僵尸」同名状态（防止同源重挂累加到已到期实例上）。
+  // 新口径（同源默认刷新）下不再需要：刷新会把僵尸实例的 amount/rate 替换为本次值、
+  // remaining 取 max，既不累加也不新增实例（怀橘遗亲每回合仍 −10）。
   // 属性升降「之前」判定（举贤决机）：属性状态成功施加**之前**（冲突判定之前）先判一次。
   // 「每种属性单独计算」= 攻击/防御/谋略/速度各是一个状态，这里每个状态各触发一次。
   const ATTR_STATUS_TYPES: StatusType[] = ['attack_buff', 'defense_buff', 'strategy_buff', 'speed_buff'];
@@ -2294,6 +2403,18 @@ export function inflictStatus(
   const diffType = target.statuses.find((s) => s.type !== 'first_aid' && s.type !== 'rest' && s.type === type && s.sourceSkillType !== sourceSkillType);
 
   if (sameSource) {
+    // 概率规避（列营守险）：状态类，同源重挂同样冲突——不施加、不刷新（用户口径）。
+    // 旧实现会落到下方「刷新 remaining、保留旧 charges」兜底分支，等于静默续命。
+    if (type === 'evade_chance') {
+      ctx.events.push({
+        type: 'status_conflict',
+        unitId: target.general.id,
+        statusType: type,
+        sourceSkillType,
+        detail: '规避效果冲突（已有同来源的概率规避），先施加者生效，未生效',
+      });
+      return;
+    }
     // 次数型下一次增减伤 / 待生效暴走：已有则不刷新，避免叠加或永控
     if (type === 'damage_boost' && create.type === 'damage_boost' && create.charges != null && !create.chargesStack) return;
     if (type === 'rampage' && create.type === 'rampage' && create.pendingNextAct) return;
@@ -2302,10 +2423,13 @@ export function inflictStatus(
       const stacks = (sameSource as { stacks?: number }).stacks ?? 1;
       if (stacks >= create.maxStacks) return;
     }
-    // 同一战法重复触发：数值类累加，规避加层，控制刷新剩余
+    // 规避（层数式必挡）：官方「层数」口径，同源重复施加加层（不同源由 sameType 分支取较高替换）
     if (sameSource.type === 'evasion') {
       if (create.type === 'evasion') sameSource.stacks += create.stacks;
-    } else if (sameSource.type === 'attack_buff' || sameSource.type === 'defense_buff' || sameSource.type === 'strategy_buff' || sameSource.type === 'speed_buff' || sameSource.type === 'damage_reduce' || sameSource.type === 'damage_boost' || sameSource.type === 'trigger_boost' || sameSource.type === 'morale_boost' || sameSource.type === 'range_buff' || sameSource.type === 'skill_range_buff') {
+      return;
+    }
+    // 显式叠层标记（官方文案写「可叠加」/「层数」，含 skill_range_buff 等数值型）→ 数值累加；其余默认刷新
+    if (isExplicitStackCreate(create)) {
       if ('amount' in sameSource && 'amount' in create) {
         sameSource.amount += create.amount;
         // 官方口径（疮痍累身截图）：同类属性增益重复施加 → 「【周泰】的攻击属性提高效果刷新了」
@@ -2325,53 +2449,87 @@ export function inflictStatus(
           (sameSource as { stacks?: number }).stacks = (sameSource.stacks ?? 1) + ('stacks' in create ? (create.stacks ?? 1) : 1);
         }
       }
-      if (create.type !== 'evasion') sameSource.remaining = Math.max(sameSource.remaining, remainingFromDuration(create.duration));
-    } else if (create.type !== 'evasion' && 'remaining' in sameSource) {
-      sameSource.remaining = Math.max(sameSource.remaining, remainingFromDuration(create.duration));
+      if ('remaining' in sameSource) {
+        sameSource.remaining = Math.max(sameSource.remaining, 'duration' in create ? remainingFromDuration(create.duration) : sameSource.remaining);
+      }
+      /**
+       * 反击同战法重挂：刷新 appliedRound，并沿用本次 rate。
+       * 否则第 2 回合 roundStartRepeat 只续 remaining，行动开始时 markStatusesOnActStart
+       * 会把 appliedRound=1 当成「上回合施加」递减掉，本回合行动后反击失效。
+       */
+      if (sameSource.type === 'counter' && create.type === 'counter') {
+        sameSource.appliedRound = ctx.currentRound;
+        sameSource.rate = create.rate;
+      }
+      // 士气提高同战法累加需发战报（谋议宏图：8→16→32），否则回合前叠层无事件
+      if (sameSource.type === 'morale_boost' && 'amount' in sameSource) {
+        const durText = sameSource.remaining >= 999 ? '持续至战斗结束' : `持续 ${sameSource.remaining} 回合`;
+        ctx.events.push({
+          type: 'status_inflicted',
+          unitId: target.general.id,
+          statusType: 'morale_boost',
+          detail: `${sameSource.amount < 0 ? '士气降低' : '士气提高'} ${Math.abs(sameSource.amount)} ${durText}`,
+        });
+      }
+      if (sameSource.type === 'damage_boost' && create.type === 'damage_boost' && create.chargesStack && 'rate' in sameSource) {
+        const pct = Math.round(Math.abs(sameSource.rate) * 100);
+        const dirName = sameSource.direction === 'caused' ? '造成的' : '受到的';
+        const verb = sameSource.rate < 0 && pct > 90 ? '大幅降低' : `${sameSource.rate >= 0 ? '提高' : '降低'} ${pct}%`;
+        ctx.events.push({
+          type: 'status_inflicted',
+          unitId: target.general.id,
+          statusType: 'damage_boost',
+          detail: `下一次${dirName}伤害${verb}`,
+        });
+      }
+      return;
     }
-    /**
-     * 反击同战法重挂：刷新 appliedRound，并沿用本次 rate。
-     * 否则第 2 回合 roundStartRepeat 只续 remaining，行动开始时 tickStatusesOnActStart
-     * 会把 appliedRound=1 当成「上回合施加」递减掉，本回合行动后反击失效。
-     */
-    if (sameSource.type === 'counter' && create.type === 'counter') {
-      sameSource.appliedRound = ctx.currentRound;
+
+    // —— 默认刷新（同源重复施加同一数值型效果）——
+    // 数值替换为本次的 amount / rate（不回加），remaining = max(旧, 新)（用户口径）。
+    if ('amount' in sameSource && 'amount' in create) {
+      sameSource.amount = create.amount;
+      if ('percent' in sameSource || 'percent' in create) {
+        (sameSource as { percent?: boolean }).percent = Boolean('percent' in create && create.percent);
+      }
+      // 属性刷新：发与首次施加同类型的事件（战报可见「降低了10（刷新）」，不新增状态实例）
+      if (type in ATTR_STAT_LABEL) {
+        const label = ATTR_STAT_LABEL[type as keyof typeof ATTR_STAT_LABEL];
+        const pctText = 'percent' in create && create.percent ? '%' : '';
+        ctx.events.push({
+          type: 'status_inflicted',
+          unitId: target.general.id,
+          statusType: type,
+          detail: `${label}${create.amount >= 0 ? '提高' : '降低'}了${Math.abs(create.amount)}${pctText}（刷新）`,
+        });
+      }
+    } else if ('rate' in sameSource && 'rate' in create) {
       sameSource.rate = create.rate;
     }
-    // 士气提高同战法累加需发战报（谋议宏图：8→16→32），否则回合前叠层无事件
-    if (sameSource.type === 'morale_boost' && 'amount' in sameSource) {
-      const durText = sameSource.remaining >= 999 ? '持续至战斗结束' : `持续 ${sameSource.remaining} 回合`;
-      ctx.events.push({
-        type: 'status_inflicted',
-        unitId: target.general.id,
-        statusType: 'morale_boost',
-        detail: `${sameSource.amount < 0 ? '士气降低' : '士气提高'} ${Math.abs(sameSource.amount)} ${durText}`,
-      });
+    if ('remaining' in sameSource) {
+      sameSource.remaining = Math.max(sameSource.remaining, 'duration' in create ? remainingFromDuration(create.duration) : sameSource.remaining);
     }
-    if (sameSource.type === 'damage_boost' && create.type === 'damage_boost' && create.chargesStack && 'rate' in sameSource) {
-      const pct = Math.round(Math.abs(sameSource.rate) * 100);
-      const dirName = sameSource.direction === 'caused' ? '造成的' : '受到的';
-      const verb = sameSource.rate < 0 && pct > 90 ? '大幅降低' : `${sameSource.rate >= 0 ? '提高' : '降低'} ${pct}%`;
-      ctx.events.push({
-        type: 'status_inflicted',
-        unitId: target.general.id,
-        statusType: 'damage_boost',
-        detail: `下一次${dirName}伤害${verb}`,
-      });
+    // 反击同战法重挂：刷新 appliedRound（原因同上；rate 已在上方替换）
+    if (sameSource.type === 'counter' && create.type === 'counter') {
+      sameSource.appliedRound = ctx.currentRound;
     }
     return;
   }
 
   if (sameType) {
     // 同类型不同战法：冲突
-    if (sameType.type === 'confusion' || sameType.type === 'rampage' || sameType.type === 'cowardice' || sameType.type === 'hesitation' || sameType.type === 'combo') {
+    // 概率规避（列营守险）是状态类：不同来源同样先施加者生效、后施加者被拒（与同源冲突口径一致）
+    if (sameType.type === 'confusion' || sameType.type === 'rampage' || sameType.type === 'cowardice' || sameType.type === 'hesitation' || sameType.type === 'combo' || sameType.type === 'evade_chance') {
       // 控制：先施加者生效，后施加者被拒
+      const detail = sameType.type === 'evade_chance'
+        ? '规避效果冲突（已有效果），先施加者生效，未生效'
+        : `${statusName(sameType.type)}冲突（已有${skillTypeName(sameType.sourceSkillType)}战法施加的${statusName(sameType.type)}），未生效`;
       ctx.events.push({
         type: 'status_conflict',
         unitId: target.general.id,
         statusType: sameType.type,
         sourceSkillType,
-        detail: `${statusName(sameType.type)}冲突（已有${skillTypeName(sameType.sourceSkillType)}战法施加的${statusName(sameType.type)}），未生效`,
+        detail,
       });
       return;
     }
@@ -2565,6 +2723,21 @@ function statusValue(x: CreateStatus | Status): number {
   return 'amount' in x ? x.amount : 'rate' in x ? x.rate : 0;
 }
 
+/**
+ * 是否带**显式叠层标记**（同源重复施加才累加；否则走默认刷新，见 CreateStatus 顶部口径）。
+ *  - 通用 `stack: true`：官方文案写「可叠加」/「层数」的属性类、减伤、士气、范围、增伤等；
+ *  - `damage_boost` 既有层数语义：`stacks`（银龙冲阵 / 攻其不备 / 文德椒房 / 九伐中原 / 徽言龙凤 /
+ *    恃强淬锋 / 七步释嫌）或 `chargesStack`（七步释嫌：带 charges 仍累加）。
+ * `evasion` 的「层数式必挡」在 sameSource 分支单独处理，不依赖本函数。
+ */
+function isExplicitStackCreate(create: CreateStatus): boolean {
+  if (create.type === 'damage_boost') {
+    if (create.chargesStack) return true;
+    if (create.stacks != null) return true;
+  }
+  return 'stack' in create && create.stack === true;
+}
+
 function pushStatus(
   ctx: CombatContext,
   target: UnitState,
@@ -2578,7 +2751,8 @@ function pushStatus(
   // 施加回合：准备阶段 currentRound=0 → 行动前施加；正式回合 → 行动中施加
   const appliedRound = ctx.currentRound;
   // 计数器型回合数：行动前施加（appliedRound=0）回合末递减（tickStatuses）；
-  // 行动中施加（appliedRound>0）持续到该单位下次行动开始前递减（actUnit 开头）。
+  // 行动中施加（appliedRound>0）：第 2 组（控制/属性/增减伤）在携带者下次行动开始时递减、
+  // 再下一次行动开始时移除；其余（含 DoT/治愈）在携带者行动结束后递减（见 markStatusesOnActStart）。
   // remaining 统一为 duration（两种施加点都从 duration 开始数）；规避按层数无 remaining
   const remaining = type === 'evasion' ? 0 : remainingFromDuration('duration' in create ? create.duration : 0);
   if (type === 'evasion') {
@@ -2666,7 +2840,7 @@ function pushStatus(
       type: 'status_inflicted',
       unitId: target.general.id,
       statusType: type,
-      detail: `攻击距离 +${create.amount} ${create.duration >= 999 ? '持续至战斗结束' : `持续 ${create.duration} 回合`}`,
+      detail: `攻击距离 ${create.amount >= 0 ? '+' : ''}${create.amount} ${create.duration >= 999 ? '持续至战斗结束' : `持续 ${create.duration} 回合`}`,
     });
     return;
   }
@@ -3035,8 +3209,35 @@ function pushStatus(
   });
 }
 
+/**
+ * 回合结束的被动递减（雪奋短兵「每回合结束时使自身攻击距离 −1」）：
+ * 携带 `rangeDecayPerRound` 的存活单位，若当前攻击距离 > min，则按 `perRound` 施加一条 `range_buff`
+ * （负值、持续至战斗结束、同战法累加，由 `target.attackRangeOf` 求和生效）；到 `≤ min` 停止下降
+ * （官方「攻击距离小于等于 1 时，不再触发攻击距离下降」）。由 `combat.runBattle` 回合末调用。
+ */
+export function triggerRangeDecayPassives(ctx: CombatContext): void {
+  for (const unit of [...ctx.myTeam, ...ctx.enemyTeam]) {
+    if (!unit.alive) continue;
+    for (const id of unit.general.passiveSkillIds) {
+      const skill = resolveSkill(ctx, id);
+      if (skill?.type !== 'passive' || !skill.rangeDecayPerRound) continue;
+      if (attackRangeOf(unit) <= skill.rangeDecayPerRound.min) continue;
+      inflictStatus(
+        ctx,
+        unit,
+        { type: 'range_buff', amount: -skill.rangeDecayPerRound.perRound, duration: 999, stack: true },
+        'passive',
+        skill.id,
+        unit.general.id
+      );
+    }
+  }
+}
+
 /** 回合结束：只递减「行动前施加」（appliedRound=0，准备阶段）的计数器回合，到 0 移除。
- *  行动中施加（appliedRound>0）持续到该单位下次行动开始前，由 tickStatusesOnActStart 递减。 */
+ *  行动中施加（appliedRound>0）的：第 1 组 + 其余行动计数型由携带者行动结束后的
+ *  tickStatusesOnActEnd 递减；第 2 组（控制/属性/增减伤）由行动开始时的 markStatusesOnActStart
+ *  递减（到期项下次行动开始时移除）；窗口/时点型（priority/counter）也在行动开始时递减，均不在此处理。 */
 export function tickStatuses(ctx: CombatContext, units: UnitState[]): void {
   for (const unit of units) {
     if (!unit.alive) continue;
@@ -3828,7 +4029,8 @@ function executeOnActSegments(ctx: CombatContext, unit: UnitState, skill: Comman
 
 /**
  * 攻心 + 士气降低（心战为上）：我军每次**对敌军造成伤害**后（实际扣兵 > 0）——
- * ① 使伤害目标士气 −`moraleReduce`（`morale_boost` 负值状态、整场常驻、同战法累加），
+ * ① 使伤害目标士气 −`moraleReduce`（`morale_boost` 负值状态、整场常驻、同战法累加；
+ *    显式 `stack: true` 叠层标记——用户 2026-09-19 确认可叠加，全仓唯一例外特例），
  *    全队累计最多 `maxTriggers` 次（`ctx.healOnDamageTriggers`）；
  * ② 本次为**攻击伤害**（physical）时，造成伤害者按 `healRate`%（受施法者谋略缩放）恢复兵力，
  *    恢复量 = 本次实际扣兵 × 恢复率；heal 事件归属战法施法者（战报统计口径）。
@@ -3848,7 +4050,8 @@ function triggerHealOnDamageCommands(
       const skill = resolveSkill(ctx, id);
       const cfg = skill?.type === 'command' ? skill.healOnDamage : undefined;
       if (!cfg) continue;
-      // ① 士气降低：全队累计上限内逐次施加（同战法同源累加）
+      // ① 士气降低：全队累计上限内逐次施加（施加模板带 stack: true → 显式叠层、同源累加）
+      //    官方未写「可叠加」；用户 2026-09-19 确认可叠加（9 次 → −45），故显式标注而非特判保留
       if (cfg.moraleReduce && cfg.moraleReduce > 0) {
         ctx.healOnDamageTriggers ??= new Map<string, number>();
         const key = `${holder.general.id}:${skill!.id}`;
@@ -3858,7 +4061,7 @@ function triggerHealOnDamageCommands(
           inflictStatus(
             ctx,
             target,
-            { type: 'morale_boost', amount: -cfg.moraleReduce, duration: 999 },
+            { type: 'morale_boost', amount: -cfg.moraleReduce, duration: 999, stack: true },
             skill!.type,
             skill!.id,
             holder.general.id
@@ -4495,17 +4698,22 @@ function executeSkillOutputs(
     // 指挥 roundStartRepeat chance）：士气修正后判定，失败则跳过该段
     // before_active 指挥（运筹决胜）已在 triggerBeforeActiveCommands 逐段判定，此处不再重复
     // recipient 代打改在每人上 roll，不走整段一次判定（先声夺人等非代打仍走此处）
+    // 输出未显式给 chance 时，可退回战法级「随回合递增几率」（将门有将：30% 起、每回合 +10%、封顶 100%）
+    const explicitChance = 'chance' in out && out.chance != null ? out.chance : null;
+    const rampCfg = skill.roundRampingChance;
+    const outChance =
+      explicitChance ??
+      (rampCfg ? Math.min(1, rampCfg.base + rampCfg.increment * (ctx.currentRound - 1)) : null);
     if (
       (skill.type === 'passive' ||
         skill.type === 'active' ||
         skill.type === 'pursuit' ||
         (skill.type === 'command' && skill.roundTrigger !== 'before_active')) &&
-      'chance' in out &&
-      out.chance != null &&
+      outChance != null &&
       !(out.kind === 'physical_damage' && out.attacker === 'recipient')
     ) {
       const morale = effectiveMorale(caster);
-      const rate = moraleTriggerRate(morale, out.chance);
+      const rate = moraleTriggerRate(morale, outChance);
       const success = ctx.rng.chance(rate);
       ctx.events.push({
         type: 'skill_trigger',
@@ -4514,7 +4722,7 @@ function executeSkillOutputs(
         skillName: skill.name,
         success,
         rate: Math.round(rate * 100),
-        baseRate: Math.round(out.chance * 100),
+        baseRate: Math.round(outChance * 100),
         morale,
       });
       if (!success) continue;
@@ -4638,6 +4846,11 @@ function executeSkillOutputs(
           );
         }
       }
+    }
+    // 攻击距离外（雪奋短兵）：池 = 存活敌军中距离 > 施法者当前攻击距离者，覆盖本段其他选靶
+    if (out.kind === 'inflict_status' && out.targetOutsideAttackRange) {
+      const range = attackRangeOf(caster);
+      pool = enemies.filter((e) => e.alive && distanceBetween(ctx, caster, e) > range);
     }
     // 三军夺帅 / 地公将军：本段状态打在**上一段伤害**的同一批命中目标上（不按本段 targetMode 重选）
     if (out.kind === 'inflict_status' && out.sameTargetsAsLastDamage) {
@@ -5194,6 +5407,10 @@ function executeSkillOutputs(
             // 减伤受谋略影响（金匮要略 20.4% 成长 0.13/点）：百分比按 1% 粒度八舍九入后转小数
             const scaled = roundRate(scaledValue(create.rate * 100, create.growthRate, effectiveStat(caster, 'strategy'))) / 100;
             inflictStatus(ctx, t, { ...create, rate: scaled }, skill.type, skill.id, caster.general.id);
+          } else if (create.type === 'damage_reduce' && create.defenseScaled && create.growthRate !== undefined) {
+            /** 减伤受防御影响（蛮王御众 30%，成长率未确认 → 缺省走下方 else 用基值）：公式同受谋略，属性换生效防御 */
+            const scaled = roundRate(scaledValue(create.rate * 100, create.growthRate, effectiveStat(caster, 'defense'))) / 100;
+            inflictStatus(ctx, t, { ...create, rate: scaled }, skill.type, skill.id, caster.general.id);
           } else if (create.type === 'damage_boost' && create.strategyScaled && create.growthRate !== undefined) {
             // 增减伤受谋略影响（密谋定蜀 +5% / 母仪浮梦 -40%，成长 0.15/点）：
             // 按绝对值缩放再恢复符号，使负向减伤随谋略增强（-40% 谋略 180 → -55%）
@@ -5383,7 +5600,7 @@ function executeSkillOutputs(
         const direction = out.direction ?? 'taken';
         for (const t of pool) {
           if (!t.alive) continue;
-          inflictStatus(ctx, t, { type: 'damage_boost', rate, duration: out.duration, direction }, skill.type, skill.id, caster.general.id);
+          inflictStatus(ctx, t, { type: 'damage_boost', rate, duration: out.duration, direction, stack: out.stack }, skill.type, skill.id, caster.general.id);
         }
         break;
       }
@@ -6380,6 +6597,30 @@ function triggerSorceryMarkOnHurt(ctx: CombatContext, target: UnitState): void {
   }
 }
 
+/**
+ * 「每受到 N 次伤害」触发（蛮王御众）：受伤者携带 `hurtEvery` 的被动时累计受击次数，
+ * 每满 `hits` 次对携带者（施法者）结算一次该配置的 output。
+ * 调用点：`applyDamage` 扣兵后、受击 hook（triggerOnHurt）之后，外层包 `ctx.resolvingHurtHooks`
+ * ——触发段打出的伤害不再回灌计数/受击钩子（防递归）。
+ */
+function triggerPassiveHurtEvery(ctx: CombatContext, victim: UnitState): void {
+  for (const id of victim.general.passiveSkillIds) {
+    const skill = resolveSkill(ctx, id);
+    if (skill?.type !== 'passive' || !skill.hurtEvery) continue;
+    ctx.hurtEveryCounters ??= new Map();
+    const key = `${victim.general.id}:${skill.id}`;
+    const count = (ctx.hurtEveryCounters.get(key) ?? 0) + 1;
+    ctx.hurtEveryCounters.set(key, count);
+    if (count % skill.hurtEvery.hits !== 0) continue;
+    ctx.events.push({
+      type: 'skill_exec',
+      unitId: victim.general.id,
+      detail: `【${victim.general.name}】执行来自【${victim.general.name}】的【${skill.name}】效果（累计受到 ${count} 次伤害）！`,
+    });
+    executeSkillOutputs(ctx, victim, skill, [victim], skill.hurtEvery.output);
+  }
+}
+
 /** 受击触发（盲侯奋勇/陷储立齐/同仇敌忾/缓师徐持）：扣兵后、阵亡标记前判定。
  *  反击等二次 applyDamage 不再递归（resolvingHurtHooks），避免盲侯循环。
  *  @param damageType 本次伤害类型；缺省不按 `onHurt.damageKind` 过滤（旧调用保持原行为）
@@ -6420,6 +6661,8 @@ function triggerOnHurt(
           if (cfg.victimPositions && !cfg.victimPositions.includes(victim.general.position)) continue;
           if (cfg.damageKind && damageType && cfg.damageKind !== damageType) continue;
           if (cfg.onlyIfActed && !victim.hasActedThisRound) continue;
+          // 攻击距离门槛（雪奋短兵：攻击距离 ≤1 后不再触发「受击 50% 规避」）
+          if (cfg.casterAttackRangeAbove != null && attackRangeOf(caster) <= cfg.casterAttackRangeAbove) continue;
           if (cfg.onlyIfSourceTauntsVictim) {
             if (!source || !source.alive) continue;
             if (!source.statuses.some((s) => s.type === 'taunt' && s.targetId === victim.general.id)) continue;
@@ -6813,6 +7056,15 @@ export function applyDamage(
   }
   // 受击触发战法（盲侯/陷储/同仇/缓师）：在阵亡标记前判定，致死一击仍可反击
   if (actual > 0) triggerOnHurt(ctx, target, source, damageType, damageSource);
+  // 每受到 N 次伤害触发（蛮王御众）：包一层 resolvingHurtHooks，触发段的伤害不再回灌计数/受击钩子
+  if (!ctx.resolvingHurtHooks && actual > 0) {
+    ctx.resolvingHurtHooks = true;
+    try {
+      triggerPassiveHurtEvery(ctx, target);
+    } finally {
+      ctx.resolvingHurtHooks = false;
+    }
+  }
   // 反击：after_damage 已清 resolvingHurtHooks，必须再包一层，避免反击段重入 before/after/counter
   if (
     !ctx.resolvingHurtHooks &&
@@ -6875,7 +7127,7 @@ function settleRetaliateOnHurt(ctx: CombatContext, target: UnitState): void {
 
 /**
  * 忠克猛烈：施法者下一次行动开始时，清除其施加的「受击追加攻击」标记（官方「直到陈到下回合行动前」）。
- * 标记挂在目标身上，故不能走目标的 tickStatusesOnActStart，需要在**施法者**行动时全局清扫。
+ * 标记挂在目标身上，故不能走目标自己的 markStatusesOnActStart，需要在**施法者**行动时全局清扫。
  */
 function expireRetaliateOnCasterAct(ctx: CombatContext, actor: UnitState): void {
   for (const u of [...ctx.myTeam, ...ctx.enemyTeam]) {

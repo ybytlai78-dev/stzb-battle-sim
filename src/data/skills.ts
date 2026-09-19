@@ -9,8 +9,8 @@ import type { CreateStatus, Skill, SkillOutput } from '../engine/types';
  * 举抑臧否（许劭）单属性效果组：随机选取属性后一次性结算的四段 ——
  * ① 该属性最低的敌军单体 −20（受谋略）；② 60% 概率 犹豫/怯战/围困 之一；
  * ③ 该属性最高的友军单体 +20（受谋略）；④ 60% 概率 先手/洞察/无视规避 之一。
- * 持续时间口径（官方「持续 1 回合」）：
- *  - 控制 / 属性 / 洞察：行动中施加 → duration 2（覆盖目标下一个行动回合，沿用辕门射戟用户口径）；
+ * 持续时间口径（官方「持续 1 回合」）：新口径（2026-09-18）下行动中施加的状态在携带者行动**结束后**递减，
+ * duration 即官方字面回合数 = 目标接下来 N 次行动 → 控制 / 属性 / 洞察一律 duration 1；
  *  - 先手（priority）：duration 1（只影响下一回合出手顺序；duration 2 会连吃两次排序）；
  *  - 无视规避：消耗制（由下一次造成伤害消耗，tick 不递减）→ duration 999 占位。
  */
@@ -18,11 +18,11 @@ function juyizangfouOption(attr: 'attack' | 'defense' | 'strategy'): SkillOutput
   const statStatus = (amount: number): CreateStatus => {
     switch (attr) {
       case 'attack':
-        return { type: 'attack_buff', amount, duration: 2, strategyScaled: true, growthRate: 0 };
+        return { type: 'attack_buff', amount, duration: 1, strategyScaled: true, growthRate: 0 };
       case 'defense':
-        return { type: 'defense_buff', amount, duration: 2, strategyScaled: true, growthRate: 0 };
+        return { type: 'defense_buff', amount, duration: 1, strategyScaled: true, growthRate: 0 };
       case 'strategy':
-        return { type: 'strategy_buff', amount, duration: 2, strategyScaled: true, growthRate: 0 };
+        return { type: 'strategy_buff', amount, duration: 1, strategyScaled: true, growthRate: 0 };
     }
   };
   return [
@@ -32,9 +32,9 @@ function juyizangfouOption(attr: 'attack' | 'defense' | 'strategy'): SkillOutput
       targetPick: `lowest_${attr}_enemy`,
       chance: 0.6,
       status: [
-        { type: 'hesitation', duration: 2 },
-        { type: 'cowardice', duration: 2 },
-        { type: 'siege', duration: 2 },
+        { type: 'hesitation', duration: 1 },
+        { type: 'cowardice', duration: 1 },
+        { type: 'siege', duration: 1 },
       ],
     },
     { kind: 'inflict_status', targetPick: `highest_${attr}_ally`, status: statStatus(20) },
@@ -44,7 +44,7 @@ function juyizangfouOption(attr: 'attack' | 'defense' | 'strategy'): SkillOutput
       chance: 0.6,
       status: [
         { type: 'priority', duration: 1 },
-        { type: 'insight', duration: 2 },
+        { type: 'insight', duration: 1 },
         { type: 'ignore_evasion', duration: 999 },
       ],
     },
@@ -363,9 +363,9 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       firstGuaranteed: true,
       applyTo: 'victim',
       output: [
-        { kind: 'inflict_status', status: { type: 'attack_buff', amount: 20, duration: 999 } },
-        { kind: 'inflict_status', status: { type: 'defense_buff', amount: 20, duration: 999 } },
-        { kind: 'inflict_status', status: { type: 'strategy_buff', amount: 20, duration: 999 } },
+        { kind: 'inflict_status', status: { type: 'attack_buff', amount: 20, duration: 999, stack: true } },
+        { kind: 'inflict_status', status: { type: 'defense_buff', amount: 20, duration: 999, stack: true } },
+        { kind: 'inflict_status', status: { type: 'strategy_buff', amount: 20, duration: 999, stack: true } },
       ],
     },
   },
@@ -379,7 +379,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     timing: 'round_start',
     targetMode: 'self',
     tags: ['damage_reduce'],
-    output: [{ kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.11, duration: 999 } }],
+    output: [{ kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.11, duration: 999, stack: true } }],
   },
   /** 青囊秘要（B 被动）：战斗中每回合都会恢复一定兵力（恢复率 150%，固定倍率，不受谋略） */
   qingnang_miyao: {
@@ -555,6 +555,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
             direction: 'taken',
             defenseScaled: true,
             growthRate: 0.026,
+            stack: true,
           },
         },
       ],
@@ -631,7 +632,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.3, duration: 2, strategyScaled: true, growthRate: 0.13 } },
       { kind: 'inflict_status', status: { type: 'panic', duration: 2, rate: 143, growthRate: 1.125 } },
       { kind: 'inflict_status', status: { type: 'curse', duration: 2, rate: 133, growthRate: 1.225 } },
-      { kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.05, duration: 999, direction: 'caused', strategyScaled: true, growthRate: 0.15 }, targetSide: 'self' },
+      { kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.05, duration: 999, direction: 'caused', strategyScaled: true, growthRate: 0.15, stack: true }, targetSide: 'self' },
     ],
   },
   /** 火势风威（陆逊主战法，S2）：1 回合准备，敌军全体策略攻击 111%（受谋略，成长率 0.95/点）+ 引燃标记 221%（受谋略，成长率 2.45/点：
@@ -653,7 +654,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
   },
   /** 辕门射戟（群弓吕布 SP 主战法）：对敌军群体发动二次无视兵种相克的攻击（140%，每次攻击目标独立选择，
    *  目标数 50% 概率 2 个 / 50% 概率 3 个）；第一次攻击命中后对目标施加「造成攻击伤害降低 9999%」debuff
-   *  （buffMult 10% 伤害下限 → 强制造成伤害 min 10%，持续 1 回合——duration 2 覆盖目标下一个行动回合）；
+   *  （buffMult 10% 伤害下限 → 强制造成伤害 min 10%，官方「持续 1 回合」→ duration 1；
+   *  新口径下行动中施加的状态在携带者行动结束后递减，duration 即字面回合数 = 目标接下来 1 次行动）；
    *  「无视兵种相克」引擎无相克系统自动满足 */
   yuanmen_sheji: {
     id: 'yuanmen_sheji',
@@ -667,7 +669,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     groupCount: [2, 3],
     tags: ['damage', 'damage_boost'],
     output: [
-      { kind: 'physical_damage', rate: 140, targetMode: 'group', groupCount: [2, 3], markCausedReduce: { rate: -99.99, duration: 2 } },
+      { kind: 'physical_damage', rate: 140, targetMode: 'group', groupCount: [2, 3], markCausedReduce: { rate: -99.99, duration: 1 } },
       { kind: 'physical_damage', rate: 140, targetMode: 'group', groupCount: [2, 3] },
     ],
   },
@@ -729,7 +731,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     settleOnFirstRound: true,
     tags: ['damage_reduce', 'morale_boost'],
     roundStartRepeat: {
-      output: [{ kind: 'inflict_status', status: { type: 'morale_boost', amount: 8, duration: 999 } }],
+      output: [{ kind: 'inflict_status', status: { type: 'morale_boost', amount: 8, duration: 999, stack: true } }],
     },
     output: [
       { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.3, duration: 999, strategyScaled: true, growthRate: 0.175, decayEighths: 8 } },
@@ -1451,7 +1453,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['sorcery', 'damage_boost'],
     output: [
       { kind: 'inflict_status', status: { type: 'sorcery', duration: 2, rate: 108, growthRate: 1.075 } },
-      { kind: 'grant_damage_boost', rate: -18, growthRate: 0, duration: 999, direction: 'caused' },
+      { kind: 'grant_damage_boost', rate: -18, growthRate: 0, duration: 999, direction: 'caused', stack: true },
     ],
   },
 
@@ -1870,7 +1872,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     timing: 'round_start',
     targetMode: 'self',
     tags: ['damage_boost'],
-    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.1, duration: 999, direction: 'caused' }, target: 'self' }],
+    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.1, duration: 999, direction: 'caused', stack: true }, target: 'self' }],
   },
   /** 擅兵不寡（A 被动·round_start）：每回合恢复兵力（180%，30% 额外 300% 近似为必恢复） */
   shanbing_bugua: {
@@ -1894,7 +1896,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     timing: 'round_start',
     targetMode: 'self',
     tags: ['damage_boost'],
-    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.11, duration: 999, direction: 'caused' }, target: 'self' }],
+    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.11, duration: 999, direction: 'caused', stack: true }, target: 'self' }],
   },
   /** 百战精兵（B 被动·battle_start）：使自身攻击、防御、谋略、速度属性全部提高 32 */
   baizhan_jingbing: {
@@ -3188,7 +3190,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
       {
         kind: 'inflict_status',
-        status: { type: 'damage_reduce', rate: 0.02, duration: 999, strategyScaled: true, growthRate: 0.01 },
+        status: { type: 'damage_reduce', rate: 0.02, duration: 999, strategyScaled: true, growthRate: 0.01, stack: true },
       },
     ],
   },
@@ -3213,10 +3215,10 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     },
     tags: ['debuff_attack', 'debuff_defense', 'debuff_strategy', 'debuff_speed'],
     output: [
-      { kind: 'inflict_status', status: { type: 'attack_buff', amount: -20, duration: 999 } },
-      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -20, duration: 999 } },
-      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -20, duration: 999 } },
-      { kind: 'inflict_status', status: { type: 'speed_buff', amount: -20, duration: 999 } },
+      { kind: 'inflict_status', status: { type: 'attack_buff', amount: -20, duration: 999, stack: true } },
+      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -20, duration: 999, stack: true } },
+      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -20, duration: 999, stack: true } },
+      { kind: 'inflict_status', status: { type: 'speed_buff', amount: -20, duration: 999, stack: true } },
     ],
   },
 
@@ -3845,7 +3847,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     output: [],
   },
 
-  /** 以诱待来（A 被动）：受击 50% 挑衅来源 1 回合（duration 2 覆盖下次行动）；来源挑衅自己时恢复 150%（不受谋略）。 */
+  /** 以诱待来（A 被动）：受击 50% 挑衅来源 1 回合（官方字面 duration 1 = 来源接下来 1 次行动）；
+   *  来源挑衅自己时恢复 150%（不受谋略）。 */
   yiyou_dailai: {
     id: 'yiyou_dailai',
     name: '以诱待来',
@@ -3860,7 +3863,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         victim: 'self',
         rate: 0.5,
         applyTo: 'source',
-        output: [{ kind: 'inflict_status', status: { type: 'taunt', duration: 2, targetId: '' } }],
+        output: [{ kind: 'inflict_status', status: { type: 'taunt', duration: 1, targetId: '' } }],
       },
       {
         victim: 'self',
@@ -4344,7 +4347,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     }],
   },
   /**
-   * 万箭齐发（A 主动 35% 距离 5）：敌军群体 2 攻击 150%；目标策略造成伤害 −50%（受攻击，无成长率）持续 1 回合（行动中施加 duration 2）。
+   * 万箭齐发（A 主动 35% 距离 5）：敌军群体 2 攻击 150%；目标策略造成伤害 −50%（受攻击，无成长率）持续 1 回合
+   * （官方字面 duration 1；新口径下 action-end 递减，1 = 目标接下来 1 次行动）。
    */
   wanjian_qifa: {
     id: 'wanjian_qifa',
@@ -4364,7 +4368,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         status: {
           type: 'damage_boost',
           rate: -0.5,
-          duration: 2,
+          duration: 1,
           direction: 'caused',
           damageType: 'strategy',
           attackScaled: true,
@@ -6669,7 +6673,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
               {
                 kind: 'inflict_status',
                 target: 'self',
-                status: { type: 'attack_buff', amount: 10, duration: 999 },
+                status: { type: 'attack_buff', amount: 10, duration: 999, stack: true },
               },
             ],
             // ② 敌军群体 2 目标策略攻击 100%（受谋略）+ 目标谋略 −5（同一批目标）
@@ -6684,7 +6688,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
               {
                 kind: 'inflict_status',
                 sameTargetsAsLastDamage: true,
-                status: { type: 'strategy_buff', amount: -5, duration: 999 },
+                status: { type: 'strategy_buff', amount: -5, duration: 999, stack: true },
               },
             ],
           ],
@@ -7192,11 +7196,11 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         { kind: 'heal', rate: 100, strategyScaled: true, growthRate: 0, target: 'self' },
         {
           kind: 'inflict_status',
-          status: { type: 'strategy_buff', amount: 15, duration: 999, strategyScaled: true, growthRate: 0 },
+          status: { type: 'strategy_buff', amount: 15, duration: 999, strategyScaled: true, growthRate: 0, stack: true },
         },
         {
           kind: 'inflict_status',
-          status: { type: 'defense_buff', amount: 15, duration: 999, strategyScaled: true, growthRate: 0 },
+          status: { type: 'defense_buff', amount: 15, duration: 999, strategyScaled: true, growthRate: 0, stack: true },
         },
       ],
     },
@@ -7226,6 +7230,9 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    * 引擎配套（新机制「攻心 + 士气降低」）：
    *   ① `CommandSkill.healOnDamage` + `ctx.healOnDamageTriggers`：`applyDamage` 内我军对敌军造成实际伤害后，
    *      使伤害目标士气 −5（走 `morale_boost` **负值**状态，整场常驻、同战法累加），全队累计最多 9 次；
+   *      **累加口径：用户 2026-09-19 确认可叠加（9 次 → −45）**——本条是「同源重复施加默认刷新」的
+   *      显式特例：施加模板带 `CreateStatus.stack: true`（`63b401d` 引入的显式叠层标记），
+   *      不是特判保留；官方原文未写「可叠加/层数」，故此处按用户确认显式标注（全仓唯一此类特例）；
    *   ② 同一次伤害若为**攻击伤害**（physical），造成伤害者按 50%（受施法者谋略缩放）恢复本次伤害值对应的兵力
    *      （heal 事件归属施法者，计入战报恢复统计）；
    *   ③ 士气正负共存：`morale_boost` 纳入「正负相反不冲突、各自共存」口径（士气提高 vs 士气降低由
@@ -7242,7 +7249,10 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     targetSide: 'ally',
     tags: ['heal'],
     output: [],
-    // 攻心（攻击伤害后按 50% 恢复，受谋略）+ 士气降低（每次伤害使目标 −5，全队累计 9 次）
+    // 攻心（攻击伤害后按 50% 恢复，受谋略）+ 士气降低（每次伤害使目标 −5，全队累计 9 次）。
+    // 士气降低为**显式可叠加**（用户 2026-09-19 确认，9 次 → −45）：施加模板带 `stack: true`
+    // （见 action.ts `triggerHealOnDamageCommands`），故同源重复施加走「显式叠层 → 数值累加」分支；
+    // 官方未写「可叠加」，此为唯一例外特例，其余未标 stack 的战法仍为刷新不叠加。
     healOnDamage: { moraleReduce: 5, maxTriggers: 9, healRate: 50 },
   },
   /**
@@ -7355,5 +7365,206 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         ],
       },
     ],
+  },
+  /**
+   * 将门有将（XP关兴＆张苞·蜀步 h653·被动 A）：距离 1，目标自己。
+   * 每回合自身行动时有 30.0% 的概率获得以下效果（每个效果独立判断）：
+   * ① 获得连击效果，持续 1 回合；② 获得分兵效果（伤害率 100.0%），持续 1 回合；
+   * 此概率每回合结束时提高 10.0%（可累加，官方未给上限）。
+   * 官方：scripts/skill_extra.json id 200933（被动 A / 距离 1 / 自己 / 兵种步；1 级 15% / 分兵 50% / 每回合 +5%）。
+   * 来源：https://stzb.163.com/m/skilllist/200933.html
+   * 入档判断：**上架** —— 三个数值（30% / 每回合 +10% / 分兵 100%）官方均给确定值，且无「受属性影响」段。
+   * 引擎配套（新机制 `BaseSkill.roundRampingChance`）：输出段未显式给 `chance` 时，基础率改为
+   *   `min(1, base + increment × (当前回合 − 1))`（再走士气修正），逐段**独立**判定、各自发 `skill_trigger`；
+   *   连击 / 分兵均为既有状态（行动中施加 `duration: 1`：本次行动生效完、携带者行动结束后递减 → 本次普攻与分兵仍覆盖）。
+   */
+  jiangmen_youjiang: {
+    id: 'jiangmen_youjiang',
+    name: '将门有将',
+    type: 'passive',
+    triggerRate: 1,
+    timing: 'round_start',
+    range: 1,
+    targetMode: 'self',
+    tags: ['combo', 'split'],
+    output: [
+      { kind: 'inflict_status', target: 'self', status: { type: 'combo', duration: 1 } },
+      { kind: 'inflict_status', target: 'self', status: { type: 'split', rate: 100, duration: 1 } },
+    ],
+    // 官方口径：30% 起、每回合结束时 +10%（可累加、官方未给上限 → 概率封顶 100%）
+    roundRampingChance: { base: 0.3, increment: 0.1 },
+  },
+  /**
+   * 二夫之勇（颜良＆文丑·群骑 h495·主动 B）：距离 4，敌军群体（有效距离内 2 个目标），发动率 35%。
+   * 对敌军群体发动一次攻击（伤害率 140.0%），并使其发动主动战法造成的伤害降低 50.0%、
+   * 受到主动战法的伤害提高 25.0%，持续 2 回合。
+   * 官方：scripts/skill_extra.json id 200736（主动 B / 距离 4 / 敌军群体（2 目标）/ 兵种骑；
+   *   1 级 伤害 70% / 主动降伤 25% / 受主动增伤 12.5%）。来源 https://stzb.163.com/m/skilllist/200736.html
+   * 入档判断：**上架** —— 伤害率与两条增减伤均为确定值、无「受属性影响」段（不登记 OFFLINE_MAIN_SKILLS）。
+   * 引擎配套（全部既有）：
+   *   ① 攻击段：`physical_damage` rate 140，沿用战法 `targetMode:'group'` + `groupCount: 2`（有效距离内 2 目标）；
+   *   ② 两段增减伤复用既有 `damage_boost` + `skillTypes:['active']` 过滤（只作用于**主动战法**造成的伤害）——
+   *      方向 'caused'（使目标的主动战法**造成**伤害 −50%）与 'taken'（使目标**受到**主动战法伤害 +25%）；
+   *   ③ 两条状态用 `sameTargetsAsLastDamage` 打在 ① 的同一批 2 个命中目标上（不重选池）；
+   *      同战法同过滤维**异方向**不冲突（各自独立共存，与「正负相反不冲突」同口径）。
+   * 持续时间口径：官方「持续 2 回合」= duration **2**（新口径：行动中施加在携带者行动结束后递减，
+   *   duration 即字面回合数 = 目标接下来 N 次行动；与 强势 / 地公将军 / 密谋定蜀 同口径）。
+   */
+  erfu_zhiyong: {
+    id: 'erfu_zhiyong',
+    name: '二夫之勇',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.35,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage', 'damage_boost'],
+    output: [
+      { kind: 'physical_damage', rate: 140 },
+      // 使目标的**主动战法造成**伤害 −50%（caused），持续 2 回合
+      {
+        kind: 'inflict_status',
+        sameTargetsAsLastDamage: true,
+        status: {
+          type: 'damage_boost',
+          rate: -0.5,
+          duration: 2,
+          direction: 'caused',
+          skillTypes: ['active'],
+        },
+      },
+      // 使目标**受到主动战法**的伤害 +25%（taken），持续 2 回合
+      {
+        kind: 'inflict_status',
+        sameTargetsAsLastDamage: true,
+        status: {
+          type: 'damage_boost',
+          rate: 0.25,
+          duration: 2,
+          direction: 'taken',
+          skillTypes: ['active'],
+        },
+      },
+    ],
+  },
+  /**
+   * 雪奋短兵（XP丁奉·吴步 h788·被动 A）：距离 5，目标自己。
+   * 自身受到伤害时有 50.0% 概率进入规避状态，每回合结束时使自身攻击距离 −1；攻击距离小于等于 1 时，
+   * 不再触发攻击距离下降及规避效果，同时每回合自身行动时，对攻击距离内的敌军单体造成 2 次攻击伤害
+   * （伤害率 60.0%），有 70.0% 几率使攻击距离外的敌军群体进入动摇状态，行动时损失一定兵力
+   * （伤害率 180.0%），持续 1 回合。
+   * 官方：scripts/skill_extra.json id 200258（被动 A / 距离 5 / 自己 / 兵种步；
+   *   1 级 规避 25% / 攻击 30% / 动摇 35%・90%）。来源 https://stzb.163.com/m/skilllist/200258.html
+   * 入档判断：**下架** —— 动摇段（DoT 180%）官方全文未写「受某属性影响」但亦未给成长系数，
+   *   与仓库动摇先例（youji / yuxue「描述未写受谋略，成长 1.0 未确认」）同口径 → 按基值不缩放
+   *   （growthRate 0，DoT 必填字段）+ 登记 OFFLINE_MAIN_SKILLS，待成长率确认后移出。
+   * 引擎配套（本批新机制「运行时攻击距离递减」）：
+   *   ① `PassiveSkill.rangeDecayPerRound`：回合结束若 `attackRangeOf(自身) > min` 则施加一条
+   *      `range_buff`（−perRound、持续至战斗结束、同战法累加）→ 普攻可达距离随回合收缩（战法有效距离不变）；
+   *      到 ≤ min 停止（官方「攻击距离小于等于 1 时，不再触发攻击距离下降」）；
+   *   ② `OnHurtConfig.casterAttackRangeAbove`：「受击 50% 规避」只在攻击距离 > 1 期间判定
+   *      （复用既有 `grant_evasion` 层数式规避，受击时消耗 1 层免疫该次伤害）；
+   *   ③ `roundStartRepeat.requireAttackRangeAtMost`：短兵段（2 次攻击 + 动摇）按运行时攻击距离 ≤1 开关，
+   *      不写死回合窗口；
+   *   ④ `inflict_status.targetOutsideAttackRange`：动摇只打「攻击距离外」的敌军（距离 > 自身攻击距离）。
+   * 口径：攻击距离 = 3（面板）→ 第 1、2 回合末各 −1 → 第 3 回合起 = 1 进入短兵段；
+   *   「2 次攻击」= 两条独立 `physical_damage`（rate 60、段级 `range: 1` 按攻击距离内单体选靶）；
+   *   「动摇」= 仓库既有口径映射为 `panic` DoT（险途暗渡 / 游击 / 浴血同），「持续 1 回合」= duration 1。
+   *   官方效果列另有「攻击距离降低」标签——EffectTag 无负向距离项，故不进 tags（效果本身已建模）。
+   */
+  xuefen_duanbing: {
+    id: 'xuefen_duanbing',
+    name: '雪奋短兵',
+    type: 'passive',
+    triggerRate: 1,
+    timing: 'battle_start', // 受击登记走 battle_start；短兵段在 roundStartRepeat（行动阶段）
+    range: 5,
+    targetMode: 'self',
+    tags: ['evasion', 'damage', 'panic'],
+    output: [],
+    // ① 受到伤害时 50% 进入规避（仅攻击距离 > 1 期间；攻击距离 ≤1 后不再触发）
+    onHurt: {
+      victim: 'self',
+      rate: 0.5,
+      casterAttackRangeAbove: 1,
+      applyTo: 'victim',
+      output: [{ kind: 'grant_evasion', stacks: 1 }],
+    },
+    // ② 每回合结束攻击距离 −1，降到 1 停止
+    rangeDecayPerRound: { perRound: 1, min: 1 },
+    // ③ 短兵段：攻击距离 ≤1 后，每回合行动时 2 次攻击 + 70% 攻击距离外敌军群体动摇
+    roundStartRepeat: {
+      requireAttackRangeAtMost: 1,
+      output: [
+        { kind: 'physical_damage', rate: 60, targetMode: 'random_single', range: 1 },
+        { kind: 'physical_damage', rate: 60, targetMode: 'random_single', range: 1 },
+        {
+          kind: 'inflict_status',
+          chance: 0.7,
+          targetOutsideAttackRange: true,
+          status: { type: 'panic', duration: 1, rate: 180, growthRate: 0 },
+        },
+      ],
+    },
+  },
+  /**
+   * 蛮王御众（XP孟获·群步 h815·被动 A）：距离 5，目标自己。
+   * 令自身受到的所有伤害降低 30.0%（受防御属性影响），前 2 回合援护友军全体；自身每受到 5 次伤害，
+   * 则使友军攻击最高单体有 60.0% 几率对敌军群体发动一次攻击（伤害率 120.0%）。
+   * 官方：scripts/skill_extra.json id 200297（被动 A / 距离 5 / 自己 / 兵种弓步骑；
+   *   1 级 减伤 15% / 攻击 30%・60%）。来源 https://stzb.163.com/m/skilllist/200297.html
+   * 入档判断：**下架** —— 减伤段「受防御属性影响」而官方未给成长系数 → 按基值不缩放
+   *   （`defenseScaled` 标记在、`growthRate` 缺）+ 登记 OFFLINE_MAIN_SKILLS，待反解确认后移出。
+   * 引擎配套：
+   *   ① 减伤段复用既有 `damage_reduce`；**新增 `damage_reduce.defenseScaled`**（受防御缩放，公式同受谋略，
+   *      属性换生效防御；`growthRate` 缺省时不缩放、用基值）；
+   *   ② 援护段：官方「援护」=「为其抵挡普通攻击」，与疮痍累身同口径 —— `cover` 挂在施法者自身
+   *      （applyDamage 的 basic 分支把友军普攻改由持 cover 者承受），duration 2 = 前 2 回合；
+   *   ③ **新机制 `PassiveSkill.hurtEvery`（{ hits, output }）**：自身每受到 `hits` 次伤害（整场累计、
+   *      走 `ctx.hurtEveryCounters`）触发一次 output；攻击段用 `physical_damage.attacker:'highest_attack_ally'`
+   *      借我军攻击最高单体出手（复用西陵克晋的代打口径，杀伤统计 creditToId 归孟获），
+   *      段级 `chance: 0.6` 走士气修正判定，`targetMode:'group'` + groupCount 2 = 敌军群体 2 目标。
+   * 口径（推定 · 待复核）：
+   *   ④ 「友军攻击最高单体」按仓库既有 `highestStatAlly` 口径**含施法者自身**（与西陵克晋
+   *      「我军攻击属性最高的武将」同源；官方对含己场景用「我军」时亦有此先例）；
+   *   ⑤ 官方兵种分支（「若友军兵种为蛮兵/藤甲兵/象兵…」）引擎未建模特殊兵种（TroopType 仅
+   *      cavalry/infantry/archer）→ **该分支未实现**，需用户确认兵种口径后再补；
+   *   ⑥ notes 建议按 desc 全伤害单段（官方 effect 标签拆「受攻击/受策略」两段，此处按描述单段实现）。
+   */
+  manwang_yuzhong: {
+    id: 'manwang_yuzhong',
+    name: '蛮王御众',
+    type: 'passive',
+    triggerRate: 1,
+    timing: 'battle_start',
+    range: 5,
+    targetMode: 'self',
+    tags: ['damage_reduce', 'cover', 'damage'],
+    output: [
+      // ① 自身受到的所有伤害降低 30%（受防御属性影响，成长率未确认 → 基值不缩放）
+      {
+        kind: 'inflict_status',
+        target: 'self',
+        status: { type: 'damage_reduce', rate: 0.3, duration: 999, defenseScaled: true },
+      },
+      // ② 前 2 回合援护友军全体（官方口径「为其抵挡普通攻击」；cover 挂自身 = 自己代为承受）
+      { kind: 'inflict_status', target: 'self', status: { type: 'cover', duration: 2 } },
+    ],
+    // ③ 自身每受到 5 次伤害：友军攻击最高单体 60% 几率对敌军群体（2 目标）发动一次攻击（伤害率 120%）
+    hurtEvery: {
+      hits: 5,
+      output: [
+        {
+          kind: 'physical_damage',
+          attacker: 'highest_attack_ally',
+          rate: 120,
+          targetMode: 'group',
+          groupCount: 2,
+          chance: 0.6,
+        },
+      ],
+    },
   },
 };
