@@ -345,11 +345,16 @@ npx tsc --noEmit                    # 类型检查（strict）
 | 陆抗 h574 | 西陵克晋 | `physical_damage.attacker:'highest_attack_ally'` / `strategy_damage.attacker:'highest_strategy_ally'` + `healSource`（代打者按自身兵力立即恢复） | 下架 |
 | 吕姬 h634 | 缚父临危 | `inflict_status.targetPick`（`highest_attack_ally` / `ally_named` 按名匹配）+ `damage_boost.attackOnly` + 状态 `ignore_evasion` | **上架** |
 | 王允 h693 | 连环计 | `BaseSkill.chainSkills`（战法链：依次执行其他已注册战法的 output，条件在该步执行时求值） | **上架** |
+| 胡芳 h797 | 率尔方雅 | `BaseSkill.targetPool:'mixed'`（敌我同池随机 N、排除自身）+ `SkillOutput.lockedSide`（段级按阵营过滤**锁定目标**，不重选池） | 下架 |
+| 小乔 h687 | 鸾凤和鸣 | 状态 `control_spread`（控制效果 +1 目标，消耗制）+ `CommandSkill.afterFirstActiveOutput`（与 roundTrigger 解耦的「首次主动成功后」附加段） | 下架 |
+| 刘禅 h689 | 赐剑长驱 | `CommandSkill.allyRecast`（友军每回合首次主动成功后按几率**再次发动**：跳准备 + 伤害/恢复 ×factor）+ 准备阶段自身犹豫/怯战封禁 | 下架 |
+| 袁术 h790 | 僭号天子 | `CommandSkill.sealTransfer` + `ctx.sealLedgers`（玉玺按比例承担我方受击伤害）+ 回合结转（`tickRoundStartStatuses`）+ 独立事件 `seal_settle` | 下架 |
 
-计数：已实现主战法 **107**（基线 88）；上架池 67 → **75**（`docs/下架武将清单.md` 重生成口径：
-未实现 **54** / 卡成长率下架 **32** / 上架 **75**；待实现分档「补 1 个」**5** / 「需多个」4 / 「需调研」45；缺失机制 12 类）；
-测试 91 files/1121 → **110 files/1238**。本批提交：`e919d1b`(破凰) `a5c1dfe`(侵掠如火) `b0a9896`(三军夺帅)
-`b6f555f`(奉令护蜀) `2e3f495`(地公将军) `f791b8c`(西陵克晋) `bbba8df`(缚父临危) `2ca1a61`(4 处复核收敛) `5d57689`(连环计)。
+计数：已实现主战法 **111**（基线 88）；上架池 67 → **75**（`docs/下架武将清单.md` 重生成口径：
+未实现 **50** / 卡成长率下架 **36** / 上架 **75**；待实现分档「补 1 个」**1**（伏波扬砂）/ 「需多个」4 / 「需调研」45；缺失机制 8 类）；
+测试 91 files/1121 → **114 files/1262**。本批提交：`e919d1b`(破凰) `a5c1dfe`(侵掠如火) `b0a9896`(三军夺帅)
+`b6f555f`(奉令护蜀) `2e3f495`(地公将军) `f791b8c`(西陵克晋) `bbba8df`(缚父临危) `2ca1a61`(4 处复核收敛) `5d57689`(连环计)
+`83874d7`(率尔方雅) `321fdd7`(鸾凤和鸣) `edcfa71`(赐剑长驱) `a1611a4`(僭号天子)。
 
 ### 7 处歧义已全部澄清（2026-09-18 用户逐条确认，勿再重复询问）
 
@@ -379,26 +384,52 @@ npx tsc --noEmit                    # 类型检查（strict）
    单次发动率、两段同发（攻略里的「1./2.」只是效果列举）。
    → 若实际为两段各自独立 50%：把两段包进 `chance_group(chance: 0.5)`
 
+### 本次 4 将（20~23）的口径推定 · 待复核（2026-09-19）
+
+> 均已写入对应 `skills.ts` 注释；改动成本都极低，用户确认后按「若要改」一键切换。
+
+1. **鸾凤和鸣「控制 +1 目标」的作用范围** —— 按「携带者打出的**任意控制段**（含群体控制）额外 +1 个目标」实现；
+   额外目标 = 施法者**距离内、未在本段目标池内**的随机敌军（`pickExtraControlTarget`）；未打出控制则不消耗标记。
+   → 若只对「随机单体控制」生效：在 `executeSkillOutputs` 的 inflict_status 分支加 `out.targetMode === 'random_single'` 门槛。
+2. **赐剑长驱「再次发动」的 50% 范围** —— 只缩放**战法自身 output 的伤害/恢复段**（`scaleDamageHealOutputs`：
+   物理/策略/位置伤害 rate、代打两率、DoT rate、heal、grant_first_aid；`chance_group`/`random_pick`/`morale_branch` 递归）；
+   属性/控制/增减伤段不缩放，**战法链（连环计）等元机制段不缩放**。
+   → 若要连战法链一起缩放：在 `runChainSkills` 里对 `ref.output` 也过一遍 `scaleDamageHealOutputs`。
+3. **赐剑长驱「友军全体」= 监听范围**（本战法自身 output 只作用于自身 → `targetMode:'self'`）；
+   再次发动时机 = 友军**每回合首次成功释放主动战法后**（含准备战法释放；`triggerAllyRecastCommands`）。
+4. **僭号天子（袁术）玉玺 3 条推定**（见 `skills.ts` `jianhao_tianzi` 注释）：
+   ① 「该比例每回合上升 10%」= 袁术**承担比例** 50% → 60% → … 每回合 +10%、**封顶 100%**；
+   ② 「我军全体受到的所有伤害」含袁术自身，但**不含玉玺结转给他自己的那一次**（`ctx.sealResolving` 防自循环）；
+   ③ 「受防御属性影响」取袁术当期**生效防御**（成长率未确认 → 基值 32%）。
+   → 若 ① 实为「每回合**降低** 10%（50%→40%→…）或降到某下限」：只改 `tickRoundStartStatuses` 里
+   `ratio = Math.min(1, 0.5 + 0.1 * (ctx.currentRound - 2))` 这一处。
+5. **4 将的成长率**（率尔方雅增伤 22% / 策略 180%、鸾凤和鸣恢复 85%、赐剑长驱几率 40%、玉玺 32%）
+   官方均未给系数 → 一律**按基值不缩放** + 登记 `OFFLINE_MAIN_SKILLS`（4 将**全部下架**，待 `derive_growth_rate.mjs` 反解）。
+
 ### 下一次接续（新对话从这里开始）
 
-- **工作树/分支**：`.dsh/worktrees/a6e643de830a/战斗系统`，分支 `hero-mechanics-cont`（领先 `origin/feat/hero-mechanics`，
-  **未 push**；`feat/hero-mechanics` 仍被 `.dsh/worktrees/adc7079ab513` 占用 —— push / 合并方式待用户决定）。
-- **已验证基线**：`npx tsc --noEmit` clean；`npm test` **110 files / 1238 passed**；golden 字节一致。
-- **下一步（§1.2 剩余 5 个，均需新机制；建议顺序）**：
-  1. `率尔方雅`（胡芳·敌我同池随机 3 + 按阵营分支）——**最推荐**：可复用既有 `recipientDamageByHigherStat`（代打定轨）
-     与 `status: CreateStatus[]` 随机取一（奇佐鬼谋）；新机制只需「混合目标池 + 段级按阵营过滤」
-  2. `鸾凤和鸣`（小乔·每回合首次主动成功后 heal 85% 受谋略 2 目标〔可复用 `roundTrigger:'after_first_active'`〕
-     + 「控制效果额外 +1 目标」〔新机制〕）
-  3. `赐剑长驱`（刘虞·自身无法主动/普攻〔新机制〕+ 友军每回合首次主动成功后 40% 受谋略再发动〔新机制，按 50% 效果〕）
-  4. `僭号天子`（袁术·伤害转移/结转）——大改，建议放后
-  5. `伏波扬砂`（马腾·「伤害共计提升幅度每达到 40%」）——**表述含糊，动手前必须先问用户**
-- **发动率区间口径**（本轮查证确认）：官方库 `probability` 为区间时**取上界 = 满级值**
+- **工作树/分支**：`.dsh/worktrees/a6e643de830a/战斗系统`，分支 `hero-mechanics-cont`
+  （领先 `origin/feat/hero-mechanics` **15 个提交，未 push**；`feat/hero-mechanics` 仍被
+  `.dsh/worktrees/adc7079ab513` 占用 —— push / 合并方式待用户决定）。
+- **已验证基线**：`npx tsc --noEmit` clean；`npm test` **114 files / 1262 passed**；golden 字节一致。
+- **§1.2「补 1 个机制」已全部完成**（19 → 23 将）。**§1.2 只剩 1 个**：
+  - `伏波扬砂`（马腾 h785·指挥 S·距离 5·我军全体）——**表述含糊，动手前必须先问用户**。官方：「使我军全体普通攻击
+    伤害提升 25.0%（受攻击属性影响）；当友军全体发动普通攻击时，造成的**伤害共计提升幅度每达到 40%**，马腾获得
+    1 层【扬砂】最多 20 层；马腾发动普通攻击后，将消耗 4 层【扬砂】进入连击，额外发动一次普通攻击，
+    此效果将重复触发直到【扬砂】不足 4 层」。含糊点：① 「伤害共计提升幅度」= 本战法自身给的普攻增伤累计，
+    还是普攻**实际造成的伤害**增幅？② 增伤基数 25% 时如何「每达到 40%」达到第 1 层？
+    （`docs/下架武将清单.md` 归类缺失机制 `stacks_consume` 层数消耗）
+- **之后**：`docs/下架武将清单.md` 剩余 = 主战法未实现 **50**（「需多个」4 / 「需调研」45）+ 缺失机制 **8 类**。
+- **动手前先核对工作区**：本次会话的 DSH 工作区被创建为 `.dsh/worktrees/01883b91ece5`（detached main），
+  实际作业树是上面那个 —— 新会话先 `git rev-parse --abbrev-ref HEAD` 确认落在 `hero-mechanics-cont`。
+- **发动率区间口径**（已查证确认，勿动）：官方库 `probability` 为区间时**取上界 = 满级值**
   （浑水摸鱼 25-35→0.35 / 妖术 30-50→0.5 / 九锡黄龙 25-35→0.35 / 温酒斩将 20-35→0.35）；
-  例外：`烽火覆周` 用 `[0.5, 1]`（既有实现，勿动）。
+  例外：`烽火覆周` 用 `[0.5, 1]`（既有实现）。
 - **每将流程**（沿用本批）：`skills.ts` 定义 → `build_heroes_seed.mjs` 挂槽 → 数据链三条命令
-  （`build_heroes_seed` / `gen_skill_data` / `sync_hero_mainskill`）→ `tests/main_skills_bN.test.ts`（≥3 个，参照 b48：
-  `runBattle` 直传 `General`、伤害断言扣 `troopBase`）→ `tsc` + 全量 `npm test` → 1 将 1 提交。
-- **环境注意**：本机 MySQL 不可达（测试 stderr 的 `[heroes] 库 … 不可用` 属正常，走 JSON 回退）；Hindsight 记忆库 401（API key 缺失）。
+  （`build_heroes_seed` / `gen_skill_data` / `sync_hero_mainskill`）→ `tests/main_skills_bN.test.ts`（≥3 个，参照 b50~b53）
+  → `tsc` + 全量 `npm test` → 1 将 1 提交。
+- **环境注意**：本机 MySQL 不可达（测试 stderr 的 `[heroes] 库 … 不可用` 属正常，走 JSON 回退）；Hindsight 记忆库 401（API key 缺失）；
+  `web/smoke.test.ts` 首个用例偶发 ~5s 超时 flake（本批 4 轮全量均通过，必要时调高 `testTimeout`）。
 
 
 ### 西陵克晋（陆抗 h574）联网查证结论 — 2026-09-18
@@ -413,15 +444,13 @@ npx tsc --noEmit                    # 类型检查（strict）
   走既有 `calcHealAmount(代打者当前兵力, rate)`；官方未给恢复率 → 取基值 100%（见上「复核结论」第 3 条）；
 - 目标为距离 4 以内敌军**单体**（攻略明确，官方技能文本未写「单体」）。
 
-### 剩余可做（§1.2 另 5 个，均需新机制）
+### 剩余可做（§1.2 只剩 1 个）
 
-| 战法（武将） | 官方要点 | 所需新机制 | 可复用既有件 |
+| 战法（武将） | 官方要点 | 所需新机制 | 状态 |
 |---|---|---|---|
-| `率尔方雅`（胡芳） | 对自身以外随机 3 名武将造成 10% 攻击；友军 → 增伤 22% 受谋略 1 回合 + 使其立即对敌群体攻击 180% 或策略 180%（按该将攻击/谋略孰高）；敌军 → 随机 1 种控制 1 回合 | 混合目标池（敌我同池随机 N、排除自身）+ 段级按阵营过滤 | `recipientDamageByHigherStat` / `status: CreateStatus[]` 随机取一 / `attacker:'recipient'` |
-| `鸾凤和鸣`（小乔） | 每回合首次主动成功后 healing 我军 2 目标 85% 受谋略；每回合行动时使我军全体「下一次随机目标控制」额外 +1 目标 | 控制效果目标 +1 | `roundTrigger:'after_first_active'` |
-| `赐剑长驱`（刘虞） | 自身无法主动/普攻；友军每回合首次主动成功后 40% 受谋略再发动（跳准备），按 50% 伤害与恢复 | 自身行动封禁 + 友军主动再发动（按比例效果） | 监听类 `ally_before_active` 钩子 |
-| `僭号天子`（袁术） | 伤害转移 / 回合结转 | 大改，建议放后 | — |
-| `伏波扬砂`（马腾） | 「伤害共计提升幅度每达到 40%」 | **表述含糊，动手前必须先问用户** | — |
+| `伏波扬砂`（马腾 h785） | 我军全体普攻伤害 +25%（受攻击）；友军全体普攻时「伤害共计提升幅度每达到 40%」得 1 层【扬砂】（≤20 层）；自身普攻后消耗 4 层进入连击并重复触发至不足 4 层 | `stacks_consume` 层数消耗触发 | **表述含糊，动手前必须先问用户**（含糊点见上「下一次接续」） |
+
+其余 **50** 个未实现战法见 `docs/下架武将清单.md`（「需多个」4 / 「需调研」45，缺失机制 8 类）。
 
 ### 已踩过的坑
 
@@ -432,6 +461,7 @@ npx tsc --noEmit                    # 类型检查（strict）
 - 单测替换 `ctx.skills` 里的战法定义**必须早于** `triggerCommandSkills`（锁定的是注册时的实例）。
 - 新增 effect/status 标签：`EffectTag` 补了 `'retaliate'`、`'counter'`；`DotType` 独立成类型；
   本批又补 `StatusType`：`'pending_stacks'`、`'ignore_evasion'`（两者都**不按回合递减**，两个 tick 函数须显式跳过）。
+  2026-09-19 批又补 `'control_spread'`（控制效果 +1 目标，消耗制，同样两个 tick 函数显式跳过）。
 - **`runBattle` 收的是 `General[]`，不是 `UnitState[]`**——传错时报的是 `troopBonus.ts: keys is not iterable`（极具误导性）。
 - **伤害断言必须扣掉 `troopBase`**：`calcDamage` 的兵力基础**不乘 mult**；且 `base` 含 `atkBaseRandomCoeff(rng)`，
   所以「同种子跑两次比大小」只在**两次 RNG 消耗完全一致**时成立（掷点类效果会破坏它——用「rate 0 的同消耗对照」）。
@@ -439,5 +469,12 @@ npx tsc --noEmit                    # 类型检查（strict）
 - 新增机制若只加进 `types.ts` 而漏了 `pushStatus` 的字段拷贝，会被**静默忽略**（本批 `attackOnly` 就踩过一次，
   策略伤害被误增伤 30% 才发现）——`CreateStatus` 加字段后务必同步 `pushStatus` + `sameDamageBoostFilter`。
 - 工作树里 **`.git` 是指针文件**（不是目录），临时提交信息文件要写到仓库根目录再删。
+- **提交信息文件别被一起提交**：`git add -A` 会把临时提交信息文件一起提交（本批踩过，已 amend 修掉）——
+  用 `git add src scripts tests web` 后再 `git commit -F <file>`。
+- PowerShell `Get-Content`/`Set-Content` 往返改文件会吃掉相邻行的换行（本批两次踩中：
+  `if (type === 'evade_chance') {` / `if (!skill.roundStartRepeat) continue;` 被并到下一行）——
+  改文件优先用 edit 工具做最小上下文替换，改完立刻 `npx tsc --noEmit` 复核。
+- 英雄测试里 `heroUnit()` 走 `level40()` → **兵力是 9000**（不是 dummy 的 30000）；绝对兵力断言会踩坑，
+  用「相对起始值的差值」断言（本批 b53 踩过）。
 - PowerShell 传中文 + 嵌套引号的 `node -e` 脚本会被转义破坏（本批踩了两次）——改用 edit 工具或按行号精确改写。
 
