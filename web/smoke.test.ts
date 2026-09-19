@@ -4,6 +4,9 @@
  */
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { TUTORIAL_STEPS } from './tutorial';
 
 async function boot(): Promise<typeof import('./main')> {
   const el = document.createElement('div');
@@ -106,7 +109,7 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(document.querySelector('.hero-pool .filter-tag')).toBeTruthy();
     expect(document.querySelector('.team-panel.red h2')!.textContent).toBe('红队');
     expect(document.querySelector('.team-panel.blue h2')!.textContent).toBe('蓝队');
-    expect(document.querySelectorAll('.nav-link').length).toBe(3); // 战报 / 战法 / 伤害测试
+    expect(document.querySelectorAll('.nav-link').length).toBe(4); // 战报 / 战法 / 伤害测试 / 教程
     expect(document.querySelectorAll('.team-panel.red .slot').length).toBe(3);
     expect(document.querySelectorAll('.team-panel.blue .slot').length).toBe(3);
     expect(document.querySelectorAll('.hero-card').length).toBeGreaterThan(20);
@@ -193,6 +196,45 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(shell.style.display).toBe('none');
     expect((document.querySelector('main > .team-editor') as HTMLElement).style.display).not.toBe('none');
     expect((document.querySelector('#app > .control-bar') as HTMLElement).style.display).not.toBe('none');
+  });
+
+  it('顶栏「教程」：打开使用指南弹窗（8 张截图 + 说明），× 可关闭', async () => {
+    await boot();
+    const nav = document.querySelector('.nav-link[data-nav="tutorial"]') as HTMLElement;
+    expect(nav).toBeTruthy();
+    expect(nav.textContent).toBe('教程');
+    nav.click();
+    const modal = document.querySelector('.tutorial-modal') as HTMLElement;
+    expect(modal).toBeTruthy();
+    expect(modal.querySelector('.m-head h3')!.textContent).toContain('引擎使用指南');
+    // 7 个步骤 / 8 张图（第 ⑥ 点有战法统计 + 武将统计两张）
+    const steps = Array.from(modal.querySelectorAll('.tut-step'));
+    expect(steps.length).toBe(8);
+    const imgs = Array.from(modal.querySelectorAll<HTMLImageElement>('.tut-img'));
+    expect(imgs.length).toBe(8);
+    for (const img of imgs) {
+      expect(img.getAttribute('src')).toMatch(/\/tutorial\/step\d+b?\.jpg$/);
+      expect(img.getAttribute('alt')).toContain('教程');
+    }
+    // 顺序按截图序号：①配将 → ②武将详情 → ③战法背包 → ④实验室 → ⑤打桩 → ⑥统计×2 → ⑦详细战报
+    expect(steps[0].textContent).toContain('配将');
+    expect(steps[1].textContent).toContain('详情');
+    expect(steps[2].textContent).toContain('战法背包');
+    expect(steps[3].textContent).toContain('实验室');
+    expect(steps[4].textContent).toContain('饼图');
+    expect(steps[5].textContent).toContain('战法统计');
+    expect(steps[6].textContent).toContain('武将统计');
+    expect(steps[7].textContent).toContain('详细战报');
+    // 关闭
+    (modal.querySelector('.m-close') as HTMLElement).click();
+    expect(document.querySelector('.tutorial-modal')).toBeNull();
+  });
+
+  it('教程截图资源齐备：public/tutorial 下的 8 张图都在（防重命名断链）', () => {
+    expect(TUTORIAL_STEPS.length).toBe(8);
+    for (const s of TUTORIAL_STEPS) {
+      expect(existsSync(join(process.cwd(), 'public', 'tutorial', s.img)), `缺 public/tutorial/${s.img}`).toBe(true);
+    }
   });
 
   it('拖拽武将池卡牌到红队/蓝队槽位（Drop-Zone）：配将成功、池子保留原卡', async () => {

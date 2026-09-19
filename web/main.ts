@@ -5,6 +5,7 @@
 import './styles.css';
 import './mobile.css';
 import './lab.css';
+import './tutorial.css';
 import { runBattle } from '../src/engine/combat';
 import type { General } from '../src/engine/types';
 import type { BattleReport } from '../src/engine/types';
@@ -23,6 +24,7 @@ import {
 } from './teamEditor';
 import { showNotice } from './notice';
 import { asset } from './assets';
+import { openTutorialPanel } from './tutorial';
 import { setupTouchDrag } from './touchDrag';
 import { setupBackButton } from './backButton';
 import { createBattleView } from './battleView';
@@ -399,6 +401,7 @@ export function initApp(root?: HTMLElement): void {
       <button type="button" class="nav-link" data-nav="history">战报</button>
       <button type="button" class="nav-link" data-nav="skills">战法</button>
       <button type="button" class="nav-link" data-nav="lab">伤害测试</button>
+      <button type="button" class="nav-link" data-nav="tutorial">教程</button>
     </nav>
   `;
   app.appendChild(header);
@@ -446,6 +449,8 @@ export function initApp(root?: HTMLElement): void {
   header.querySelector('[data-nav="lab"]')!.addEventListener('click', () => {
     labVisible ? exitLab() : enterLab();
   });
+  // 引擎使用指南（带截图的教程弹窗）
+  header.querySelector('[data-nav="tutorial"]')!.addEventListener('click', () => openTutorialPanel());
 }
 
 // ─── 伤害测试实验室视图（顶栏「伤害测试」导航切换）───
