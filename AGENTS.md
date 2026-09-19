@@ -322,7 +322,7 @@ npx tsc --noEmit                    # 类型检查（strict）
 > 生成物（`web/data/*.json`、`scripts/seed_heroes.sql`）随提交入库；受属性缩放的段成长率留空
 > （`strategyScaled`/`attackScaled` 标记在，可选字段不写、必填字段给 0）并登记 `OFFLINE_MAIN_SKILLS`。
 
-### 已完成 19 个（§1.2 10 个 + §1.3 1 个 + 歧义澄清后 7 个 + 连环计）
+### 已完成 24 个（§1.2 10 个 + §1.3 1 个 + 歧义澄清后 7 个 + §1.2 收官 5 个〔率尔方雅～伏波扬砂〕）
 
 | 武将 | 战法 | 新机制（引擎字段） | 上线 |
 |---|---|---|---|
@@ -417,6 +417,27 @@ npx tsc --noEmit                    # 类型检查（strict）
 - **消耗**：马腾普攻后每 4 层换 1 次额外普通攻击，重复触发至不足 4 层（额外普攻继续累计层数；
   单次行动上限 20 次防失控）。
 - 25% 普攻增伤段「受攻击属性影响」官方未给系数 → 基值 25% + 登记 `OFFLINE_MAIN_SKILLS`（马腾下架）。
+
+### UI 里看不到新武将？先查这两条（2026-09-19 排查结论）
+
+1. **「下架」武将在配将池里本就不显示**：`web/heroes.ts` 第 34 行
+   `export const HEROES: HeroJson[] = heroesJson.filter(isHeroListed)` ——
+   进池条件 = 「主战法已实现 **且** 不在 `OFFLINE_MAIN_SKILLS`」（全量在 `ALL_HEROES`）。
+   故若某批某将「实现了但池里找不到」，先查 `listing.ts` 有没有登记下架；
+   受属性缩放段成长率未确认的将**按设计不可见**，不是 bug。
+2. **确认起服务/打包的是哪一棵树**：`web/data/heroes.json` 由 Vite **编译期内联**进产物，
+   在旧树起 `npm run web`（或旧树里执行 APK 打包）时，池里一个新将都不会有。
+   - 本地端口：`npm run web` 必须在**含本批提交的树**里跑；曾有 vite 从
+     `.dsh/worktrees/075773c90805`（停在 main `a924e55`，`heroes.json` 命中 0/7）起来的先例。
+   - APK：`android/`（**Capacitor**）打包 Vite 产物 → `android/app/src/main/assets/public/`，
+     产物落 `android/app/build/outputs/apk/release/app-release.apk`。验证某份产物是否含目标武将：
+     ```powershell
+     # ① 战法定义是否在产物里（内联的 SKILL_REGISTRY）
+     Select-String -Path "<产物>/assets/index-*.js" -Pattern "xiling_kejin" -SimpleMatch
+     # ② 武将挂槽是否连上（内联的 heroes.json，形如 {id:"h574",…,mainSkillId:"xiling_kejin"}）
+     Select-String -Path "<产物>/assets/index-*.js" -Pattern 'mainSkillId:"xiling_kejin"' -SimpleMatch
+     ```
+     两条都命中 = 数据没问题，剩下只需确认「手机里装的是不是这份新包」。
 
 ### 下一次接续（新对话从这里开始）
 
