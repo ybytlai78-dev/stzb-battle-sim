@@ -150,6 +150,7 @@ const SKILL_ID_BY_NAME = {
   赐剑长驱: 'cijian_changqu',
   僭号天子: 'jianhao_tianzi',
   伏波扬砂: 'fuboyangsha',
+  潜谋远计: 'qianmou_yuanji',
   万箭齐发: 'wanjian_qifa',
   文伐: 'wenfa',
   不攻: 'bugong',

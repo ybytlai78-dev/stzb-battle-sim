@@ -5500,4 +5500,66 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     // 【扬砂】：每次普攻按「增减伤净幅度」累计，每满 40% 得 1 层（上限 20）；普攻后每 4 层换 1 次额外普攻
     stacksConsume: { threshold: 40, maxStacks: 20, consumePerAttack: 4 },
   },
+  /**
+   * 潜谋远计（羊祜·晋步 h709·指挥 S）：距离 5，官方目标「自己」。
+   * 战斗中前 4 回合自身受到伤害时，有 60.0% 几率使自身恢复一定兵力（恢复率 100.0%，受谋略属性影响）
+   * 并使谋略属性和防御属性提高 15.0，可叠加，持续至战斗结束；第 5 回合起，每回合行动时，
+   * 对谋略低于自身的敌军全体有 60.0% 几率造成一次策略攻击（伤害率 140.0%，受谋略属性影响）。
+   * 仅对自身处于前锋或中军位置时生效。
+   * 官方：scripts/skill_extra.json id 200991（指挥 S / 距离 5 / 自己 / 兵种步；1 级 恢复 50% / 属性 7.5 / 伤害 70%）。
+   * 入档判断：**下架** —— 恢复率 100% / 策略伤害 140% / 属性 +15 均「受谋略属性影响」而官方未给成长系数 →
+   *   按基值不缩放 + 登记 OFFLINE_MAIN_SKILLS，待反解确认后移出。
+   * 引擎配套：
+   *   ① `BaseSkill.casterPositions`（整次生效的站位条件：仅前锋/中军；准备阶段与受击监听/被动入口统一判定）；
+   *   ② `strategy_damage.requireTargetStrategyBelowSelf`（「谋略低于自身」逐目标过滤，按**生效谋略**比较）；
+   *   ③ 前 4 回合受击段复用既有 `onHurt`（victim:'self' + endRound:4 + applyTo:'victim' + output）——
+   *      60% 受击判定、恢复（受谋略）+ 谋略/防御各 +15（可叠加至战斗结束）；
+   *   ④ 第 5 回合起「每回合行动时」段走 `roundStartRepeat`（startRound:5）——沿用徽言龙凤既有口径
+   *      （官方「每回合行动时」在引擎里以回合前结算实现）；60% 走输出级 `chance`（士气修正后逐段判定）。
+   */
+  qianmou_yuanji: {
+    id: 'qianmou_yuanji',
+    name: '潜谋远计',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'enemy',
+    casterPositions: ['前锋', '中军'],
+    tags: ['heal', 'strategy_buff', 'defense_buff', 'damage'],
+    // 前 4 回合自身受击 60%：恢复 + 谋略/防御 +15（可叠加，持续至战斗结束）
+    onHurt: {
+      victim: 'self',
+      rate: 0.6,
+      endRound: 4,
+      applyTo: 'victim',
+      output: [
+        { kind: 'heal', rate: 100, strategyScaled: true, growthRate: 0, target: 'self' },
+        {
+          kind: 'inflict_status',
+          status: { type: 'strategy_buff', amount: 15, duration: 999, strategyScaled: true, growthRate: 0 },
+        },
+        {
+          kind: 'inflict_status',
+          status: { type: 'defense_buff', amount: 15, duration: 999, strategyScaled: true, growthRate: 0 },
+        },
+      ],
+    },
+    output: [],
+    // 第 5 回合起每回合行动时：对谋略低于自身的敌军全体 60% 造成策略攻击 140%（受谋略）
+    roundStartRepeat: {
+      startRound: 5,
+      output: [
+        {
+          kind: 'strategy_damage',
+          rate: 140,
+          strategyScaled: true,
+          growthRate: 0,
+          chance: 0.6,
+          requireTargetStrategyBelowSelf: true,
+        },
+      ],
+    },
+  },
 };

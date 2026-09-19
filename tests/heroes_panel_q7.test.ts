@@ -1,7 +1,8 @@
 /**
  * 七将面板入库（2026-09-14）：只挂面板 / 成长 / 互斥。
- * 贾充已挂主战法赏顺伐逆，因策略反击成长未确认仍下架；
- * 曹纯 / 羊祜 / 马谡 / 汉荀彧 空槽；马岱 2026-09-18 已实现奉令护蜀（受属性成长未确认 → 下架）；于禁、魏荀彧修正成长。
+ * 曹纯 已挂虎豹督军（上架）；贾充已挂主战法赏顺伐逆，因策略反击成长未确认仍下架；
+ * 羊祜 2026-09-19 已实现潜谋远计（受谋略成长未确认 → 下架）；马谡 / 汉荀彧 空槽；
+ * 马岱 2026-09-18 已实现奉令护蜀（受属性成长未确认 → 下架）；于禁、魏荀彧修正成长。
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { initHeroDB, HERO_RECORDS, HERO_REGISTRY, getGeneral, validateMutualExclusion } from '../src/data/heroes';
@@ -56,7 +57,7 @@ describe('七将面板入库（空槽 / 取基值下架）', () => {
     expect(isHeroListed(rec)).toBe(false);
   });
 
-  it('羊祜 h709 潜谋远计用战法库 60%/叠防/前中 文案，空槽', () => {
+  it('羊祜 h709 潜谋远计用战法库 60%/叠防/前中 文案，已实现并挂槽（取基值下架）', () => {
     const rec = HERO_RECORDS['h709'];
     const g = HERO_REGISTRY['h709'];
     expect(g.name).toBe('羊祜');
@@ -64,7 +65,7 @@ describe('七将面板入库（空槽 / 取基值下架）', () => {
     expect(g.troopType).toBe('infantry');
     expect(rec.growthStrategy).toBe(2.01);
     expect(rec.growthDefense).toBe(1.86);
-    expect(rec.mainSkillId).toBe('');
+    expect(rec.mainSkillId).toBe('qianmou_yuanji'); // 2026-09-19 已实现（受谋略成长未确认 → 下架）
     expect(rec.mainSkillName).toBe('潜谋远计');
     expect(rec.skillDesc).toContain('60.0%');
     expect(rec.skillDesc).toContain('谋略属性和防御属性提高15.0');

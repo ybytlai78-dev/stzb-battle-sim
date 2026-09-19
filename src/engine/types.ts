@@ -216,6 +216,11 @@ export type SkillOutput =
       /** 兵力阈值条件：不满足的目标不结算本段（持玺兴兵「兵力低于 50% 才恢复」） */
       troopRatio?: TroopRatioCond;
       /**
+       * 仅对**生效谋略低于施法者**的目标结算（潜谋远计「对谋略低于自身的敌军全体」）：
+       * 按 `effectiveStat(target,'strategy') < effectiveStat(caster,'strategy')` 逐目标过滤。
+       */
+      requireTargetStrategyBelowSelf?: boolean;
+      /**
        * 代打者：`'highest_strategy_ally'` = 由我**当前谋略属性最高**的存活武将出手结算本段
        * （西陵克晋「我军当前谋略属性最高的武将对距离 4 以内的敌军发动一次策略攻击」；
        * 含施法者自身，官方「也有可能施加给陆抗自己」）。缺省 = 施法者自身（statSource 口径不变）。
@@ -522,6 +527,12 @@ interface BaseSkill {
    * 读部署名单（不论 alive）；战斗中不再复查。
    */
   teamTroopFilter?: TroopType[];
+  /**
+   * 施法者站位条件（潜谋远计「仅对自身处于前锋或中军位置时生效」）：
+   * 施法者（开战时）站位不在此列表内 → **本战法整次不生效**（含受击监听、每回合段、准备阶段 output）。
+   * 站位战斗中不变，故只在准备阶段 / 监听入口判定一次。
+   */
+  casterPositions?: Position[];
   /**
    * 重复施加奖励（诸葛锦囊「若发动时目标已有诸葛锦囊效果，则额外恢复目标一定兵力」）：
    * 战法每次发动时逐目标判定，目标身上已带**本战法**施加的状态则追加结算这段 output；

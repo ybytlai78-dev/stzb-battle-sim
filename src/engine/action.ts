@@ -30,6 +30,12 @@ import type { Rng } from './rng';
 import { calcDamage, applyTroopCap, scaledValue, roundRate, sumRates, buffMult, calcHealAmount, moraleRate, applyIgnoreDef, troopCounterReduce } from './formulas';
 import { nearestEnemy, skillTargets, distanceBetween, adjacentUnits, sameSideDistance, attackRangeOf, POSITION_INDEX } from './target';
 
+/** 施法者站位条件（潜谋远计「仅对自身处于前锋或中军位置时生效」）：不满足 → 本战法整次不生效 */
+function passesCasterPosition(skill: Skill, unit: UnitState): boolean {
+  const allowed = skill.casterPositions;
+  return !allowed || allowed.length === 0 || allowed.includes(unit.general.position);
+}
+
 /** 兵种克制减伤率（加算进增减伤单一总和）：被克制方攻击克制方 0.3，否则 0 */
 function troopCounterReduceOf(source: UnitState, target: UnitState): number {
   return troopCounterReduce(source.general.troopType, target.general.troopType);
@@ -259,6 +265,7 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
   for (const id of unit.general.commandSkillIds) {
     const skill = resolveSkill(ctx, id);
     if (skill?.type !== 'command') continue;
+    if (!passesCasterPosition(skill, unit)) continue; // 站位条件（潜谋远计：仅前锋/中军生效）
     if (skill.battleStartOnce) {
       // 当敌制决：入库类型为二类指挥，但效果为战斗开始一次性（self 减伤），不参与每回合判定
       ctx.events.push({
@@ -1146,6 +1153,7 @@ export function triggerPassiveSkills(
   for (const id of unit.general.passiveSkillIds) {
     const skill = resolveSkill(ctx, id);
     if (skill?.type !== 'passive' || skill.timing !== timing) continue;
+    if (!passesCasterPosition(skill, unit)) continue; // 站位条件（同战法口径）
     ctx.events.push({
       type: 'unit_act_start',
       unitId: unit.general.id,
@@ -3655,6 +3663,11 @@ function executeSkillOutputs(
       const cond = out.troopRatio;
       pool = pool.filter((t) => troopRatioMatches(t, cond));
     }
+    // 「谋略低于自身」的目标过滤（潜谋远计：对谋略低于自身的敌军全体）——按生效谋略逐目标比较
+    if (out.kind === 'strategy_damage' && out.requireTargetStrategyBelowSelf) {
+      const selfStrategy = effectiveStat(caster, 'strategy');
+      pool = pool.filter((t) => effectiveStat(t, 'strategy') < selfStrategy);
+    }
     // 怀德畏威：混乱只打「友军随机单体攻击 ∩ 自身群体策略」重合目标，不再按战法整体目标重选
     if (out.kind === 'inflict_status' && out.onlyIfOverlapPrevious) {
       const overlap = new Set(lastDamageTargetIds.filter((id) => prevDamageTargetIds.includes(id)));
@@ -5293,6 +5306,7 @@ function triggerOnHurt(
       for (const id of ids) {
         const skill = resolveSkill(ctx, id);
         if (!skill || (skill.type !== 'command' && skill.type !== 'passive') || !skill.onHurt) continue;
+        if (!passesCasterPosition(skill, caster)) continue; // 站位条件（潜谋远计：仅前锋/中军生效）
         if (!caster.alive && !skill.retainAfterDeath) continue;
         const cfgs = Array.isArray(skill.onHurt) ? skill.onHurt : [skill.onHurt];
         for (const cfg of cfgs) {
