@@ -3183,7 +3183,7 @@
     "growthDefense": 1.52,
     "growthStrategy": 2.19,
     "growthSpeed": 0.91,
-    "mainSkillId": "",
+    "mainSkillId": "jiyu_fuili",
     "mainSkillName": "计谕废立",
     "skillDesc": "对敌方单体发动2次策略攻击（伤害率140.0%，受谋略属性影响），并使其分别陷入恐慌和燃烧状态（伤害率156.0%，受谋略属性影响），持续2回合，2次目标独立判定"
   },

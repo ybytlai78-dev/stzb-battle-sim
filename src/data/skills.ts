@@ -8272,4 +8272,44 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     output: [],
     lastActStrike: { attempts: 3, chance: 0.75, rate: 100, ratePerRepeatOnControl: 20 },
   },
+
+  /**
+   * 计谕废立（李儒·群弓 h604 主战法）：主动 A（无准备），距离 5，发动率 30%，目标随机敌军单体。
+   * 满级「对敌方单体发动 2 次策略攻击（伤害率 140.0%，受谋略属性影响），并使其分别陷入恐慌和燃烧
+   *   状态（伤害率 156.0%，受谋略属性影响），持续 2 回合，2 次目标独立判定」；
+   * 1 级：策略攻击 70.0% / 恐慌燃烧 78.0%。
+   * 官方：scripts/skill_extra.json id 200857（主动 / 距离 5 / 敌军单体 / 兵种弓；effect 策略攻击伤害;
+   *   恐慌;燃烧）。来源 https://stzb.163.com/m/skilllist/200857.html
+   *
+   * 口径（策略 A，2026-09-20；推定处已标注；**零引擎改动**，全部复用既有件）：
+   *   ① 「2 次策略攻击…2 次目标独立判定」= **两个独立伤害段**，各自 `targetMode:'random_single'`
+   *      重选敌军单体（同一战法内两段各自 roll 目标，可命中同一人，推定）；
+   *   ② 「并使其分别陷入恐慌和燃烧」= 每次攻击的**命中目标**各获得恐慌 + 燃烧（两种状态同挂，
+   *      「分别」为列举口径，推定）；落点走既有 `inflict_status.sameTargetsAsLastDamage`
+   *      （上一段伤害的命中目标，三军夺帅 / 地公将军先例）——因此状态段紧跟各自的伤害段；
+   *   ③ 「伤害率 156%」= **每次跳伤率**（与密谋定蜀 恐慌 143%、火势风威 燃烧等既有 DoT 口径一致，
+   *      非「2 回合合计率」，推定）；持续 2 回合 → DoT 在目标后两次行动时各跳 1 次；
+   *   ④ 策略攻击与 DoT 两处「受谋略属性影响」的成长系数官方未给 → 一律**基值不缩放**
+   *      （strategyScaled 在、DoT growthRate 0）→ 登记 OFFLINE_MAIN_SKILLS（李儒下架）。
+   */
+  jiyu_fuili: {
+    id: 'jiyu_fuili',
+    name: '计谕废立',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.3,
+    targetMode: 'random_single',
+    tags: ['damage', 'panic', 'burning'],
+    output: [
+      // ① 第 1 次策略攻击（140%，受谋略）→ 其命中目标获得恐慌 + 燃烧（156%/跳，2 回合）
+      { kind: 'strategy_damage', rate: 140, strategyScaled: true, targetMode: 'random_single' },
+      { kind: 'inflict_status', sameTargetsAsLastDamage: true, status: { type: 'panic', duration: 2, rate: 156, growthRate: 0 } },
+      { kind: 'inflict_status', sameTargetsAsLastDamage: true, status: { type: 'burning', duration: 2, rate: 156, growthRate: 0 } },
+      // ② 第 2 次策略攻击（独立重选目标）→ 同样恐慌 + 燃烧
+      { kind: 'strategy_damage', rate: 140, strategyScaled: true, targetMode: 'random_single' },
+      { kind: 'inflict_status', sameTargetsAsLastDamage: true, status: { type: 'panic', duration: 2, rate: 156, growthRate: 0 } },
+      { kind: 'inflict_status', sameTargetsAsLastDamage: true, status: { type: 'burning', duration: 2, rate: 156, growthRate: 0 } },
+    ],
+  },
 };
