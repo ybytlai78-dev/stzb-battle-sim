@@ -96,14 +96,19 @@
     letter-spacing: 0;
   }
 
-  /* 配队槽位：手机端只留纯立绘 ——
+  /* 配队槽位（横屏手机紧凑版）：只留纯立绘 ——
      位置标签 / 圆头像 / 名字 / 星级 / 势力·兵种·等级行 / 战法图标 全部隐藏；
-     主战法图标也删掉了（贴在立绘右下角不好看，用户 2026-09-19 反馈） */
+     主战法图标也删掉了（贴在立绘右下角不好看，用户 2026-09-19 反馈）。
+     ⚠️ 槽位标记已改为官方卡框结构（.slot-card > .slot-art / .frame / .plate）：
+     这里让 .slot-card 铺满、并把 .frame（卡框装饰）与 .plate（卡面文字层）一并隐藏，
+     净效果与重构版一致＝画像铺满整格。若要在 84px 紧凑版里保留卡框装饰，删掉 .frame 一行即可。 */
   .slot { padding: 0; border-radius: var(--radius); }
   .slot-inner { position: relative; display: block; gap: 0; }
-  /* 立绘从 40px 竖条改成铺满整卡的方形（background-size: cover 已有，取上半身靠上裁切） */
+  .slot-card { position: absolute; inset: 0; }
   .slot-art { width: 100%; height: 100%; border: none; border-radius: 0; }
   .slot-main { position: absolute; inset: 0; display: block; }
+  .slot-card .frame,
+  .slot-card .plate,
   .slot .hero-line,
   .slot .slot-sub,
   .slot .hero-skills { display: none; }
@@ -113,6 +118,13 @@
   /* 加号素材矮视口缩小，避免撑高槽位（基础 34px 见 styles.css） */
   .slot-add-icon { width: 24px; height: 24px; }
   .slot .hint { font-size: 9px; margin-top: 0; }
+  /* 战法名底板（grade-plate）需要额外内边距（宽屏/竖屏槽位可见时生效） */
+  .slot-skill-name.has-plate { padding: 0 5px; }
+  /* 简略战报卡面：矮视口下字号压一档 */
+  .sum-hero .fac { font-size: 9px; }
+  .sum-hero .sh-name { font-size: 11px; letter-spacing: 0; }
+  .sum-hero .sh-stars { font-size: 7px; }
+  .sum-hero .card-bar { font-size: 9px; }
 
   /* 武将池：卡片缩小，一屏看更多 */
   .hero-pool { padding: 8px; }
@@ -120,13 +132,13 @@
   .hero-pool input[type="text"] { padding: 4px 8px; font-size: 12px; }
   .hero-filter { padding: 4px 7px; margin-bottom: 5px; }
   .filter-tag { font-size: 11px; padding: 1px 10px; }
-  .hero-grid { gap: 5px; }
-  .hero-card .art { height: 82px; }
-  .hero-card .plate { padding: 3px 5px 4px; }
-  .hero-card .n { font-size: 11.5px; }
-  .hero-card .f { font-size: 9.5px; }
-  .hero-card .s { font-size: 9px; margin-top: 0; }
-  .hero-card .stars { font-size: 8px; }
+  /* 武将池：卡框版卡片缩小（比例由 aspect-ratio 保持，只压字号） */
+  .hero-grid { gap: 5px; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); }
+  .hero-card .fac { font-size: 8px; top: 2px; }
+  .hero-card .n { font-size: 9px; letter-spacing: 0; }
+  .hero-card .stars { font-size: 6.5px; letter-spacing: 0; }
+  .hero-card .bar { font-size: 7px; gap: 3px; }
+  .hero-card .sp-badge { font-size: 6px; padding: 0 1px; }
 
   /* ── 首页武将池：固定一行六个 + 立绘按卡片宽度等比缩放（"等比例缩小，不显得臃肿"）──
      只作用首页（.team-editor 里的那个池子）：

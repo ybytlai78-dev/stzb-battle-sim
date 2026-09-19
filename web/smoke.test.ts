@@ -29,7 +29,8 @@ function pickHeroIntoSlot(
   const cards = Array.from(modal.querySelectorAll('.hero-card')) as HTMLElement[];
   const card = cards.find((c) => {
     if (!c.querySelector('.n')!.textContent!.includes(heroName)) return false;
-    if (opts.skill && !c.textContent!.includes(opts.skill)) return false;
+    // 主战法名不再进卡面（2026-09-19 回退）→ 从卡片 title 判定，用于区分同名武将（关羽 蜀/魏）
+    if (opts.skill && !(c.title || '').includes(opts.skill)) return false;
     return true;
   });
   expect(card, `武将「${heroName}」应在弹窗中`).toBeTruthy();
@@ -117,6 +118,25 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(addIcon).toBeTruthy();
     expect(addIcon.src).toMatch(/\/skills\/slot-add\.png$/);
     expect(addIcon.alt).toBe('');
+    // 武将卡＝官方卡框（wujiang5）：画像铺满 + 左上势力字/竖排名 + 右上五星 + 底部 Lv·兵种·主战法
+    const card = document.querySelector('.hero-pool .hero-card') as HTMLElement;
+    const frame = card.querySelector('.frame') as HTMLElement;
+    expect(frame, '武将卡应有卡框层').toBeTruthy();
+    expect(frame.style.backgroundImage).toContain('card-frame-5.png');
+    expect((card.querySelector('.art') as HTMLElement).style.backgroundImage).toContain('/portraits/');
+    expect(card.querySelector('.fac')!.textContent).toMatch(/^(汉|魏|蜀|吴|群|晋)$/);
+    expect(card.querySelector('.n')!.textContent!.length).toBeGreaterThan(1);   // 竖排名
+    expect(card.querySelector('.stars')!.textContent).toBe('★★★★★');
+    expect(card.querySelector('.bar .lv')!.textContent).toContain('Lv.40');      // 未上阵 = 默认 40 级
+    expect(card.querySelector('.bar .troop')!.textContent).toMatch(/^(骑|步|弓)$/); // 兵种（无图标素材→文字）
+    // 主战法名不进卡面（2026-09-19 决策回退）：卡面只 势力/姓名/星级/Lv/兵种，战法名+描述走 title
+    const liubei = Array.from(document.querySelectorAll('.hero-pool .hero-card')).find(
+      (c) => (c.querySelector('.n') as HTMLElement).textContent === '刘备',
+    ) as HTMLElement;
+    expect(liubei, '武将池应有刘备').toBeTruthy();
+    expect(liubei.title).toContain('皇裔流离');
+    expect(liubei.querySelector('.plate')!.textContent).not.toContain('皇裔流离');
+    expect(card.querySelector('.bar .s')).toBeNull();
   });
 
   it('顶栏「伤害测试」导航：进入 lab 视图 / 再点返回配将', async () => {
@@ -287,6 +307,14 @@ describe('Web 战斗模拟器冒烟', () => {
     // 槽位填充确认
     const redPanel = document.querySelector('.team-panel.red') as HTMLElement;
     expect(redPanel.querySelectorAll('.slot .hero-name')[2].textContent).toContain('太史慈');
+    // 配将槽位卡＝官方卡面（左：卡框 + 画像铺满 + 势力字/竖排名 + 底部 Lv·兵种）+ 信息列（右）
+    const slotCard = redPanel.querySelectorAll('.slot')[2].querySelector('.slot-card') as HTMLElement;
+    expect(slotCard, '槽位卡应有官方卡面').toBeTruthy();
+    expect((slotCard.querySelector('.frame') as HTMLElement).style.backgroundImage).toContain('card-frame-5.png');
+    expect(slotCard.querySelector('.fac')!.textContent).toBe('吴');                 // 太史慈 = 吴
+    expect(slotCard.querySelector('.hero-name')!.textContent).toBe('太史慈');       // 左竖排名
+    expect(slotCard.querySelector('.card-bar .lv')!.textContent).toContain('Lv.40');
+    expect(slotCard.querySelector('.card-bar .troop')!.textContent).toBe('弓');     // 太史慈 = 弓兵
     // 战法芯片：太史慈主战法方阵突击（追击）
     expect(redPanel.querySelectorAll('.slot')[2].textContent).toContain('方阵突击');
     expect(redPanel.textContent).not.toContain('点击查看详情');
@@ -305,7 +333,16 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(summary.querySelector('.vs-badge')).toBeTruthy();                 // VS 图标
     expect(summary.querySelectorAll('.sum-hero').length).toBe(4);            // 3 红 + 1 蓝
     expect(summary.querySelectorAll('.sh-stars').length).toBe(4);            // 星级/红度
-    expect(summary.textContent).toContain('级');
+    // 简略战报卡＝官方卡面：卡框 + 画像铺满 + 左上势力字/竖排名 + 右上红度 + 底部 Lv·兵种；兵力条留在卡面外
+    const shCard = summary.querySelector('.sum-hero .sh-card') as HTMLElement;
+    expect(shCard, '简略战报卡应有官方卡面').toBeTruthy();
+    expect((shCard.querySelector('.frame') as HTMLElement).style.backgroundImage).toContain('card-frame-5.png');
+    expect((shCard.querySelector('img.sh-art') as HTMLImageElement).src).toContain('/portraits/');
+    expect(shCard.querySelector('.sh-name')!.textContent!.length).toBeGreaterThan(1);
+    expect(shCard.querySelector('.card-bar .lv')!.textContent).toContain('Lv.');
+    expect(shCard.querySelector('.card-bar .troop')!.textContent).toMatch(/^(骑|步|弓)$/);
+    expect(summary.querySelector('.sum-hero .troopbar'), '兵力条在卡面外').toBeTruthy();
+    expect(summary.textContent).toContain('Lv.');
     expect(summary.textContent).toMatch(/(红队胜利|蓝队胜利|双方平局|红胜|蓝胜|平局)/);
     // 单屏布局：底部不再重复「统计/战报详情」；回合/种子收进 VS 列，避免盖住画像
     expect(document.querySelector('.report-toolbar')).toBeFalsy();
@@ -433,8 +470,8 @@ describe('Web 战斗模拟器冒烟', () => {
     pickHeroIntoSlot('red', 2, '太史慈');
     let redPanel = document.querySelector('.team-panel.red') as HTMLElement;
     const slotEl = redPanel.querySelectorAll('.slot')[2] as HTMLElement;
-    // 槽位展示默认 40 级、兵力 9000
-    expect(slotEl.textContent).toContain('40级');
+    // 槽位展示默认 40 级（卡面底部栏 Lv.）、兵力 9000
+    expect(slotEl.textContent).toContain('Lv.40');
     expect(slotEl.textContent).toContain('兵力9000');
     // 打开详情页
     slotEl.click();
@@ -464,7 +501,7 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(modal.textContent).toContain('/ 100 点');
     // 槽位同步显示 50 级 兵力 11000
     redPanel = document.querySelector('.team-panel.red') as HTMLElement;
-    expect((redPanel.querySelectorAll('.slot')[2] as HTMLElement).textContent).toContain('50级');
+    expect((redPanel.querySelectorAll('.slot')[2] as HTMLElement).textContent).toContain('Lv.50');
     expect((redPanel.querySelectorAll('.slot')[2] as HTMLElement).textContent).toContain('兵力11000');
   });
 
@@ -531,6 +568,13 @@ describe('Web 战斗模拟器冒烟', () => {
     expect((slotSkills[0].querySelector('.ti') as HTMLImageElement).getAttribute('src')).toContain('skill-type-pursuit');
     expect((slotSkills[0].querySelector('.kf') as HTMLImageElement).getAttribute('src')).toContain('grade-ring-a');
     expect((slotSkills[2].querySelector('.kf') as HTMLImageElement).getAttribute('src')).toContain('grade-ring-d');
+    // 战法名背景框：A 级有官方色板（has-plate + 内联 background-image）；D 级无素材 → 半透明芯片兜底
+    const aName = slotSkills[0].querySelector('.slot-skill-name') as HTMLElement;
+    expect(aName.className).toContain('has-plate');
+    expect(aName.style.backgroundImage).toContain('grade-plate-a.png');
+    const dName = slotSkills[2].querySelector('.slot-skill-name') as HTMLElement;
+    expect(dName.className).not.toContain('has-plate');
+    expect(dName.style.backgroundImage).toBe('');
   });
 
   it('模拟 → 返回配将 → 再次模拟：第二次战报正常渲染', async () => {
@@ -603,13 +647,14 @@ describe('Web 战斗模拟器冒烟', () => {
     clickTag('魏');
     const weiNames = new Set(['曹操', '张辽', '司马懿', '荀彧', '曹仁', '夏侯惇']);
     expect(cards().length).toBeGreaterThan(0);
-    expect(cards().every((c) => c.querySelector('.f')!.textContent!.startsWith('魏'))).toBe(true);
+    // 卡框版卡片：势力字在左上 .fac、兵种在底部栏 .bar .troop
+    expect(cards().every((c) => c.querySelector('.fac')!.textContent === '魏')).toBe(true);
     // 再点「骑」→ 同时是魏且骑兵（交集）
     clickTag('骑');
     const weiCav = cards();
     expect(weiCav.length).toBeGreaterThan(0);
-    expect(weiCav.every((c) => c.querySelector('.f')!.textContent!.startsWith('魏'))).toBe(true);
-    expect(weiCav.every((c) => c.querySelector('.f')!.textContent!.includes('· 骑'))).toBe(true);
+    expect(weiCav.every((c) => c.querySelector('.fac')!.textContent === '魏')).toBe(true);
+    expect(weiCav.every((c) => c.querySelector('.bar .troop')!.textContent === '骑')).toBe(true);
     expect(weiNames.has('张辽')).toBe(true); // 魏骑代表
     // 取消骑、加吴 → 魏或吴（并集）
     clickTag('骑');
@@ -617,8 +662,8 @@ describe('Web 战斗模拟器冒烟', () => {
     const weiOrWu = cards();
     expect(weiOrWu.length).toBeGreaterThan(0);
     expect(weiOrWu.every((c) => {
-      const f = c.querySelector('.f')!.textContent!;
-      return f.startsWith('魏') || f.startsWith('吴');
+      const fac = c.querySelector('.fac')!.textContent!;
+      return fac === '魏' || fac === '吴';
     })).toBe(true);
     // 重置 → 全部恢复
     (document.querySelector('.hero-pool .hf-reset') as HTMLElement).click();

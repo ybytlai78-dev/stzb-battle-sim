@@ -4,7 +4,7 @@
  * 点击武将 → 率土风武将详情页（左画像右数据：四维+成长 / 加点 / 红度 / 兵种转换占位 / 三战法栏）
  * 战法判定顺序：被动 > 指挥 > 主动 > 追击；同类型内主战法先判定、装配战法按添加顺序。
  */
-import { HEROES, getHeroById, SKILL_TYPE_NAME, avatarSrc, portraitSrc, isFemale, freePointBudget, troopCapacity, skillGrade, skillTypeIcon, gradeFrame, gradeRibbon, SKILL_DESCS, isMainSkill, isLearnableSkillListed, rednessStars, buildGeneral } from './heroes';
+import { HEROES, getHeroById, SKILL_TYPE_NAME, avatarSrc, portraitSrc, isFemale, freePointBudget, troopCapacity, skillGrade, skillTypeIcon, gradeFrame, gradeRibbon, gradePlate, SKILL_DESCS, isMainSkill, isLearnableSkillListed, rednessStars, buildGeneral, TROOP_CHAR as TYPE_CHAR, FACTION_CLASS, cardFrameSrc } from './heroes';
 import type { HeroJson } from './heroes';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import type { General, Skill, TroopType, FormationBonus } from '../src/engine/types';
@@ -101,7 +101,6 @@ function isSlotDragEvent(e: DragEvent): boolean {
 const RED_SLOTS: Array<[string, string]> = [['大营', 'red-大营'], ['中军', 'red-中军'], ['前锋', 'red-前锋']];
 const BLUE_SLOTS: Array<[string, string]> = [['大营', 'blue-大营'], ['中军', 'blue-中军'], ['前锋', 'blue-前锋']];
 
-const TYPE_CHAR: Record<string, string> = { cavalry: '骑', infantry: '步', archer: '弓' };
 const TYPE_NAME: Record<string, string> = { cavalry: '骑兵', infantry: '步兵', archer: '弓兵' };
 const FACTION_CLS: Record<string, string> = { 汉: 'fc-han', 魏: 'fc-wei', 蜀: 'fc-shu', 吴: 'fc-wu', 群: 'fc-qun', 晋: 'fc-jin' };
 
@@ -258,19 +257,33 @@ export function mutualConflict(team: SlotState[], heroId: string): string | null
 
 // ─── 率土风武将卡 ───
 
-/** 武将卡内部内容（art + plate，不含外层 .hero-card 容器——由调用方包裹，避免嵌套）。
- *  保留 .n/.f/.s 类名供测试与样式使用。 */
-function heroCardHtml(hero: HeroJson): string {
-  const mainName = hero.mainSkillId ? (SKILL_REGISTRY[hero.mainSkillId]?.name ?? hero.mainSkillName) : hero.mainSkillName || '（无主战法）';
+/** 主战法显示名（未实装 / 无主战法时给可读占位）。**只用于卡片 title 悬浮提示，不画进卡面** */
+export function heroMainSkillName(hero: HeroJson): string {
+  return hero.mainSkillId ? (SKILL_REGISTRY[hero.mainSkillId]?.name ?? hero.mainSkillName) : hero.mainSkillName || '（无主战法）';
+}
+
+/** 武将卡内部内容（.art 画像 / .frame 卡框 / .plate 覆盖信息——由调用方包 .hero-card）。
+ *  结构对齐官方卡（wujiang5 卡框）：左上势力字 + 竖排名、右上五星、底部 Lv·兵种。
+ *  ⚠️ 主战法名**不进卡面**（2026-09-19 回退「卡上画战法名」的决策）：卡面只留 势力/姓名/星级/Lv/兵种，
+ *     战法名与描述走 `card.title` 悬浮提示。
+ *  @param level 展示等级（武将池传该武将当前上阵等级，缺省 40＝引擎默认等级） */
+function heroCardHtml(hero: HeroJson, level = 40): string {
   const art = portraitSrc(hero.id) || '';
+  const frame = cardFrameSrc();
   const sp = hero.tags.includes('sp');
+  const facCls = FACTION_CLASS[hero.faction] ?? 'qun';
   return `
       <div class="art" style="background-image:url('${art}')"></div>
+      <div class="frame" style="background-image:url('${frame}')"></div>
       <div class="plate">
-        <div class="n">${hero.name}${sp ? ' <span class="sp-tag">SP</span>' : ''}</div>
-        <div class="f">${hero.faction} · ${TYPE_CHAR[hero.troopType] ?? '?'}</div>
-        <div class="s">${mainName}</div>
+        <div class="fac ${facCls}">${hero.faction}</div>
+        <div class="n">${hero.name}</div>
+        ${sp ? '<div class="sp-badge">SP</div>' : ''}
         <div class="stars">★★★★★</div>
+        <div class="bar">
+          <span class="lv"><i>Lv.</i>${level}</span>
+          <span class="troop" title="兵种">${TYPE_CHAR[hero.troopType] ?? '?'}</span>
+        </div>
       </div>`;
 }
 
@@ -522,19 +535,31 @@ export function renderSlot(team: 'red' | 'blue', i: number, slot: SlotState, lab
   const hero = getHeroById(slot.heroId)!;
   const portrait = portraitSrc(hero.id);
   const avatar = avatarSrc(hero.id);
+  const facCls = FACTION_CLASS[hero.faction] ?? 'qun';
   const div = document.createElement('div');
   div.className = 'slot-inner';
+  /* 左＝官方卡面（wujiang5 卡框：画像铺满 / 左上势力字 + 竖排名 / 右上红度 / 底部 Lv·兵种），
+     右＝配将信息列（站位、头像、属性概览、三战法位）。名称只画一次（在卡面竖排，类名仍是 .hero-name）。 */
   div.innerHTML = `
-    <div class="slot-art" style="background-image:url('${portrait}')"></div>
+    <div class="slot-card">
+      <div class="slot-art" style="background-image:url('${portrait}')"></div>
+      <div class="frame" style="background-image:url('${cardFrameSrc()}')"></div>
+      <div class="plate">
+        <div class="fac ${facCls}">${hero.faction}</div>
+        <div class="hero-name">${hero.name}</div>
+        ${hero.tags.includes('sp') ? '<div class="sp-badge">SP</div>' : ''}
+        <div class="hero-stars" title="红度 ${slot.redness}/5">${rednessStars(slot.redness)}</div>
+        <div class="card-bar">
+          <span class="lv"><i>Lv.</i>${slot.level}</span>
+          <span class="troop" title="${TYPE_NAME[hero.troopType] ?? '兵种'}">${TYPE_CHAR[hero.troopType] ?? '?'}</span>
+        </div>
+      </div>
+    </div>
     <div class="slot-main">
       <div class="hero-line">
         <span class="slot-label">${label}</span>
         <img class="slot-avatar" src="${avatar}" alt="" onerror="this.style.display='none'" />
-        <span class="hero-name">${hero.name}${hero.tags.includes('sp') ? ' <span class="sp-tag">SP</span>' : ''}</span>
-      </div>
-      <div class="slot-sub">
-        <div class="hero-stars" title="红度 ${slot.redness}/5">${rednessStars(slot.redness)}</div>
-        <div class="hero-meta">${hero.faction} · ${TYPE_NAME[hero.troopType] ?? ''} · 距离${hero.attackRange} · ${slot.level}级 · 兵力${troopCapacity(slot.level, slot.redness)}</div>
+        <span class="hero-meta">${hero.faction} · ${TYPE_NAME[hero.troopType] ?? ''} · 距离${hero.attackRange} · 兵力${troopCapacity(slot.level, slot.redness)}</span>
       </div>
       <div class="hero-skills"></div>
     </div>
@@ -550,7 +575,8 @@ export function renderSlot(team: 'red' | 'blue', i: number, slot: SlotState, lab
       const item = document.createElement('div');
       item.className = `slot-skill grade-${grade}${x.main ? ' main' : ''}`;
       item.title = s.name;
-      item.innerHTML = `${skillIconHtml(x.id, 'css')}<span class="slot-skill-name">${s.name}</span>`;
+      const plate = gradePlate(grade);
+      item.innerHTML = `${skillIconHtml(x.id, 'css')}<span class="slot-skill-name${plate ? ' has-plate' : ''}"${plate ? ` style="background-image:url('${plate}')"` : ''}>${s.name}</span>`;
       skillBox.appendChild(item);
     }
   }
@@ -606,7 +632,15 @@ export function renderHeroPool(state: EditorState, h: EditorHandlers, searchSlot
   const selected: HeroFilter = { faction: new Set(), type: new Set() };
 
   const picked = new Set<string>();
-  for (const team of [state.red, state.blue]) for (const s of team) if (s.heroId) picked.add(s.heroId);
+  /** 已上阵武将的当前等级（卡底 Lv 显示；未上阵用引擎默认 40 级） */
+  const levelOf = new Map<string, number>();
+  for (const team of [state.red, state.blue]) {
+    for (const s of team) {
+      if (!s.heroId) continue;
+      picked.add(s.heroId);
+      levelOf.set(s.heroId, s.level);
+    }
+  }
 
   pool.addEventListener('dragover', (e) => {
     if (!isSlotDragEvent(e)) return;
@@ -633,8 +667,8 @@ export function renderHeroPool(state: EditorState, h: EditorHandlers, searchSlot
       if (!heroMatchesFilter(hero, selected, q)) continue;
       const card = document.createElement('div');
       card.className = 'hero-card' + (picked.has(hero.id) ? ' picked' : '');
-      card.innerHTML = heroCardHtml(hero);
-      card.title = `${hero.skillDesc || ''}`;
+      card.innerHTML = heroCardHtml(hero, levelOf.get(hero.id) ?? 40);
+      card.title = `${heroMainSkillName(hero)}｜${hero.skillDesc || ''}`;
       card.draggable = true;
       card.dataset.heroId = hero.id;
       card.addEventListener('dragstart', (e) => {
@@ -1177,6 +1211,7 @@ export function openHeroPicker(team: 'red' | 'blue', slotIndex: number, h: Edito
       const card = document.createElement('div');
       card.className = 'hero-card';
       card.innerHTML = heroCardHtml(hero);
+      card.title = `${heroMainSkillName(hero)}｜${hero.skillDesc || ''}`;
       card.onclick = () => { close(); openHeroDetail(hero.id, { target: { team, idx: slotIndex }, handlers: h }); };
       grid.appendChild(card);
     }
