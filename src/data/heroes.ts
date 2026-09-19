@@ -29,6 +29,26 @@ export interface HeroDBConfig {
 const TREE_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../..');
 
 /**
+ * 性别表（`web/data/hero_meta.json`：武将 id → '男'/'女'）：
+ * 由 `scripts/sync_hero_meta.mjs` 按 `scripts/hero_extra.json` 的官方 `sex` 补齐（161 条全量）。
+ * 引擎与 Web（web/heroes.ts HERO_META）共用；懒加载 + 读取失败降级为空表（性别分支不生效）。
+ */
+let genderMeta: Record<string, '男' | '女'> | undefined;
+function genderOf(heroId: string): 'male' | 'female' | undefined {
+  if (!genderMeta) {
+    try {
+      genderMeta = JSON.parse(
+        readFileSync(join(TREE_ROOT, 'web/data/hero_meta.json'), 'utf8')
+      ) as Record<string, '男' | '女'>;
+    } catch {
+      genderMeta = {};
+    }
+  }
+  const sex = genderMeta[heroId];
+  return sex === '男' ? 'male' : sex === '女' ? 'female' : undefined;
+}
+
+/**
  * 工作树标识（DSH 工作树取 hash；旧 `.wt-stzb/<name>` 兜底取 name），非工作树返回 null。
  * ⚠️ 本逻辑须与 `scripts/db-config.mjs` 保持一致（tsconfig 的 include 不含 scripts/，无法直接 import）。
  */
@@ -68,8 +88,9 @@ function loadHeroesFromJson(): void {
   const jsonPath = join(dirname(fileURLToPath(import.meta.url)), '../../web/data/heroes.json');
   const rows = JSON.parse(readFileSync(jsonPath, 'utf8')) as HeroRecord[];
   for (const rec of rows) {
-    HERO_RECORDS[rec.id] = rec;
-    HERO_REGISTRY[rec.id] = recordToGeneral(rec);
+    const withGender: HeroRecord = { ...rec, gender: genderOf(rec.id) };
+    HERO_RECORDS[withGender.id] = withGender;
+    HERO_REGISTRY[withGender.id] = recordToGeneral(withGender);
   }
 }
 
@@ -99,6 +120,7 @@ function ingestHeroRow(row: HeroRow): void {
     mainSkillId: row.main_skill_id,
     mainSkillName: row.main_skill_name,
     skillDesc: row.skill_desc ?? '',
+    gender: genderOf(row.id),
   };
   HERO_RECORDS[rec.id] = rec;
   HERO_REGISTRY[rec.id] = recordToGeneral(rec);

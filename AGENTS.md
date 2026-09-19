@@ -322,7 +322,7 @@ npx tsc --noEmit                    # 类型检查（strict）
 > 生成物（`web/data/*.json`、`scripts/seed_heroes.sql`）随提交入库；受属性缩放的段成长率留空
 > （`strategyScaled`/`attackScaled` 标记在，可选字段不写、必填字段给 0）并登记 `OFFLINE_MAIN_SKILLS`。
 
-### 已完成 26 个（§1.2 10 个 + §1.3 1 个 + 歧义澄清后 7 个 + §1.2 收官 5 个〔率尔方雅～伏波扬砂〕+ 落地追加 2 个〔潜谋远计/心战为上〕）
+### 已完成 28 个（§1.2 10 个 + §1.3 1 个 + 歧义澄清后 7 个 + §1.2 收官 5 个〔率尔方雅～伏波扬砂〕+ §1.3 收官 4 个〔潜谋远计～辞后定朝〕）
 
 | 武将 | 战法 | 新机制（引擎字段） | 上线 |
 |---|---|---|---|
@@ -350,15 +350,18 @@ npx tsc --noEmit                    # 类型检查（strict）
 | 刘禅 h689 | 赐剑长驱 | `CommandSkill.allyRecast`（友军每回合首次主动成功后按几率**再次发动**：跳准备 + 伤害/恢复 ×factor）+ 准备阶段自身犹豫/怯战封禁 | 下架 |
 | 袁术 h790 | 僭号天子 | `CommandSkill.sealTransfer` + `ctx.sealLedgers`（玉玺按比例承担我方受击伤害）+ 回合结转（`tickRoundStartStatuses`）+ 独立事件 `seal_settle` | 下架 |
 | 马腾 h785 | 伏波扬砂 | `CommandSkill.stacksConsume` + `ctx.stacksConsumeCounters`（普攻**增减伤净幅度**累计 → 每满 40% 得 1 层【扬砂】→ 普攻后每 4 层换 1 次额外普攻） | 下架 |
-| 羊祜 h709 | 潜谋远计 | `BaseSkill.casterPositions`（**整次生效**的站位条件：仅前锋/中军）+ `strategy_damage.requireTargetStrategyBelowSelf`（按**生效谋略**逐目标过滤）；前 4 回合受击段复用 `onHurt`、第 5 回合起走 `roundStartRepeat(startRound:5)` | 下架 |
-| 马谡 h799 | 心战为上 | `healOnDamage`（攻心：按本次**造成的伤害值**恢复，计数走 `ctx.healOnDamageTriggers`）+ 目标士气降低（复用 `morale_boost` 负值，正负相反各自共存） | 下架 |
+| 羊祜 h709 | 潜谋远计 | `BaseSkill.casterPositions`（整次生效的**站位条件**）+ `strategy_damage.requireTargetStrategyBelowSelf`（「谋略低于自身」过滤） | 下架 |
+| 马谡 h799 | 心战为上 | `CommandSkill.healOnDamage` + `ctx.healOnDamageTriggers`（**攻心**：攻击伤害后按伤害值恢复 + **士气降低**：目标 −5、全队上限 9 次） | 下架 |
+| 许劭 h770 | 举抑臧否 | `inflict_status.targetPick` 扩展（`highest_*_ally` / `lowest_*_enemy` 按属性选人）+ 复用 `random_pick`（随机属性选取） | 下架 |
+| 阴丽华 h742 | 辞后定朝 | `CommandSkill.onActSegments`（**行动时分段**：窗口 + 几率 + once）/ `remove_by_source_skill_type`（移除指定来源战法的效果）/ `inflict_status.requireGender` + `General.gender` | 下架 |
 
-计数：已实现主战法 **114**（基线 88）；上架池 67 → **75**（`docs/下架武将清单.md` 重生成口径：
-未实现 **47** / 卡成长率下架 **39** / 上架 **75**；待实现分档「补 1 个」**0** / 「需多个」**2** / 「需调研」45；缺失机制 **5** 类）；
-测试 91 files/1121 → **121 files/1307**。本批提交：`e919d1b`(破凰) `a5c1dfe`(侵掠如火) `b0a9896`(三军夺帅)
+计数：已实现主战法 **116**（基线 88）；上架池 67 → **75**（`docs/下架武将清单.md` 重生成口径：
+未实现 **45** / 卡成长率下架 **41** / 上架 **75**；待实现分档「补 1 个」**0** / 「需多个」**0** / 「需调研」45；缺失机制 2 类）；
+测试 91 files/1121 → **123 files/1319**（main 合入后口径；分支侧为 120/1297）。本批提交：`e919d1b`(破凰) `a5c1dfe`(侵掠如火) `b0a9896`(三军夺帅)
 `b6f555f`(奉令护蜀) `2e3f495`(地公将军) `f791b8c`(西陵克晋) `bbba8df`(缚父临危) `2ca1a61`(4 处复核收敛) `5d57689`(连环计)
-`83874d7`(率尔方雅) `321fdd7`(鸾凤和鸣) `edcfa71`(赐剑长驱) `a1611a4`(僭号天子) `5c6a1c5`(批次文档收尾) `be00c55`(伏波扬砂)
-`aa88231`(AGENTS.md 修正) `537aa2b`(潜谋远计) `501d4e3`(配将池「显示下架武将」开关) `1cbf7d9`(心战为上)。
+`83874d7`(率尔方雅) `321fdd7`(鸾凤和鸣) `edcfa71`(赐剑长驱) `a1611a4`(僭号天子) `5c6a1c5`(批次文档收尾) `be00c55`(伏波扬砂)；
+落地追加：`537aa2b`(潜谋远计) `1cbf7d9`(心战为上) `7a26f76`(举抑臧否) `0a6b18a`(辞后定朝) `ac8c702`(§1.3 收官文档)
++ Web 侧 `501d4e3`(配将池「显示下架武将」开关) `aa88231`(AGENTS.md 修正)；主仓库合并提交 `587d738` / `2fd6e39`(versionCode 19)。
 
 ### 7 处歧义已全部澄清（2026-09-18 用户逐条确认，勿再重复询问）
 
@@ -429,7 +432,7 @@ npx tsc --noEmit                    # 类型检查（strict）
    故若某批某将「实现了但池里找不到」，先查 `listing.ts` 有没有登记下架；
    受属性缩放段成长率未确认的将**默认不显示**，不是 bug。
    - **想看/想配这些将**：配将池（与「选择武将」弹窗）有「**显示下架武将（N）**」开关
-     （`renderHeroPool` / `openHeroPicker` 共用，状态跨重渲染保持；开关打开时用 `SLOTTED_HEROES`，
+     （`renderHeroPool` / `openHeroPicker` 共用，状态跨重渲染保持；打开后用 `SLOTTED_HEROES`，
      卡上带 `.offline` + 「下架」角标 + 原因 tooltip）。
      `HERO_RECORDS` 覆盖全部已挂主战法的武将、`getHeroById` 查 `ALL_HEROES`，故下架将可正常配将/进战报。
 2. **搜索框只搜武将名 / 拼音 / 势力 / SP**，搜**战法名**找不到（战法名只在卡 `title` 提示里）。
@@ -446,31 +449,43 @@ npx tsc --noEmit                    # 类型检查（strict）
      Select-String -Path "<产物>/assets/index-*.js" -Pattern 'mainSkillId:"xiling_kejin"' -SimpleMatch
      ```
      两条都命中 = 数据没问题，剩下只需确认「手机里装的是不是这份新包」。
-4. **主仓库里看不到**：合并回 main 后若只在 `Desktop/战斗系统` 跑，注意主库重灌（见上「下一次接续」）。
+4. **主仓库里看不到**：合并回 main 后必须在**主仓库**重灌主库（见「下一次接续」的 ⚠️）。
 
 ### 下一次接续（新对话从这里开始）
 
 - **工作树/分支**：`.dsh/worktrees/a6e643de830a/战斗系统`，分支 `hero-mechanics-cont`
-  （领先 `origin/feat/hero-mechanics` **23 个提交，未 push**；`feat/hero-mechanics` 仍被
-  `.dsh/worktrees/adc7079ab513` 占用 —— push 方式待用户决定；**已合并进 `main`**）。
-- **已验证基线**：`npx tsc --noEmit` clean；`npm test` **121 files / 1307 passed**（main 合入后重测）；golden 字节一致。
-- **⚠️ 合并回主仓库后必须重灌主库**：主仓库路径 → 主库 `stzb战斗系统`，MySQL 可达时**不会回退 JSON**，
-  于是「工作树里全绿、合回主仓库就红」（main_skill_id 为空）。修法 = 数据链四条命令，
-  详见 `docs/工作树落地流程.md` §二.2（2026-09-19 本次落地又踩了一次）。
-- **§1.2「补 1 个机制」已全部完成**（19 → 24 将，`docs/下架武将清单.md` 分档「补 1 个」= **0**）。
-- **下一步候选**（`docs/下架武将清单.md` §1.3 / §1.4）：
-  - 「需多个机制」**2** 个 + 「需调研」**45** 个（缺失机制聚类 **5 类**：先手洞察随机 `insight_priority` 等，
-    以重生成后的清单为准）。
-  - 建议顺序 = 解锁数降序，同数时优先成本低的（属性/状态类 < 目标选择类 < 全新钩子类）。
-  - 每个新战法沿用本批流程；**遇含糊表述先问用户**（本批伏波扬砂即因此先问后做，口径已记录在上）。
+  （领先 `origin/feat/hero-mechanics` **27 个提交，未 push**；`feat/hero-mechanics` 仍被
+  `.dsh/worktrees/adc7079ab513` 占用 —— push 方式待用户决定）。
+  **已合并进 `main`**：`587d738`（26 将 + 「显示下架武将」开关）→ 第二次合并（28 将，含 `ac8c702` 收官文档）。
+  ⚠️ 该工作树**同时有 Web 会话在提交**（如 `501d4e3` 配将池「显示下架武将」开关）——
+  提交请**显式列路径**（`git add src/data/... tests/... web/data/...`），不要 `git add -A` / `git add web`。
+- **已验证基线**：`npx tsc --noEmit` clean；`npm test` **123 files / 1319 passed**（main 合入 28 将后重测）；
+  分支侧为 120 files / 1297。golden 字节一致。
+- **⚠️ 合并回主仓库后必须重灌主库**：主仓库路径推导出**主库 `stzb战斗系统`**，MySQL 可达时**不会回退 JSON**，
+  于是「工作树里全绿、合回主仓库就红」（`main_skill_id` 为空）。修法 = 在**主仓库**跑数据链四条命令
+  （`build_heroes_seed` → `seed_db` → `gen_skill_data` → `export_web_data`，性别表变更再加 `sync_hero_meta`），
+  详见 `docs/工作树落地流程.md` §二.2（2026-09-19 两次合并各踩了一次）。
+- **§1.2「补 1 个机制」+ §1.3「需补多个机制」已全部完成**（19 → 28 将；分档「补 1 个」= **0**、「需多个」= **0**）。
+- **下一步只剩 §1.4「需先调研」45 个**（缺失机制聚类 **2 类**）：
+  - 绝大多数卡在「`scripts/skill_extra.json` 无此战法数据（占位 / 空槽）→ **需先抓官方数据**」（XP / SP 武将为主）；
+  - 少数卡在**官方描述无数值**（如 `遗志`「恢复极大量兵力」）→ 需调研或用户口径。
+  - 每个新战法沿用本批流程；**遇含糊表述先问用户**（伏波扬砂、僭号天子玉玺即先问 / 待复核）。
+- **本次 4 将（25~28）值得留意的口径**：
+  - 潜谋远计「第 5 回合起每回合行动时」→ `roundStartRepeat(startRound:5)`（沿用徽言龙凤既有口径）；
+  - 心战为上「士气降低」= `morale_boost` **负值**状态（正负共存、`effectiveMorale` 相加）；
+  - 举抑臧否 持续 1 回合：控制 / 属性 / 洞察 `duration 2`（覆盖下一个行动回合，辕门射戟口径）、
+    先手 `duration 1`（只影响下一回合排序）、无视规避 999 占位（消耗制）；
+  - 辞后定朝「第 4 回合开始」= `once` 整场一次（逐回合重复会把同源属性 buff 累加）；
+  - 性别数据：`web/data/hero_meta.json`（`scripts/sync_hero_meta.mjs` 按官方 `sex` 补全 161 条）
+    → `src/data/heroes.ts` 注入 `General.gender`；`General` / `HeroRecord` 新增可选 `gender`。
 - **动手前先核对工作区**：本次会话的 DSH 工作区被创建为 `.dsh/worktrees/01883b91ece5`（detached main），
   实际作业树是上面那个 —— 新会话先 `git rev-parse --abbrev-ref HEAD` 确认落在 `hero-mechanics-cont`。
 - **发动率区间口径**（已查证确认，勿动）：官方库 `probability` 为区间时**取上界 = 满级值**
   （浑水摸鱼 25-35→0.35 / 妖术 30-50→0.5 / 九锡黄龙 25-35→0.35 / 温酒斩将 20-35→0.35）；
   例外：`烽火覆周` 用 `[0.5, 1]`（既有实现）。
 - **每将流程**（沿用本批）：`skills.ts` 定义 → `build_heroes_seed.mjs` 挂槽 → 数据链三条命令
-  （`build_heroes_seed` / `gen_skill_data` / `sync_hero_mainskill`）→ `tests/main_skills_bN.test.ts`（≥3 个，参照 b50~b53）
-  → `tsc` + 全量 `npm test` → 1 将 1 提交。
+  （`build_heroes_seed` / `gen_skill_data` / `sync_hero_mainskill`，性别表变更再加 `sync_hero_meta`）
+  → `tests/main_skills_bN.test.ts`（≥3 个，参照 b50~b58）→ `tsc` + 全量 `npm test` → 1 将 1 提交。
 - **环境注意**：本机 MySQL 不可达（测试 stderr 的 `[heroes] 库 … 不可用` 属正常，走 JSON 回退）；Hindsight 记忆库 401（API key 缺失）；
   `web/smoke.test.ts` 首个用例偶发 ~5s 超时 flake（本批 4 轮全量均通过，必要时调高 `testTimeout`）。
 
@@ -487,13 +502,13 @@ npx tsc --noEmit                    # 类型检查（strict）
   走既有 `calcHealAmount(代打者当前兵力, rate)`；官方未给恢复率 → 取基值 100%（见上「复核结论」第 3 条）；
 - 目标为距离 4 以内敌军**单体**（攻略明确，官方技能文本未写「单体」）。
 
-### 剩余可做（§1.2 已收官）
+### 剩余可做（§1.2 / §1.3 已收官）
 
 | 战法（武将） | 官方要点 | 所需新机制 | 状态 |
 |---|---|---|---|
-| — | §1.2「补 1 个机制」已全部完成（19 → 24 将，最后一将是 `伏波扬砂`，口径见上） | — | ✅ |
+| — | §1.2「补 1 个机制」+ §1.3「需补多个机制」全部完成（19 → 28 将，最后一将是 `辞后定朝`） | — | ✅ |
 
-其余 **49** 个未实现战法见 `docs/下架武将清单.md`（§1.3「需多个」4 / §1.4「需调研」45，缺失机制 7 类）。
+其余 **45** 个未实现战法全在 §1.4「需先调研」（缺失机制 2 类：多数需先抓官方数据，少数需官方数值）。
 
 ### 已踩过的坑
 

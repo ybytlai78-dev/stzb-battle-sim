@@ -31,6 +31,7 @@ export function recordToGeneral(rec: HeroRecord): General {
     rarity: rec.rarity,
     cost: rec.cost,
     faction: rec.faction,
+    gender: rec.gender,
     tags: [...rec.tags],
     mutualExclusionGroup: rec.mutualExclusionGroup,
     troopType: rec.troopType,

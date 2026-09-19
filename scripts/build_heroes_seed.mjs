@@ -152,6 +152,8 @@ const SKILL_ID_BY_NAME = {
   伏波扬砂: 'fuboyangsha',
   潜谋远计: 'qianmou_yuanji',
   心战为上: 'xinzhan_weishang',
+  举抑臧否: 'juyizangfou',
+  辞后定朝: 'cihou_dingchao',
   万箭齐发: 'wanjian_qifa',
   文伐: 'wenfa',
   不攻: 'bugong',

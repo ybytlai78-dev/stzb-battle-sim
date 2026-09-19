@@ -3,7 +3,53 @@
  * 全部数值严格按《通用战法调研.md》描述（满级效果）。
  * 治疗战法恢复率成长率以《谋略战法受谋略成长调研.md》§七为准，不得用 0.7 惯例估。
  */
-import type { Skill } from '../engine/types';
+import type { CreateStatus, Skill, SkillOutput } from '../engine/types';
+
+/**
+ * 举抑臧否（许劭）单属性效果组：随机选取属性后一次性结算的四段 ——
+ * ① 该属性最低的敌军单体 −20（受谋略）；② 60% 概率 犹豫/怯战/围困 之一；
+ * ③ 该属性最高的友军单体 +20（受谋略）；④ 60% 概率 先手/洞察/无视规避 之一。
+ * 持续时间口径（官方「持续 1 回合」）：
+ *  - 控制 / 属性 / 洞察：行动中施加 → duration 2（覆盖目标下一个行动回合，沿用辕门射戟用户口径）；
+ *  - 先手（priority）：duration 1（只影响下一回合出手顺序；duration 2 会连吃两次排序）；
+ *  - 无视规避：消耗制（由下一次造成伤害消耗，tick 不递减）→ duration 999 占位。
+ */
+function juyizangfouOption(attr: 'attack' | 'defense' | 'strategy'): SkillOutput[] {
+  const statStatus = (amount: number): CreateStatus => {
+    switch (attr) {
+      case 'attack':
+        return { type: 'attack_buff', amount, duration: 2, strategyScaled: true, growthRate: 0 };
+      case 'defense':
+        return { type: 'defense_buff', amount, duration: 2, strategyScaled: true, growthRate: 0 };
+      case 'strategy':
+        return { type: 'strategy_buff', amount, duration: 2, strategyScaled: true, growthRate: 0 };
+    }
+  };
+  return [
+    { kind: 'inflict_status', targetPick: `lowest_${attr}_enemy`, status: statStatus(-20) },
+    {
+      kind: 'inflict_status',
+      targetPick: `lowest_${attr}_enemy`,
+      chance: 0.6,
+      status: [
+        { type: 'hesitation', duration: 2 },
+        { type: 'cowardice', duration: 2 },
+        { type: 'siege', duration: 2 },
+      ],
+    },
+    { kind: 'inflict_status', targetPick: `highest_${attr}_ally`, status: statStatus(20) },
+    {
+      kind: 'inflict_status',
+      targetPick: `highest_${attr}_ally`,
+      chance: 0.6,
+      status: [
+        { type: 'priority', duration: 1 },
+        { type: 'insight', duration: 2 },
+        { type: 'ignore_evasion', duration: 999 },
+      ],
+    },
+  ];
+}
 
 export const SKILL_REGISTRY: Record<string, Skill> = {
   /** 突进（D 主动）：距离1，25%，敌军单体，攻击伤害 115% */
@@ -5607,5 +5653,116 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     output: [],
     // 攻心（攻击伤害后按 50% 恢复，受谋略）+ 士气降低（每次伤害使目标 −5，全队累计 9 次）
     healOnDamage: { moraleReduce: 5, maxTriggers: 9, healRate: 50 },
+  },
+  /**
+   * 举抑臧否（许劭·汉弓 h770·指挥 A）：距离 5，官方目标「敌友单体」。
+   * 每回合自身行动时随机选取攻击、防御、谋略三种属性之一：使该属性最低的敌军单体对应属性降低 20.0
+   * （受谋略属性影响），并有 60.0% 几率获得犹豫、怯战、围困中的 1 种效果，持续 1 回合；
+   * 使该属性最高的友军单体对应属性提升 20.0（受谋略属性影响），并有 60.0% 几率获得先手、洞察、
+   * 无视规避中的 1 种效果，持续 1 回合。
+   * 官方：scripts/skill_extra.json id 200242（指挥 A / 距离 5 / 敌友单体 / 兵种弓；1 级 属性 10 / 30%）。
+   * 入档判断：**下架** —— 属性 ±20「受谋略属性影响」而官方未给成长系数 → 按基值不缩放 +
+   *   登记 OFFLINE_MAIN_SKILLS，待反解确认后移出。
+   * 引擎配套：
+   *   ① 随机属性选取复用 `random_pick`（3 组各 1 注，逐组结算）；
+   *   ② `inflict_status.targetPick` 扩展 `'highest_{attack|defense|strategy}_ally'` /
+   *      `'lowest_{attack|defense|strategy}_enemy'`（按生效属性取最高 / 最低单体，敌侧**无视距离**）；
+   *   ③ 两处 60% 走输出级 `chance`（逐段士气修正判定），控制/先手/洞察/无视规避均为既有状态。
+   */
+  juyizangfou: {
+    id: 'juyizangfou',
+    name: '举抑臧否',
+    type: 'command',
+    phase: 'round',
+    roundTrigger: 'on_act',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'self', // 目标由各段 targetPick 指定（敌军最低 / 友军最高）
+    // 注：官方效果列还有「先手(预备)」「无视规避」，EffectTag 无对应项故不进 tags（效果本身已建模）
+    tags: ['debuff_attack', 'debuff_defense', 'debuff_strategy', 'buff_attack', 'buff_defense', 'buff_strategy', 'hesitation', 'cowardice', 'siege', 'insight'],
+    output: [
+      {
+        kind: 'random_pick',
+        count: 1,
+        options: [juyizangfouOption('attack'), juyizangfouOption('defense'), juyizangfouOption('strategy')],
+      },
+    ],
+  },
+  /**
+   * 辞后定朝（阴丽华·汉弓 h742·指挥 A）：距离 3，我军全体。
+   * 战斗前 3 回合，自身行动时有 90.0% 几率移除自身受到的由指挥、主动、追击战法带来的有害和有益效果；
+   * 第 4 回合开始，使友军全体中男性武将攻击和防御属性提升 40.0（受谋略属性影响），
+   * 女性武将谋略和防御属性提升 40.0（受谋略属性影响）。
+   * 官方：scripts/skill_extra.json id 201007（指挥 A / 距离 3 / 我军全体 / 兵种弓步；1 级 45% / 属性 20）。
+   * 入档判断：**下架** —— 属性 +40「受谋略属性影响」而官方未给成长系数 → 按基值不缩放 +
+   *   登记 OFFLINE_MAIN_SKILLS，待反解确认后移出。
+   * 引擎配套：
+   *   ① `CommandSkill.onActSegments`（行动时分段：窗口 + 独立几率 + once）承载「前 3 回合」与「第 4 回合起」两段；
+   *   ② 新输出段 `remove_by_source_skill_type`（移除指定来源战法类型施加的状态，有害+有益都移除）；
+   *   ③ 新过滤 `inflict_status.requireGender`（男性 / 女性分支）；
+   *   ④ 性别数据：`General.gender` ← `web/data/hero_meta.json`（`scripts/sync_hero_meta.mjs` 按官方 sex 补全 161 条）。
+   * 口径：②「第 4 回合开始」= 整场一次的光环（`once: true`）——逐回合重复会把同源属性 buff 累加，与官方「提升 40」不符。
+   */
+  cihou_dingchao: {
+    id: 'cihou_dingchao',
+    name: '辞后定朝',
+    type: 'command',
+    phase: 'round',
+    roundTrigger: 'on_act',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['immunity', 'buff_attack', 'buff_defense', 'buff_strategy'],
+    output: [],
+    onActSegments: [
+      // ① 前 3 回合自身行动时 90%：移除自身受到的（指挥 / 主动 / 追击来源）有害与有益效果
+      {
+        startRound: 1,
+        endRound: 3,
+        rate: 0.9,
+        output: [
+          {
+            kind: 'remove_by_source_skill_type',
+            target: 'self',
+            skillTypes: ['command', 'active', 'pursuit'],
+          },
+        ],
+      },
+      // ② 第 4 回合开始（整场一次）：男性 攻击/防御 +40；女性 谋略/防御 +40（受谋略，成长率未确认 → 0）
+      {
+        startRound: 4,
+        once: true,
+        output: [
+          {
+            kind: 'inflict_status',
+            targetSide: 'ally',
+            targetMode: 'all',
+            requireGender: 'male',
+            status: { type: 'attack_buff', amount: 40, duration: 999, strategyScaled: true, growthRate: 0 },
+          },
+          {
+            kind: 'inflict_status',
+            targetSide: 'ally',
+            targetMode: 'all',
+            requireGender: 'male',
+            status: { type: 'defense_buff', amount: 40, duration: 999, strategyScaled: true, growthRate: 0 },
+          },
+          {
+            kind: 'inflict_status',
+            targetSide: 'ally',
+            targetMode: 'all',
+            requireGender: 'female',
+            status: { type: 'strategy_buff', amount: 40, duration: 999, strategyScaled: true, growthRate: 0 },
+          },
+          {
+            kind: 'inflict_status',
+            targetSide: 'ally',
+            targetMode: 'all',
+            requireGender: 'female',
+            status: { type: 'defense_buff', amount: 40, duration: 999, strategyScaled: true, growthRate: 0 },
+          },
+        ],
+      },
+    ],
   },
 };

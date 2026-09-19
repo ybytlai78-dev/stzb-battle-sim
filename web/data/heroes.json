@@ -3381,7 +3381,7 @@
     "growthDefense": 1.4,
     "growthStrategy": 1.8,
     "growthSpeed": 0.88,
-    "mainSkillId": "",
+    "mainSkillId": "juyizangfou",
     "mainSkillName": "举抑臧否",
     "skillDesc": "每回合自身行动时随机选取攻击、防御、谋略三种属性之一， 使该属性最低的敌军单体对应属性降低20.0（受谋略属性影响），并有60.0%几率获得犹豫、怯战、围困中的1种效果，持续1回合；使该属性最高的友军单体对应属性提升20.0（受谋略属性影响），并有60.0%几率获得先手、洞察、无视规避中的1种效果，持续1回合"
   },
@@ -3491,7 +3491,7 @@
     "growthDefense": 1.39,
     "growthStrategy": 1.48,
     "growthSpeed": 0.66,
-    "mainSkillId": "",
+    "mainSkillId": "cihou_dingchao",
     "mainSkillName": "辞后定朝",
     "skillDesc": "战斗前3回合，自身行动时有90.0%几率移除自身受到的由指挥、主动、追击战法带来的有害和有益效果；第4回合开始，使友军全体中男性武将攻击和防御属性提升40.0（受谋略属性影响），女性武将谋略和防御属性提升40.0（受谋略属性影响）"
   },
