@@ -321,6 +321,12 @@ export type SkillOutput =
        */
       sameTargetsAsLastDamage?: boolean;
       /**
+       * 仅对「**攻击距离外**」的敌军结算（雪奋短兵「使攻击距离外的敌军群体进入动摇状态」）：
+       * 为 true 时忽略本段 targetSide/targetMode，池 = 存活敌军中 `distanceBetween(施法者, 目标) >
+       * attackRangeOf(施法者)` 者（与普攻可达范围同一口径，含 range_buff 递减）。攻击距离内的目标不吃。
+       */
+      targetOutsideAttackRange?: boolean;
+      /**
        * 本段友军目标选取覆盖（缚父临危 / 举抑臧否）：
        *  - `'highest_attack_ally'` = 我军当前**攻击属性最高**单体（含施法者自身，「自身及友军攻击属性最高的单体」）；
        *  - `'ally_named'` = 按武将名匹配（配合 `targetPickName`，如「吕布」——同名多张卡都算，用户确认）；
@@ -923,6 +929,11 @@ export interface OnHurtConfig {
   firstGuaranteed?: boolean;
   /** 仅当受伤者本回合已行动完毕（缓师徐持） */
   onlyIfActed?: boolean;
+  /**
+   * 仅当施法者（战法携带者）**当前攻击距离 > 此值**时才判定（雪奋短兵「攻击距离小于等于 1 时，
+   * 不再触发…规避效果」）：攻击距离走 `target.attackRangeOf`（含 range_buff 状态，即逐回合递减后的值）。
+   */
+  casterAttackRangeAbove?: number;
   /** 独立判定次数（缓师 2），缺省 1 */
   rolls?: number;
   /**
@@ -1012,6 +1023,14 @@ export interface PassiveSkill extends BaseSkill {
   /** 被动生效回合窗口（先声夺人 endRound:3）；battle_start 型不受此字段影响 */
   startRound?: number;
   endRound?: number;
+  /**
+   * 回合结束时攻击距离递减（雪奋短兵「每回合结束时使自身攻击距离 −1。攻击距离小于等于 1 时，
+   * 不再触发攻击距离下降」）：每回合结束若 `attackRangeOf(携带者) > min`，则按 `perRound` 施加一条
+   * `range_buff`（负值、持续至战斗结束、同战法累加）；到 `≤ min` 停止下降。
+   * 递减在 `combat.runBattle` 回合末调用 `triggerRangeDecayPassives` 结算（普攻可达范围随之变化，
+   * 战法有效距离 skill.range 不变）。
+   */
+  rangeDecayPerRound?: { perRound: number; min: number };
   /** 受击触发（同仇敌忾 / 舍身卫主）：战斗开始只登记，不立刻结算 output */
   onHurt?: OnHurtConfig | OnHurtConfig[];
   onHeal?: OnHealConfig;
@@ -1029,6 +1048,12 @@ export interface PassiveSkill extends BaseSkill {
     startRound?: number;
     endRound?: number;
     oddRounds?: boolean;
+    /**
+     * 仅当携带者**当前攻击距离 ≤ 此值**时才结算（雪奋短兵「攻击距离小于等于 1 时，不再触发攻击距离
+     * 下降及规避效果，同时每回合自身行动时…」）：与 `rangeDecayPerRound` 配套，把「攻击距离门槛」
+     * 做成运行时条件，而不是写死回合窗口（攻击距离经 `target.attackRangeOf` 求和后再判）。
+     */
+    requireAttackRangeAtMost?: number;
   };
   /**
    * 自身造成攻击伤害叠层（恃强淬锋 +3.4%/层）。

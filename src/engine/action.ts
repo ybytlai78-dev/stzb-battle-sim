@@ -1729,6 +1729,8 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
     if (rs.startRound != null && ctx.currentRound < rs.startRound) continue;
     if (rs.endRound != null && ctx.currentRound > rs.endRound) continue;
     if (rs.oddRounds && ctx.currentRound % 2 === 0) continue;
+    // 攻击距离门槛（雪奋短兵「攻击距离小于等于 1 时…每回合自身行动时」）：未降到门槛内则整段不结算
+    if (rs.requireAttackRangeAtMost != null && attackRangeOf(unit) > rs.requireAttackRangeAtMost) continue;
     executeSkillOutputs(ctx, unit, p, [unit], rs.output);
   }
 
@@ -2463,7 +2465,7 @@ function pushStatus(
       type: 'status_inflicted',
       unitId: target.general.id,
       statusType: type,
-      detail: `攻击距离 +${create.amount} ${create.duration >= 999 ? '持续至战斗结束' : `持续 ${create.duration} 回合`}`,
+      detail: `攻击距离 ${create.amount >= 0 ? '+' : ''}${create.amount} ${create.duration >= 999 ? '持续至战斗结束' : `持续 ${create.duration} 回合`}`,
     });
     return;
   }
@@ -2794,6 +2796,31 @@ function pushStatus(
     statusType: type,
     detail: `${statusName(type)} ${remaining} 回合`,
   });
+}
+
+/**
+ * 回合结束的被动递减（雪奋短兵「每回合结束时使自身攻击距离 −1」）：
+ * 携带 `rangeDecayPerRound` 的存活单位，若当前攻击距离 > min，则按 `perRound` 施加一条 `range_buff`
+ * （负值、持续至战斗结束、同战法累加，由 `target.attackRangeOf` 求和生效）；到 `≤ min` 停止下降
+ * （官方「攻击距离小于等于 1 时，不再触发攻击距离下降」）。由 `combat.runBattle` 回合末调用。
+ */
+export function triggerRangeDecayPassives(ctx: CombatContext): void {
+  for (const unit of [...ctx.myTeam, ...ctx.enemyTeam]) {
+    if (!unit.alive) continue;
+    for (const id of unit.general.passiveSkillIds) {
+      const skill = resolveSkill(ctx, id);
+      if (skill?.type !== 'passive' || !skill.rangeDecayPerRound) continue;
+      if (attackRangeOf(unit) <= skill.rangeDecayPerRound.min) continue;
+      inflictStatus(
+        ctx,
+        unit,
+        { type: 'range_buff', amount: -skill.rangeDecayPerRound.perRound, duration: 999 },
+        'passive',
+        skill.id,
+        unit.general.id
+      );
+    }
+  }
 }
 
 /** 回合结束：只递减「行动前施加」（appliedRound=0，准备阶段）的计数器回合，到 0 移除。
@@ -3852,6 +3879,11 @@ function executeSkillOutputs(
           );
         }
       }
+    }
+    // 攻击距离外（雪奋短兵）：池 = 存活敌军中距离 > 施法者当前攻击距离者，覆盖本段其他选靶
+    if (out.kind === 'inflict_status' && out.targetOutsideAttackRange) {
+      const range = attackRangeOf(caster);
+      pool = enemies.filter((e) => e.alive && distanceBetween(ctx, caster, e) > range);
     }
     // 三军夺帅 / 地公将军：本段状态打在**上一段伤害**的同一批命中目标上（不按本段 targetMode 重选）
     if (out.kind === 'inflict_status' && out.sameTargetsAsLastDamage) {
@@ -5495,6 +5527,8 @@ function triggerOnHurt(
           if (!matchOnHurtVictim(ctx, skill, cfg, caster, victim)) continue;
           if (cfg.damageKind && damageType && cfg.damageKind !== damageType) continue;
           if (cfg.onlyIfActed && !victim.hasActedThisRound) continue;
+          // 攻击距离门槛（雪奋短兵：攻击距离 ≤1 后不再触发「受击 50% 规避」）
+          if (cfg.casterAttackRangeAbove != null && attackRangeOf(caster) <= cfg.casterAttackRangeAbove) continue;
           if (cfg.onlyIfSourceTauntsVictim) {
             if (!source || !source.alive) continue;
             if (!source.statuses.some((s) => s.type === 'taunt' && s.targetId === victim.general.id)) continue;

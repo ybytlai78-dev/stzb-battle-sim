@@ -5831,4 +5831,64 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+  /**
+   * 雪奋短兵（XP丁奉·吴步 h788·被动 A）：距离 5，目标自己。
+   * 自身受到伤害时有 50.0% 概率进入规避状态，每回合结束时使自身攻击距离 −1；攻击距离小于等于 1 时，
+   * 不再触发攻击距离下降及规避效果，同时每回合自身行动时，对攻击距离内的敌军单体造成 2 次攻击伤害
+   * （伤害率 60.0%），有 70.0% 几率使攻击距离外的敌军群体进入动摇状态，行动时损失一定兵力
+   * （伤害率 180.0%），持续 1 回合。
+   * 官方：scripts/skill_extra.json id 200258（被动 A / 距离 5 / 自己 / 兵种步；
+   *   1 级 规避 25% / 攻击 30% / 动摇 35%・90%）。来源 https://stzb.163.com/m/skilllist/200258.html
+   * 入档判断：**下架** —— 动摇段（DoT 180%）官方全文未写「受某属性影响」但亦未给成长系数，
+   *   与仓库动摇先例（youji / yuxue「描述未写受谋略，成长 1.0 未确认」）同口径 → 按基值不缩放
+   *   （growthRate 0，DoT 必填字段）+ 登记 OFFLINE_MAIN_SKILLS，待成长率确认后移出。
+   * 引擎配套（本批新机制「运行时攻击距离递减」）：
+   *   ① `PassiveSkill.rangeDecayPerRound`：回合结束若 `attackRangeOf(自身) > min` 则施加一条
+   *      `range_buff`（−perRound、持续至战斗结束、同战法累加）→ 普攻可达距离随回合收缩（战法有效距离不变）；
+   *      到 ≤ min 停止（官方「攻击距离小于等于 1 时，不再触发攻击距离下降」）；
+   *   ② `OnHurtConfig.casterAttackRangeAbove`：「受击 50% 规避」只在攻击距离 > 1 期间判定
+   *      （复用既有 `grant_evasion` 层数式规避，受击时消耗 1 层免疫该次伤害）；
+   *   ③ `roundStartRepeat.requireAttackRangeAtMost`：短兵段（2 次攻击 + 动摇）按运行时攻击距离 ≤1 开关，
+   *      不写死回合窗口；
+   *   ④ `inflict_status.targetOutsideAttackRange`：动摇只打「攻击距离外」的敌军（距离 > 自身攻击距离）。
+   * 口径：攻击距离 = 3（面板）→ 第 1、2 回合末各 −1 → 第 3 回合起 = 1 进入短兵段；
+   *   「2 次攻击」= 两条独立 `physical_damage`（rate 60、段级 `range: 1` 按攻击距离内单体选靶）；
+   *   「动摇」= 仓库既有口径映射为 `panic` DoT（险途暗渡 / 游击 / 浴血同），「持续 1 回合」= duration 1。
+   *   官方效果列另有「攻击距离降低」标签——EffectTag 无负向距离项，故不进 tags（效果本身已建模）。
+   */
+  xuefen_duanbing: {
+    id: 'xuefen_duanbing',
+    name: '雪奋短兵',
+    type: 'passive',
+    triggerRate: 1,
+    timing: 'battle_start', // 受击登记走 battle_start；短兵段在 roundStartRepeat（行动阶段）
+    range: 5,
+    targetMode: 'self',
+    tags: ['evasion', 'damage', 'panic'],
+    output: [],
+    // ① 受到伤害时 50% 进入规避（仅攻击距离 > 1 期间；攻击距离 ≤1 后不再触发）
+    onHurt: {
+      victim: 'self',
+      rate: 0.5,
+      casterAttackRangeAbove: 1,
+      applyTo: 'victim',
+      output: [{ kind: 'grant_evasion', stacks: 1 }],
+    },
+    // ② 每回合结束攻击距离 −1，降到 1 停止
+    rangeDecayPerRound: { perRound: 1, min: 1 },
+    // ③ 短兵段：攻击距离 ≤1 后，每回合行动时 2 次攻击 + 70% 攻击距离外敌军群体动摇
+    roundStartRepeat: {
+      requireAttackRangeAtMost: 1,
+      output: [
+        { kind: 'physical_damage', rate: 60, targetMode: 'random_single', range: 1 },
+        { kind: 'physical_damage', rate: 60, targetMode: 'random_single', range: 1 },
+        {
+          kind: 'inflict_status',
+          chance: 0.7,
+          targetOutsideAttackRange: true,
+          status: { type: 'panic', duration: 1, rate: 180, growthRate: 0 },
+        },
+      ],
+    },
+  },
 };
