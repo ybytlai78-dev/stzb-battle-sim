@@ -2181,7 +2181,7 @@
     "growthDefense": 1.52,
     "growthStrategy": 2.86,
     "growthSpeed": 0.72,
-    "mainSkillId": "",
+    "mainSkillId": "mingqi_xushi",
     "mainSkillName": "明其虚实",
     "skillDesc": "战斗中，使敌军全体的谋略降低6.0%，此效果每回合叠加一次，并在前2回合，使敌军群体陷入犹豫状态，无法发动主动战法"
   },

@@ -173,6 +173,7 @@ const SKILL_ID_BY_NAME = {
   兵行巧变: 'bingxing_qiaobian',
   竭忠尽智: 'jiezhong_jinzhi',
   银龙孤胆: 'yinlong_gudan',
+  明其虚实: 'mingqi_xushi',
 };
 
 /** 现有 8 个武将固定拼音 id（测试直接引用 HERO_REGISTRY.<id>） */

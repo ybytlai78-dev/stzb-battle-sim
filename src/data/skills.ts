@@ -8111,4 +8111,50 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'physical_damage', rate: 80, repeats: 7, targetMode: 'random_single', ratePerRepeat: 7 },
     ],
   },
+  /**
+   * 明其虚实（诸葛亮·蜀弓 h496 主战法）：指挥 S（一类指挥 prep），距离 5，发动率 --（指挥固定生效）。
+   * 满级：战斗中，使敌军全体的谋略降低 6.0%，此效果每回合叠加一次；并在前 2 回合，
+   *   使敌军群体陷入犹豫状态，无法发动主动战法。
+   * 1 级：谋略降低 3.0%（叠层与犹豫窗口同）。
+   * 官方：scripts/skill_extra.json id 200737（指挥 / 距离 5 / 敌军群体（有效距离内 2 个目标）/ 兵种弓；
+   *   effect 标签 犹豫(预备);谋略属性降低）。
+   *   来源 https://stzb.163.com/m/skilllist/200737.html
+   * 口径（策略 A，2026-09-20；推定处已标注）：
+   *   ① 满级原文为两版拼接（前段「前 2 回合」/ 后段「前 3 回合」）→ 取**前半**（前 2 回合，
+   *      与仓库既有 dedupe 口径及 web/data/heroes.json 一致）。
+   *   ② 谋略降低 6% = **百分比**（`strategy_buff` + `amount:-6` + `percent:true`）→ 按目标当前生效谋略结算
+   *      （魏武之世 −15% 先例；百分比按 1% 粒度八舍九入）。
+   *   ③ 「每回合叠加一次」官方未给上限 → 用**同源显式叠层**（`stack: true`）逐回合累加（−6% → −12% → …，
+   *      **推定：官方未给叠加上限**）。
+   *   ④ 「前 2 回合犹豫」→ `initialOutput`（一类指挥准备阶段一次性，不参与 roundRepeat）施加 hesitation，
+   *      `duration: 2`（准备阶段施加 → 回合末 tickStatuses 递减 → 覆盖第 1~2 回合）。
+   *   ⑤ 目标拆分：谋略降低打**敌军全体**（战法 `targetMode:'all'` + `targetSide:'enemy'` → 准备阶段锁定全体 3 人）；
+   *      犹豫段打**敌军群体 2 目标**——段级 `targetSide:'enemy'` + `targetMode:'group'` + `groupCount:2`
+   *      （注：`inflict_status` 的段级 `targetMode` 仅在同时给 `targetSide` 时才重选池，
+   *      否则沿用战法整体目标；见 action.ts executeSkillOutputs。group 缺省 2 目标，此处显式写出）。
+   *   ⑥ 无「受属性影响」段、无数值缺口 → **上架**（不登记 OFFLINE_MAIN_SKILLS）。
+   * 引擎配套：**零引擎改动**——复用 initialOutput（其疾如风）、roundRepeat 预备负面（战必断金）、
+   *   percent 属性增减（魏武之世）、CreateStatus.stack 显式叠层（疮痍累身等）。
+   */
+  mingqi_xushi: {
+    id: 'mingqi_xushi',
+    name: '明其虚实',
+    type: 'command',
+    phase: 'prep', // 一类指挥：「战斗中…每回合叠加」→ 战斗开始后生效
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'enemy',
+    tags: ['strategy_buff', 'hesitation'],
+    // 前 2 回合：敌军群体（有效距离内 2 目标）陷入犹豫（准备阶段一次性施加，回合末递减）
+    initialOutput: [
+      // 段级 targetSide/targetMode 使犹豫只打「重选的敌军群体 2 目标」，不沿用战法整体的敌军全体 3 目标
+      { kind: 'inflict_status', targetSide: 'enemy', targetMode: 'group', groupCount: 2, status: { type: 'hesitation', duration: 2 } },
+    ],
+    // 每回合叠加一次：目标行动时按 rate 判定并结算 output（落在**行动者本人**上，每个敌军每回合各叠 1 次）
+    roundRepeat: { startRound: 1, endRound: 8, rate: 1 },
+    output: [
+      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -6, percent: true, duration: 999, stack: true } },
+    ],
+  },
 };
