@@ -1068,7 +1068,21 @@ export interface CommandSkill extends BaseSkill {
   /** 每 N 回合判定一次（难知如阴「每2回合」）：只在 currentRound % everyNRounds === 0 时判定。缺省每回合 */
   everyNRounds?: number;
   /**
-   * 避锐消耗后的附加效果（疲兵沮意「避锐效果生效后有 50% 几率令敌军单体陷入燃烧状态…并使其后续
+   * 一类指挥·「敌方被施加特殊负面效果前」判定（审时定计，XP程昱）：
+   * 敌方单位被施加**特殊负面效果**（`StatusType` ∈ taunt/siege/控制四类，见实现常量）**之前**，
+   * 由存活携带者按 `rate` 判定（士气修正，逐次发 skill_trigger）；命中则对该敌方单位结算 `output`
+   * （典型：本回合受到伤害提升 + 恢复我军单体）。「特殊负面效果」清单官方未定义 → 取本法自身列举的
+   * 挑衅/围困/控制四类（**推定**）。
+   */
+  specialDebuffBefore?: { rate: number; output: SkillOutput[] };
+  /**
+   * 「我军全体被施加挑衅/围困/控制效果时」抵御（审时定计，XP程昱）：
+   * 本侧单位被施加 `statuses` 中的状态时，由存活携带者按 `rate` 判定（士气修正）；命中则该次施加
+   * **整段取消**（不落状态、不刷新、不叠加），并推 `status_resisted` 战报事件。
+   */
+  debuffResist?: { rate: number; statuses: StatusType[] };
+  /**
+   * 避锐消耗后的附加效果（疲兵沮意「避锐效果生效后有 50% 几率令敌军单体陷入燃烧状态（伤害率 150%，
    * 受到疲兵沮意的燃烧伤害伤害率提升 80%，可叠加至战斗结束」）：携带者的 `avoid_charge` 状态
    * 消耗 1 层时，由施法者按 `chance` 判定（走士气修正，同 actLayer 口径）；命中则对**战法距离内
    * 随机敌军单体**结算 `output`（燃烧 + 「受到本战法燃烧伤害提升」同源叠层，同一目标）。
@@ -2009,6 +2023,8 @@ export type BattleEvent =
   | { type: 'insight_blocked'; unitId: string; statusType: StatusType }
   /** 不受敌方指挥战法影响（藤甲突击）：敌方指挥战法的状态/伤害被整段拦截 */
   | { type: 'command_immune_blocked'; unitId: string; skillId: string; statusType?: StatusType }
+  /** 抵御负面效果（审时定计，XP程昱）：该次施加被取消 */
+  | { type: 'status_resisted'; unitId: string; skillId: string; statusType: StatusType }
   | { type: 'cowardice_immune_blocked'; unitId: string; statusType: StatusType }
   | {
       type: 'split_damage';

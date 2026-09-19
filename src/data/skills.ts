@@ -8770,4 +8770,51 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     ],
     output: [],
   },
+
+  /**
+   * 审时定计（XP程昱·魏弓 h787 主战法）：指挥 S（一类指挥 prep），距离 5，敌军全体，发动率 --。
+   * 满级「战斗开始后，敌军全体被施加特殊负面效果前，程昱有 50.0% 概率使其本回合受到所有伤害提升 30.0%
+   *   （受谋略属性影响）并恢复我军单体一定兵力（恢复率 65.0%，受谋略属性影响）；战斗开始后，我军全体
+   *   被施加挑衅、围困以及控制效果时，有 50.0% 概率抵御该负面效果，使其无法施加」；
+   * 1 级：25.0% / 15.0% / 恢复 32.5%。
+   * 官方：scripts/skill_extra.json id 200257（指挥 / 距离 5 / 敌军全体 / 兵种弓；effect 受到攻击伤害提高;
+   *   受到策略攻击伤害提高;急救）。来源 https://stzb.163.com/m/skilllist/200257.html
+   *
+   * 口径（策略 A，2026-09-20；推定处已标注）：
+   *   ① 段一「特殊负面效果」官方未定义 → 取**本法自身列举**的清单：挑衅 / 围困 / 控制四类
+   *      （`SPECIAL_DEBUFF_TYPES`，**推定**）；触发点为 `inflictStatus` 内、该状态落库**之前**，
+   *      敌方（携带者同侧视角）单位被施加且命中改判时，对**该敌方单位**结算 output；
+   *   ② 段一输出 = `damage_boost` direction:'taken'（本回合受到所有伤害 +30%，duration 1，**推定**）
+   *      + 恢复我军单体（`heal` 65% 受谋略未确认 → 基值；目标口径官方未写 → **我军随机单体**，
+   *      `targetSide:'ally' + targetMode:'random_single'`，**推定**）；
+   *   ③ 段二「抵御」= 新引擎件 `CommandSkill.debuffResist`：我军被施加挑衅/围困/控制时按 50% 判定，
+   *      命中则整段取消（不落状态/不刷新/不叠加；推 `status_resisted` 事件）；
+   *   ④ 两段判定均走士气修正并逐次发 skill_trigger（actLayer / first_aid 口径，**推定**）；
+   *   ⑤ 「50.0%」两段同值；受谋略两处成长系数未给 → 基值不缩放 → 登记 OFFLINE_MAIN_SKILLS（程昱下架）。
+   */
+  shenshi_dingji: {
+    id: 'shenshi_dingji',
+    name: '审时定计',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'enemy',
+    tags: ['damage_boost', 'heal'],
+    output: [],
+    // ① 敌方被施加特殊负面（挑衅/围困/控制）前：50% → ② 本回合受到伤害 +30% + 恢复我军单体
+    specialDebuffBefore: {
+      rate: 0.5,
+      output: [
+        { kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.3, duration: 1, direction: 'taken', strategyScaled: true } },
+        { kind: 'heal', rate: 65, strategyScaled: true, growthRate: 0, targetSide: 'ally', targetMode: 'random_single' },
+      ],
+    },
+    // ③ 我军全体被施加挑衅/围困/控制时：50% 抵御（整段取消）
+    debuffResist: {
+      rate: 0.5,
+      statuses: ['taunt', 'siege', 'confusion', 'rampage', 'cowardice', 'hesitation'],
+    },
+  },
 };

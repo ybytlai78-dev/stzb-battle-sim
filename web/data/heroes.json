@@ -817,7 +817,7 @@
     "growthDefense": 1.92,
     "growthStrategy": 2.21,
     "growthSpeed": 0.83,
-    "mainSkillId": "",
+    "mainSkillId": "shenshi_dingji",
     "mainSkillName": "审时定计",
     "skillDesc": "战斗开始后，敌军全体被施加特殊负面效果前，程昱有50.0%概率使其本回合受到所有伤害提升30.0%（受谋略属性影响）并恢复我军单体一定兵力（恢复率65.0%，受谋略属性影响）；"
   },

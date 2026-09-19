@@ -420,6 +420,8 @@ export interface CombatContext {
   afterActiveRoundKeys?: Set<string>;
   /** 「我军全体士气提升时」重入保护（佐命晋武）：监听段自身再挂士气时不回灌 */
   resolvingMoraleRaise?: boolean;
+  /** 「特殊负面效果前」判定重入保护（审时定计）：判定段自身挂负面时不回灌 */
+  resolvingSpecialDebuff?: boolean;
 }
 
 /** 持续型急救战法级计数器（皇裔流离/金匮要略）：一个战法一个实例，全队共享。
@@ -2384,6 +2386,11 @@ function inflictStatusCore(
   }
   const type = create.type;
 
+  // 审时定计①：敌方被施加**特殊负面效果**前 → 存活携带者按 rate 判定（命中则先结算 output）
+  triggerSpecialDebuffBefore(ctx, target, type);
+  // 审时定计②：我军被施加挑衅/围困/控制时 → 按 rate 抵御（命中则该次施加整段取消）
+  if (triggerDebuffResist(ctx, target, type)) return;
+
   // 不受敌方指挥战法影响（藤甲突击）：敌方指挥战法施加的状态整段拦截（友方指挥不受影响）
   if (sourceSkillType === 'command') {
     const from = casterId ? castUnit(ctx, casterId) : undefined;
@@ -2787,6 +2794,90 @@ function inflictStatusCore(
 
   // 不同类型：各自计数共存（新增独立实例）
   pushStatus(ctx, target, create, sourceSkillType, sourceSkillId, casterId);
+}
+
+/** 特殊负面效果清单（审时定计）：挑衅 / 围困 / 控制四类（官方式列举口径，配合本法段二推定）。 */
+const SPECIAL_DEBUFF_TYPES: StatusType[] = ['taunt', 'siege', 'confusion', 'rampage', 'cowardice', 'hesitation'];
+
+/**
+ * 「敌方被施加特殊负面效果前」判定（审时定计，XP程昱）：目标为某存活携带者的**敌方**且本次状态属于
+ * 特殊负面清单时，按 `rate` 判定（士气修正，逐次发 skill_trigger）；命中则对该目标结算 `output`。
+ * `ctx.resolvingSpecialDebuff` 防递归（判定段自身挂负面时不回灌）。
+ */
+function triggerSpecialDebuffBefore(ctx: CombatContext, target: UnitState, statusType: StatusType): void {
+  if (ctx.resolvingSpecialDebuff) return;
+  if (!SPECIAL_DEBUFF_TYPES.includes(statusType)) return;
+  // 目标的对侧 = 携带者所在侧（目标的敌方为我军）
+  const casters = target.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
+  for (const caster of casters) {
+    if (!caster.alive) continue;
+    for (const id of caster.general.commandSkillIds) {
+      const skill = resolveSkill(ctx, id);
+      if (skill?.type !== 'command' || !skill.specialDebuffBefore) continue;
+      const morale = effectiveMorale(caster);
+      const rate = moraleTriggerRate(morale, skill.specialDebuffBefore.rate);
+      const success = ctx.rng.chance(rate);
+      ctx.events.push({
+        type: 'skill_trigger',
+        unitId: caster.general.id,
+        targetId: target.general.id,
+        skillId: skill.id,
+        skillName: skill.name,
+        success,
+        rate: Math.round(rate * 100),
+        baseRate: Math.round(skill.specialDebuffBefore.rate * 100),
+        morale,
+      });
+      if (!success) continue;
+      ctx.resolvingSpecialDebuff = true;
+      try {
+        executeSkillOutputs(ctx, caster, skill, [target], skill.specialDebuffBefore.output);
+      } finally {
+        ctx.resolvingSpecialDebuff = false;
+      }
+    }
+  }
+}
+
+/**
+ * 「我军全体被施加挑衅/围困/控制效果时」抵御（审时定计，XP程昱）：目标为某存活携带者的**同侧**单位
+ * 且本次状态在 `statuses` 清单内时，按 `rate` 判定（士气修正）；命中则该次施加**整段取消**并返回 true
+ * （调用方直接 return，不落状态、不刷新、不叠加）。
+ */
+function triggerDebuffResist(ctx: CombatContext, target: UnitState, statusType: StatusType): boolean {
+  const team = target.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+  for (const caster of team) {
+    if (!caster.alive) continue;
+    for (const id of caster.general.commandSkillIds) {
+      const skill = resolveSkill(ctx, id);
+      if (skill?.type !== 'command' || !skill.debuffResist) continue;
+      if (!skill.debuffResist.statuses.includes(statusType)) continue;
+      const morale = effectiveMorale(caster);
+      const rate = moraleTriggerRate(morale, skill.debuffResist.rate);
+      const success = ctx.rng.chance(rate);
+      ctx.events.push({
+        type: 'skill_trigger',
+        unitId: caster.general.id,
+        targetId: target.general.id,
+        skillId: skill.id,
+        skillName: skill.name,
+        success,
+        rate: Math.round(rate * 100),
+        baseRate: Math.round(skill.debuffResist.rate * 100),
+        morale,
+      });
+      if (success) {
+        ctx.events.push({
+          type: 'status_resisted',
+          unitId: target.general.id,
+          skillId: skill.id,
+          statusType,
+        });
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 /**
