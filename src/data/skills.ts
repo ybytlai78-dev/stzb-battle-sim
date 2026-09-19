@@ -8545,4 +8545,68 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       ],
     },
   },
+
+  /**
+   * 统军畏慎（徐晃·魏骑 h645 主战法）：指挥 S（一类指挥 prep），距离 2，我军全体，发动率 --。
+   * 满级「战斗开始后，我军全体每回合有 80.0% 几率攻击或策略攻击造成的伤害提高 25.0%（受谋略属性影响），
+   *   此几率每回合降低 10%；每回合有 30.0% 几率造成伤害时无视敌方 60.0% 防御或谋略属性，此几率每回合
+   *   提升 10%。武将获得伤害提高效果与无视目标属性效果的类型由自身攻击与谋略中较高的属性决定」；
+   * 1 级：伤害提高 12.5% / 无视 30.0%（两条概率序列同：80%−10% / 30%+10%）。
+   * 官方：scripts/skill_extra.json id 200915（指挥 / 距离 2 / 目标自己 / 兵种骑；effect 攻击伤害提高;
+   *   策略攻击伤害提高;无视敌方属性）。来源 https://stzb.163.com/m/skilllist/200915.html
+   *
+   * 口径（策略 A，2026-09-20；推定处已标注）：
+   *   ① 两版拼接（前段「80.0% 几率」/ 后段「100.0% 几率」，其余数值完全相同）→ 按仓库 dedupe 口径与
+   *      web/data/heroes.json 取**前半 80%** 版；
+   *   ② 「每回合有 X% 几率…此几率每回合降低/提升 10%」→ 新引擎件 `inflict_status.roundRampingChance`
+   *      段级覆盖（base + increment×(回合−1)，clamp 0~1）：A 段 80%→70%→…→0%、B 段 30%→40%→…→100%；
+   *      几率判定走士气修正（段级 chance 既有口径）；
+   *   ③ 「伤害提高效果与无视目标属性效果的类型由自身攻击与谋略中较高的属性决定」→ 新引擎件
+   *      `inflict_status.byHigherStatStatus`：逐目标按**生效攻击 vs 生效谋略**二选一
+   *      （攻击 > 谋略 → 攻击轨；否则策略轨）；
+   *   ④ A 段 = `damage_boost` direction:'caused' + damageType physical/strategy（25%，受谋略成长率未确认
+   *      → 基值）；B 段 = `ignore_def` 60%：物理轨折减目标防御（既有）、策略轨折减策略伤害用的目标谋略
+   *      （新引擎件 `ignore_def.damageType:'strategy'` + `strategyTargetStrategy`）——两条轨互不串味；
+   *   ⑤ 两段 duration 1（该回合生效；官方「每回合有 X% 几率」= 本回合），**推定**；
+   *   ⑥ A 段「受谋略属性影响」成长系数未给 → 基值不缩放 → 登记 OFFLINE_MAIN_SKILLS（徐晃下架）。
+   */
+  tongjun_weishen: {
+    id: 'tongjun_weishen',
+    name: '统军畏慎',
+    type: 'command',
+    phase: 'prep',
+    range: 2,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['damage_boost', 'ignore_def'],
+    output: [],
+    // 每回合回合前（单位行动前）判定两条段：各自概率随回合递减/递增
+    roundStartRepeat: {
+      output: [
+        {
+          // A：80% 起每回合 −10% → 造成（攻击/策略）伤害提高 25%（受谋略未确认 → 基值）
+          kind: 'inflict_status',
+          // status 为类型必填占位：本段实际用 byHigherStatStatus 逐目标二选一（引擎优先取后者）
+          status: { type: 'damage_boost', rate: 0.25, duration: 1, direction: 'caused', damageType: 'strategy', strategyScaled: true },
+          roundRampingChance: { base: 0.8, increment: -0.1 },
+          byHigherStatStatus: {
+            attack: { type: 'damage_boost', rate: 0.25, duration: 1, direction: 'caused', damageType: 'physical', strategyScaled: true },
+            strategy: { type: 'damage_boost', rate: 0.25, duration: 1, direction: 'caused', damageType: 'strategy', strategyScaled: true },
+          },
+        },
+        {
+          // B：30% 起每回合 +10% → 造成伤害时无视敌方 60% 防御（攻击轨）/ 谋略（策略轨）
+          kind: 'inflict_status',
+          // status 为类型必填占位：本段实际用 byHigherStatStatus 逐目标二选一（引擎优先取后者）
+          status: { type: 'ignore_def', rate: 0.6, duration: 1, damageType: 'strategy' },
+          roundRampingChance: { base: 0.3, increment: 0.1 },
+          byHigherStatStatus: {
+            attack: { type: 'ignore_def', rate: 0.6, duration: 1, damageType: 'physical' },
+            strategy: { type: 'ignore_def', rate: 0.6, duration: 1, damageType: 'strategy' },
+          },
+        },
+      ],
+    },
+  },
 };

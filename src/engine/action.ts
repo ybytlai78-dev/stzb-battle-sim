@@ -3104,7 +3104,11 @@ function pushStatus(
     if ((type === 'damage_boost' || type === 'damage_reduce') && 'skillTypes' in create && create.skillTypes != null) {
       (push as { skillTypes?: SkillType[] }).skillTypes = create.skillTypes;
     }
-    if ((type === 'damage_boost' || type === 'damage_reduce') && 'damageType' in create && create.damageType != null) {
+    if (
+      (type === 'damage_boost' || type === 'damage_reduce' || type === 'ignore_def') &&
+      'damageType' in create &&
+      create.damageType != null
+    ) {
       (push as { damageType?: 'physical' | 'strategy' }).damageType = create.damageType;
     }
     // DoT 类型维过滤（全主诿异：只提升被施加的燃烧 / 恐慌 / 妖术诅咒）
@@ -3206,7 +3210,8 @@ function pushStatus(
     } else if (type === 'damage_reduce' && 'decayEighths' in create && create.decayEighths) {
       detail = `${statusName(type)} ${create.rate} 剩余 ${create.decayEighths}/8 ${durText}`;
     } else if (type === 'ignore_def') {
-      detail = `无视防御 ${Math.round(create.rate * 100)}% ${durText}`;
+      const isStrategy = create.damageType === 'strategy';
+      detail = `${isStrategy ? '无视谋略' : '无视防御'} ${Math.round(create.rate * 100)}% ${durText}`;
     } else if (type === 'heal_boost') {
       // 受到恢复效果提升（勇挚刚毅）：百分数化，不输出原始小数；rate<0 = 受到恢复效果降低
       const pct = Math.round(Math.abs(create.rate) * 100);
@@ -3784,7 +3789,27 @@ export function effectiveStat(unit: UnitState, kind: 'attack' | 'defense' | 'str
  */
 function physicalTargetDefense(attacker: UnitState, target: UnitState, ignoresDefense = false): number {
   if (ignoresDefense) return 0; // 忠克猛烈：本战法造成的伤害无视目标防御属性
-  return applyIgnoreDef(effectiveStat(target, 'defense'), sumRates(attacker.statuses, 'ignore_def'));
+  // 只吃「物理轨」无视防御（damageType 缺省 = physical；strategy 轨留给策略伤害用的目标谋略折减）
+  const ignore = sumRates(
+    attacker.statuses.filter(
+      (s): s is Extract<Status, { type: 'ignore_def' }> => s.type === 'ignore_def' && (s.damageType ?? 'physical') === 'physical'
+    ),
+    'ignore_def'
+  );
+  return applyIgnoreDef(effectiveStat(target, 'defense'), ignore);
+}
+
+/** 策略伤害结算用的目标谋略：按攻击方「策略轨」ignore_def 比例折减（统军畏慎「无视敌方 60% 谋略属性」）。 */
+function strategyTargetStrategy(attacker: UnitState | undefined, target: UnitState): number {
+  const base = target.general.strategy;
+  if (!attacker) return base;
+  const ignore = sumRates(
+    attacker.statuses.filter(
+      (s): s is Extract<Status, { type: 'ignore_def' }> => s.type === 'ignore_def' && s.damageType === 'strategy'
+    ),
+    'ignore_def'
+  );
+  return applyIgnoreDef(base, ignore);
 }
 
 /**
@@ -5034,10 +5059,13 @@ function executeSkillOutputs(
     // recipient 代打改在每人上 roll，不走整段一次判定（先声夺人等非代打仍走此处）
     // 输出未显式给 chance 时，可退回战法级「随回合递增几率」（将门有将：30% 起、每回合 +10%、封顶 100%）
     const explicitChance = 'chance' in out && out.chance != null ? out.chance : null;
-    const rampCfg = skill.roundRampingChance;
+    // 段级「随回合递增/递减几率」覆盖（统军畏慎：两段各自 80%−10%/回合 与 30%+10%/回合）；
+    // 缺省退回战法级 roundRampingChance（将门有将）。下限 0、上限 100%（递减段到 0 后恒不发动）。
+    const segRamp = 'roundRampingChance' in out ? out.roundRampingChance : undefined;
+    const rampCfg = segRamp ?? skill.roundRampingChance;
     const outChance =
       explicitChance ??
-      (rampCfg ? Math.min(1, rampCfg.base + rampCfg.increment * (ctx.currentRound - 1)) : null);
+      (rampCfg ? Math.max(0, Math.min(1, rampCfg.base + rampCfg.increment * (ctx.currentRound - 1))) : null);
     if (
       (skill.type === 'passive' ||
         skill.type === 'active' ||
@@ -5599,7 +5627,7 @@ function executeSkillOutputs(
                 attackerStrategy: effStrategy,
                 attackerTroops: stratSrc.troops,
                 targetDefense: t.general.defense,
-                targetStrategy: t.general.strategy,
+                targetStrategy: strategyTargetStrategy(stratSrc, t),
                 mult: buffMult(causedMult, takenMult, reduce),
                 isDot: out.dotFormula === true,
               },
@@ -5727,6 +5755,13 @@ function executeSkillOutputs(
           const creates: CreateStatus[] = Array.isArray(out.status)
             ? (out.applyAll ? out.status : [out.status[ctx.rng.int(out.status.length)]])
             : [out.status];
+          // 按目标「攻击 vs 谋略」孰高二选一（统军畏慎）：逐目标用**生效属性**比较
+          if (out.byHigherStatStatus) {
+            const cfg2 = out.byHigherStatStatus;
+            const useAttack = effectiveStat(t, 'attack') > effectiveStat(t, 'strategy');
+            creates.length = 0;
+            creates.push(useAttack ? cfg2.attack : cfg2.strategy);
+          }
           for (const create of creates) {
           if (!t.alive) break;
           if (controlSpread && !spreadCreate && CONTROL_STATUS_TYPES.includes(create.type)) spreadCreate = create;

@@ -1719,7 +1719,7 @@
     "growthDefense": 1.73,
     "growthStrategy": 1.16,
     "growthSpeed": 1.95,
-    "mainSkillId": "",
+    "mainSkillId": "tongjun_weishen",
     "mainSkillName": "统军畏慎",
     "skillDesc": "战斗开始后，我军全体每回合有80.0%几率攻击或策略攻击造成的伤害提高25.0%（受谋略属性影响），此几率每回合降低10%；每回合有30.0%几率造成伤害时无视敌方60.0%防御或谋略属性，此几率每回合提升10%。武将获得伤害提高效果与无视目标属性效果的类型由自身攻击与谋略中较高的属性决定"
   },

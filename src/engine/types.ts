@@ -351,6 +351,17 @@ export type SkillOutput =
        */
       chance?: number;
       /**
+       * 段级「随回合递增/递减几率」覆盖（统军畏慎：两段各自 80%−10%/回合 与 30%+10%/回合）：
+       * 未显式给 `chance` 时优先用本字段，缺省退回战法级 `roundRampingChance`；结果 clamp 到 0~1。
+       */
+      roundRampingChance?: { base: number; increment: number };
+      /**
+       * 按目标「攻击 vs 谋略」孰高在两条状态模板中二选一（统军畏慎「武将获得伤害提高效果与
+       * 无视目标属性效果的类型由自身攻击与谋略中较高的属性决定」）：目标**攻击 > 谋略**用 `attack`，
+       * 否则（谋略 ≥ 攻击）用 `strategy`；按**生效属性**逐目标比较。给本字段时不看 `status`。
+       */
+      byHigherStatStatus?: { attack: CreateStatus; strategy: CreateStatus };
+      /**
        * 仅对「上两段伤害输出目标重合」的单位施加（怀德畏威：
        * 友军随机单体攻击 ∩ 自身群体策略 2 目标 → 重合者混乱）。
        * 为 true 时不再按战法整体目标/本段 targetSide 重选，直接取交集。
@@ -673,7 +684,12 @@ export type CreateStatus =
    *  正负相反（士气提高 vs 士气降低）不冲突、各自共存，由 `effectiveMorale` 相加得净士气 */
   | { type: 'morale_boost'; amount: number; duration: number; /** 显式「可叠加」（谋议宏图 每回合 +8 / 心战为上 每次 −5）：同源重复施加累加；缺省刷新 */ stack?: true }
   /** 无视防御比例（0.6 = 60%），自身攻击时目标防御 × (1 − rate) */
-  | { type: 'ignore_def'; rate: number; duration: number }
+  /**
+   * 无视目标属性比例（0.6 = 60%）：`damageType:'physical'`（缺省）= 攻击伤害时目标防御 × (1 − rate)；
+   * `damageType:'strategy'`（统军畏慎「造成伤害时无视敌方 60% 谋略属性」）= 策略伤害时目标谋略 × (1 − rate)
+   * （仅作用于该次伤害结算用的谋略，不改面板）。
+   */
+  | { type: 'ignore_def'; rate: number; duration: number; damageType?: 'physical' | 'strategy' }
   /** 攻击距离提高（帝临回光「攻击距离 +1」）：普攻可达距离上限 +amount，见 target.ts attackRangeOf */
   | { type: 'range_buff'; amount: number; duration: number; /** 显式「可叠加」（雪奋短兵 每回合攻击距离 −1）：同源重复施加累加；缺省刷新 */ stack?: true }
   /** 战法有效距离提高（合纵连横「我军全体武将战法距离+1」）：战法选目标距离上限 +amount，见 target.ts skillRangeOf */
@@ -1714,7 +1730,7 @@ export type Status =
    */
   | { type: 'rest'; remaining: number; healAmount: number; startRound: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; troopRatio?: TroopRatioCond }
   | { type: 'morale_boost'; amount: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
-  | { type: 'ignore_def'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
+  | { type: 'ignore_def'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; /** 'strategy' = 作用于策略伤害的目标谋略折减（缺省/`'physical'` = 攻击伤害的目标防御折减） */ damageType?: 'physical' | 'strategy' }
   /** 攻击距离提高（帝临回光）：普攻可达距离上限 +amount（target.ts attackRangeOf 求和） */
   | { type: 'range_buff'; amount: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   /** 战法有效距离提高（合纵连横）：战法选目标距离上限 +amount（target.ts skillRangeOf 求和） */
