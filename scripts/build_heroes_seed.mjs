@@ -159,6 +159,7 @@ const SKILL_ID_BY_NAME = {
   不攻: 'bugong',
   恃强淬锋: 'shiqiang_cuifeng',
   将门有将: 'jiangmen_youjiang',
+  二夫之勇: 'erfu_zhiyong',
 };
 
 /** 现有 8 个武将固定拼音 id（测试直接引用 HERO_REGISTRY.<id>） */

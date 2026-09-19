@@ -71,8 +71,8 @@ beforeEach(() => {
 
 describe('配将池「显示下架武将」开关', () => {
   it('默认只显示上架武将，下架将不进池', () => {
-    // 基线口径：上架 76 / 下架 ≥37（全量 161，已挂主战法 = 上架 + 下架）
-    expect(HEROES.length).toBe(76);
+    // 基线口径：上架 77 / 下架 ≥37（全量 161，已挂主战法 = 上架 + 下架）
+    expect(HEROES.length).toBe(77);
     expect(OFFLINE_HEROES.length).toBeGreaterThanOrEqual(37);
     expect(SLOTTED_HEROES.length).toBe(HEROES.length + OFFLINE_HEROES.length);
     expect(cards(ctx.pool).length).toBe(HEROES.length);

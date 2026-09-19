@@ -61,7 +61,7 @@
     "growthDefense": 1.95,
     "growthStrategy": 0.54,
     "growthSpeed": 1.18,
-    "mainSkillId": "",
+    "mainSkillId": "erfu_zhiyong",
     "mainSkillName": "二夫之勇",
     "skillDesc": "对敌军群体发动一次攻击（伤害率140.0%），并使其发动主动战法造成的伤害降低50.0%，受到主动战法的伤害提高25.0%，持续2回合"
   },

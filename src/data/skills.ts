@@ -5776,4 +5776,59 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     // 官方口径：30% 起、每回合结束时 +10%（可累加、官方未给上限 → 概率封顶 100%）
     roundRampingChance: { base: 0.3, increment: 0.1 },
   },
+  /**
+   * 二夫之勇（颜良＆文丑·群骑 h495·主动 B）：距离 4，敌军群体（有效距离内 2 个目标），发动率 35%。
+   * 对敌军群体发动一次攻击（伤害率 140.0%），并使其发动主动战法造成的伤害降低 50.0%、
+   * 受到主动战法的伤害提高 25.0%，持续 2 回合。
+   * 官方：scripts/skill_extra.json id 200736（主动 B / 距离 4 / 敌军群体（2 目标）/ 兵种骑；
+   *   1 级 伤害 70% / 主动降伤 25% / 受主动增伤 12.5%）。来源 https://stzb.163.com/m/skilllist/200736.html
+   * 入档判断：**上架** —— 伤害率与两条增减伤均为确定值、无「受属性影响」段（不登记 OFFLINE_MAIN_SKILLS）。
+   * 引擎配套（全部既有）：
+   *   ① 攻击段：`physical_damage` rate 140，沿用战法 `targetMode:'group'` + `groupCount: 2`（有效距离内 2 目标）；
+   *   ② 两段增减伤复用既有 `damage_boost` + `skillTypes:['active']` 过滤（只作用于**主动战法**造成的伤害）——
+   *      方向 'caused'（使目标的主动战法**造成**伤害 −50%）与 'taken'（使目标**受到**主动战法伤害 +25%）；
+   *   ③ 两条状态用 `sameTargetsAsLastDamage` 打在 ① 的同一批 2 个命中目标上（不重选池）；
+   *      同战法同过滤维**异方向**不冲突（各自独立共存，与「正负相反不冲突」同口径）。
+   * 持续时间口径：官方「持续 2 回合」= duration **2**（行动中施加：覆盖目标本回合与下一回合的行动，
+   *   与 强势 / 地公将军 / 密谋定蜀 同口径；官方「持续 1 回合」才需按辕门射戟兜底到 duration 2）。
+   */
+  erfu_zhiyong: {
+    id: 'erfu_zhiyong',
+    name: '二夫之勇',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.35,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage', 'damage_boost'],
+    output: [
+      { kind: 'physical_damage', rate: 140 },
+      // 使目标的**主动战法造成**伤害 −50%（caused），持续 2 回合
+      {
+        kind: 'inflict_status',
+        sameTargetsAsLastDamage: true,
+        status: {
+          type: 'damage_boost',
+          rate: -0.5,
+          duration: 2,
+          direction: 'caused',
+          skillTypes: ['active'],
+        },
+      },
+      // 使目标**受到主动战法**的伤害 +25%（taken），持续 2 回合
+      {
+        kind: 'inflict_status',
+        sameTargetsAsLastDamage: true,
+        status: {
+          type: 'damage_boost',
+          rate: 0.25,
+          duration: 2,
+          direction: 'taken',
+          skillTypes: ['active'],
+        },
+      },
+    ],
+  },
 };
