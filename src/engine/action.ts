@@ -1666,19 +1666,51 @@ function executeSplitAttack(
  *  规避（按层数）、叠层待发 / 无视规避（消耗制）没有 remaining，已在标记阶段跳过。 */
 type ActEndCountingStatus = Exclude<Status, { type: 'evasion' | 'pending_stacks' | 'ignore_evasion' }>;
 
-/** 行动中施加的状态（appliedRound>0）按**递减时点**分两类（用户口径 2026-09-18）：
- *  - **行动计数型**（绝大多数）：携带者行动**结束**后递减、到 0 才移除 —— `duration N`
+/** 第 2 组「**下次行动前递减**」的状态（用户口径 2026-09-20）：控制 / 属性 / 增减伤。
+ *  语义：duration N = 生效目标接下来 **N 次行动**；第 N 次生效行动结束后状态**仍在身**，
+ *  直到「再下一次行动开始前」才移除 —— 即 remaining 减到 ≤0 时**只打「下次行动开始时移除」标记**
+ *  （用 remaining ≤ 0 表达），本次行动照常生效，下一次行动开始时由 markStatusesOnActStart 开头清掉。
+ *  第 1 组（DoT sorcery/burning/panic/curse/ignite、治愈 first_aid/rest）与其余行动计数型
+ *  保持 8032010 的「携带者行动结束后递减」；priority / counter 仍是「行动开始前递减 + 即时移除」。 */
+const NEXT_ACT_TICK_TYPES = [
+  'hesitation', 'cowardice', 'confusion', 'rampage',
+  'attack_buff', 'defense_buff', 'strategy_buff', 'speed_buff',
+  'damage_boost', 'damage_reduce',
+] as const;
+type NextActTickStatus = Extract<Status, { type: (typeof NEXT_ACT_TICK_TYPES)[number] }>;
+
+/** 是否属于第 2 组类型（不看消耗制豁免） */
+function isNextActTickType(type: StatusType): boolean {
+  return (NEXT_ACT_TICK_TYPES as readonly string[]).includes(type);
+}
+
+/** 是否属于第 2 组（跳过项须与 markStatusesOnActStart 一致：次数型增减伤是消耗制，不算） */
+function isNextActTickStatus(s: Status): s is NextActTickStatus {
+  if (!isNextActTickType(s.type)) return false;
+  if (s.type === 'damage_boost' && 'charges' in s && s.charges != null) return false;
+  return true;
+}
+
+/** 行动中施加的状态（appliedRound>0）按**递减时点**分三路（用户口径 2026-09-20，承接 8032010）：
+ *  - **第 1 组 + 其余行动计数型**：携带者行动**结束**后递减、到 0 才移除 —— `duration N`
  *    = 目标接下来 **N 次行动**都生效，与双方出手先后无关（旧实现在行动开始前递减，
  *    目标已出手的时序会少生效 1 次）。标记函数只负责把这类状态收集进数组返回。
  *    本行动开始时仍在身上的都算「接下来 N 次行动」里的 1 次——所以**不**沿用旧的
  *    `appliedRound >= currentRound` 跳过：那个特例是为「行动开始前递减」服务的（会白挂），
  *    改成行动结束后递减后不再需要，留着反而会让「出手在前」的时序多生效 1 次。
+ *  - **第 2 组**（`NEXT_ACT_TICK_TYPES`：控制 / 属性 / 增减伤）：行动**开始**时先清掉上一轮
+ *    到期项，再 `remaining -= 1`；减到 ≤0 只打标记、本次行动照常生效。
  *  - **窗口/时点型例外**（`priority` / `counter`）：仍走「行动开始前递减 + 即时移除」原逻辑——
  *    `priority` 的作用时点是回合初排序，改到行动结束后会被吃掉（实测 1→0）；`counter` 的窗口是
  *    「直到携带者下回合行动前」，窗口一开就到点。
  *  行动前施加（appliedRound=0）由回合末 tickStatuses 递减，不在此处理。 */
 function markStatusesOnActStart(ctx: CombatContext, unit: UnitState): ActEndCountingStatus[] {
   const marked: ActEndCountingStatus[] = [];
+  // 第 0 步：第 2 组里「上一轮已到期」的状态（remaining 已减到 ≤0）在本次行动开始前移除。
+  // 准备阶段施加（appliedRound=0）的仍由回合末 tickStatuses 递减，不在此处理。
+  unit.statuses = unit.statuses.filter(
+    (s) => !(isNextActTickStatus(s) && s.appliedRound !== 0 && s.remaining <= 0)
+  );
   for (const s of [...unit.statuses]) {
     if (s.type === 'evasion') continue; // 规避按层数，不递减
     // 叠层待发（奉令护蜀）：只由「普攻打出 / 受到实际伤害」清空，不按回合递减
@@ -1691,11 +1723,11 @@ function markStatusesOnActStart(ctx: CombatContext, unit: UnitState): ActEndCoun
     if (s.type === 'damage_boost' && 'charges' in s && s.charges != null) continue;
     // 次数型分兵：不按回合递减，打出后由 consumeSplitCharges 移除
     if (s.type === 'split' && 'charges' in s && s.charges != null) continue;
-    // 待下次行动再生效的暴走（青丘媚祸）：本行动开始时激活，不递减；再下一次行动开始前才到期
+    // 待下次行动再生效的暴走（青丘媚祸）：本行动开始时激活，**并继续走下面的第 2 组递减**
+    // （激活当次生效，下一次行动开始前移除 = 官方「下次行动生效，持续到再下一次行动开始前」）
     if (s.type === 'rampage' && s.pendingNextAct) {
       s.pendingNextAct = false;
       s.appliedRound = ctx.currentRound;
-      continue;
     }
     // first_aid：remaining 递减（Infinity 整场常驻恒不减；金匮要略前 3 回合到期移除）
     if (s.type === 'rest') continue; // 休整 remaining 只在跳恢复时递减
@@ -1710,21 +1742,41 @@ function markStatusesOnActStart(ctx: CombatContext, unit: UnitState): ActEndCoun
       }
       continue;
     }
-    // 行动计数型：交给行动结束后的 tickStatusesOnActEnd 递减（保底先让本次行动生效）
+    // 第 2 组（控制 / 属性 / 增减伤）：本次行动开始前递减；减到 ≤0 只打标记，本次行动仍生效，
+    // 下一次行动开始时由本函数第 0 步静默清掉（取消原「同一回合刚施加不递减」的跳过）
+    if (isNextActTickStatus(s)) {
+      s.remaining -= 1;
+      continue;
+    }
+    // 行动计数型（第 1 组 + 其余）：交给行动结束后的 tickStatusesOnActEnd 递减（保底先让本次行动生效）
     marked.push(s);
   }
   return marked;
 }
 
-/** 行动结束时递减 `markStatusesOnActStart` 标记的行动计数型状态，`<=0` 才移除——
- *  状态即使 `remaining` 已到 0，也先把本次行动生效完再移除（保底生效一次）。
+/** 行动结束时结算：
+ *  ① `markStatusesOnActStart` 标记的**第 1 组 + 其余行动计数型**状态：remaining -= 1，<=0 移除
+ *     （状态即使 remaining 已到 0，也先把本次行动生效完再移除）。
+ *  ② 本次行动**之内**（行动开始之后）才施加的第 2 组状态：本次行动已计入 1 次生效 → 这里补一次递减，
+ *     使「之内施加的持续 1 回合」也只生效本次行动，下一次行动开始时被静默移除。
  *  静默移除（不 push `status_expired`），与行动开始前静默失效同口径，减少行动事件流噪音。 */
-function tickStatusesOnActEnd(unit: UnitState, marked: ActEndCountingStatus[]): void {
+function tickStatusesOnActEnd(
+  unit: UnitState,
+  marked: ActEndCountingStatus[],
+  statusesAtActStart: ReadonlySet<Status>
+): void {
   for (const s of marked) {
     s.remaining -= 1;
     if (s.remaining <= 0) {
       unit.statuses = unit.statuses.filter((x) => x !== s);
     }
+  }
+  for (const s of [...unit.statuses]) {
+    if (statusesAtActStart.has(s)) continue; // 行动开始时已在身：已在行动开始处递减过
+    if (!isNextActTickStatus(s)) continue;
+    // 待下次行动再生效的暴走（青丘媚祸）：生效时点由 markStatusesOnActStart 的激活分支单独控制
+    if (s.type === 'rampage' && s.pendingNextAct) continue;
+    s.remaining -= 1;
   }
 }
 
@@ -1732,8 +1784,11 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
   const enemies = unit.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
   const allies = unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
 
-  // 0. 行动中施加的状态：窗口/时点型（priority/counter）在此递减；行动计数型只标记，
-  //    待本次行动完全生效后再由 tickStatusesOnActEnd 递减（三出口统一调用）。
+  // 0. 行动中施加的状态：在这里先结算「下次行动前递减」类——
+  //    第 2 组（控制/属性/增减伤）先清到期项、再递减；窗口/时点型（priority/counter）即时移除；
+  //    第 1 组 + 其余行动计数型只标记，待本次行动完全生效后再由 tickStatusesOnActEnd 递减（三出口统一调用）。
+  //    statusesAtActStart：判断「本次行动之内才施加」的第 2 组状态（见 tickStatusesOnActEnd ②）。
+  const statusesAtActStart = new Set(unit.statuses);
   const actEndMarked = markStatusesOnActStart(ctx, unit);
   // 忠克猛烈：施法者行动时清除其施加的受击追加攻击标记（窗口「直到施法者下回合行动前」）
   expireRetaliateOnCasterAct(ctx, unit);
@@ -1799,7 +1854,7 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
   if (!unit.alive) {
     unit.hasActedThisRound = true;
     ctx.events.push({ type: 'unit_act_end', unitId: unit.general.id });
-    tickStatusesOnActEnd(unit, actEndMarked); // 阵亡出口：本次行动已生效，行动计数型状态照常递减
+    tickStatusesOnActEnd(unit, actEndMarked, statusesAtActStart); // 阵亡出口：本次行动已生效，状态照常递减
     return;
   }
 
@@ -1813,7 +1868,7 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
     });
     unit.hasActedThisRound = true;
     ctx.events.push({ type: 'unit_act_end', unitId: unit.general.id });
-    tickStatusesOnActEnd(unit, actEndMarked); // 混乱出口：行动计数型状态照常递减
+    tickStatusesOnActEnd(unit, actEndMarked, statusesAtActStart); // 混乱出口：状态照常递减
     return;
   }
 
@@ -1932,7 +1987,7 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
 
   unit.hasActedThisRound = true;
   ctx.events.push({ type: 'unit_act_end', unitId: unit.general.id });
-  tickStatusesOnActEnd(unit, actEndMarked); // 正常出口：行动计数型状态在行动结束后递减
+  tickStatusesOnActEnd(unit, actEndMarked, statusesAtActStart); // 正常出口：状态在行动结束后递减
 }
 
 function resolveSkill(ctx: CombatContext, id: string): Skill | null {
@@ -1971,6 +2026,15 @@ export function inflictStatus(
     create = { ...create, duration: ctx.rng.intInclusive(a, b) } as CreateStatus;
   }
   const type = create.type;
+
+  // 第 2 组里「已到期待移除」的状态（remaining ≤ 0，正等携带者下次行动开始时清理）在**同名新状态施加**时
+  // 先清掉：语义上它们已经到期，只是移除时点被推迟；不清会让同源重挂累加到僵尸状态上
+  // （怀橘遗亲每回合重挂 −10 → −20 → −30），同类型冲突也会被僵尸状态挡住。
+  if (isNextActTickType(type)) {
+    target.statuses = target.statuses.filter(
+      (s) => !(s.type === type && isNextActTickStatus(s) && s.appliedRound !== 0 && s.remaining <= 0)
+    );
+  }
 
   // 属性升降「之前」判定（举贤决机）：属性状态成功施加**之前**（冲突判定之前）先判一次。
   // 「每种属性单独计算」= 攻击/防御/谋略/速度各是一个状态，这里每个状态各触发一次。
@@ -2418,7 +2482,8 @@ function pushStatus(
   // 施加回合：准备阶段 currentRound=0 → 行动前施加；正式回合 → 行动中施加
   const appliedRound = ctx.currentRound;
   // 计数器型回合数：行动前施加（appliedRound=0）回合末递减（tickStatuses）；
-  // 行动中施加（appliedRound>0）持续到该单位下次行动开始前递减（actUnit 开头）。
+  // 行动中施加（appliedRound>0）：第 2 组（控制/属性/增减伤）在携带者下次行动开始时递减、
+  // 再下一次行动开始时移除；其余（含 DoT/治愈）在携带者行动结束后递减（见 markStatusesOnActStart）。
   // remaining 统一为 duration（两种施加点都从 duration 开始数）；规避按层数无 remaining
   const remaining = type === 'evasion' ? 0 : remainingFromDuration('duration' in create ? create.duration : 0);
   if (type === 'evasion') {
@@ -2865,8 +2930,9 @@ export function triggerRangeDecayPassives(ctx: CombatContext): void {
 }
 
 /** 回合结束：只递减「行动前施加」（appliedRound=0，准备阶段）的计数器回合，到 0 移除。
- *  行动中施加（appliedRound>0）的行动计数型状态由携带者行动结束后的 tickStatusesOnActEnd 递减，
- *  窗口/时点型（priority/counter）由行动开始前的 markStatusesOnActStart 递减，均不在此处理。 */
+ *  行动中施加（appliedRound>0）的：第 1 组 + 其余行动计数型由携带者行动结束后的
+ *  tickStatusesOnActEnd 递减；第 2 组（控制/属性/增减伤）由行动开始时的 markStatusesOnActStart
+ *  递减（到期项下次行动开始时移除）；窗口/时点型（priority/counter）也在行动开始时递减，均不在此处理。 */
 export function tickStatuses(ctx: CombatContext, units: UnitState[]): void {
   for (const unit of units) {
     if (!unit.alive) continue;

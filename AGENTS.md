@@ -170,7 +170,8 @@ npx tsc --noEmit                    # 类型检查（strict）
 - **辕门射戟**（h479 群弓 SP 吕布·主动 S·距离5·35%）：对敌军群体发动二次攻击（140%，每次攻击目标独立选择），第一次攻击命中后对目标施加「造成攻击伤害降低 9999%」debuff（持续 1 回合），第二次攻击独立选目标不受影响。
   - **新机制 1：`groupCount?: number | [number, number]`**（BaseSkill + physical/strategy_damage 输出）：`[2,3]` = 50% 概率 2 目标 / 50% 概率 3 目标（`skillTargets` 第 6 参）。
   - **新机制 2：`markCausedReduce?: { rate, duration }`**（physical_damage 输出）：伤害结算后对本次攻击每个目标施加 `damage_boost` caused 负值（-99.99 = -9999%）；`buffMult` 既有 `MIN_DAMAGE_FACTOR = 0.1`（v0.14 单一总和模型，增减伤总和 < -90% 最低保留 10%）→ 强制目标造成伤害 min 10%。**注意**：`calcDamage` 的 `troopBase`（兵力基础）不乘 mult，故实际伤害 = 兵力基础 + 其余 ×10%。
-  - **debuff 持续时间语义**：行动中施加（appliedRound>0）由 `tickStatusesOnActStart` 在目标下次行动开始前递减 → 「持续 1 回合」= duration **2**（覆盖目标下一个行动回合，第 N 回合施加 → 第 N+1 回合行动时生效）。
+  - **debuff 持续时间语义**：`damage_boost` 属第 2 组 → 行动中施加（appliedRound>0）按「下次行动前递减」结算，
+    「持续 1 回合」= duration **1**（目标未出手 → 生效本次行动；已出手 → 生效下一次行动；2026-09-20 口径）。
 - 「无视兵种相克」：引擎无兵种相克系统，自动满足（无需建模）。
 - 测试 `tests/main_skills_s2.test.ts` 辕门射戟 4 个：装配 / 二次独立攻击（每次施放 4~6 条 damage）/ groupCount [2,3] 50-50（skillTargets 单元）/ debuff 伤害下限（同种子双跑对比，buffed = troopBase + (基线-troopBase)×0.1 ±1）。
 
@@ -498,12 +499,24 @@ npx tsc --noEmit                    # 类型检查（strict）
 
 ### 已踩过的坑
 
-- **行动中施加的状态（`appliedRound>0`）：在携带者行动「结束后」递减**（`markStatusesOnActStart` 只标记、
-  `tickStatusesOnActEnd` 在 `actUnit` 三出口统一减），`duration` = **官方字面回合数 = 目标接下来 N 次行动**，
-  与双方出手先后无关（旧口径「下次行动开始前递减」在目标已出手时只生效 N−1 次）；
-  例外：`priority`（作用在回合初排序，改时点会被吃掉）/`counter`（窗口「直到携带者下回合行动前」）
-  保持「行动开始前递减 + 即时移除」。数据层同步回归：辕门射戟 `markCausedReduce.duration` 2→1、
-  举抑臧否 属性/控制/洞察 2→1、以诱待来 taunt 2→1、万箭齐发 `damage_boost` 2→1（全为官方字面「1 回合」）。
+- **行动中施加的状态（`appliedRound>0`）按递减时点分两组 + 例外**（用户口径 2026-09-20，承接 8032010；
+  `duration` 一律 = 官方字面回合数 N = 目标接下来 N 次行动都生效，与双方出手先后无关）：
+  - **第 2 组 = 控制（犹豫/怯战/混乱/暴走）+ 属性（攻击/防御/谋略/速度）+ 增减伤（damage_boost/damage_reduce）
+    → 「下次行动前递减」**：携带者**行动开始时**（effect 检查之前）先清掉上一轮到期项，再 `remaining -= 1`；
+    减到 ≤0 **只打「下次行动开始时移除」标记、本次行动不移除**（`markStatusesOnActStart` 第 0 步清标记）。
+    时序：**A = 持续到下一次行动前**（生效目标本次行动）、**B = 持续到 N+2 次行动前**（生效目标下一次行动，
+    再下一次行动开始前移除）；`appliedRound === currentRound`（本回合刚施加、携带者还没行动）**也照此递减**
+    （旧「同一回合刚施加不递减」跳过已取消）。在携带者**本次行动之内**施加的（行动开始后才挂上）由
+    `tickStatusesOnActEnd` 补一次递减 —— 「之内施加的持续 1 回合」同样只生效本次行动。
+  - **第 1 组 = DoT（妖术/燃烧/恐慌/妖术诅咒/引燃）+ 治愈（持续型急救 first_aid / 休整 rest）
+    → 行动「结束后」递减**（`tickStatusesOnActEnd` 在 `actUnit` 三出口统一减；rest 仍只在跳恢复时减）。
+  - **例外**：`priority`（作用在回合初排序，改时点会被吃掉）/`counter`（窗口「直到携带者下回合行动前」）
+    保持「行动开始前递减 + 即时移除」，实测 A=1/B=1。
+  - 准备阶段施加（`appliedRound === 0`）仍由回合末 `tickStatuses` 递减。
+  - 已到期待移除（`remaining ≤ 0`）的第 2 组状态，同类型新状态施加时先清掉（`inflictStatus` 开头）——
+    否则同源重挂会累加到僵尸状态上（怀橘遗亲每回合重挂 −10 → −20 → −30）。
+  - 数据层同步回归（保留 8032010）：辕门射戟 `markCausedReduce.duration`、举抑臧否 属性/控制/洞察、
+    以诱待来 taunt、万箭齐发 `damage_boost` 均为官方字面「1 回合」。
 - 生成器幂等但**行尾**会漂移（CRLF/LF）：`git diff --numstat` 为 0 时属行尾噪声，`git checkout` 即可丢；
   `heroes.json` 末尾换行已在 `export_web_data` / `sync_hero_mainskill` 统一补 `\n`。
 - 一类指挥若 `output: []` 且走「普通一类指挥直接执行」分支，须在条件里追加自己的新字段

@@ -162,7 +162,9 @@ describe('奋疾先登（乐进·二类指挥·行动叠层）', () => {
     const boost = fenjiBoost(lejin);
     expect(boost).toBeTruthy();
     expect(boost!.rate).toBe(0.16);
-    expect(boost!.remaining).toBe(999);
+    // 第 2 组（damage_boost）在本次行动之内施加 → 本次行动已计入 1 次生效，行动结束补一次递减：
+    // 999 → 998（该状态由 actLayerCounters 手动清空，999 只是「持续至战斗结束」的约定值）
+    expect(boost!.remaining).toBe(998);
     expect(boost!.sourceUnitId).toBe('lejin');
     // 计数器 2 层，未触发攻击
     expect(ctx.actLayerCounters!.get('lejin:fenji_xiandeng')).toBe(2);

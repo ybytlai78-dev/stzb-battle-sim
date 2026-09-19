@@ -352,7 +352,7 @@ describe('持节镇西：叠层上限与衰减', () => {
     expect(buffAmount(ally, 'attack_buff')).toBe(4 * 33);
   });
 
-  it('每层持续 1 回合（新口径）：本次行动叠的层本次享受，携带者下次行动结束后才移除', () => {
+  it('每层持续 1 回合（新口径）：本次行动叠的层本次享受，下次行动开始时移除', () => {
     const ctx = makeCtx();
     const wg = makeUnit('weiguan', { position: '中军', attack: 151 });
     wg.general.commandSkillIds = ['chijie_zhenxi'];
@@ -368,11 +368,12 @@ describe('持节镇西：叠层上限与衰减', () => {
     expect(buffLayers(ally, 'attack_buff')).toBe(1);
     expect(buffAmount(ally, 'attack_buff')).toBe(33);
 
-    // 回合末不递减（行动中施加，由携带者行动结束递减）
+    // 回合末不递减（第 2 组在携带者行动开始时递减）
     tickStatuses(ctx, [...ctx.myTeam, ...ctx.enemyTeam]);
     expect(buffLayers(ally, 'attack_buff')).toBe(1);
 
-    // 回合 2：上回合那层在本次行动中仍生效（本次新层结算时攻击 100+33+33=166），行动结束才到期
+    // 回合 2：上回合那层在「本次行动开始」时移除（行动之内施加的持续 1 回合只覆盖本次行动），
+    // 本次新层结算时攻击 100 + 33 = 133
     ctx.currentRound = 2;
     const mark = ctx.events.length;
     actUnit(ctx, ally);
@@ -380,9 +381,9 @@ describe('持节镇西：叠层上限与衰减', () => {
       .slice(mark)
       .filter((e): e is Extract<typeof e, { type: 'status_inflicted' }> => e.type === 'status_inflicted' && e.statusType === 'attack_buff');
     expect(layerEvents).toHaveLength(1);
-    expect(layerEvents[0].detail).toContain('攻击属性提高了33(166)');
+    expect(layerEvents[0].detail).toContain('攻击属性提高了33(133)');
 
-    // 行动结束：旧层（appliedRound=1）到期移除，只剩本次行动新叠的 1 层
+    // 行动结束：本次行动新叠的 1 层仍在身（已计入本次行动 → remaining 0，下次行动开始时移除）
     expect(buffLayers(ally, 'attack_buff')).toBe(1);
     expect(ally.statuses.find((s) => s.type === 'attack_buff')?.appliedRound).toBe(2);
   });

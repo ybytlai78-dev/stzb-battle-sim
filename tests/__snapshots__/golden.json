@@ -12221,7 +12221,7 @@
         1935,
         4714
       ],
-      "eventCount": 399,
+      "eventCount": 401,
       "events": [
         {
           "type": "battle_start",
@@ -13432,6 +13432,12 @@
           "morale": 100
         },
         {
+          "type": "status_inflicted",
+          "unitId": "enemy-front",
+          "statusType": "cowardice",
+          "detail": "怯战 1 回合"
+        },
+        {
           "type": "unit_act_start",
           "unitId": "enemy-front",
           "name": "木桩前锋",
@@ -13465,6 +13471,12 @@
           "rate": 90,
           "baseRate": 90,
           "morale": 100
+        },
+        {
+          "type": "status_inflicted",
+          "unitId": "enemy-mid",
+          "statusType": "cowardice",
+          "detail": "怯战 1 回合"
         },
         {
           "type": "unit_act_start",
@@ -18721,7 +18733,7 @@
         3773,
         3689
       ],
-      "eventCount": 237,
+      "eventCount": 239,
       "events": [
         {
           "type": "battle_start",
@@ -19486,6 +19498,12 @@
           "morale": 100
         },
         {
+          "type": "status_inflicted",
+          "unitId": "enemy-front",
+          "statusType": "cowardice",
+          "detail": "怯战 1 回合"
+        },
+        {
           "type": "unit_act_start",
           "unitId": "enemy-front",
           "name": "木桩前锋",
@@ -19519,6 +19537,12 @@
           "rate": 100,
           "baseRate": 100,
           "morale": 100
+        },
+        {
+          "type": "status_inflicted",
+          "unitId": "enemy-mid",
+          "statusType": "cowardice",
+          "detail": "怯战 1 回合"
         },
         {
           "type": "unit_act_start",
@@ -21282,14 +21306,14 @@
       "result": "draw",
       "rounds": 8,
       "finalMyTroops": [
-        6898,
+        6934,
         9000,
         9000
       ],
       "finalEnemyTroops": [
-        2926,
-        5012,
-        7901
+        3250,
+        5265,
+        8002
       ],
       "eventCount": 263,
       "events": [
@@ -21769,18 +21793,18 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(298)"
+          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(265)"
         },
         {
           "type": "attack_hit",
           "sourceId": "taishici",
           "targetId": "enemy-front",
           "distance": 2,
-          "damage": 564,
+          "damage": 544,
           "breakdown": {
             "troopBase": 201,
-            "base": 77,
-            "main": 286
+            "base": 69,
+            "main": 274
           },
           "modifiers": {
             "caused": [],
@@ -21879,18 +21903,18 @@
           "type": "status_inflicted",
           "unitId": "sunquan",
           "statusType": "attack_buff",
-          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(200)"
+          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(167)"
         },
         {
           "type": "attack_hit",
           "sourceId": "sunquan",
           "targetId": "enemy-front",
           "distance": 3,
-          "damage": 486,
+          "damage": 456,
           "breakdown": {
             "troopBase": 201,
-            "base": 45,
-            "main": 240
+            "base": 37,
+            "main": 218
           },
           "modifiers": {
             "caused": [],
@@ -21921,18 +21945,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "attack_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(217)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(184)"
         },
         {
           "type": "attack_hit",
           "sourceId": "weiguan",
           "targetId": "enemy-mid",
           "distance": 2,
-          "damage": 620,
+          "damage": 581,
           "breakdown": {
             "troopBase": 195,
-            "base": 76,
-            "main": 349
+            "base": 64,
+            "main": 322
           },
           "modifiers": {
             "caused": [],
@@ -21955,7 +21979,7 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "defense_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的防御属性提高了38(222)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的防御属性提高了38(298)"
         },
         {
           "type": "evasion_blocked",
@@ -21978,7 +22002,7 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "defense_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的防御属性提高了38(260)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的防御属性提高了38(336)"
         },
         {
           "type": "evasion_blocked",
@@ -22016,8 +22040,8 @@
             9000
           ],
           "enemyTroops": [
-            7815,
-            8918,
+            7865,
+            8957,
             10000
           ],
           "myWounded": [
@@ -22026,8 +22050,8 @@
             0
           ],
           "enemyWounded": [
-            1929,
-            941,
+            1888,
+            910,
             0
           ],
           "myDead": [
@@ -22036,8 +22060,8 @@
             0
           ],
           "enemyDead": [
-            256,
-            141,
+            247,
+            133,
             0
           ]
         },
@@ -22064,18 +22088,18 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(298)"
+          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(265)"
         },
         {
           "type": "attack_hit",
           "sourceId": "taishici",
           "targetId": "enemy-mid",
           "distance": 3,
-          "damage": 566,
+          "damage": 545,
           "breakdown": {
             "troopBase": 201,
-            "base": 79,
-            "main": 286
+            "base": 70,
+            "main": 274
           },
           "modifiers": {
             "caused": [],
@@ -22140,18 +22164,18 @@
           "type": "status_inflicted",
           "unitId": "sunquan",
           "statusType": "attack_buff",
-          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(200)"
+          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(167)"
         },
         {
           "type": "attack_hit",
           "sourceId": "sunquan",
           "targetId": "enemy-front",
           "distance": 3,
-          "damage": 486,
+          "damage": 456,
           "breakdown": {
             "troopBase": 201,
-            "base": 45,
-            "main": 240
+            "base": 37,
+            "main": 218
           },
           "modifiers": {
             "caused": [],
@@ -22182,18 +22206,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "attack_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(217)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(184)"
         },
         {
           "type": "attack_hit",
           "sourceId": "weiguan",
           "targetId": "enemy-front",
           "distance": 1,
-          "damage": 618,
+          "damage": 580,
           "breakdown": {
             "troopBase": 195,
-            "base": 74,
-            "main": 349
+            "base": 63,
+            "main": 322
           },
           "modifiers": {
             "caused": [],
@@ -22239,18 +22263,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "defense_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的防御属性提高了38(222)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的防御属性提高了38(298)"
         },
         {
           "type": "attack_hit",
           "sourceId": "enemy-mid",
           "targetId": "weiguan",
           "distance": 2,
-          "damage": 293,
+          "damage": 278,
           "breakdown": {
-            "troopBase": 194,
+            "troopBase": 195,
             "base": 19,
-            "main": 80
+            "main": 64
           },
           "modifiers": {
             "caused": [],
@@ -22283,33 +22307,33 @@
           "type": "round_end",
           "round": 3,
           "myTroops": [
-            8106,
+            8121,
             9000,
             9000
           ],
           "enemyTroops": [
-            6711,
-            8352,
+            6829,
+            8412,
             10000
           ],
           "myWounded": [
-            767,
+            757,
             0,
             0
           ],
           "enemyWounded": [
-            2669,
-            1320,
+            2583,
+            1275,
             0
           ],
           "myDead": [
-            127,
+            122,
             0,
             0
           ],
           "enemyDead": [
-            620,
-            328,
+            588,
+            313,
             0
           ]
         },
@@ -22336,18 +22360,18 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(298)"
+          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(265)"
         },
         {
           "type": "attack_hit",
           "sourceId": "taishici",
           "targetId": "enemy-back",
           "distance": 4,
-          "damage": 560,
+          "damage": 540,
           "breakdown": {
             "troopBase": 201,
-            "base": 73,
-            "main": 286
+            "base": 65,
+            "main": 274
           },
           "modifiers": {
             "caused": [],
@@ -22398,7 +22422,7 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(331)"
+          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(298)"
         },
         {
           "type": "damage",
@@ -22407,11 +22431,11 @@
           "skillId": "fangzhen_tuji",
           "skillName": "方阵突击",
           "damageType": "physical",
-          "damage": 950,
+          "damage": 911,
           "breakdown": {
             "troopBase": 201,
-            "base": 153,
-            "main": 596
+            "base": 138,
+            "main": 572
           },
           "modifiers": {
             "caused": [],
@@ -22465,18 +22489,18 @@
           "type": "status_inflicted",
           "unitId": "sunquan",
           "statusType": "attack_buff",
-          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(200)"
+          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(167)"
         },
         {
           "type": "attack_hit",
           "sourceId": "sunquan",
           "targetId": "enemy-front",
           "distance": 3,
-          "damage": 484,
+          "damage": 455,
           "breakdown": {
             "troopBase": 201,
-            "base": 43,
-            "main": 240
+            "base": 36,
+            "main": 218
           },
           "modifiers": {
             "caused": [],
@@ -22507,18 +22531,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "attack_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(217)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(184)"
         },
         {
           "type": "attack_hit",
           "sourceId": "weiguan",
           "targetId": "enemy-mid",
           "distance": 2,
-          "damage": 622,
+          "damage": 582,
           "breakdown": {
             "troopBase": 191,
-            "base": 85,
-            "main": 346
+            "base": 72,
+            "main": 319
           },
           "modifiers": {
             "caused": [],
@@ -22541,18 +22565,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "defense_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的防御属性提高了38(222)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的防御属性提高了38(260)"
         },
         {
           "type": "attack_hit",
           "sourceId": "enemy-front",
           "targetId": "weiguan",
           "distance": 1,
-          "damage": 263,
+          "damage": 256,
           "breakdown": {
-            "troopBase": 167,
+            "troopBase": 169,
             "base": 23,
-            "main": 73
+            "main": 64
           },
           "modifiers": {
             "caused": [],
@@ -22575,18 +22599,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "defense_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的防御属性提高了38(260)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的防御属性提高了38(298)"
         },
         {
           "type": "attack_hit",
           "sourceId": "enemy-mid",
           "targetId": "weiguan",
           "distance": 2,
-          "damage": 273,
+          "damage": 268,
           "breakdown": {
-            "troopBase": 187,
+            "troopBase": 188,
             "base": 18,
-            "main": 68
+            "main": 62
           },
           "modifiers": {
             "caused": [],
@@ -22612,34 +22636,34 @@
           "type": "round_end",
           "round": 4,
           "myTroops": [
-            7570,
+            7597,
             9000,
             9000
           ],
           "enemyTroops": [
-            6227,
-            7730,
-            8490
+            6374,
+            7830,
+            8549
           ],
           "myWounded": [
-            1051,
+            1035,
             0,
             0
           ],
           "enemyWounded": [
-            2926,
-            1650,
-            800
+            2824,
+            1583,
+            769
           ],
           "myDead": [
-            379,
+            368,
             0,
             0
           ],
           "enemyDead": [
-            847,
-            620,
-            710
+            802,
+            587,
+            682
           ]
         },
         {
@@ -22665,18 +22689,18 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(331)"
+          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(265)"
         },
         {
           "type": "attack_hit",
           "sourceId": "taishici",
           "targetId": "enemy-back",
           "distance": 4,
-          "damage": 589,
+          "damage": 547,
           "breakdown": {
             "troopBase": 201,
-            "base": 90,
-            "main": 298
+            "base": 72,
+            "main": 274
           },
           "modifiers": {
             "caused": [],
@@ -22763,18 +22787,18 @@
           "type": "status_inflicted",
           "unitId": "sunquan",
           "statusType": "attack_buff",
-          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(200)"
+          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(167)"
         },
         {
           "type": "attack_hit",
           "sourceId": "sunquan",
           "targetId": "enemy-mid",
           "distance": 4,
-          "damage": 491,
+          "damage": 461,
           "breakdown": {
             "troopBase": 201,
-            "base": 50,
-            "main": 240
+            "base": 42,
+            "main": 218
           },
           "modifiers": {
             "caused": [],
@@ -22805,18 +22829,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "attack_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(217)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(184)"
         },
         {
           "type": "attack_hit",
           "sourceId": "weiguan",
           "targetId": "enemy-front",
           "distance": 1,
-          "damage": 599,
+          "damage": 561,
           "breakdown": {
             "troopBase": 185,
-            "base": 76,
-            "main": 338
+            "base": 64,
+            "main": 312
           },
           "modifiers": {
             "caused": [],
@@ -22862,7 +22886,7 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "defense_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的防御属性提高了38(222)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的防御属性提高了38(298)"
         },
         {
           "type": "evasion_blocked",
@@ -22895,34 +22919,34 @@
           "type": "round_end",
           "round": 5,
           "myTroops": [
-            7570,
+            7597,
             9000,
             9000
           ],
           "enemyTroops": [
-            5628,
-            7239,
-            7901
+            5813,
+            7369,
+            8002
           ],
           "myWounded": [
-            1051,
+            1035,
             0,
             0
           ],
           "enemyWounded": [
-            3160,
-            1841,
-            1030
+            3043,
+            1763,
+            982
           ],
           "myDead": [
-            379,
+            368,
             0,
             0
           ],
           "enemyDead": [
-            1212,
-            920,
-            1069
+            1144,
+            868,
+            1016
           ]
         },
         {
@@ -22948,18 +22972,18 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(298)"
+          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(265)"
         },
         {
           "type": "attack_hit",
           "sourceId": "taishici",
           "targetId": "enemy-front",
           "distance": 2,
-          "damage": 560,
+          "damage": 540,
           "breakdown": {
             "troopBase": 201,
-            "base": 73,
-            "main": 286
+            "base": 65,
+            "main": 274
           },
           "modifiers": {
             "caused": [],
@@ -23024,18 +23048,18 @@
           "type": "status_inflicted",
           "unitId": "sunquan",
           "statusType": "attack_buff",
-          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(200)"
+          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(167)"
         },
         {
           "type": "attack_hit",
           "sourceId": "sunquan",
           "targetId": "enemy-front",
           "distance": 3,
-          "damage": 490,
+          "damage": 460,
           "breakdown": {
             "troopBase": 201,
-            "base": 49,
-            "main": 240
+            "base": 41,
+            "main": 218
           },
           "modifiers": {
             "caused": [],
@@ -23066,18 +23090,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "attack_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(217)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(184)"
         },
         {
           "type": "attack_hit",
           "sourceId": "weiguan",
           "targetId": "enemy-mid",
           "distance": 2,
-          "damage": 603,
+          "damage": 565,
           "breakdown": {
             "troopBase": 185,
-            "base": 80,
-            "main": 338
+            "base": 68,
+            "main": 312
           },
           "modifiers": {
             "caused": [],
@@ -23100,7 +23124,7 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "defense_buff",
-          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的防御属性提高了38(218)"
+          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的防御属性提高了38(256)"
         },
         {
           "type": "evasion_blocked",
@@ -23123,7 +23147,7 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "defense_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的防御属性提高了38(222)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的防御属性提高了38(260)"
         },
         {
           "type": "evasion_blocked",
@@ -23156,34 +23180,34 @@
           "type": "round_end",
           "round": 6,
           "myTroops": [
-            7570,
+            7597,
             9000,
             9000
           ],
           "enemyTroops": [
-            4578,
-            6636,
-            7901
+            4813,
+            6804,
+            8002
           ],
           "myWounded": [
-            1051,
+            1035,
             0,
             0
           ],
           "enemyWounded": [
-            3422,
-            1992,
-            1030
+            3293,
+            1904,
+            982
           ],
           "myDead": [
-            379,
+            368,
             0,
             0
           ],
           "enemyDead": [
-            2000,
-            1372,
-            1069
+            1894,
+            1292,
+            1016
           ]
         },
         {
@@ -23209,18 +23233,18 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(298)"
+          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(265)"
         },
         {
           "type": "attack_hit",
           "sourceId": "taishici",
           "targetId": "enemy-front",
           "distance": 2,
-          "damage": 550,
+          "damage": 531,
           "breakdown": {
             "troopBase": 201,
-            "base": 63,
-            "main": 286
+            "base": 56,
+            "main": 274
           },
           "modifiers": {
             "caused": [],
@@ -23285,18 +23309,18 @@
           "type": "status_inflicted",
           "unitId": "sunquan",
           "statusType": "attack_buff",
-          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(200)"
+          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(167)"
         },
         {
           "type": "attack_hit",
           "sourceId": "sunquan",
           "targetId": "enemy-front",
           "distance": 3,
-          "damage": 494,
+          "damage": 463,
           "breakdown": {
             "troopBase": 201,
-            "base": 53,
-            "main": 240
+            "base": 44,
+            "main": 218
           },
           "modifiers": {
             "caused": [],
@@ -23327,18 +23351,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "attack_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(217)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(184)"
         },
         {
           "type": "attack_hit",
           "sourceId": "weiguan",
           "targetId": "enemy-front",
           "distance": 1,
-          "damage": 608,
+          "damage": 569,
           "breakdown": {
             "troopBase": 185,
-            "base": 85,
-            "main": 338
+            "base": 72,
+            "main": 312
           },
           "modifiers": {
             "caused": [],
@@ -23361,18 +23385,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "defense_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的防御属性提高了38(222)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的防御属性提高了38(260)"
         },
         {
           "type": "attack_hit",
           "sourceId": "enemy-front",
           "targetId": "weiguan",
           "distance": 1,
-          "damage": 177,
+          "damage": 181,
           "breakdown": {
-            "troopBase": 103,
+            "troopBase": 111,
             "base": 22,
-            "main": 52
+            "main": 48
           },
           "modifiers": {
             "caused": [],
@@ -23395,18 +23419,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "defense_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的防御属性提高了38(260)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的防御属性提高了38(298)"
         },
         {
           "type": "attack_hit",
           "sourceId": "enemy-mid",
           "targetId": "weiguan",
           "distance": 2,
-          "damage": 260,
+          "damage": 256,
           "breakdown": {
-            "troopBase": 173,
+            "troopBase": 175,
             "base": 22,
-            "main": 65
+            "main": 59
           },
           "modifiers": {
             "caused": [],
@@ -23439,34 +23463,34 @@
           "type": "round_end",
           "round": 7,
           "myTroops": [
-            7133,
+            7160,
             9000,
             9000
           ],
           "enemyTroops": [
-            2926,
-            6636,
-            7901
+            3250,
+            6804,
+            8002
           ],
           "myWounded": [
-            1099,
+            1083,
             0,
             0
           ],
           "enemyWounded": [
-            3603,
-            1992,
-            1030
+            3465,
+            1904,
+            982
           ],
           "myDead": [
-            768,
+            757,
             0,
             0
           ],
           "enemyDead": [
-            3471,
-            1372,
-            1069
+            3285,
+            1292,
+            1016
           ]
         },
         {
@@ -23492,18 +23516,18 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(298)"
+          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(265)"
         },
         {
           "type": "attack_hit",
           "sourceId": "taishici",
           "targetId": "enemy-mid",
           "distance": 3,
-          "damage": 558,
+          "damage": 538,
           "breakdown": {
             "troopBase": 201,
-            "base": 71,
-            "main": 286
+            "base": 63,
+            "main": 274
           },
           "modifiers": {
             "caused": [],
@@ -23568,18 +23592,18 @@
           "type": "status_inflicted",
           "unitId": "sunquan",
           "statusType": "attack_buff",
-          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(200)"
+          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(167)"
         },
         {
           "type": "attack_hit",
           "sourceId": "sunquan",
           "targetId": "enemy-mid",
           "distance": 4,
-          "damage": 483,
+          "damage": 454,
           "breakdown": {
             "troopBase": 201,
-            "base": 42,
-            "main": 240
+            "base": 35,
+            "main": 218
           },
           "modifiers": {
             "caused": [],
@@ -23610,18 +23634,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "attack_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(217)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(184)"
         },
         {
           "type": "attack_hit",
           "sourceId": "weiguan",
           "targetId": "enemy-mid",
           "distance": 2,
-          "damage": 583,
+          "damage": 547,
           "breakdown": {
-            "troopBase": 179,
-            "base": 72,
-            "main": 332
+            "troopBase": 180,
+            "base": 61,
+            "main": 306
           },
           "modifiers": {
             "caused": [],
@@ -23667,18 +23691,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "defense_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的防御属性提高了38(222)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的防御属性提高了38(298)"
         },
         {
           "type": "attack_hit",
           "sourceId": "enemy-mid",
           "targetId": "weiguan",
           "distance": 2,
-          "damage": 235,
+          "damage": 226,
           "breakdown": {
-            "troopBase": 147,
+            "troopBase": 151,
             "base": 21,
-            "main": 67
+            "main": 54
           },
           "modifiers": {
             "caused": [],
@@ -23711,34 +23735,34 @@
           "type": "round_end",
           "round": 8,
           "myTroops": [
-            6898,
+            6934,
             9000,
             9000
           ],
           "enemyTroops": [
-            2926,
-            5012,
-            7901
+            3250,
+            5265,
+            8002
           ],
           "myWounded": [
-            1099,
+            1083,
             0,
             0
           ],
           "enemyWounded": [
-            3603,
-            1992,
-            1030
+            3465,
+            1904,
+            982
           ],
           "myDead": [
-            1003,
+            983,
             0,
             0
           ],
           "enemyDead": [
-            3471,
-            2996,
-            1069
+            3285,
+            2831,
+            1016
           ]
         },
         {
@@ -23746,14 +23770,14 @@
           "result": "draw",
           "rounds": 8,
           "myTroops": [
-            6898,
+            6934,
             9000,
             9000
           ],
           "enemyTroops": [
-            2926,
-            5012,
-            7901
+            3250,
+            5265,
+            8002
           ]
         }
       ]
