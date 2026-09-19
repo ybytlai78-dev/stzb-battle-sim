@@ -3707,6 +3707,18 @@ function consumeControlSpread(ctx: CombatContext, holder: UnitState, status: Sta
   });
 }
 
+/**
+ * 每次发动后伤害率递增（及锋而试「每次发动后伤害率增加 40.0%」）：
+ * 本次结算的加算值 = `skill.damageRatePerCast` × **此前**发动次数。
+ * 计数在 `executeSkillWithTargets` 结算完成后 +1，故这里读到的是「此前发动次数」；不封顶、整场累计。
+ */
+function damageRatePerCastBonus(ctx: CombatContext, caster: UnitState, skill: Skill): number {
+  const step = skill.damageRatePerCast;
+  if (step == null) return 0;
+  const prior = ctx.skillCastCounters?.get(`${caster.general.id}:${skill.id}`) ?? 0;
+  return step * prior;
+}
+
 function executeSkillOutputs(
   ctx: CombatContext,
   caster: UnitState,
@@ -3778,11 +3790,14 @@ function executeSkillOutputs(
       if (success) executeSkillOutputs(ctx, caster, skill, targets, out.outputs);
       continue;
     }
-    // 被动/指挥输出级独立发动率（击势 65%、指挥 roundStartRepeat chance）：士气修正后判定，失败则跳过该段
+    // 独立发动率（被动/主动/指挥；击势 65%、举抑臧否 60%、望风而降 50%、指挥 roundStartRepeat chance）：
+    // 士气修正后判定，失败则跳过该段
     // before_active 指挥（运筹决胜）已在 triggerBeforeActiveCommands 逐段判定，此处不再重复
     // recipient 代打改在每人上 roll，不走整段一次判定（先声夺人等非代打仍走此处）
     if (
-      (skill.type === 'passive' || (skill.type === 'command' && skill.roundTrigger !== 'before_active')) &&
+      (skill.type === 'passive' ||
+        skill.type === 'active' ||
+        (skill.type === 'command' && skill.roundTrigger !== 'before_active')) &&
       'chance' in out &&
       out.chance != null &&
       !(out.kind === 'physical_damage' && out.attacker === 'recipient')
@@ -4143,7 +4158,10 @@ function executeSkillOutputs(
             const { causedMult, takenMult } = damageBoosts(ctx, source, t, hit);
             const counterReduce = out.ignoresTroopCounter ? 0 : troopCounterReduceOf(source, t);
             const reduce = sumReduce(t, hit) + counterReduce;
-            const rate = Array.isArray(out.rate) ? ctx.rng.intInclusive(out.rate[0], out.rate[1]) : out.rate;
+            // 每次发动后伤害率递增（及锋而试）：加在输出段 rate 上（不封顶、整场累计）
+            const rate =
+              (Array.isArray(out.rate) ? ctx.rng.intInclusive(out.rate[0], out.rate[1]) : out.rate) +
+              damageRatePerCastBonus(ctx, caster, skill);
             const { damage, breakdown } = calcDamage(
               {
                 damageType: 'physical',
@@ -4248,9 +4266,10 @@ function executeSkillOutputs(
           // 叠层后再读生效谋略（与攻击伤害先叠攻击再读 effectiveStat 对齐；
           // 群体逐目标叠层，每段伤害吃到截至本目标的全部层）
           const effStrategy = effectiveStat(stratSrc, 'strategy');
-          let rate = out.rate;
+          // 每次发动后伤害率递增（及锋而试）：先加算再走受谋略缩放
+          let rate = out.rate + damageRatePerCastBonus(ctx, caster, skill);
           if (out.strategyScaled && out.growthRate !== undefined) {
-            rate = roundRate(scaledValue(out.rate, out.growthRate, effStrategy));
+            rate = roundRate(scaledValue(rate, out.growthRate, effStrategy));
           }
           const hit: DamageHitContext = { damageSource: 'skill', damageType: 'strategy', skillType: skill.type };
           const { causedMult, takenMult } = damageBoosts(ctx, stratSrc, t, hit);
@@ -4553,18 +4572,27 @@ function executeSkillOutputs(
       }
       case 'morale_branch': {
         const threshold = out.threshold ?? 100;
-        // by:'caster'（列营守险「若自身士气高昂时，规避状态的目标变为我军全体」）：
+        // compareTo:'caster'（望风而降 / 激水之疾 / 蓄盈待竭）：与施法者当前生效士气**相对**比较——
+        // 目标士气**严格低于**施法者走 low（描述「若目标士气低于自身」的成立分支），
+        // 不低于（含相等）走 high（用户 2026-09-19 确认「低于」= 严格小于）。
+        // compareTo:'threshold'（缺省）：> threshold 走 high（盛气横凌 / 列营守险 / 胜负先征）。
+        const casterMorale = effectiveMorale(caster);
+        const pickHigh = (u: UnitState): boolean =>
+          out.compareTo === 'caster'
+            ? effectiveMorale(u) >= casterMorale
+            : effectiveMorale(u) > threshold;
+        // by:'caster'（列营守险「若自身士气高昂时，规避状态的目标变为我军全体」/ 胜负先征）：
         // 按施法者自身士气**整体判定一次**，对整个目标池执行选中分支
         // （逐目标判定会按目标数重复施加同一段状态，战报出现多条重复）
         if (out.by === 'caster') {
-          const branch = effectiveMorale(caster) > threshold ? out.high : out.low;
+          const branch = pickHigh(caster) ? out.high : out.low;
           executeSkillOutputs(ctx, caster, skill, pool, branch);
           break;
         }
-        // 缺省 'target'：逐目标按各自士气分支（盛气横凌）
+        // 缺省 'target'：逐目标按各自士气分支（盛气横凌 / 望风而降 / 激水之疾 / 蓄盈待竭）
         for (const t of pool) {
           if (!t.alive) continue;
-          const branch = effectiveMorale(t) > threshold ? out.high : out.low;
+          const branch = pickHigh(t) ? out.high : out.low;
           executeSkillOutputs(ctx, caster, skill, [t], branch);
         }
         break;
@@ -5112,6 +5140,12 @@ function executeSkillWithTargets(
     skillName: skill.name,
   });
   executeSkillOutputs(ctx, unit, skill, targets);
+  // 每次成功发动后计数 +1（及锋而试伤害率递增；结算中读到的即此前发动次数）
+  if (skill.damageRatePerCast != null) {
+    ctx.skillCastCounters ??= new Map();
+    const key = `${unit.general.id}:${skill.id}`;
+    ctx.skillCastCounters.set(key, (ctx.skillCastCounters.get(key) ?? 0) + 1);
+  }
 }
 
 /** 追击战法：普攻命中后，对命中目标执行 */

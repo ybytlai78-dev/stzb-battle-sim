@@ -658,9 +658,9 @@
     "targetDesc": "敌军群体（有效距离内2个目标）",
     "effectDesc": "对敌军群体发动一次攻击（伤害率120.0%）并使其士气降低10.0，每次发动后伤害率增加40.0%",
     "sources": "【晋·司马师·骑】【晋·司马昭·骑】【晋·司马炎·步】",
-    "status": "skipped",
-    "missingMechanics": "士气降低",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "morale p5"
   },
   {
     "name": "妖术",
@@ -799,11 +799,11 @@
     "range": 5,
     "triggerRate": "40%",
     "targetDesc": "敌军单体",
-    "effectDesc": "对敌军单体发动2次策略攻击（伤害率108.0%，受谋略属性影响），若目标士气低于自身，则使其陷入恐慌状态（伤害率98.0%，受谋略属性影响），持续1回合",
+    "effectDesc": "对敌军单体发动2次策略攻击（伤害率108.0%，受谋略属性影响），并有50.0%几率使其陷入恐慌状态（伤害率98.0%，受谋略属性影响），持续1回合，若目标士气低于自身，则此几率提升至100.0%",
     "sources": "【晋·贾充·步】【晋·羊祜·步】【吴·周瑜·步】",
-    "status": "skipped",
-    "missingMechanics": "士气比较",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "morale p5"
   },
   {
     "name": "楚歌四起",
@@ -827,9 +827,9 @@
     "targetDesc": "敌军群体（有效距离内2个目标）",
     "effectDesc": "对敌军群体发动一次策略攻击（伤害率180.0%，受谋略属性影响），若目标士气低于自身，则使其谋略属性降低20.0，持续1回合",
     "sources": "【晋·山涛·弓】【晋·向秀·步】【群·许攸·骑】",
-    "status": "skipped",
-    "missingMechanics": "士气比较",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "morale p5"
   },
   {
     "name": "焰焚箕轸",
@@ -1126,9 +1126,9 @@
     "targetDesc": "敌军单体",
     "effectDesc": "选择随机敌军单体，其士气值低于自身时，对该敌军发动一次攻击（伤害率200.0%），否则提升自身攻击、防御、谋略属性60.0，持续2回合",
     "sources": "【晋·阮咸·步】【晋·王戎·骑】",
-    "status": "skipped",
-    "missingMechanics": "士气比较",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "morale p5"
   },
   {
     "name": "车悬",
@@ -2166,9 +2166,9 @@
     "targetDesc": "自己",
     "effectDesc": "每回合自身行动时，若士气高昂，则使自身造成的主动和追击战法伤害提升40.0%，持续1回合；若士气处于一般或低落，则使自身受到伤害时恢复一定兵力（恢复率75.0%），持续1回合",
     "sources": "【晋·王元姬·弓】【晋·卫瓘·步】",
-    "status": "skipped",
-    "missingMechanics": "士气比较",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "morale p5"
   },
   {
     "name": "回马",

@@ -213,7 +213,8 @@ export type SkillOutput =
       groupCount?: number | [number, number];
       /**
        * 独立发动率（运筹决胜策略攻击 50%），缺省必中。
-       * 仅 `roundTrigger:'before_active'` 的二类指挥按此逐段判定。
+       * 支持：被动 / 主动 / 指挥（非 `before_active`）在输出执行处逐段判定（士气修正，失败跳过本段）；
+       * `roundTrigger:'before_active'` 的二类指挥走 `triggerBeforeActiveCommands` 逐段判定。
        */
       chance?: number;
       /** 仅对带这些状态之一的目标生效（运筹决胜：混乱 / 暴走） */
@@ -298,8 +299,9 @@ export type SkillOutput =
        */
       applyAll?: boolean;
       /**
-       * 独立发动率（运筹决胜暴走 30%），缺省必中。
-       * 仅 `roundTrigger:'before_active'` 的二类指挥按此逐段判定。
+       * 独立发动率（运筹决胜暴走 30%；望风而降「50% 几率使其陷入恐慌」），缺省必中。
+       * 支持：被动 / 主动 / 指挥（非 `before_active`）在输出执行处逐段判定（士气修正，失败跳过本段）；
+       * `roundTrigger:'before_active'` 的二类指挥走 `triggerBeforeActiveCommands` 逐段判定。
        */
       chance?: number;
       /**
@@ -432,16 +434,22 @@ export type SkillOutput =
       troopTypes?: TroopType[];
     }
   /**
-   * 按目标生效士气分支（盛气横凌）：
-   * 生效士气 > threshold（缺省 100，即高昂）走 high，否则（一般/低落）走 low。
+   * 士气分支：按生效士气选 high / low 执行。
+   * - `compareTo:'threshold'`（缺省）：生效士气 **> threshold**（缺省 100，即高昂）走 high，
+   *   否则（一般/低落）走 low（盛气横凌 / 列营守险 / 胜负先征口径）。
+   * - `compareTo:'caster'`：与**施法者**当前生效士气比较——目标士气 **严格低于** 施法者走 low
+   *   （描述「若目标士气低于自身」的成立分支），**不低于（含相等）** 走 high
+   *   （望风而降 / 激水之疾 / 蓄盈待竭；用户 2026-09-19 确认「低于」= 严格小于）。
    */
   | {
       kind: 'morale_branch';
-      /** 高昂阈值，缺省 100（>100 为高昂） */
+      /** 高昂阈值，缺省 100（仅 compareTo:'threshold' 使用） */
       threshold?: number;
-      /** 士气判定对象：缺省 'target'（逐目标按各自士气分支，盛气横凌）；
+      /** 比较基准：缺省 'threshold'；'caster' = 与施法者当前生效士气相对比较 */
+      compareTo?: 'threshold' | 'caster';
+      /** 士气判定对象：缺省 'target'（逐目标按各自士气分支，盛气横凌 / 望风而降 / 激水之疾 / 蓄盈待竭）；
        *  'caster' = 按施法者自身士气**整体判定一次**并对整个目标池执行选中分支
-       *  （列营守险「若自身士气高昂时，规避状态的目标变为我军全体」） */
+       *  （列营守险「若自身士气高昂时，规避状态的目标变为我军全体」；胜负先征） */
       by?: 'caster' | 'target';
       high: SkillOutput[];
       low: SkillOutput[];
@@ -595,6 +603,13 @@ interface BaseSkill {
    * 仅主动战法有意义；准备主动按「释放」计一次（进入准备不计）。
    */
   triggerRateDecayPerCast?: number;
+  /**
+   * 每次**成功发动**后本战法伤害率递增（及锋而试「每次发动后伤害率增加 40.0%」）：
+   * 第 N 次发动时输出段实际伤害率 = 输出段 rate + damageRatePerCast × (N-1)，**不封顶、整场累计**；
+   * 计数走 `ctx.skillCastCounters`（键 `${casterId}:${skillId}`），在**本次结算完成后** +1，
+   * 因此结算中读到的是「此前发动次数」。加算在受谋略缩放**之前**（先加后缩放）。
+   */
+  damageRatePerCast?: number;
   /**
    * 战法链（连环计「依次发动下列战法…每个战法的效果与原战法在同等级下效果相同」）：
    * 最外层发动时按顺序把**其他已注册战法**（`SKILL_REGISTRY`）的 `output` 当作本战法效果执行，

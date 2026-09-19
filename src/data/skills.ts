@@ -4758,6 +4758,189 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     ],
   },
 
+  // ─── 拆解通用 B+ 第五阶段：士气组（5 个）───
+
+  /**
+   * 望风而降（A 主动·距离 5·40%·敌军单体）：
+   * ① 对敌军单体发动 **2 次**策略攻击（伤害率 108%，受谋略，成长率未确认 → 留空按基值）；
+   * ② 50% 几率使其陷入恐慌（伤害率 98%，受谋略，成长率未确认 → 0 = 不缩放），持续 1 回合；
+   *    **若目标士气低于自身，则此几率提升至 100%**。
+   * 官方：scripts/skill_extra.json id 200982（1 级 54% / 49%）。
+   * 注：`scripts/_classified.json` 里本战法的 effectDesc 是旧版（漏了「并有 50% 几率…提升至 100%」），
+   *   本次已按 extra 满级原文同步。
+   * 引擎配套：
+   *   ①「2 次」= 两段相同 `strategy_damage`（strategy_damage 无 repeats，两段各自独立结算，语义等价）；
+   *   ② `morale_branch.compareTo:'caster'`（**本次新增**）：逐目标与施法者当前生效士气比较——
+   *      目标士气**严格低于**自身走 low（必定恐慌），**不低于**（含相等）走 high（50% 几率）；
+   *   ③ 主动战法的输出级 `chance`（**本次扩展**：原仅被动/指挥生效）——士气修正，失败跳过本段；
+   *      用户 2026-09-19 口径：「凡是几率类的基本都吃士气加成」。
+   * 用户确认：「低于自身」= 严格小于（相等走 50% 分支）；恐慌「持续 1 回合」= DoT duration 1（焰焚箕轸口径）。
+   */
+  wangfeng_erjiang: {
+    id: 'wangfeng_erjiang',
+    name: '望风而降',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.4,
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['damage', 'panic'],
+    output: [
+      { kind: 'strategy_damage', rate: 108, strategyScaled: true },
+      { kind: 'strategy_damage', rate: 108, strategyScaled: true },
+      {
+        kind: 'morale_branch',
+        compareTo: 'caster',
+        by: 'target',
+        // 目标士气 ≥ 自身：50% 几率恐慌（士气修正后判定）；目标士气 < 自身：必定恐慌
+        high: [
+          { kind: 'inflict_status', chance: 0.5, status: { type: 'panic', duration: 1, rate: 98, growthRate: 0 } },
+        ],
+        low: [{ kind: 'inflict_status', status: { type: 'panic', duration: 1, rate: 98, growthRate: 0 } }],
+      },
+    ],
+  },
+  /**
+   * 激水之疾（A 主动·距离 4·35%·敌军群体 2 目标）：
+   * 对敌军群体发动一次策略攻击（伤害率 180%，受谋略，成长率未确认 → 留空按基值）；
+   * **若目标士气低于自身**，则使其谋略属性降低 20（受谋略，成长率未确认 → 留空按基值），持续 1 回合。
+   * 官方 id 200992（1 级 90% / −10）。
+   * 引擎配套：`morale_branch.compareTo:'caster'` 逐目标判定；high 段为空数组（不低于自身则不打 debuff）。
+   * 用户确认：「持续 1 回合」= duration 2（辕门射戟 / 举抑臧否口径，覆盖目标下一个行动回合）。
+   */
+  jishui_zhiji: {
+    id: 'jishui_zhiji',
+    name: '激水之疾',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.35,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage', 'debuff_strategy'],
+    output: [
+      { kind: 'strategy_damage', rate: 180, strategyScaled: true },
+      {
+        kind: 'morale_branch',
+        compareTo: 'caster',
+        by: 'target',
+        high: [],
+        low: [
+          {
+            kind: 'inflict_status',
+            status: { type: 'strategy_buff', amount: -20, duration: 2, strategyScaled: true },
+          },
+        ],
+      },
+    ],
+  },
+  /**
+   * 蓄盈待竭（B 主动·距离 4·35%·敌军单体）：
+   * 随机选择敌军单体：其士气**低于**自身 → 对该敌军发动一次攻击（伤害率 200%）；
+   * **否则**（不低于，含相等）→ 提升自身攻击、防御、谋略属性 60，持续 2 回合。
+   * 官方 id 200995（1 级 100% / +30）；无「受属性影响」→ 固定值不缩放。
+   * 引擎配套：`morale_branch.compareTo:'caster'`
+   *   （low = 目标士气 < 自身 → 攻击；high = 不低于 → 自身三维修正，段内 `target:'self'` 落回施法者）。
+   * 用户确认：随机敌军单体按战法有效距离 4 内均匀随机（`targetMode:'random_single'`）。
+   */
+  xuying_daijie: {
+    id: 'xuying_daijie',
+    name: '蓄盈待竭',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.35,
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['damage', 'attack_buff', 'defense_buff', 'strategy_buff'],
+    output: [
+      {
+        kind: 'morale_branch',
+        compareTo: 'caster',
+        by: 'target',
+        high: [
+          { kind: 'inflict_status', target: 'self', status: { type: 'attack_buff', amount: 60, duration: 2 } },
+          { kind: 'inflict_status', target: 'self', status: { type: 'defense_buff', amount: 60, duration: 2 } },
+          { kind: 'inflict_status', target: 'self', status: { type: 'strategy_buff', amount: 60, duration: 2 } },
+        ],
+        low: [{ kind: 'physical_damage', rate: 200 }],
+      },
+    ],
+  },
+  /**
+   * 胜负先征（A 被动·距离 1·目标自己）：
+   * 每回合自身行动时按**自身士气**分支（用户确认档位：>100 高昂 / =100 一般 / <100 低落）：
+   *  - 高昂 → 自身造成的主动、追击战法伤害 +40%，持续 1 回合；
+   *  - 一般/低落 → 自身受到伤害时恢复一定兵力（恢复率 75%，受谋略，成长率未确认 → 0 = 不缩放），持续 1 回合。
+   * 官方 id 200981（1 级 20% / 37.5%）。
+   * 引擎配套：**无需新机制**——被动 `timing:'round_start'`（每回合行动阶段、主动/普攻之前）
+   *   + `morale_branch`（compareTo 缺省 'threshold'、by:'caster'、threshold 100）
+   *   + `grant_first_aid`（受击触发恢复：触发率 100%、duration 1）。
+   * 时序：本段在自身行动**前**施加 → 「持续 1 回合」= duration 1 恰好覆盖本回合（回合末 tick 掉），
+   *   与「行动中施加给他人」的 duration 2 口径（辕门射戟）不同。
+   */
+  shengfu_xianzheng: {
+    id: 'shengfu_xianzheng',
+    name: '胜负先征',
+    type: 'passive',
+    timing: 'round_start',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['damage_boost', 'first_aid', 'heal'],
+    output: [
+      {
+        kind: 'morale_branch',
+        by: 'caster',
+        threshold: 100,
+        high: [
+          {
+            kind: 'inflict_status',
+            status: {
+              type: 'damage_boost',
+              rate: 0.4,
+              duration: 1,
+              direction: 'caused',
+              skillTypes: ['active', 'pursuit'],
+            },
+          },
+        ],
+        low: [
+          { kind: 'grant_first_aid', target: 'self', rate: 100, healRate: 75, healGrowthRate: 0, duration: 1 },
+        ],
+      },
+    ],
+  },
+  /**
+   * 及锋而试（S 主动·距离 5·35%·敌军群体 2 目标）：
+   * 对敌军群体发动一次攻击（伤害率 120%）并使其士气降低 10（整场常驻、同战法累加）；
+   * **每次发动后伤害率增加 40.0%**，不封顶、整场累计。
+   * 官方 id 200979（1 级 60% / −5）。
+   * 引擎配套：**新增 `BaseSkill.damageRatePerCast`**（本次成功发动后计数 +1，结算时
+   *   实际率 = 输出段 rate + 40 × 此前发动次数；计数走既有 `ctx.skillCastCounters`）。
+   * 士气降低复用 `morale_boost` 负值状态（心战为上先例：整场常驻、同战法累加、正负相反共存）。
+   * 用户确认：不封顶（第 N 次发动 = 120 + 40×(N-1)）。
+   */
+  jifeng_ershi: {
+    id: 'jifeng_ershi',
+    name: '及锋而试',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.35,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    damageRatePerCast: 40,
+    tags: ['damage', 'morale_boost'],
+    output: [
+      { kind: 'physical_damage', rate: 120 },
+      { kind: 'inflict_status', status: { type: 'morale_boost', amount: -10, duration: 999 } },
+    ],
+  },
+
   // ─── 批量31：下架武将清单 §1.2「补 1 个机制」逐个实现 ───
 
   /**
