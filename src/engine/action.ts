@@ -2692,6 +2692,8 @@ function sameDamageBoostFilter(existing: Status, incoming: CreateStatus): boolea
   if (incoming.type !== 'damage_boost' && incoming.type !== 'damage_reduce') return true;
   const norm = (types?: SkillType[]) => [...(types ?? [])].sort().join(',');
   const normDots = (types?: DotType[]) => [...(types ?? [])].sort().join(',');
+  // 指定战法维（守静却敌）：不同战法过滤轨各自独立叠层，不判同源
+  const normIds = (ids?: string[]) => [...(ids ?? [])].sort().join(',');
   // charges 仅 damage_boost 有（次数型下一次攻击）；damage_reduce 无此字段，用 in 安全探测
   const hasCharges = (s: Status | CreateStatus): boolean =>
     'charges' in s ? (s as { charges?: number }).charges != null : false;
@@ -2700,6 +2702,8 @@ function sameDamageBoostFilter(existing: Status, incoming: CreateStatus): boolea
     (existing.damageType ?? undefined) === (incoming.damageType ?? undefined) &&
     norm(existing.skillTypes) === norm(incoming.skillTypes) &&
     normDots(existing.dotTypes) === normDots('dotTypes' in incoming ? incoming.dotTypes : undefined) &&
+    normIds('skillIds' in existing ? existing.skillIds : undefined) ===
+      normIds('skillIds' in incoming ? incoming.skillIds : undefined) &&
     hasCharges(existing) === hasCharges(incoming) &&
     // 「仅进行攻击」维（缚父临危）：与全局增伤是两条独立轨，不判同源
     ('attackOnly' in existing ? Boolean(existing.attackOnly) : false) ===
@@ -2961,6 +2965,10 @@ function pushStatus(
     // DoT 类型维过滤（全主诿异：只提升被施加的燃烧 / 恐慌 / 妖术诅咒）
     if (type === 'damage_boost' && 'dotTypes' in create && create.dotTypes != null) {
       (push as { dotTypes?: DotType[] }).dotTypes = create.dotTypes;
+    }
+    // 指定战法维过滤（守静却敌：只提升本战法自己的策略伤害）
+    if (type === 'damage_boost' && 'skillIds' in create && create.skillIds != null) {
+      (push as { skillIds?: string[] }).skillIds = create.skillIds;
     }
     // 条件减伤（人公将军）：仅当携带者自身带该状态时生效
     if (type === 'damage_reduce' && 'requireSelfStatus' in create && create.requireSelfStatus != null) {
@@ -3645,6 +3653,8 @@ export type DamageHitContext = {
   damageSource?: 'basic' | 'skill';
   damageType?: DamageType;
   skillType?: SkillType;
+  /** 本次伤害来源战法 id：供 `skillIds` 过滤维使用（守静却敌只提升自身伤害） */
+  skillId?: string;
   /** DoT 类型（仅 DoT 挂上时结算携带）：供 `dotTypes` 过滤维使用（全主诿异） */
   dotType?: DotType;
   /** 分兵溅射伤害（普攻衍生）：不算「进行攻击」（侵掠如火概率增伤不吃分兵） */
@@ -3655,7 +3665,7 @@ export type DamageHitContext = {
  * 增减伤/减伤是否计入本次伤害。hit 缺省或某维缺省 = 该维不限制。
  */
 export function statusMatchesHit(
-  s: { damageSource?: 'basic' | 'skill'; skillTypes?: SkillType[]; damageType?: 'physical' | 'strategy'; dotTypes?: DotType[]; attackOnly?: boolean },
+  s: { damageSource?: 'basic' | 'skill'; skillTypes?: SkillType[]; damageType?: 'physical' | 'strategy'; dotTypes?: DotType[]; skillIds?: string[]; attackOnly?: boolean },
   hit?: DamageHitContext
 ): boolean {
   if (!hit) return true;
@@ -3665,6 +3675,10 @@ export function statusMatchesHit(
   if (s.damageType && hit.damageType && s.damageType !== hit.damageType) return false;
   if (s.dotTypes && s.dotTypes.length > 0) {
     if (!hit.dotType || !s.dotTypes.includes(hit.dotType)) return false;
+  }
+  // 指定战法维（守静却敌）：hit 未带 skillId（普攻/分兵/反击等）时视为不匹配
+  if (s.skillIds && s.skillIds.length > 0) {
+    if (!hit.skillId || !s.skillIds.includes(hit.skillId)) return false;
   }
   if (s.skillTypes && s.skillTypes.length > 0) {
     if (!hit.skillType || !s.skillTypes.includes(hit.skillType)) return false;
@@ -4597,7 +4611,7 @@ function triggerDealPunish(ctx: CombatContext, source: UnitState): void {
     const caster = castUnit(ctx, m.casterId);
     const skill = resolveSkill(ctx, m.skillId);
     if (!caster || !caster.alive || !skill) continue;
-    const hit: DamageHitContext = { damageSource: 'skill', damageType: 'strategy', skillType: skill.type };
+    const hit: DamageHitContext = { damageSource: 'skill', damageType: 'strategy', skillType: skill.type, skillId: skill.id };
     const { causedMult, takenMult } = damageBoosts(ctx, caster, source, hit);
     const reduce = sumReduce(source, hit) + troopCounterReduceOf(caster, source);
     const { damage, breakdown } = calcDamage(
@@ -5026,7 +5040,11 @@ function executeSkillOutputs(
       }
     }
     // recipient 代打：忽略 targetMode 从敌军重建的池，用锁定/战法目标（友军）再滤兵种
-    if (out.kind === 'physical_damage' && out.attacker === 'recipient') {
+    // （physical_damage：怀德畏威 / 四世三公；strategy_damage：守静却敌「使我军全体各造成一次策略伤害」）
+    if (
+      (out.kind === 'physical_damage' || out.kind === 'strategy_damage') &&
+      out.attacker === 'recipient'
+    ) {
       pool = targets;
     }
     // 施法者站位条件（疮痍累身：仅「位于前锋及中军时」才援护友军全体）：
@@ -5144,7 +5162,7 @@ function executeSkillOutputs(
               if (!out.ignoresEvasion && consumeEvasion(ctx, t, rider.general.id)) continue;
               const atk = effectiveStat(rider, 'attack');
               const def = useStrategy ? t.general.defense : physicalTargetDefense(rider, t);
-              const hit: DamageHitContext = { damageSource: 'skill', damageType, skillType: skill.type };
+              const hit: DamageHitContext = { damageSource: 'skill', damageType, skillType: skill.type, skillId: skill.id };
               const { causedMult, takenMult } = damageBoosts(ctx, rider, t, hit);
               const counterReduce = out.ignoresTroopCounter ? 0 : troopCounterReduceOf(rider, t);
               const reduce = sumReduce(t, hit) + counterReduce;
@@ -5229,7 +5247,7 @@ function executeSkillOutputs(
             if (!out.ignoresEvasion && consumeEvasion(ctx, t, source.general.id)) continue;
             const atk = effectiveStat(source, 'attack');
             const def = physicalTargetDefense(source, t, out.ignoresDefense === true);
-            const hit: DamageHitContext = { damageSource: 'skill', damageType: 'physical', skillType: skill.type };
+            const hit: DamageHitContext = { damageSource: 'skill', damageType: 'physical', skillType: skill.type, skillId: skill.id };
             const { causedMult, takenMult } = damageBoosts(ctx, source, t, hit);
             const counterReduce = out.ignoresTroopCounter ? 0 : troopCounterReduceOf(source, t);
             const reduce = sumReduce(t, hit) + counterReduce;
@@ -5335,70 +5353,93 @@ function executeSkillOutputs(
           rememberDamageTargets([]);
           break;
         }
-        const stratSrc = stratRider ?? statU;
-        const stratActor = stratRider ?? caster;
-        for (const t of pool) {
-          if (!t.alive) continue;
-          if (out.requireStatuses?.length && !out.requireStatuses.some((st) => hasStatus(t, st))) continue;
-          selectedIds.push(t.general.id);
-          // 常驻伤害前叠层（持节镇西）：施法者叠谋略、受击者叠防御
-          triggerStackBuff(ctx, stratSrc, t, 'strategy');
-          // 规避：默认免疫一次伤害；ignoresEvasion 时无视
-          if (!out.ignoresEvasion && consumeEvasion(ctx, t, stratSrc.general.id)) continue;
-          // 叠层后再读生效谋略（与攻击伤害先叠攻击再读 effectiveStat 对齐；
-          // 群体逐目标叠层，每段伤害吃到截至本目标的全部层）
-          const effStrategy = effectiveStat(stratSrc, 'strategy');
-          // 每次发动后伤害率递增（及锋而试）：先加算再走受谋略缩放
-          let rate = out.rate + damageRatePerCastBonus(ctx, caster, skill);
-          if (out.strategyScaled && out.growthRate !== undefined) {
-            rate = roundRate(scaledValue(rate, out.growthRate, effStrategy));
-          }
-          const hit: DamageHitContext = {
-            damageSource: 'skill',
-            damageType: 'strategy',
-            skillType: skill.type,
-            // 火积「立即受到燃烧伤害」：按燃烧公式结算，并以 dotType 参与「受到燃烧伤害提升」等过滤
-            ...(out.dotFormula ? { dotType: 'burning' as DotType } : {}),
-          };
-          const { causedMult, takenMult } = damageBoosts(ctx, stratSrc, t, hit);
-          const reduce = sumReduce(t, hit) + troopCounterReduceOf(stratSrc, t);
-          const { damage, breakdown } = calcDamage(
-            {
+        // recipient 代打（守静却敌「使我军全体对随机敌军单体造成一次策略伤害」）：池 = 本战法锁定友军，
+        // 每名友军各按**自身**属性/增减伤出手一次、目标逐人独立重选（不耗行动、不受混乱）。
+        const riders: Array<UnitState | undefined> =
+          out.attacker === 'recipient' ? pool.filter((u) => u.alive) : [stratRider];
+        if (out.attacker === 'recipient' && riders.length === 0) {
+          rememberDamageTargets([]);
+          break;
+        }
+        for (const rider of riders) {
+          const stratSrc = rider ?? statU;
+          const stratActor = rider ?? caster;
+          // recipient：逐人按自身距离重选敌军单体（覆盖外层池）；其余路径沿用外层池
+          const foePool =
+            rider && out.targetMode
+              ? skillTargets(
+                  ctx,
+                  rider,
+                  enemies,
+                  outRange,
+                  resolveCombatTargetMode(out.targetMode, 'random_single'),
+                  out.groupCount
+                )
+              : pool;
+          for (const t of foePool) {
+            if (!t.alive) continue;
+            if (out.requireStatuses?.length && !out.requireStatuses.some((st) => hasStatus(t, st))) continue;
+            selectedIds.push(t.general.id);
+            // 常驻伤害前叠层（持节镇西）：施法者叠谋略、受击者叠防御
+            triggerStackBuff(ctx, stratSrc, t, 'strategy');
+            // 规避：默认免疫一次伤害；ignoresEvasion 时无视
+            if (!out.ignoresEvasion && consumeEvasion(ctx, t, stratSrc.general.id)) continue;
+            // 叠层后再读生效谋略（与攻击伤害先叠攻击再读 effectiveStat 对齐；
+            // 群体逐目标叠层，每段伤害吃到截至本目标的全部层）
+            const effStrategy = effectiveStat(stratSrc, 'strategy');
+            // 每次发动后伤害率递增（及锋而试）：先加算再走受谋略缩放
+            let rate = out.rate + damageRatePerCastBonus(ctx, caster, skill);
+            if (out.strategyScaled && out.growthRate !== undefined) {
+              rate = roundRate(scaledValue(rate, out.growthRate, effStrategy));
+            }
+            const hit: DamageHitContext = {
+              damageSource: 'skill',
               damageType: 'strategy',
-              rate,
-              attackerAttack: stratSrc.general.attack,
-              attackerStrategy: effStrategy,
-              attackerTroops: stratSrc.troops,
-              targetDefense: t.general.defense,
-              targetStrategy: t.general.strategy,
-              mult: buffMult(causedMult, takenMult, reduce),
-              isDot: out.dotFormula === true,
-            },
-            ctx.rng
-          );
-          const capped = applyTroopCap(damage, t.troops);
-          ctx.events.push({
-            type: 'damage',
-            sourceId: stratActor.general.id,
-            // 代打（西陵克晋）：杀伤统计归属施法者
-            creditToId: stratActor.general.id === caster.general.id ? undefined : caster.general.id,
-            targetId: t.general.id,
-            skillId: skill.id,
-            skillName: skill.name,
-            damageType: 'strategy',
-            damage: capped,
-            breakdown,
-            modifiers: collectDamageModifiers(ctx, stratSrc, t, true, hit),
-          });
-          applyDamage(ctx, t, capped, stratActor, 'strategy', 'skill');
-          // 其徐如林：本侧施加的策略伤害生效后，对目标同侧相邻敌军额外造成一次策略伤害（原伤害率 × 比例）
-          if (capped > 0) triggerStrategyAdjacentBonus(ctx, caster, t, rate);
+              skillType: skill.type,
+              skillId: skill.id,
+              // 火积「立即受到燃烧伤害」：按燃烧公式结算，并以 dotType 参与「受到燃烧伤害提升」等过滤
+              ...(out.dotFormula ? { dotType: 'burning' as DotType } : {}),
+            };
+            const { causedMult, takenMult } = damageBoosts(ctx, stratSrc, t, hit);
+            const reduce = sumReduce(t, hit) + troopCounterReduceOf(stratSrc, t);
+            const { damage, breakdown } = calcDamage(
+              {
+                damageType: 'strategy',
+                rate,
+                attackerAttack: stratSrc.general.attack,
+                attackerStrategy: effStrategy,
+                attackerTroops: stratSrc.troops,
+                targetDefense: t.general.defense,
+                targetStrategy: t.general.strategy,
+                mult: buffMult(causedMult, takenMult, reduce),
+                isDot: out.dotFormula === true,
+              },
+              ctx.rng
+            );
+            const capped = applyTroopCap(damage, t.troops);
+            ctx.events.push({
+              type: 'damage',
+              sourceId: stratActor.general.id,
+              // 代打（西陵克晋 / 守静却敌）：杀伤统计归属施法者
+              creditToId: stratActor.general.id === caster.general.id ? undefined : caster.general.id,
+              targetId: t.general.id,
+              skillId: skill.id,
+              skillName: skill.name,
+              damageType: 'strategy',
+              damage: capped,
+              breakdown,
+              modifiers: collectDamageModifiers(ctx, stratSrc, t, true, hit),
+            });
+            applyDamage(ctx, t, capped, stratActor, 'strategy', 'skill');
+            // 其徐如林：本侧施加的策略伤害生效后，对目标同侧相邻敌军额外造成一次策略伤害（原伤害率 × 比例）
+            if (capped > 0) triggerStrategyAdjacentBonus(ctx, caster, t, rate);
+          }
+          if (foePool.some((t) => t.alive)) consumeAttackCharges(ctx, stratActor, { damageSource: 'skill', damageType: 'strategy', skillType: skill.type });
         }
         rememberDamageTargets(selectedIds);
-        if (pool.some((t) => t.alive)) consumeAttackCharges(ctx, stratActor, { damageSource: 'skill', damageType: 'strategy', skillType: skill.type });
         // 西陵克晋：代打者结算后按自身当前兵力恢复（每次发动一段恢复一次，不随目标数叠加）
         if (selectedIds.length > 0 && out.healSource) {
-          healDamageSource(ctx, skill, caster, stratActor, out.healSource.rate);
+          healDamageSource(ctx, skill, caster, riders[0] ?? caster, out.healSource.rate);
         }
         executeDamageChain(ctx, caster, skill, targets, out);
         break;
@@ -5808,7 +5849,7 @@ function executeSkillOutputs(
           triggerStackBuff(ctx, source, t, 'physical');
           const atk = effectiveStat(source, 'attack');
           const def = physicalTargetDefense(source, t);
-          const hit: DamageHitContext = { damageSource: 'skill', damageType: 'physical', skillType: skill.type };
+          const hit: DamageHitContext = { damageSource: 'skill', damageType: 'physical', skillType: skill.type, skillId: skill.id };
           const { causedMult, takenMult } = damageBoosts(ctx, source, t, hit);
           const counterReduce = out.ignoresTroopCounter ? 0 : troopCounterReduceOf(source, t);
           const reduce = sumReduce(t, hit) + counterReduce;
@@ -6628,12 +6669,14 @@ function rollOnHeal(
   return { success: ctx.rng.chance(rate), rate, baseRate: base };
 }
 
-/** 受恢复触发效果落点：self=只对施法者结算；allies=友军全体（含自己） */
+/** 受恢复触发效果落点：self=只对施法者结算；allies=友军全体（含自己）；
+ *  victim=只对**本次被恢复的武将**结算（守静却敌：层数只叠在被恢复者身上）。 */
 function applyOnHealEffect(
   ctx: CombatContext,
   caster: UnitState,
   skill: Skill,
-  cfg: OnHealConfig
+  cfg: OnHealConfig,
+  victim: UnitState
 ): void {
   ctx.events.push({
     type: 'skill_cast',
@@ -6643,6 +6686,10 @@ function applyOnHealEffect(
   });
   if (cfg.applyTo === 'self') {
     executeSkillOutputs(ctx, caster, skill, [caster], cfg.output);
+    return;
+  }
+  if (cfg.applyTo === 'victim') {
+    executeSkillOutputs(ctx, caster, skill, [victim], cfg.output);
     return;
   }
   const team = caster.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
@@ -6682,7 +6729,7 @@ function triggerOnHeal(ctx: CombatContext, target: UnitState): void {
           });
         }
         if (!rolled.success) continue;
-        applyOnHealEffect(ctx, caster, skill, cfg);
+        applyOnHealEffect(ctx, caster, skill, cfg, target);
       }
     }
   } finally {

@@ -8157,4 +8157,82 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -6, percent: true, duration: 999, stack: true } },
     ],
   },
+
+  /**
+   * 守静却敌（XP蒋琬·蜀步 h800 主战法）：指挥 A（一类指挥 prep），距离 5，目标我军全体，发动率 --。
+   * 满级「使我军全体受到的恢复效果提升 10.0%（受谋略属性影响）；在第六回合、第八回合开始时，使我军全体
+   *   对随机敌军单体造成一次策略伤害（伤害率 100.0%，受谋略属性影响），每当我军武将受到一次恢复效果，
+   *   使受到恢复的武将造成【守静却敌】的策略伤害时，伤害提升 10.0%（受谋略属性影响），至多叠加 15 次」；
+   * 1 级：恢复提升 5.0% / 策略伤害 50.0% / 每层提升 5.0%（层数上限同为 15 次）。
+   * 官方：scripts/skill_extra.json id 200277（指挥 / 距离 5 / 我军全体；effect 标签 受到恢复效果提高;
+   *   策略攻击伤害提高;策略攻击伤害）。来源 https://stzb.163.com/m/skilllist/200277.html
+   *
+   * 口径（策略 A，2026-09-20；推定处已标注）：
+   *   ① 一类指挥：「使我军全体受到的恢复效果提升 10%」= 准备阶段一次性挂 `heal_boost`（duration 999 整场）；
+   *   ② 「第六回合、第八回合开始时」→ `delayedOutputs[{atRound:6},{atRound:8}]`（匠心不竭先例）；
+   *   ③ 「使我军全体对随机敌军单体造成一次策略伤害」= **每名我军武将各自出手一次**（推定：与末句
+   *      「使受到恢复的武将造成【守静却敌】的策略伤害时」对齐——每名武将各自持有层数、各自结算），
+   *      走新引擎件 `strategy_damage.attacker:'recipient'`（每名友军按自身属性/增减伤、目标逐人独立重选）；
+   *   ④ 「每当我军武将受到一次恢复效果」= **任意恢复来源**（主动奶 / 休整 / 持续急救 / 代打恢复，推定），
+   *      由既有 `onHeal` 钩子在 `recoverTroops` 收口判定，新引擎件 `applyTo:'victim'` 使状态只落在
+   *      **被恢复的那名武将**身上；层数 = 同源 `damage_boost` 叠加（stacks/maxStacks 15）；
+   *   ⑤ 「造成【守静却敌】的策略伤害时」= 只提升本战法自己的伤害 → 新引擎件 `damage_boost.skillIds`；
+   *   ⑥ 三处「受谋略属性影响」的成长系数官方未给 → 一律**基值不缩放**（strategyScaled 在、growthRate 不写）
+   *      → 登记 `OFFLINE_MAIN_SKILLS`（蒋琬下架，待反解成长率）；
+   *   ⑦ 一类指挥效果施法者阵亡后仍生效 → `retainAfterDeath: true`（延迟伤害与受恢复叠层都保留，推定）。
+   */
+  shoujing_quedi: {
+    id: 'shoujing_quedi',
+    name: '守静却敌',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    // 一类指挥：施法者阵亡后恢复提升与延迟伤害仍生效（延迟清算 / 受恢复叠层都由该标记放行）
+    retainAfterDeath: true,
+    tags: ['heal', 'damage_boost', 'damage'],
+    // ① 我军全体「受到恢复效果提升 10%」（受谋略，成长率未确认 → 基值），整场常驻
+    initialOutput: [
+      { kind: 'inflict_status', status: { type: 'heal_boost', rate: 0.1, duration: 999, strategyScaled: true } },
+    ],
+    // ② 每当我军武将受到一次恢复效果 → 对被恢复者叠 1 层「造成本战法策略伤害 +10%」（受谋略，上限 15 层）
+    onHeal: {
+      victim: 'ally',
+      applyTo: 'victim',
+      output: [
+        {
+          kind: 'inflict_status',
+          status: {
+            type: 'damage_boost',
+            rate: 0.1,
+            duration: 999,
+            direction: 'caused',
+            damageType: 'strategy',
+            skillIds: ['shoujing_quedi'],
+            stacks: 1,
+            maxStacks: 15,
+            strategyScaled: true,
+          },
+        },
+      ],
+    },
+    // ③ 第六回合、第八回合开始时：我军全体各自对随机敌军单体造成一次策略伤害（100%，受谋略）
+    delayedOutputs: [
+      {
+        atRound: 6,
+        output: [
+          { kind: 'strategy_damage', rate: 100, strategyScaled: true, attacker: 'recipient', targetMode: 'random_single' },
+        ],
+      },
+      {
+        atRound: 8,
+        output: [
+          { kind: 'strategy_damage', rate: 100, strategyScaled: true, attacker: 'recipient', targetMode: 'random_single' },
+        ],
+      },
+    ],
+    output: [],
+  },
 };
