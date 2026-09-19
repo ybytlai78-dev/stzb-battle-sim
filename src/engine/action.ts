@@ -3702,7 +3702,8 @@ function executeOnActSegments(ctx: CombatContext, unit: UnitState, skill: Comman
 
 /**
  * 攻心 + 士气降低（心战为上）：我军每次**对敌军造成伤害**后（实际扣兵 > 0）——
- * ① 使伤害目标士气 −`moraleReduce`（`morale_boost` 负值状态、整场常驻、同战法累加），
+ * ① 使伤害目标士气 −`moraleReduce`（`morale_boost` 负值状态、整场常驻、同战法累加；
+ *    显式 `stack: true` 叠层标记——用户 2026-09-19 确认可叠加，全仓唯一例外特例），
  *    全队累计最多 `maxTriggers` 次（`ctx.healOnDamageTriggers`）；
  * ② 本次为**攻击伤害**（physical）时，造成伤害者按 `healRate`%（受施法者谋略缩放）恢复兵力，
  *    恢复量 = 本次实际扣兵 × 恢复率；heal 事件归属战法施法者（战报统计口径）。
@@ -3722,7 +3723,8 @@ function triggerHealOnDamageCommands(
       const skill = resolveSkill(ctx, id);
       const cfg = skill?.type === 'command' ? skill.healOnDamage : undefined;
       if (!cfg) continue;
-      // ① 士气降低：全队累计上限内逐次施加（同战法同源累加）
+      // ① 士气降低：全队累计上限内逐次施加（施加模板带 stack: true → 显式叠层、同源累加）
+      //    官方未写「可叠加」；用户 2026-09-19 确认可叠加（9 次 → −45），故显式标注而非特判保留
       if (cfg.moraleReduce && cfg.moraleReduce > 0) {
         ctx.healOnDamageTriggers ??= new Map<string, number>();
         const key = `${holder.general.id}:${skill!.id}`;

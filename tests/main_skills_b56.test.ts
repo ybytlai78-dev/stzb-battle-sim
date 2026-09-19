@@ -149,6 +149,39 @@ describe('心战为上（马谡 h799）', () => {
     for (let i = 0; i < 10; i++) applyDamage(ctx, foe, 100, ally, 'strategy', 'skill');
     expect(ctx.healOnDamageTriggers?.get(`h799:${SKILL_ID}`)).toBe(9);
     expect(effectiveMorale(foe)).toBe(100 - 5 * 9); // 55
+
+    // 超出上限：再打一次，计数与士气都不再变化（净士气锁在 55）
+    applyDamage(ctx, foe, 100, ally, 'strategy', 'skill');
+    expect(ctx.healOnDamageTriggers?.get(`h799:${SKILL_ID}`)).toBe(9);
+    expect(effectiveMorale(foe)).toBe(55);
+  });
+
+  /**
+   * 用户 2026-09-19 确认：心战为上·士气降低**显式可叠加**——同一战法重复施加 9 次 → 目标净士气 100 − 45 = 55；
+   * 超过 9 次不再降低。对照组：同样数值的同类状态若**不带**显式叠层标记（其他战法）→ 刷新不叠加（恒 −5）。
+   * （真实战法的刷新口径另有锁定：`repeat_inflict.test.ts` 列营守险四维 35→35 不翻倍 / 谋议宏图可叠加 8→16→24。）
+   */
+  it('显式可叠加（用户确认）：同一战法施加 9 次 → 目标净士气 55；对照同值未标 stack 的状态刷新不叠加', () => {
+    // ① 真实路径：心战为上 同一战法重复施加 9 次 → 施加模板带 stack: true → 累加 −45
+    const { ally, foes, ctx } = setup();
+    const foe = foes[0];
+    for (let i = 0; i < 9; i++) applyDamage(ctx, foe, 100, ally, 'strategy', 'skill');
+    expect(ctx.healOnDamageTriggers?.get(`h799:${SKILL_ID}`)).toBe(9);
+    expect(effectiveMorale(foe)).toBe(55); // 100 − 5×9 = 100 − 45
+    // 第 10 次不再降低（全队累计上限 9 次，净士气锁在 55）
+    applyDamage(ctx, foe, 100, ally, 'strategy', 'skill');
+    expect(effectiveMorale(foe)).toBe(55);
+
+    // ② 对照组：同数值 + 显式 stack: true → −45；**去掉 stack** → 刷新不叠加、恒 −5
+    //    （证明 −45 来自「显式叠层标记」本身，而不是 morale_boost 的特判）
+    const base = { type: 'morale_boost', amount: -5, duration: 999 } as const;
+    const victim = makeUnit(dummy('victim', '前锋'));
+    for (let i = 0; i < 9; i++) inflictStatus(ctx, victim, { ...base, stack: true }, 'command', SKILL_ID);
+    expect(effectiveMorale(victim)).toBe(55); // 显式可叠加
+    const control = makeUnit(dummy('control', '前锋'));
+    for (let i = 0; i < 9; i++) inflictStatus(ctx, control, { ...base }, 'command', 'other_skill');
+    expect(control.statuses.filter((s) => s.type === 'morale_boost')).toHaveLength(1); // 单实例
+    expect(effectiveMorale(control)).toBe(95); // 刷新：恒 −5，绝不 −45
   });
 
   it('攻心：攻击伤害后按 50%（受谋略）恢复**造成伤害者**的兵力（策略伤害不恢复）', () => {

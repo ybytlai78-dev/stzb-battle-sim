@@ -764,7 +764,9 @@ export interface CommandSkill extends BaseSkill {
   /**
    * 攻心 + 士气降低（心战为上）：我军每次**对敌军造成伤害**后 ——
    * ① `moraleReduce` > 0 时使伤害目标士气 −该值（走 `morale_boost` 负值状态，整场常驻；
-   *    同一战法重复触发累加），全队累计最多 `maxTriggers` 次；
+   *    重复触发**显式累加**——施加模板带 `CreateStatus.stack: true`，用户 2026-09-19 确认可叠加
+   *    （官方原文未写「可叠加」，是全仓唯一按用户确认显式标注的特例；9 次 → −45），
+   *    全队累计最多 `maxTriggers` 次；
    * ② 本次为**攻击伤害**（`damageType:'physical'`）时，造成伤害者按 `healRate`%（受施法者谋略缩放，
    *    `growthRate` 缺省 = 按基值）恢复兵力，恢复量 = 本次实际扣兵 × 恢复率。
    * 计数走 `ctx.healOnDamageTriggers`（键 `${casterId}:${skillId}`，整场累计不重置）。

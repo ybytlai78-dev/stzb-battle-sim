@@ -5622,6 +5622,9 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    * 引擎配套（新机制「攻心 + 士气降低」）：
    *   ① `CommandSkill.healOnDamage` + `ctx.healOnDamageTriggers`：`applyDamage` 内我军对敌军造成实际伤害后，
    *      使伤害目标士气 −5（走 `morale_boost` **负值**状态，整场常驻、同战法累加），全队累计最多 9 次；
+   *      **累加口径：用户 2026-09-19 确认可叠加（9 次 → −45）**——本条是「同源重复施加默认刷新」的
+   *      显式特例：施加模板带 `CreateStatus.stack: true`（`63b401d` 引入的显式叠层标记），
+   *      不是特判保留；官方原文未写「可叠加/层数」，故此处按用户确认显式标注（全仓唯一此类特例）；
    *   ② 同一次伤害若为**攻击伤害**（physical），造成伤害者按 50%（受施法者谋略缩放）恢复本次伤害值对应的兵力
    *      （heal 事件归属施法者，计入战报恢复统计）；
    *   ③ 士气正负共存：`morale_boost` 纳入「正负相反不冲突、各自共存」口径（士气提高 vs 士气降低由
@@ -5638,7 +5641,10 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     targetSide: 'ally',
     tags: ['heal'],
     output: [],
-    // 攻心（攻击伤害后按 50% 恢复，受谋略）+ 士气降低（每次伤害使目标 −5，全队累计 9 次）
+    // 攻心（攻击伤害后按 50% 恢复，受谋略）+ 士气降低（每次伤害使目标 −5，全队累计 9 次）。
+    // 士气降低为**显式可叠加**（用户 2026-09-19 确认，9 次 → −45）：施加模板带 `stack: true`
+    // （见 action.ts `triggerHealOnDamageCommands`），故同源重复施加走「显式叠层 → 数值累加」分支；
+    // 官方未写「可叠加」，此为唯一例外特例，其余未标 stack 的战法仍为刷新不叠加。
     healOnDamage: { moraleReduce: 5, maxTriggers: 9, healRate: 50 },
   },
   /**
