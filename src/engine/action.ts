@@ -35,6 +35,9 @@ function troopCounterReduceOf(source: UnitState, target: UnitState): number {
   return troopCounterReduce(source.general.troopType, target.general.troopType);
 }
 
+/** 四种控制状态（混乱/犹豫/暴走/怯战）：洞察免疫、控制冲突、鸾凤和鸣「控制 +1 目标」共用同一口径 */
+const CONTROL_STATUS_TYPES: StatusType[] = ['confusion', 'rampage', 'cowardice', 'hesitation'];
+
 /** skillTargets 能吃的四种选敌；`self` 等回退 fallback，避免 random_single 被降成 all/group */
 type CombatTargetMode = 'single' | 'random_single' | 'group' | 'all';
 function resolveCombatTargetMode(mode: string | undefined, fallback: CombatTargetMode): CombatTargetMode {
@@ -193,6 +196,24 @@ export interface CombatContext {
    */
   beforeActiveOnceKeys?: Set<string>;
   /**
+   * 友军再次发动监听（赐剑长驱）：key `${round}:${skillId}:${casterId}:${actorId}` → 已判定，
+   * 保证「友军每回合首次成功释放主动战法后」对每个发动者只判定一次。
+   * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
+   */
+  allyRecastOnceKeys?: Set<string>;
+  /**
+   * 玉玺伤害转移账本（僭号天子）：每侧至多一份（准备阶段注册）。`carried` = 本回合玉玺承担量累积，
+   * 回合开始时结算给持有者并清零。可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
+   */
+  sealLedgers?: Array<{ skillId: string; casterId: string; carried: number }>;
+  /** 正在结算玉玺结转（防止玉玺 → 持有者的伤害又被玉玺自己转移，形成自循环） */
+  sealResolving?: boolean;
+  /**
+   * 【扬砂】层数计数器（伏波扬砂）：key `${casterId}:${skillId}` → { acc（未满阈值的累计百分点）, stacks（层数） }。
+   * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
+   */
+  stacksConsumeCounters?: Map<string, { acc: number; stacks: number }>;
+  /**
    * 受击触发整场次数上限（持玺兴兵）：key `${casterId}:${skillId}` → 已触发次数（整场累计，不随回合重置）。
    * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
    */
@@ -345,6 +366,14 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
       ctx.stackBuffs.push({ skillId: skill.id, casterId: unit.general.id, config: skill.stackBuff });
     }
 
+    // 玉玺账本（僭号天子）：准备阶段注册；之后我军受击按比例转入，回合开始时结转给持有者
+    if (skill.sealTransfer) {
+      ctx.sealLedgers ??= [];
+      if (!ctx.sealLedgers.some((l) => l.skillId === skill.id && l.casterId === unit.general.id)) {
+        ctx.sealLedgers.push({ skillId: skill.id, casterId: unit.general.id, carried: 0 });
+      }
+    }
+
     // 准备阶段一次性效果（其疾如风前3回合速度+41）：无条件施加，不参与 roundRepeat 每回合判定
     if (skill.initialOutput) {
       executeSkillOutputs(ctx, unit, skill, targets, skill.initialOutput);
@@ -354,6 +383,7 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
     // onHurt 战法准备阶段只登记，output 留到受击时结算（盲侯反击 / 缓师 debuff）
     // onAttrChange 战法准备阶段只登记，output 留到属性升降前结算（举贤决机）
     // settleOnFirstRound（虎豹督军/谋议宏图）：准备阶段只释放+锁目标，output 留到第 1 回合开始时结算
+    // sealTransfer（僭号天子）：准备阶段只登记玉玺，output 留到受击承担时结算
     if (
       !skill.roundRepeat &&
       !skill.delayedOutput &&
@@ -361,6 +391,7 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
       !skill.onHurt &&
       !skill.onAttrChange &&
       !skill.strategyAdjacentBonus &&
+      !skill.sealTransfer &&
       !skill.settleOnFirstRound
     ) {
       executeSkillOutputs(ctx, unit, skill, targets);
@@ -1600,6 +1631,8 @@ function tickStatusesOnActStart(ctx: CombatContext, unit: UnitState): void {
     if (s.type === 'pending_stacks') continue;
     // 下一次伤害无视规避（缚父临危）：消耗制，不按回合递减
     if (s.type === 'ignore_evasion') continue;
+    // 控制效果 +1 目标（鸾凤和鸣）：消耗制，不按回合递减
+    if (s.type === 'control_spread') continue;
     // 次数型下一次攻击：不按回合递减，打出后由 consumeAttackCharges 移除
     if (s.type === 'damage_boost' && 'charges' in s && s.charges != null) continue;
     // 次数型分兵：不按回合递减，打出后由 consumeSplitCharges 移除
@@ -1771,9 +1804,8 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
   // 7+8. 普通攻击阶段（连击：至多两次普攻，非乘算；怯战无法普攻）。
   // 追击战法在每次普攻命中后立即判定（连击：普攻→追击→普攻→追击），而非全部普攻结束后统一判定。
   // 时序依赖追击的战法（烈火焚舟：第二刀引爆第一刀挂上的燃烧）依赖该穿插顺序。
-  const comboCount = hasStatus(unit, 'combo') ? 2 : 1;
   const hits: UnitState[] = [];
-  for (let i = 0; i < comboCount; i++) {
+  const doOneAttack = (): UnitState | null => {
     ctx.events.push({
       type: 'unit_act_start',
       unitId: unit.general.id,
@@ -1797,8 +1829,16 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
         });
         triggerPursuitSkill(ctx, unit, pursuit, hit, enemies);
       }
-      if (!hit.alive) continue; // 目标已死，继续按连击打下一个
     }
+    return hit;
+  };
+  const comboCount = hasStatus(unit, 'combo') ? 2 : 1;
+  for (let i = 0; i < comboCount; i++) doOneAttack();
+  // 伏波扬砂（马腾）：普攻后每消耗 4 层【扬砂】追加一次普攻，可重复触发直到不足 4 层
+  // （额外普攻同样是普攻 → 继续累计层数；上限 20 次防失控）
+  for (let extra = 0; extra < YANGSHA_MAX_EXTRA_ATTACKS; extra++) {
+    if (!consumeStacksForExtraAttack(ctx, unit, canNormalAttack)) break;
+    doOneAttack();
   }
 
   // 9. 分兵攻击阶段（普攻后无视攻击距离对相邻目标造成比例伤害）
@@ -1861,8 +1901,7 @@ export function inflictStatus(
   }
 
   // 洞察：免疫控制类效果（混乱/怯战/暴走/犹豫）
-  const CONTROL_TYPES: StatusType[] = ['confusion', 'rampage', 'cowardice', 'hesitation'];
-  if (CONTROL_TYPES.includes(type) && hasStatus(target, 'insight')) {
+  if (CONTROL_STATUS_TYPES.includes(type) && hasStatus(target, 'insight')) {
     ctx.events.push({
       type: 'insight_blocked',
       unitId: target.general.id,
@@ -1945,6 +1984,12 @@ export function inflictStatus(
 
   // 受击追加攻击标记（忠克猛烈）：独立共存，不参与冲突判定
   if (type === 'retaliate') {
+    pushStatus(ctx, target, create, sourceSkillType, sourceSkillId, casterId);
+    return;
+  }
+
+  // 控制效果额外 +1 目标（鸾凤和鸣）：正面标记，独立共存、不参与冲突判定（同战法重复施加只刷新，不叠加）
+  if (type === 'control_spread') {
     pushStatus(ctx, target, create, sourceSkillType, sourceSkillId, casterId);
     return;
   }
@@ -2316,6 +2361,20 @@ function pushStatus(
       unitId: target.general.id,
       statusType: type,
       detail: '下一次造成的伤害无视规避',
+    });
+    return;
+  }
+  if (type === 'control_spread') {
+    // 控制效果 +1 目标（鸾凤和鸣）：消耗制；同战法重复施加只刷新，不叠加（不同战法各自独立共存）
+    const dup = target.statuses.some((s) => s.type === 'control_spread' && s.sourceSkillId === sourceSkillId);
+    if (!dup) {
+      target.statuses.push({ type: 'control_spread', remaining, appliedRound, sourceSkillType, sourceSkillId, sourceUnitId: casterId });
+    }
+    ctx.events.push({
+      type: 'status_inflicted',
+      unitId: target.general.id,
+      statusType: type,
+      detail: '下一次造成的控制效果额外对 1 个目标生效',
     });
     return;
   }
@@ -2711,6 +2770,8 @@ export function tickStatuses(ctx: CombatContext, units: UnitState[]): void {
       if (s.appliedRound !== 0) continue; // 行动中施加：下次行动开始前递减
       if (s.type === 'pending_stacks') continue; // 叠层待发：不按回合递减（奉令护蜀）
       if (s.type === 'ignore_evasion') continue; // 无视规避：消耗制，不按回合递减（缚父临危）
+      // 控制 +1 目标（鸾凤和鸣）：消耗制，不按回合递减
+      if (s.type === 'control_spread') continue;
       if (s.type === 'rest') continue; // 休整 remaining 只在跳恢复时递减
       // 次数型分兵（准备阶段施加）：不按回合递减
       if (s.type === 'split' && 'charges' in s && s.charges != null) continue;
@@ -2740,6 +2801,36 @@ export function tickStatuses(ctx: CombatContext, units: UnitState[]): void {
 export function tickRoundStartStatuses(ctx: CombatContext): void {
   const decayEighthsNow = ctx.currentRound !== 1; // 第 1 回合不衰减（保 8/8）
   const units = [...ctx.myTeam, ...ctx.enemyTeam];
+  // 玉玺结转（僭号天子）：第二回合起，每回合开始时对持有者结算「上一回合承担量 × 本回合承担比例」；
+  // 本回合承担比例 = 50% 起、每回合 +10%，封顶 100%。账本结算后清零。
+  for (const seal of ctx.sealLedgers ?? []) {
+    // 第 1 回合不结算（本回合的承担量留给第 2 回合开始结转）——账本只在结算时清零
+    if (ctx.currentRound < 2) continue;
+    const carried = seal.carried;
+    seal.carried = 0;
+    if (carried <= 0) continue;
+    const caster = castUnit(ctx, seal.casterId);
+    if (!caster?.alive) continue;
+    const ratio = Math.min(1, 0.5 + 0.1 * (ctx.currentRound - 2));
+    const skill = resolveSkill(ctx, seal.skillId);
+    const before = caster.troops;
+    const ev: Extract<BattleEvent, { type: 'seal_settle' }> = {
+      type: 'seal_settle',
+      unitId: caster.general.id,
+      skillId: seal.skillId,
+      skillName: skill?.name ?? seal.skillId,
+      carried,
+      ratio,
+      damage: Math.round(carried * ratio),
+      afterTroops: before,
+    };
+    ctx.events.push(ev);
+    ctx.sealResolving = true; // 玉玺 → 持有者的伤害不再被玉玺自己转移（防自循环）
+    applyDamage(ctx, caster, ev.damage, undefined, 'strategy', 'skill');
+    ctx.sealResolving = false;
+    ev.damage = before - caster.troops;
+    ev.afterTroops = caster.troops;
+  }
   for (const unit of units) {
     if (!unit.alive || !decayEighthsNow) continue;
     for (const s of [...unit.statuses]) {
@@ -3125,6 +3216,7 @@ function statusName(type: StatusType): string {
     case 'retaliate': return '受击追加攻击';
     case 'pending_stacks': return '叠层待发';
     case 'ignore_evasion': return '无视规避';
+    case 'control_spread': return '控制效果 +1 目标';
     case 'range_buff': return '攻击距离';
   }
 }
@@ -3303,6 +3395,143 @@ function executeDamageChain(
   }
 }
 
+/**
+ * 战法链（连环计）：最外层发动时依次把**其他已注册战法**的 output 当作本战法效果执行
+ * （官方「每个战法的效果与原战法在同等级下效果相同」→ 直接用注册表里该战法的 output，事件归属该战法）。
+ * 每步条件在**该步执行时**求值：前一步可能降主目标谋略（伐谋）或给主目标挂暴走（迷阵命中主目标），
+ * 从而影响后一步（迷阵 / 落雷）是否结算——顺序不可预先求值。
+ */
+function runChainSkills(ctx: CombatContext, caster: UnitState, skill: Skill, targets: UnitState[]): void {
+  const chain = 'chainSkills' in skill ? skill.chainSkills : undefined;
+  if (!chain || chain.length === 0) return;
+  const enemies = caster.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
+  const primary = targets[0]; // 本战法主目标 = 连环计目标
+  for (const step of chain) {
+    if (step.requireTargetStrategyBelowSelf) {
+      if (!primary || !primary.alive) continue;
+      if (effectiveStat(primary, 'strategy') >= effectiveStat(caster, 'strategy')) continue;
+    }
+    if (step.requireTargetStatus) {
+      if (!primary || !primary.alive || !hasStatus(primary, step.requireTargetStatus)) continue;
+    }
+    const ref = resolveSkill(ctx, step.skillId);
+    if (!ref) continue;
+    const pool: UnitState[] =
+      step.targetMode === 'random_single'
+        ? skillTargets(ctx, caster, enemies, ref.range ?? skill.range, 'random_single')
+        : primary
+          ? [primary]
+          : [];
+    if (pool.length === 0) continue;
+    ctx.events.push({
+      type: 'skill_target',
+      unitId: caster.general.id,
+      skillId: ref.id,
+      targetIds: pool.map((t) => t.general.id),
+    });
+    ctx.events.push({
+      type: 'skill_cast',
+      unitId: caster.general.id,
+      skillId: ref.id,
+      skillName: ref.name,
+    });
+    executeSkillOutputs(ctx, caster, ref, pool, ref.output, false);
+    if (!caster.alive) break;
+  }
+}
+
+/** 【扬砂】额外普攻单次行动上限（安全阀：层数可在额外普攻中继续累计） */
+const YANGSHA_MAX_EXTRA_ATTACKS = 20;
+
+/**
+ * 【扬砂】层数累计（伏波扬砂）：我军（含携带者）每次普攻命中后，把该次伤害的**增减伤净幅度**
+ * （百分点，`buffMult(...) − 1` ×100，含兵种克制减伤）累入计数器；每满 `threshold` 扣阈值 +1 层，
+ * 层数达到 `maxStacks` 后不再累计（官方「最多叠加 20 层」）。
+ * 计数走 `ctx.stacksConsumeCounters`（整场累计不重置；施法者阵亡后不再累计）。
+ */
+function accumulateStacksConsume(ctx: CombatContext, attacker: UnitState, points: number): void {
+  if (!Number.isFinite(points) || points === 0) return;
+  const team = attacker.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+  for (const holder of team) {
+    if (!holder.alive) continue;
+    for (const id of holder.general.commandSkillIds) {
+      const skill = resolveSkill(ctx, id);
+      const cfg = skill?.type === 'command' ? skill.stacksConsume : undefined;
+      if (!cfg) continue;
+      ctx.stacksConsumeCounters ??= new Map<string, { acc: number; stacks: number }>();
+      const key = `${holder.general.id}:${skill!.id}`;
+      const state = ctx.stacksConsumeCounters.get(key) ?? { acc: 0, stacks: 0 };
+      if (state.stacks < cfg.maxStacks) {
+        state.acc += points;
+        while (state.acc >= cfg.threshold && state.stacks < cfg.maxStacks) {
+          state.acc -= cfg.threshold;
+          state.stacks += 1;
+        }
+      }
+      ctx.stacksConsumeCounters.set(key, state);
+    }
+  }
+}
+
+/**
+ * 【扬砂】消耗换额外普攻（伏波扬砂）：携带者普攻后每 `consumePerAttack` 层换 1 次额外普攻。
+ * 层数足够且可普攻（非怯战）时扣层并返回 true，调用方追加一次普攻（可重复触发至不足 4 层）。
+ */
+function consumeStacksForExtraAttack(ctx: CombatContext, unit: UnitState, canNormalAttack: boolean): boolean {
+  if (!canNormalAttack || !unit.alive) return false;
+  for (const id of unit.general.commandSkillIds) {
+    const skill = resolveSkill(ctx, id);
+    const cfg = skill?.type === 'command' ? skill.stacksConsume : undefined;
+    if (!cfg) continue;
+    const state = ctx.stacksConsumeCounters?.get(`${unit.general.id}:${skill!.id}`);
+    if (!state || state.stacks < cfg.consumePerAttack) continue;
+    state.stacks -= cfg.consumePerAttack;
+    return true;
+  }
+  return false;
+}
+
+/**
+ * 玉玺账本（僭号天子）：取受击者一侧、持有者存活的账本（我方全体受击都走这一份；持有者阵亡则不再转移）。
+ */
+function findSealLedger(
+  ctx: CombatContext,
+  target: UnitState
+): { skillId: string; casterId: string; carried: number } | undefined {
+  return ctx.sealLedgers?.find((l) => {
+    const holder = castUnit(ctx, l.casterId);
+    return holder?.alive === true && holder.side === target.side;
+  });
+}
+
+/**
+ * 「控制效果 +1 目标」的额外目标（鸾凤和鸣）：施法者**距离内**、未在本段目标池内的随机 1 个存活敌军。
+ * 无可用目标时返回 undefined（标记照常消耗——「下一次控制」已用掉）。
+ */
+function pickExtraControlTarget(
+  ctx: CombatContext,
+  caster: UnitState,
+  range: number,
+  hitIds: string[]
+): UnitState | undefined {
+  const enemies = caster.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
+  const candidates = enemies.filter(
+    (e) => e.alive && !hitIds.includes(e.general.id) && distanceBetween(ctx, caster, e) <= range
+  );
+  if (candidates.length === 0) return undefined;
+  return candidates[ctx.rng.int(candidates.length)];
+}
+
+/** 消耗「控制效果 +1 目标」标记（鸾凤和鸣）：打出控制后移除并记 status_expired */
+function consumeControlSpread(ctx: CombatContext, holder: UnitState, status: Status): void {
+  holder.statuses = holder.statuses.filter((s) => s !== status);
+  ctx.events.push({
+    type: 'status_expired',
+    unitId: holder.general.id,
+    statusType: 'control_spread',
+  });
+}
+
 function executeSkillOutputs(
   ctx: CombatContext,
   caster: UnitState,
@@ -3330,6 +3559,8 @@ function executeSkillOutputs(
     }
   }
   const list = outputs ?? skill.output;
+  // 战法链（连环计）：仅最外层发动执行（nested 调用都带显式 outputs，故不会递归触发）
+  if (!outputs) runChainSkills(ctx, caster, skill, targets);
   /** 属性/兵力/增减伤的读取来源；缺省与施法者同体（旧口径） */
   const statU = statSource ?? caster;
   /** 上两段伤害输出的实际目标，供 onlyIfOverlapPrevious（怀德畏威重合混乱）取交集 */
@@ -3517,6 +3748,17 @@ function executeSkillOutputs(
     if ('troopTypes' in out && out.troopTypes && out.troopTypes.length > 0) {
       pool = pool.filter((u) => out.troopTypes!.includes(u.general.troopType));
     }
+    // 段级按阵营过滤锁定目标（率尔方雅）：不经重选池，直接取**本战法整体目标**中同侧/对侧/自身者，
+    // 使「同一批敌我混合目标」按阵营分派不同段（先混合抽 3 个 → 友军段增伤+代打、敌军段随机控制）
+    if ('lockedSide' in out && out.lockedSide) {
+      const side = out.lockedSide;
+      pool = pool.filter((u) => {
+        if (!u.alive) return false;
+        if (side === 'self') return u.general.id === caster.general.id;
+        const sameSide = u.side === caster.side;
+        return side === 'ally' ? sameSide : !sameSide;
+      });
+    }
     switch (out.kind) {
       case 'detonate_sorcery_marks': {
         // 破凰：引爆敌军全体身上由本战法施加的「受击触发妖术」剩余次数
@@ -3589,7 +3831,7 @@ function executeSkillOutputs(
                       ),
                     ];
                   })()
-                : skillTargets(ctx, rider, enemies, atkRange, resolveCombatTargetMode(out.targetMode, 'random_single'));
+                : skillTargets(ctx, rider, enemies, atkRange, resolveCombatTargetMode(out.targetMode, 'random_single'), out.groupCount);
             let riderAttacked = false;
             for (const raw of foes) {
               if (!raw.alive) continue;
@@ -3923,14 +4165,21 @@ function executeSkillOutputs(
         break;
       }
       case 'inflict_status': {
+        // 控制效果 +1 目标（鸾凤和鸣）：携带者本段实际打出控制（混乱/犹豫/暴走/怯战）后，
+        // 额外对 1 个敌军目标生效，随后消耗该标记（未打出控制则不消耗）
+        const controlSpread = getStatus(caster, 'control_spread');
+        let spreadCreate: CreateStatus | undefined;
+        const hitIds: string[] = [];
         for (const t of pool) {
           if (!t.alive) continue;
+          hitIds.push(t.general.id);
           // 状态数组：缺省每个目标随机 1 个（奇佐鬼谋）；applyAll 则全部施加（黄天余音四维）
           const creates: CreateStatus[] = Array.isArray(out.status)
             ? (out.applyAll ? out.status : [out.status[ctx.rng.int(out.status.length)]])
             : [out.status];
           for (const create of creates) {
           if (!t.alive) break;
+          if (controlSpread && !spreadCreate && CONTROL_STATUS_TYPES.includes(create.type)) spreadCreate = create;
           // DoT/诅咒/引燃 类型：预缩放 rate + 冻结 caster 谋略
           if (create.type === 'sorcery' || create.type === 'burning' || create.type === 'panic' || create.type === 'curse' || create.type === 'ignite') {
             const effStrategy = effectiveStat(caster, 'strategy');
@@ -4048,6 +4297,12 @@ function executeSkillOutputs(
             inflictStatus(ctx, t, create, skill.type, skill.id, caster.general.id);
           }
           }
+        }
+        // 控制效果 +1 目标（鸾凤和鸣）：额外命中 1 个「距离内、未在本段目标池内」的随机敌军，随后消耗
+        if (controlSpread && spreadCreate) {
+          const extra = pickExtraControlTarget(ctx, caster, skill.range, hitIds);
+          if (extra) inflictStatus(ctx, extra, spreadCreate, skill.type, skill.id, caster.general.id);
+          consumeControlSpread(ctx, caster, controlSpread);
         }
         break;
       }
@@ -4211,6 +4466,7 @@ export function triggerActiveSkill(
 
   executeSkillWithTargets(ctx, unit, skill, enemies, allies, attackPool);
   triggerAfterFirstActiveCommands(ctx, unit);
+  triggerAllyRecastCommands(ctx, unit, skill);
   triggerPassiveAfterActive(ctx, unit);
   // 三军夺帅：成功发动主动战法后触发；奉令护蜀：本侧友军行动叠层
   triggerActHooks(ctx, unit);
@@ -4227,6 +4483,7 @@ function executePreparedSkill(
   const allies = unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
   executeSkillWithTargets(ctx, unit, skill, enemies, allies, attackPool);
   triggerAfterFirstActiveCommands(ctx, unit);
+  triggerAllyRecastCommands(ctx, unit, skill);
   triggerPassiveAfterActive(ctx, unit);
   // 三军夺帅：成功发动主动战法后触发；奉令护蜀：本侧友军行动叠层
   triggerActHooks(ctx, unit);
@@ -4246,7 +4503,10 @@ function triggerAfterFirstActiveCommands(ctx: CombatContext, unit: UnitState): v
   for (const id of unit.general.commandSkillIds) {
     const skill = resolveSkill(ctx, id);
     if (skill?.type !== 'command' || skill.phase !== 'round') continue;
-    if (skill.roundTrigger !== 'after_first_active') continue;
+    // 主判定时机为 after_first_active 的走 skill.output；否则仅在声明了附加段（鸾凤和鸣）时执行
+    const mainAfterFirstActive = skill.roundTrigger === 'after_first_active';
+    const extraOutput = skill.afterFirstActiveOutput;
+    if (!mainAfterFirstActive && !(extraOutput && extraOutput.length > 0)) continue;
     const side = skill.targetSide ?? 'ally';
     const pool = side === 'ally' ? allies : enemies;
     const mode = resolveCombatTargetMode(skill.targetMode, 'group');
@@ -4257,7 +4517,125 @@ function triggerAfterFirstActiveCommands(ctx: CombatContext, unit: UnitState): v
       skillId: skill.id,
       skillName: skill.name,
     });
-    executeSkillOutputs(ctx, unit, skill, selected);
+    executeSkillOutputs(ctx, unit, skill, selected, mainAfterFirstActive ? skill.output : extraOutput);
+  }
+}
+
+/**
+ * 再次发动的输出缩放（赐剑长驱「造成原战法 50.0% 的伤害和恢复效果」）：
+ * 只缩放**伤害/恢复类数值**——物理/策略/位置伤害 rate、代打定轨两率（recipientDamageByHigherStat）、
+ * DoT rate（妖术/燃烧/恐慌/诅咒/引燃）、heal.rate、grant_first_aid.healRate；
+ * 属性增减 / 控制 / 增减伤等非伤害恢复段保持原样。chance_group / random_pick / morale_branch 递归处理。
+ * 说明：战法链（连环计 chainSkills）等元机制段不在本口径内（再次发动只缩放战法自身 output）。
+ */
+function scaleDamageHealOutputs(outputs: SkillOutput[], factor: number): SkillOutput[] {
+  const scaleRate = (v: number): number => (v === 0 ? 0 : roundRate(v * factor));
+  const scaleRateOrRange = (v: number | [number, number]): number | [number, number] =>
+    Array.isArray(v) ? [scaleRate(v[0]), scaleRate(v[1])] : scaleRate(v);
+  return outputs.map((raw) => {
+    const out = structuredClone(raw) as unknown as Record<string, unknown>;
+    switch (out.kind) {
+      case 'physical_damage': {
+        if (out.rate != null) out.rate = scaleRateOrRange(out.rate as number | [number, number]);
+        const byHigher = out.recipientDamageByHigherStat as { attackRate: number; strategyRate: number } | undefined;
+        if (byHigher) {
+          out.recipientDamageByHigherStat = {
+            attackRate: scaleRate(byHigher.attackRate),
+            strategyRate: scaleRate(byHigher.strategyRate),
+          };
+        }
+        break;
+      }
+      case 'strategy_damage':
+      case 'positional_physical_damage':
+        if (out.rate != null) out.rate = scaleRateOrRange(out.rate as number | [number, number]);
+        break;
+      case 'heal':
+        out.rate = scaleRate(out.rate as number);
+        break;
+      case 'grant_first_aid':
+        out.healRate = scaleRate(out.healRate as number);
+        break;
+      case 'inflict_status': {
+        const statuses = (
+          Array.isArray(out.status) ? out.status : [out.status]
+        ) as Array<Record<string, unknown>>;
+        for (const st of statuses) {
+          if (!st) continue;
+          if (['sorcery', 'burning', 'panic', 'curse', 'ignite'].includes(String(st.type)) && st.rate != null) {
+            st.rate = scaleRate(st.rate as number);
+          }
+        }
+        break;
+      }
+      case 'chance_group':
+        out.outputs = scaleDamageHealOutputs(out.outputs as SkillOutput[], factor);
+        break;
+      case 'random_pick':
+        out.options = (out.options as SkillOutput[][]).map((option) => scaleDamageHealOutputs(option, factor));
+        break;
+      case 'morale_branch':
+        out.high = scaleDamageHealOutputs((out.high ?? []) as SkillOutput[], factor);
+        out.low = scaleDamageHealOutputs((out.low ?? []) as SkillOutput[], factor);
+        break;
+      default:
+        break;
+    }
+    return out as unknown as SkillOutput;
+  });
+}
+
+/**
+ * 友军「再次发动」监听（赐剑长驱）：我军全体**每回合首次成功释放主动战法后**，由存活携带者按
+ * 「基础几率（受谋略缩放）× 士气」判定一次；命中则该友军立即再次发动**同一战法**——跳过所有准备回合、
+ * 重新选目标，但只造成原战法 `factor` 倍的伤害与恢复效果（见 scaleDamageHealOutputs）。
+ * 逐「友军 × 每回合首次成功主动」只判定一次；再次发动走 executeSkillWithTargets（不会再触发本监听）。
+ */
+export function triggerAllyRecastCommands(ctx: CombatContext, actor: UnitState, cast: Skill): void {
+  if (cast.type !== 'active') return; // 官方：「每回合首次成功释放**主动战法**后」
+  const team = actor.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+  const enemies = actor.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
+  for (const caster of team) {
+    if (!caster.alive) continue; // 施法者兵力为 0 后不再生效
+    for (const id of caster.general.commandSkillIds) {
+      const skill = resolveSkill(ctx, id);
+      if (skill?.type !== 'command' || !skill.allyRecast) continue;
+      ctx.allyRecastOnceKeys ??= new Set();
+      const onceKey = `${ctx.currentRound}:${skill.id}:${caster.general.id}:${actor.general.id}`;
+      if (ctx.allyRecastOnceKeys.has(onceKey)) continue;
+      ctx.allyRecastOnceKeys.add(onceKey);
+
+      const cfg = skill.allyRecast;
+      const base = roundRate(scaledValue(cfg.rate, cfg.growthRate ?? 0, effectiveStat(caster, 'strategy'))) / 100;
+      const morale = effectiveMorale(caster);
+      const rate = moraleTriggerRate(morale, base);
+      const success = ctx.rng.chance(rate);
+      ctx.events.push({
+        type: 'skill_trigger',
+        unitId: caster.general.id,
+        targetId: actor.general.id,
+        skillId: skill.id,
+        skillName: skill.name,
+        success,
+        rate: Math.round(rate * 100),
+        baseRate: Math.round(base * 100),
+        morale,
+      });
+      if (!success) continue;
+      // 再次发动：跳过所有准备回合（直接执行输出）、重选目标，伤害/恢复按 factor 缩放
+      const recast = {
+        ...(structuredClone(cast) as Skill),
+        output: scaleDamageHealOutputs(cast.output, cfg.factor),
+      } as Skill;
+      executeSkillWithTargets(
+        ctx,
+        actor,
+        recast,
+        enemies,
+        team,
+        hasStatus(actor, 'rampage') ? mixedPool(ctx, actor) : enemies
+      );
+    }
   }
 }
 
@@ -4476,15 +4854,18 @@ function executeSkillWithTargets(
     // targetSide 覆盖：'enemy'=对敌施放（闭月等防御减益）、'ally'=对友施放；缺省按启发式
     const targetSide = 'targetSide' in skill ? skill.targetSide : undefined;
     const pool =
-      targetSide === 'enemy'
-        ? enemies
-        : targetSide === 'ally'
-          ? allies
-          : rampage
-            ? attackPool
-            : selfBuff
-              ? allies
-              : enemies;
+      // 敌我同池（率尔方雅「对自身以外的随机 3 名武将」）：双方存活单位、不含施法者自身
+      skill.targetPool === 'mixed'
+        ? mixedPool(ctx, unit)
+        : targetSide === 'enemy'
+          ? enemies
+          : targetSide === 'ally'
+            ? allies
+            : rampage
+              ? attackPool
+              : selfBuff
+                ? allies
+                : enemies;
     targets = skillTargets(ctx, unit, pool, skill.range, targetMode, skill.groupCount ?? 2);
   }
 
@@ -4652,6 +5033,7 @@ function dealAttack(ctx: CombatContext, unit: UnitState, target: UnitState, dist
   const hitCtx: DamageHitContext = { damageSource: 'basic', damageType: 'physical' };
   const { causedMult, takenMult } = damageBoosts(ctx, unit, hit, hitCtx);
   const reduce = sumReduce(hit, hitCtx) + troopCounterReduceOf(unit, hit);
+  const mult = buffMult(causedMult, takenMult, reduce);
   const { damage, breakdown } = calcDamage(
     {
       damageType: 'physical',
@@ -4661,7 +5043,7 @@ function dealAttack(ctx: CombatContext, unit: UnitState, target: UnitState, dist
       attackerTroops: unit.troops,
       targetDefense: def,
       targetStrategy: hit.general.strategy,
-      mult: buffMult(causedMult, takenMult, reduce),
+      mult,
     },
     ctx.rng
   );
@@ -4674,6 +5056,9 @@ function dealAttack(ctx: CombatContext, unit: UnitState, target: UnitState, dist
     consumePendingStacks(ctx, unit);
     return;
   }
+
+  // 伏波扬砂：普攻命中后把该次伤害的**增减伤净幅度**（百分点，含兵种克制）累入【扬砂】计数器
+  accumulateStacksConsume(ctx, unit, (mult - 1) * 100);
 
   ctx.events.push({
     type: 'attack_hit',
@@ -5248,7 +5633,24 @@ export function applyDamage(
     reduceRate = before.thisHitReduce;
   }
   const incoming = Math.round(Math.max(0, damage) * (1 - reduceRate));
-  const actual = Math.min(incoming, target.troops);
+  let actual = Math.min(incoming, target.troops);
+  // 玉玺（僭号天子）：我方受到的伤害按比例转入玉玺账本，本回合不从受击者扣兵（回合开始结转给持有者）。
+  // 结转结算自身置 ctx.sealResolving → 不再被玉玺转移（防自循环）。
+  if (!ctx.sealResolving && ctx.sealLedgers && ctx.sealLedgers.length > 0) {
+    const seal = findSealLedger(ctx, target);
+    const holder = seal ? castUnit(ctx, seal.casterId) : undefined;
+    const cfg = seal ? resolveSkill(ctx, seal.skillId) : undefined;
+    const transfer = cfg?.type === 'command' ? cfg.sealTransfer : undefined;
+    if (seal && holder && transfer && actual > 0) {
+      const rate =
+        roundRate(scaledValue(transfer.rate, transfer.growthRate ?? 0, effectiveStat(holder, 'defense'))) / 100;
+      const diverted = Math.min(actual, Math.round(actual * rate));
+      if (diverted > 0) {
+        seal.carried += diverted;
+        actual -= diverted;
+      }
+    }
+  }
   target.troops -= actual;
   if (target.troops <= 0) target.troops = 0;
   const lethal = target.troops <= 0;

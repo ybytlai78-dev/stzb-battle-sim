@@ -87,6 +87,13 @@ export type SkillOutput =
       /** 输出级 group 目标数（仅 targetMode:'group'，缺省沿用战法 groupCount 或 2）；`[2,3]` 50/50 随机（辕门射戟） */
       groupCount?: number | [number, number];
       /**
+       * 段级按阵营过滤**本战法整体（锁定）目标**（率尔方雅）：
+       * 只结算锁定目标中与施法者**同侧**（'ally'）/ **对侧**（'enemy'）/ **自身**（'self'）者，
+       * 不重选池、不按战法距离重新抽取。用于「同一批随机目标按阵营分派不同效果」——
+       * 先由 `BaseSkill.targetPool:'mixed'` 抽出 N 个敌我混合目标，再各段按锁定目标分阵营。
+       */
+      lockedSide?: 'ally' | 'enemy' | 'self';
+      /**
        * 首次攻击标记（辕门射戟）：伤害结算后对本次攻击的每个目标施加「造成攻击伤害降低」debuff
        * （damage_boost caused 方向，rate 为小数如 -99.99 = -9999%，配合 buffMult 10% 伤害下限
        * 强制目标造成伤害降为 min 10%），持续 duration 回合。第二次攻击目标独立选择、不受影响。
@@ -250,6 +257,12 @@ export type SkillOutput =
       groupCount?: number | [number, number];
       /** 从友军池排除施法者（「自身 + 友军单体」的友军段：奇佐鬼谋 / 黄天余音） */
       excludeSelf?: boolean;
+      /**
+       * 段级按阵营过滤**本战法整体（锁定）目标**（率尔方雅）：
+       * 只结算锁定目标中与施法者**同侧**（'ally'）/ **对侧**（'enemy'）/ **自身**（'self'）者，
+       * 不重选池、不按战法距离重新抽取（与 `targetSide` 的「重选池」语义不同）。
+       */
+      lockedSide?: 'ally' | 'enemy' | 'self';
       /**
        * status 为数组时：true = 对同一目标施加全部状态（黄天余音友军四维）；
        * 缺省仍随机选 1 个（奇佐鬼谋控制）。
@@ -447,6 +460,11 @@ export type CreateStatus =
   /** 下一次造成伤害无视规避（缚父临危）：无 duration——消耗制，不按回合递减 */
   /** 下一次造成伤害无视规避（缚父临危）：duration 仅占位——消耗制，不按回合递减（两个 tick 函数显式跳过） */
   | { type: 'ignore_evasion'; duration: number }
+  /**
+   * 控制效果额外 +1 目标（鸾凤和鸣）：携带者「下一次造成的控制效果（混乱/犹豫/暴走/怯战）
+   * 额外对一个目标生效」。消耗制（duration 仅占位，不按回合递减），由携带者打出控制时消耗并移除。
+   */
+  | { type: 'control_spread'; duration: number }
   | { type: 'taunt'; duration: number; targetId: string }
   /** 反击资格（反击之策）：携带者被普攻实际扣兵后，对来源打 rate% 攻击。不消耗。rate 与 physical_damage 同口径（100=100%） */
   | { type: 'counter'; duration: number; rate: number }
@@ -494,6 +512,12 @@ interface BaseSkill {
   /** group 模式目标数（仅 targetMode:'group' 有效，缺省 2）；`[2,3]` = 50% 概率 2 目标 / 50% 概率 3 目标（辕门射戟） */
   groupCount?: number | [number, number];
   /**
+   * 目标池覆盖：`'mixed'` = **敌我同池**（双方存活单位，**不含施法者自身**）随机抽取
+   * （率尔方雅「对自身以外的随机 3 名武将」；与暴走目标池同口径，但无需暴走状态）。
+   * 缺省按输出启发式选池（敌军 / 友军 / 暴走时混合）。
+   */
+  targetPool?: 'mixed';
+  /**
    * 开场上阵单位的 troopType 集合必须 ⊆ 此列表，否则本战法整次不生效（疏数弓+骑）。
    * 读部署名单（不论 alive）；战斗中不再复查。
    */
@@ -512,6 +536,23 @@ interface BaseSkill {
    * 仅主动战法有意义；准备主动按「释放」计一次（进入准备不计）。
    */
   triggerRateDecayPerCast?: number;
+  /**
+   * 战法链（连环计「依次发动下列战法…每个战法的效果与原战法在同等级下效果相同」）：
+   * 最外层发动时按顺序把**其他已注册战法**（`SKILL_REGISTRY`）的 `output` 当作本战法效果执行，
+   * 事件 / 统计归属**被引用战法**（战报显示「发动了一次伐谋」）。
+   * 每步前置条件在**该步执行时**求值——前一步的效果（如降谋略、施加暴走）可影响后一步判定。
+   * 被引用战法自身的 `triggerRate` 不参与判定（本战法已掷过发动率）。
+   */
+  chainSkills?: Array<{
+    /** 被发动战法 id（须已在 SKILL_REGISTRY 注册） */
+    skillId: string;
+    /** 目标池覆盖：`'random_single'` = 在本战法距离内随机敌军单体（迷阵 / 落雷段）；缺省 = 本战法主目标 */
+    targetMode?: 'random_single';
+    /** 仅当本战法**主目标**的生效谋略 **低于** 施法者生效谋略时结算（迷阵段） */
+    requireTargetStrategyBelowSelf?: boolean;
+    /** 仅当本战法**主目标**带此状态时结算（落雷段 `'rampage'`；迷阵命中主目标时可在其后满足） */
+    requireTargetStatus?: StatusType;
+  }>;
   /**
    * 按「造成伤害次数」递增本战法 `chance_group` 的基础发动率（霸王渡江「每次攻击造成伤害后可使
    * 霸王渡江发动率提升 3.0%，该效果可叠加 5 次」）：
@@ -648,6 +689,42 @@ export interface CommandSkill extends BaseSkill {
   };
   /** 二类指挥动态发动率：初始 base，未生效每回合 +increment，生效后重置（奇兵拒北 30% 起始，未生效+5%） */
   dynamicTriggerRate?: { base: number; increment: number };
+  /**
+   * 【扬砂】层数累计 + 消耗触发（伏波扬砂，马腾）：我军（含携带者）每次**普通攻击命中**后，把该次普攻的
+   * **增减伤净幅度**（总增伤 − 总减伤，百分点，即 `buffMult(...) − 1`）×100 累入计数器；
+   * 每满 `threshold`（40）个百分点扣掉阈值并 +1 层，层数上限 `maxStacks`（20）；
+   * 携带者发动普通攻击**后**，每 `consumePerAttack`（4）层换一次额外普通攻击，重复触发至不足 4 层。
+   * 计数走 `ctx.stacksConsumeCounters`（键 `${casterId}:${skillId}`，整场累计不重置）。
+   */
+  stacksConsume?: {
+    /** 每满多少个百分点得 1 层（40） */
+    threshold: number;
+    /** 层数上限（20） */
+    maxStacks: number;
+    /** 每次额外普通攻击消耗的层数（4） */
+    consumePerAttack: number;
+  };
+  /**
+   * 玉玺·伤害转移（僭号天子）：我军全体受到伤害的 `rate`%（受施法者**生效防御**缩放）由玉玺承担，
+   * 计入账本本回合不从受击者扣兵；第二回合起每回合开始时，玉玺对施法者造成
+   * 「上一回合承担量 × 本回合承担比例」的兵力损失（比例 50% 起、每回合 +10%，封顶 100%）。
+   * `growthRate` 缺省 = 不缩放（按基值，待反解）。
+   */
+  sealTransfer?: { rate: number; growthRate?: number };
+  /**
+   * 友军「再次发动」监听（赐剑长驱）：令友军全体**每回合首次成功释放主动战法后**，有 `rate`% 几率
+   * 再次发动同一战法（**跳过所有准备回合**），但只造成原战法 `factor` 倍的伤害与恢复效果。
+   * 逐「友军 × 每回合首次成功主动」判定一次（同回合内每名友军最多 1 次）；`rate` 为谋略 80 时的
+   * 基础几率（%），`growthRate` 缺省 = 不缩放（按基值，待反解）；施法者阵亡后不再生效。
+   */
+  allyRecast?: { rate: number; growthRate?: number; factor: number };
+  /**
+   * 二类指挥·附加「本回合首次主动战法实际释放成功后」段（鸾凤和鸣）：
+   * 与 `roundTrigger` 解耦——主判定时机走 on_act / after_first_active 时，本段仍会在携带者本回合
+   * **首次成功释放主动战法后**执行一次（目标池按段内 targetSide/targetMode/groupCount 覆盖）。
+   * 用于「同一指挥战法兼具『每回合行动时』与『每回合首次主动后』两个时机」的场景。
+   */
+  afterFirstActiveOutput?: SkillOutput[];
   /** 每 N 回合判定一次（难知如阴「每2回合」）：只在 currentRound % everyNRounds === 0 时判定。缺省每回合 */
   everyNRounds?: number;
   /** 先手：先驱突击前 3 回合先手。回合内先比「携带先手标签」单位的出手顺序，再比其余单位 */
@@ -1098,7 +1175,9 @@ export type StatusType =
   /** 叠层待发（奉令护蜀）：友军每次成功发动叠 1 层（上限 5），下次普攻增伤 / 下次受击减伤后清空全部层数 */
   | 'pending_stacks'
   /** 下一次伤害无视规避（缚父临危：友军中吕布下一次造成的伤害无视规避；覆盖任意伤害类型，由该单位下次造成伤害时消耗） */
-  | 'ignore_evasion';
+  | 'ignore_evasion'
+  /** 下一次造成的控制效果额外 +1 目标（鸾凤和鸣）：消耗制，由携带者打出控制时消耗 */
+  | 'control_spread';
 
 /** DoT（妖术/燃烧/恐慌）挂上时冻结的每次伤害（滞后触发）：
  *  伤害在「挂上时」结算并冻结——按当时的增伤合计（造成侧 + 受到侧）、施法者兵力、
@@ -1201,7 +1280,9 @@ export type Status =
    * 覆盖**任意伤害类型**（攻击/策略），由携带者下一次造成伤害时消耗（consumeEvasion 内统一处理，
    * 携带者自己带此标记则跳过规避判定）；不按回合递减（两个 tick 函数显式跳过）。
    */
-  | { type: 'ignore_evasion'; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string };
+  | { type: 'ignore_evasion'; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
+  /** 控制效果额外 +1 目标（鸾凤和鸣）：消耗制，不按回合递减（两个 tick 函数显式跳过） */
+  | { type: 'control_spread'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string };
 
 export interface UnitState {
   readonly general: General;
@@ -1272,6 +1353,24 @@ export type BattleEvent =
       unitId: string;
       targetId: string;
       skillId?: string;
+    }
+  /**
+   * 玉玺结转（僭号天子）：每回合开始时玉玺对持有者造成「上一回合承担量 × 本回合承担比例」的兵力损失。
+   * 独立事件（不走 damage / 杀伤统计）：这是玉玺对自己人的结转，不是施法者的杀伤。
+   */
+  | {
+      type: 'seal_settle';
+      /** 玉玺持有者（袁术） */
+      unitId: string;
+      skillId: string;
+      skillName: string;
+      /** 上一回合玉玺承担量 */
+      carried: number;
+      /** 本回合承担比例（0.5 起每回合 +0.1，封顶 1） */
+      ratio: number;
+      /** 实际扣减兵力 */
+      damage: number;
+      afterTroops: number;
     }
   | {
       type: 'skill_cast';

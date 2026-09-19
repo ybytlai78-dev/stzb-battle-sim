@@ -5262,4 +5262,259 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+  /**
+   * 连环计（王允·汉弓 h693·主动 A）：距离 4，敌军单体，官方发动率 20%-30%（**取上界 30% = 满级口径**，
+   * 同浑水摸鱼 25-35→35 / 妖术 30-50→50 / 九锡黄龙 25-35→35 的既有惯例）。
+   * 对敌军单体施加连环计，**依次发动**下列战法：对连环计目标发动一次「伐谋」；
+   * 若连环计目标谋略低于自身，则对随机敌军单体发动一次「迷阵」；
+   * 若连环计目标处于暴走状态，则对随机敌军单体发动一次「落雷」。每个战法的效果与原战法在同等级下效果相同。
+   * 官方：scripts/skill_extra.json id 200714（主动 A / 距离 4 / 敌军单体 / 兵种弓）。
+   * 入档判断：**上架**——三段效果全部借用已注册战法（伐谋 209%/2.175、迷阵 155%/1.5、落雷 148%/1.35，
+   *   成长率均已确认），本战法自身无数值待定。
+   * 引擎配套：**新增 `BaseSkill.chainSkills`（战法链）** —— 依序执行其他已注册战法的 `output`，
+   *   每步条件在**该步执行时**求值（伐谋先降主目标谋略 → 影响迷阵判定；迷阵命中主目标时挂暴走 → 影响落雷判定）；
+   *   被引用战法的 triggerRate 不参与判定（本战法已掷过发动率）。
+   */
+  lianhuanji: {
+    id: 'lianhuanji',
+    name: '连环计',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.3,
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['damage', 'rampage', 'confusion', 'debuff_attack', 'debuff_strategy'],
+    output: [],
+    chainSkills: [
+      // ① 对连环计目标发动一次「伐谋」（策略 209% 受谋略 + 攻/谋 −45 两回合）
+      { skillId: 'famou' },
+      // ② 若连环计目标谋略低于自身 → 对随机敌军单体发动「迷阵」（策略 155% + 暴走 1 回合）
+      { skillId: 'mizhen', targetMode: 'random_single', requireTargetStrategyBelowSelf: true },
+      // ③ 若连环计目标处于暴走状态 → 对随机敌军单体发动「落雷」（策略 148% + 混乱 1 回合）
+      { skillId: 'luolei', targetMode: 'random_single', requireTargetStatus: 'rampage' },
+    ],
+  },
+  /**
+   * 率尔方雅（胡芳·晋步 h797·主动 A）：距离 5，发动率 40%，敌我群体（有效距离内 3 个目标）。
+   * 对自身以外的随机 3 名武将造成一次攻击伤害（伤害率 10.0%）；若目标为友军，则使其造成的所有伤害
+   * 提升 22.0%（受谋略属性影响）持续 1 回合，并使其立即对敌军群体发动一次攻击（伤害率 180.0%）或
+   * 策略攻击（伤害率 180.0%，受谋略属性影响），伤害类型由该武将自身攻击和谋略较高值决定；
+   * 若目标为敌军，则使其随机陷入犹豫、混乱、暴走、怯战状态中的一种，持续 1 回合。
+   * 官方：scripts/skill_extra.json id 200273（主动 A / 距离 5 / 敌我群体3 / 兵种弓步骑 / 发动率 40%；
+   *   1 级 10% / 增伤 11% / 90%）。
+   * 入档判断：**下架** —— 22% 增伤与 180% 策略段均「受谋略属性影响」而官方未给成长系数，
+   *   按本批口径留空 `growthRate`（按基值不缩放）+ 登记 OFFLINE_MAIN_SKILLS，待反解确认后移出。
+   * 引擎配套：
+   *   ① `BaseSkill.targetPool:'mixed'`（敌我同池随机 N，排除施法者自身）；
+   *   ② `SkillOutput.lockedSide`（段级按阵营过滤**锁定目标**，不重选池）——同一批 3 个目标里，
+   *      友军走「增伤 + 代打」、敌军走「随机控制」；
+   *   ③ 友军代打复用 `attacker:'recipient'` + `recipientDamageByHigherStat`（徽言龙凤口径：
+   *      攻击 > 谋略 → 攻击伤害，否则策略伤害），选敌复用 `targetMode:'group'`（敌军群体 2 目标）。
+   */
+  lv_er_fang_ya: {
+    id: 'lv_er_fang_ya',
+    name: '率尔方雅',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.4,
+    targetMode: 'group',
+    groupCount: 3,
+    targetPool: 'mixed',
+    tags: ['damage', 'damage_boost', 'hesitation', 'confusion', 'rampage', 'cowardice'],
+    output: [
+      // ① 对自身以外随机 3 名武将（敌我同池）各造成一次攻击伤害 10%
+      { kind: 'physical_damage', rate: 10 },
+      // ② 友军：造成的所有伤害 +22%（受谋略）1 回合（成长率未确认 → 按基值 22% 不缩放）
+      {
+        kind: 'inflict_status',
+        lockedSide: 'ally',
+        status: {
+          type: 'damage_boost',
+          rate: 0.22,
+          direction: 'caused',
+          strategyScaled: true,
+          duration: 1,
+        },
+      },
+      // ③ 友军：立即对敌军群体（有效距离内 2 目标）发动一次攻击 / 策略攻击 180%，
+      //    伤害类型由该武将自身攻击与谋略孰高决定（代打者属性、吃代打者自身增减伤）
+      {
+        kind: 'physical_damage',
+        rate: 0, // 由 recipientDamageByHigherStat 定轨（攻击 180% / 策略 180%），本字段忽略
+        attacker: 'recipient',
+        lockedSide: 'ally',
+        recipientDamageByHigherStat: { attackRate: 180, strategyRate: 180 },
+        targetMode: 'group',
+        groupCount: 2,
+      },
+      // ④ 敌军：随机陷入犹豫 / 混乱 / 暴走 / 怯战之一，持续 1 回合
+      {
+        kind: 'inflict_status',
+        lockedSide: 'enemy',
+        status: [
+          { type: 'hesitation', duration: 1 },
+          { type: 'confusion', duration: 1 },
+          { type: 'rampage', duration: 1 },
+          { type: 'cowardice', duration: 1 },
+        ],
+      },
+    ],
+  },
+  /**
+   * 鸾凤和鸣（小乔·吴弓 h687·指挥 A）：距离 3，我军全体。
+   * 战斗中，自身每回合首次发动主动战法后，使我军群体 2 目标恢复一定兵力（恢复率 85.0%，受谋略属性影响）；
+   * 每回合自身行动时，使我军全体 3 目标造成的下一次随机目标的控制效果（混乱、犹豫、暴走、怯战）额外对一个目标生效。
+   * 官方：scripts/skill_extra.json id 200960（指挥 A / 距离 3 / 我军全体 / 兵种弓；1 级 42.5%）。
+   * 入档判断：**下架** —— 85% 恢复率「受谋略属性影响」而官方未给成长系数 → 按基值不缩放 +
+   *   登记 OFFLINE_MAIN_SKILLS，待反解确认后移出。
+   * 引擎配套：
+   *   ① 新状态 `control_spread`（控制效果 +1 目标）：消耗制标记，携带者打出控制（混乱/犹豫/暴走/怯战）时
+   *      额外对 1 个「距离内、未在本段目标池内」的随机敌军生效（段级在 executeSkillOutputs 的 inflict_status
+   *      分支统一处理，覆盖主动/追击/指挥各来源的控制段），随后消耗；
+   *   ② `CommandSkill.afterFirstActiveOutput`：与 `roundTrigger` 解耦的「本回合首次主动战法成功释放后」附加段
+   *      —— 本战法主判定走 on_act（②「每回合自身行动时」），① 的恢复段走该附加钩子。
+   */
+  luanfeng_heming: {
+    id: 'luanfeng_heming',
+    name: '鸾凤和鸣',
+    type: 'command',
+    phase: 'round',
+    roundTrigger: 'on_act',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['heal'],
+    output: [
+      // ② 每回合自身行动时：我军全体获得「下一次造成的控制效果额外 +1 目标」（消耗制）
+      { kind: 'inflict_status', status: { type: 'control_spread', duration: 999 } },
+    ],
+    afterFirstActiveOutput: [
+      // ① 自身每回合首次发动主动战法后：我军群体 2 目标恢复 85%（受谋略；成长率未确认 → 0 基值不缩放）
+      {
+        kind: 'heal',
+        rate: 85,
+        strategyScaled: true,
+        growthRate: 0,
+        targetSide: 'ally',
+        targetMode: 'group',
+        groupCount: 2,
+      },
+    ],
+  },
+  /**
+   * 赐剑长驱（刘禅·蜀步 h689·指挥 A）：距离 3，官方目标「友军全体」。
+   * 战斗中自身无法释放主动战法或进行普通攻击，令友军全体每回合首次成功释放主动战法后，
+   * 有 40.0% 几率（受谋略属性影响）再次发动（跳过所有准备回合），造成原战法 50.0% 的伤害和恢复效果。
+   * 官方：scripts/skill_extra.json id 200962（指挥 A / 距离 3 / 友军全体 / 兵种步；1 级 发动率 20% / 效果 25%）。
+   * 入档判断：**下架** —— 再次发动几率 40%「受谋略属性影响」而官方未给成长系数 → 按基值不缩放 +
+   *   登记 OFFLINE_MAIN_SKILLS，待反解确认后移出。
+   * 引擎配套：
+   *   ① 自身封禁用既有控制状态（犹豫 = 无法主动、怯战 = 无法普攻），准备阶段对自身施加 duration 999
+   *      （与官方效果标签「犹豫(自身);怯战(自身)」一致；可被移除有害效果类战法净化）；
+   *   ② `CommandSkill.allyRecast`（友军每回合首次成功主动后按几率再次发动同一战法、跳过准备、按 factor 缩放
+   *      伤害与恢复）——监听入口 triggerAllyRecastCommands，由主动战法成功释放点调用（含准备战法释放）。
+   * 口径说明（本次新机制）：官方目标列写的「友军全体」是**监听范围**，本战法自身 output 只作用于自身，
+   *   故 targetMode:'self'；再次发动的 50% 只缩放「战法自身 output 的伤害/恢复段」（战法链等元机制段不缩放）。
+   */
+  cijian_changqu: {
+    id: 'cijian_changqu',
+    name: '赐剑长驱',
+    type: 'command',
+    phase: 'prep',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['hesitation', 'cowardice'],
+    output: [
+      // 自身无法释放主动战法（犹豫）/ 无法进行普通攻击（怯战）：整场常驻
+      { kind: 'inflict_status', status: { type: 'hesitation', duration: 999 } },
+      { kind: 'inflict_status', status: { type: 'cowardice', duration: 999 } },
+    ],
+    // 友军全体每回合首次成功释放主动战法后：40%（受谋略，成长率未确认 → 基值）再次发动，伤害/恢复 ×50%
+    allyRecast: { rate: 40, factor: 0.5 },
+  },
+  /**
+   * 僭号天子（袁术·群步 h790·指挥 S）：距离 3，我军全体。
+   * 战斗开始后获得玉玺：我军全体受到的所有伤害的 32.0%（受防御属性影响）由玉玺承担；
+   * 第二回合起，每回合开始时玉玺对袁术造成其上一回合承担的所有伤害，袁术仅受到来自玉玺伤害的 50%，
+   * 该比例每回合上升 10%。
+   * 官方：scripts/skill_extra.json id 200262（指挥 S / 距离 3 / 我军全体 / 兵种步；1 级 16%）。
+   * 入档判断：**下架** —— 32%「受防御属性影响」而官方未给成长系数 → 按基值不缩放 +
+   *   登记 OFFLINE_MAIN_SKILLS，待反解确认后移出。
+   * 引擎配套（新机制「伤害承担/转移（玉玺）」）：
+   *   ① `CommandSkill.sealTransfer` + `ctx.sealLedgers`：准备阶段注册账本；`applyDamage` 里我军受击时
+   *      按「32% 受持有者生效防御缩放」把伤害转入账本（本回合不从受击者扣兵）；
+   *   ② `tickRoundStartStatuses` 每回合开始时（第 2 回合起）对持有者结算
+   *      「上一回合承担量 × 本回合承担比例」，比例 50% 起每回合 +10%（封顶 100%），账本清零；
+   *      结算伤害走 `applyDamage`（策略、无视规避的定值伤害），但置 `ctx.sealResolving`
+   *      使玉玺伤害不再被玉玺自己转移（防自循环）；
+   *   ③ 结转走独立事件 `seal_settle`（不计入杀伤统计——这是玉玺对自己人的结转，不是施法者的杀伤），
+   *      report.ts 单独渲染。
+   * 口径推定（本次新机制，待用户复核）：
+   *   - 「该比例每回合上升 10%」= 袁术**承担比例** 50% → 60% → … 每回合 +10%，**封顶 100%**（不会超过结转量）；
+   *   - 「我军全体受到的所有伤害」含袁术自身受到的伤害，但**不含玉玺结转给他自己的那一次**；
+   *   - 「受防御属性影响」取袁术（施法者）当期生效防御；成长率未确认 → 基值 32%。
+   */
+  jianhao_tianzi: {
+    id: 'jianhao_tianzi',
+    name: '僭号天子',
+    type: 'command',
+    phase: 'prep',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['damage'],
+    output: [],
+    // 玉玺：我方全体受击的 32%（受防御，成长率未确认 → 基值）转入账本，每回合开始结转给自身
+    sealTransfer: { rate: 32 },
+  },
+  /**
+   * 伏波扬砂（马腾·群骑 h785·指挥 S）：距离 5，我军全体。
+   * 使我军全体普通攻击伤害提升 25.0%（受攻击属性影响）。当友军全体发动普通攻击时，造成的伤害
+   * 共计提升幅度每达到 40%，马腾获得 1 层【扬砂】效果，最多叠加 20 层；马腾发动普通攻击后，
+   * 将消耗 4 层【扬砂】效果进入连击状态，额外发动一次普通攻击，此效果将重复触发直到不足 4 层。
+   * 官方：scripts/skill_extra.json id 200255（指挥 S / 距离 5 / 我军全体 / 兵种骑；1 级 12.5%）。
+   * 入档判断：**下架** —— 25%「受攻击属性影响」而官方未给成长系数 → 按基值不缩放 +
+   *   登记 OFFLINE_MAIN_SKILLS，待反解确认后移出。
+   * 引擎配套（新机制「层数累计 + 消耗触发」`stacksConsume`）：
+   *   ① 普攻增伤段：`damage_boost` direction:'caused' + `damageSource:'basic'`（只作用于普通攻击）
+   *      + `attackScaled`（受攻击，成长率未确认 → 基值 25%），整场常驻施加给我军全体；
+   *   ② 层数累计：`dealAttack` 命中后把该次普攻的**增减伤净幅度**（`buffMult(...) − 1` ×100 个百分点，
+   *      总增伤 − 总减伤，含兵种克制）累入 `ctx.stacksConsumeCounters`；每满 40 扣 40 并 +1 层（上限 20）；
+   *   ③ 消耗触发：`actUnit` 普攻阶段后，马腾每 4 层换一次额外普通攻击，重复触发至不足 4 层
+   *      （额外普攻同样累计层数；单次行动上限 20 次防失控）。
+   * 口径（**用户 2026-09-19 口述**）：「伤害共计提升幅度」= 该次普攻的**总增伤与总减伤净合计**（百分点），
+   *   用变量累计、每满 40% 扣 40% 得 1 层（余数保留）。
+   */
+  fuboyangsha: {
+    id: 'fuboyangsha',
+    name: '伏波扬砂',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['damage_boost', 'combo'],
+    output: [
+      // 我军全体：普通攻击伤害 +25%（受攻击，成长率未确认 → 基值），整场常驻
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'damage_boost',
+          rate: 0.25,
+          duration: 999,
+          direction: 'caused',
+          attackScaled: true,
+          damageSource: 'basic',
+        },
+      },
+    ],
+    // 【扬砂】：每次普攻按「增减伤净幅度」累计，每满 40% 得 1 层（上限 20）；普攻后每 4 层换 1 次额外普攻
+    stacksConsume: { threshold: 40, maxStacks: 20, consumePerAttack: 4 },
+  },
 };
