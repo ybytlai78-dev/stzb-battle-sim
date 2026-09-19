@@ -107,7 +107,7 @@
     "growthDefense": 2.07,
     "growthStrategy": 2.48,
     "growthSpeed": 0.44,
-    "mainSkillId": "",
+    "mainSkillId": "xianming_jiangong",
     "mainSkillName": "衔命建功",
     "skillDesc": "敌军全体每回合首次受到持续性伤害时，周瑜有50.0%几率对其发动一次策略攻击（伤害率140.0%，受谋略属性影响）；第3回合起，敌军武将陷入持续性伤害时，立即额外引发一次该持续性伤害"
   },

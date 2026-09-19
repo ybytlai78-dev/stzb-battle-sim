@@ -80,6 +80,70 @@ export function triggerRoundEndCommands(ctx: CombatContext): void {
   }
 }
 
+/**
+ * 「敌军每回合首次受到持续性伤害时」（衔命建功，XP周瑜）：敌方单位本回合首次吃到 DoT 伤害后，
+ * 由**对侧**存活携带者按 `rate` 判定（士气修正、逐次发 skill_trigger）；命中则对该敌方单位结算 output。
+ * 去重键 `${round}:${skillId}:${targetId}`（「每回合首次」；跨来源不重置，**推定**）。
+ */
+function triggerOnDotReceived(ctx: CombatContext, target: UnitState): void {
+  const casters = target.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
+  for (const caster of casters) {
+    if (!caster.alive) continue;
+    for (const id of caster.general.commandSkillIds) {
+      const skill = resolveSkill(ctx, id);
+      if (skill?.type !== 'command' || !skill.onDotReceived) continue;
+      ctx.dotReceivedKeys ??= new Set();
+      const key = `${ctx.currentRound}:${skill.id}:${target.general.id}`;
+      if (ctx.dotReceivedKeys.has(key)) continue;
+      ctx.dotReceivedKeys.add(key);
+      const morale = effectiveMorale(caster);
+      const rate = moraleTriggerRate(morale, skill.onDotReceived.rate);
+      const success = ctx.rng.chance(rate);
+      ctx.events.push({
+        type: 'skill_trigger',
+        unitId: caster.general.id,
+        targetId: target.general.id,
+        skillId: skill.id,
+        skillName: skill.name,
+        success,
+        rate: Math.round(rate * 100),
+        baseRate: Math.round(skill.onDotReceived.rate * 100),
+        morale,
+      });
+      if (!success) continue;
+      executeSkillOutputs(ctx, caster, skill, [target], skill.onDotReceived.output);
+    }
+  }
+}
+
+/**
+ * 「第 N 回合起，敌军陷入持续性伤害时立即额外引发一次该持续伤害」（衔命建功）：DoT 挂上后立即额外跳 1 次。
+ * 由**对侧**存活携带者的 `extraTickOnDotApply` 配置驱动；额外跳伤本身不再重复触发本钩子（只调 dealDotDamage）。
+ */
+function triggerExtraTickOnDotApply(
+  ctx: CombatContext,
+  target: UnitState,
+  dot: Extract<Status, { type: 'sorcery' | 'burning' | 'panic' | 'curse' | 'ignite' }>
+): void {
+  const casters = target.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
+  for (const caster of casters) {
+    if (!caster.alive) continue;
+    for (const id of caster.general.commandSkillIds) {
+      const skill = resolveSkill(ctx, id);
+      if (skill?.type !== 'command' || !skill.extraTickOnDotApply) continue;
+      if (ctx.currentRound < skill.extraTickOnDotApply.startRound) continue;
+      ctx.events.push({
+        type: 'status_changed',
+        unitId: target.general.id,
+        statusType: dot.type,
+        detail: `【${skill.name}】立即额外引发一次持续性伤害`,
+      });
+      dealDotDamage(ctx, target, dot);
+      if (!target.alive) return;
+    }
+  }
+}
+
 /** 是否「不受敌方指挥战法影响」（藤甲突击）：携带者装有任何 commandImmune 被动即为真。 */function hasCommandImmune(ctx: CombatContext, unit: UnitState): boolean {
   return unit.general.passiveSkillIds.some((id) => {
     const s = resolveSkill(ctx, id);
@@ -422,6 +486,8 @@ export interface CombatContext {
   resolvingMoraleRaise?: boolean;
   /** 「特殊负面效果前」判定重入保护（审时定计）：判定段自身挂负面时不回灌 */
   resolvingSpecialDebuff?: boolean;
+  /** 「敌军每回合首次受到持续伤害」去重（衔命建功）：key `${回合}:${skillId}:${targetId}` */
+  dotReceivedKeys?: Set<string>;
 }
 
 /** 持续型急救战法级计数器（皇裔流离/金匮要略）：一个战法一个实例，全队共享。
@@ -1804,6 +1870,8 @@ function dealDotDamage(
       modifiers: dot.stored.modifiers,
     });
     applyDamage(ctx, unit, capped, src, 'strategy', 'skill');
+    // 敌军每回合首次受到持续性伤害（衔命建功）
+    triggerOnDotReceived(ctx, unit);
     return;
   }
   // 回退：实时结算（无挂上时冻结上下文）
@@ -1838,6 +1906,8 @@ function dealDotDamage(
     modifiers: collectDamageModifiers(ctx, unit, unit, false),
   });
   applyDamage(ctx, unit, capped, src, 'strategy', 'skill');
+  // 敌军每回合首次受到持续性伤害（衔命建功）
+  triggerOnDotReceived(ctx, unit);
 }
 
 /** 休整每次恢复值：挂上时按施法者兵力/谋略冻结。无施法者时回退目标满兵 + 基础率。 */
@@ -2540,6 +2610,14 @@ function inflictStatusCore(
       });
     }
     pushStatus(ctx, target, create, sourceSkillType, sourceSkillId, casterId, stored);
+    // 第 N 回合起，敌军陷入持续伤害时立即额外引发一次该伤害（衔命建功）
+    const pushed = target.statuses.find(
+      (s): s is Extract<Status, { type: 'sorcery' | 'burning' | 'panic' | 'curse' | 'ignite' }> =>
+        s.type === type &&
+        s.sourceSkillId === sourceSkillId &&
+        ('sourceUnitId' in s ? s.sourceUnitId : undefined) === casterId
+    );
+    if (pushed) triggerExtraTickOnDotApply(ctx, target, pushed);
     return;
   }
 

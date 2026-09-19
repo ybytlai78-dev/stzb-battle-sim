@@ -8881,4 +8881,43 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+
+  /**
+   * 衔命建功（XP周瑜·吴步 h784 主战法）：指挥 S（一类指挥 prep），距离 5，敌军全体，发动率 --。
+   * 满级「敌军全体每回合首次受到持续性伤害时，周瑜有 50.0% 几率对其发动一次策略攻击（伤害率 140.0%，
+   *   受谋略属性影响）；第 3 回合起，敌军武将陷入持续性伤害时，立即额外引发一次该持续性伤害」；
+   * 1 级：策略攻击 70.0%（50% 与「额外引发一次」同）。
+   * 官方：scripts/skill_extra.json id 200254（指挥 / 距离 5 / 敌军全体 / 兵种步；effect 策略攻击伤害）。
+   *   来源 https://stzb.163.com/m/skilllist/200254.html
+   *
+   * 口径（策略 A，2026-09-20；推定处已标注）：
+   *   ① 「敌军每回合首次受到持续性伤害时」→ 新引擎件 `CommandSkill.onDotReceived`：敌方单位本回合
+   *      **首次**吃到 DoT 伤害（含 DoT 跳伤 / 引燃 / 引爆，**推定**）后按 50% 判定（士气修正，逐次发
+   *      skill_trigger）；命中则对该敌方单位结算 output = 一次策略攻击 140%（受谋略成长率未确认 → 基值）；
+   *      去重键 `${回合}:${战法}:${单位}`（「每回合首次」按**目标**计、跨来源不重置，**推定**）；
+   *   ② 「第 3 回合起，敌军武将陷入持续性伤害时，立即额外引发一次该持续性伤害」→ 新引擎件
+   *      `CommandSkill.extraTickOnDotApply: { startRound: 3 }`：DoT 状态挂上后立即 `dealDotDamage`
+   *      额外跳 1 次（= 原 DoT 的一次跳伤，官方未给系数，**推定**）；
+   *   ③ 两段都只对**敌方**单位生效（携带者同侧视角的反向），且需要携带者存活（二类/监听口径）；
+   *   ④ 「受谋略属性影响」成长系数官方未给 → 基值不缩放 → 登记 OFFLINE_MAIN_SKILLS（XP周瑜下架）。
+   */
+  xianming_jiangong: {
+    id: 'xianming_jiangong',
+    name: '衔命建功',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'enemy',
+    tags: ['damage'],
+    output: [],
+    // ① 敌军每回合首次吃 DoT：50% → 对其发动一次策略攻击 140%（受谋略未确认 → 基值）
+    onDotReceived: {
+      rate: 0.5,
+      output: [{ kind: 'strategy_damage', rate: 140, strategyScaled: true }],
+    },
+    // ② 第 3 回合起：敌军陷入持续伤害时立即额外引发一次该伤害
+    extraTickOnDotApply: { startRound: 3 },
+  },
 };

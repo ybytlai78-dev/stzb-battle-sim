@@ -1095,7 +1095,19 @@ export interface CommandSkill extends BaseSkill {
    */
   avoidOnConsume?: { chance: number; output: SkillOutput[] };
   /**
-   * 「我军全体士气提升时」触发（佐命晋武，裴秀）：**本侧任意单位**被施加正士气提升（morale_boost
+   * 「敌军每回合首次受到持续性伤害时」判定（衔命建功，XP周瑜）：敌方单位本回合**首次**吃到 DoT 伤害
+   * （含 DoT 跳伤 / 引燃 / 引爆，推定）后，由存活携带者按 `rate` 判定（士气修正，发 skill_trigger）；
+   * 命中则对该敌方单位结算 `output`（典型：对其发动一次策略攻击）。每「单位 × 回合 × 战法」只判定一次
+   * （`ctx.dotReceivedKeys` 去重）。
+   */
+  onDotReceived?: { rate: number; output: SkillOutput[] };
+  /**
+   * 「第 N 回合起，敌军陷入持续性伤害时立即额外引发一次该持续伤害」（衔命建功）：DoT 状态**挂上后**
+   * 立即对该目标额外跳 1 次该 DoT（`dealDotDamage`，即原 DoT 的一次跳伤）。
+   */
+  extraTickOnDotApply?: { startRound: number };
+  /**
+   * 我军全体士气提升时触发（佐命晋武，裴秀）：**本侧任意单位**被施加正士气提升（morale_boost
    * amount > 0）后，由存活携带者对**我军全体存活单位**结算 `output`。
    * 每次触发叠 1 层（同源叠层与上限由状态自身 `maxStacks` 控制）；`ctx.resolvingMoraleRaise` 防递归。
    */
