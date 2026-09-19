@@ -181,6 +181,11 @@ export interface CombatContext {
   hurtOnceKeys?: Set<string>;
   /** 首次受击必触发已用标记（疮痍累身），键为 `skillId:casterId:victimId` */
   hurtFirstKeys?: Set<string>;
+  /**
+   * 「每受到 N 次伤害」累计计数（蛮王御众）：key `${victimId}:${skillId}` → 已受击次数（整场累计）。
+   * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
+   */
+  hurtEveryCounters?: Map<string, number>;
   /** 受击 hook 重入保护：反击/引爆等二次 applyDamage 不再触发 onHurt（防盲侯循环） */
   resolvingHurtHooks?: boolean;
   /** 受恢复 hook 重入保护：赏顺伐逆群体奶不再触发 onHeal */
@@ -4421,6 +4426,10 @@ function executeSkillOutputs(
             // 减伤受谋略影响（金匮要略 20.4% 成长 0.13/点）：百分比按 1% 粒度八舍九入后转小数
             const scaled = roundRate(scaledValue(create.rate * 100, create.growthRate, effectiveStat(caster, 'strategy'))) / 100;
             inflictStatus(ctx, t, { ...create, rate: scaled }, skill.type, skill.id, caster.general.id);
+          } else if (create.type === 'damage_reduce' && create.defenseScaled && create.growthRate !== undefined) {
+            /** 减伤受防御影响（蛮王御众 30%，成长率未确认 → 缺省走下方 else 用基值）：公式同受谋略，属性换生效防御 */
+            const scaled = roundRate(scaledValue(create.rate * 100, create.growthRate, effectiveStat(caster, 'defense'))) / 100;
+            inflictStatus(ctx, t, { ...create, rate: scaled }, skill.type, skill.id, caster.general.id);
           } else if (create.type === 'damage_boost' && create.strategyScaled && create.growthRate !== undefined) {
             // 增减伤受谋略影响（密谋定蜀 +5% / 母仪浮梦 -40%，成长 0.15/点）：
             // 按绝对值缩放再恢复符号，使负向减伤随谋略增强（-40% 谋略 180 → -55%）
@@ -5489,6 +5498,30 @@ function triggerSorceryMarkOnHurt(ctx: CombatContext, target: UnitState): void {
   }
 }
 
+/**
+ * 「每受到 N 次伤害」触发（蛮王御众）：受伤者携带 `hurtEvery` 的被动时累计受击次数，
+ * 每满 `hits` 次对携带者（施法者）结算一次该配置的 output。
+ * 调用点：`applyDamage` 扣兵后、受击 hook（triggerOnHurt）之后，外层包 `ctx.resolvingHurtHooks`
+ * ——触发段打出的伤害不再回灌计数/受击钩子（防递归）。
+ */
+function triggerPassiveHurtEvery(ctx: CombatContext, victim: UnitState): void {
+  for (const id of victim.general.passiveSkillIds) {
+    const skill = resolveSkill(ctx, id);
+    if (skill?.type !== 'passive' || !skill.hurtEvery) continue;
+    ctx.hurtEveryCounters ??= new Map();
+    const key = `${victim.general.id}:${skill.id}`;
+    const count = (ctx.hurtEveryCounters.get(key) ?? 0) + 1;
+    ctx.hurtEveryCounters.set(key, count);
+    if (count % skill.hurtEvery.hits !== 0) continue;
+    ctx.events.push({
+      type: 'skill_exec',
+      unitId: victim.general.id,
+      detail: `【${victim.general.name}】执行来自【${victim.general.name}】的【${skill.name}】效果（累计受到 ${count} 次伤害）！`,
+    });
+    executeSkillOutputs(ctx, victim, skill, [victim], skill.hurtEvery.output);
+  }
+}
+
 /** 受击触发（盲侯奋勇/陷储立齐/同仇敌忾/缓师徐持）：扣兵后、阵亡标记前判定。
  *  反击等二次 applyDamage 不再递归（resolvingHurtHooks），避免盲侯循环。
  *  @param damageType 本次伤害类型；缺省不按 `onHurt.damageKind` 过滤（旧调用保持原行为）
@@ -5901,6 +5934,15 @@ export function applyDamage(
   }
   // 受击触发战法（盲侯/陷储/同仇/缓师）：在阵亡标记前判定，致死一击仍可反击
   if (actual > 0) triggerOnHurt(ctx, target, source, damageType, damageSource);
+  // 每受到 N 次伤害触发（蛮王御众）：包一层 resolvingHurtHooks，触发段的伤害不再回灌计数/受击钩子
+  if (!ctx.resolvingHurtHooks && actual > 0) {
+    ctx.resolvingHurtHooks = true;
+    try {
+      triggerPassiveHurtEvery(ctx, target);
+    } finally {
+      ctx.resolvingHurtHooks = false;
+    }
+  }
   // 反击：after_damage 已清 resolvingHurtHooks，必须再包一层，避免反击段重入 before/after/counter
   if (
     !ctx.resolvingHurtHooks &&
