@@ -195,7 +195,7 @@
     "growthDefense": 1.91,
     "growthStrategy": 0.62,
     "growthSpeed": 1.56,
-    "mainSkillId": "",
+    "mainSkillId": "jiangchu_guanxi",
     "mainSkillName": "将出关西",
     "skillDesc": "对随机敌军单体发动2-4次攻击（伤害率250.0%），每次伤害率减少40.0%。首次攻击造成的伤害无视规避，并使该目标无法恢复兵力，持续2回合"
   },

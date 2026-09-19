@@ -191,6 +191,11 @@ export type SkillOutput =
        * 每次独立重选目标（若带 targetMode）。
        */
       repeats?: number | [number, number];
+      /**
+       * 仅**首次 repeats 攻击**无视规避（华雄「首次攻击造成的伤害无视规避」）：
+       * 第 1 次攻击不判定/不消耗目标规避，第 2 次起照常判定（与整段 `ignoresEvasion` 区分）。
+       */
+      ignoresEvasionFirstRepeat?: boolean;
       /** 每次 repeats 递增的伤害率（百分点）：第 i 次（i 从 0 起）= rate + i × ratePerRepeat（银龙孤胆 7 次 80→87→…→122）。缺省 0 = 不递增 */
       ratePerRepeat?: number;
       /** 独立发动率（先声夺人第三段 60%）；士气修正后判定，与 inflict_status.chance 同口径 */

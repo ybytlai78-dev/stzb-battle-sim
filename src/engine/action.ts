@@ -5426,8 +5426,10 @@ function executeSkillOutputs(
             selectedIds.push(t.general.id);
             // 常驻伤害前叠层（持节镇西）：伤害源叠攻击、受击者叠防御
             triggerStackBuff(ctx, source, t, 'physical');
-            // 规避：默认免疫一次伤害；ignoresEvasion 时无视
-            if (!out.ignoresEvasion && consumeEvasion(ctx, t, source.general.id)) continue;
+            // 规避：默认免疫一次伤害；ignoresEvasion 时无视；ignoresEvasionFirstRepeat 仅第 1 次无视（华雄）
+            const ignoreEv =
+              out.ignoresEvasion === true || (out.ignoresEvasionFirstRepeat === true && hitI === 0);
+            if (!ignoreEv && consumeEvasion(ctx, t, source.general.id)) continue;
             const atk = effectiveStat(source, 'attack');
             const def = physicalTargetDefense(source, t, out.ignoresDefense === true);
             const hit: DamageHitContext = { damageSource: 'skill', damageType: 'physical', skillType: skill.type, skillId: skill.id };

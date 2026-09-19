@@ -8461,4 +8461,47 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     },
     output: [],
   },
+
+  /**
+   * 将出关西（华雄·群骑 h647 主战法）：主动 A（无准备），距离 4，发动率 35%，目标随机敌军单体。
+   * 满级「对随机敌军单体发动 2-4 次攻击（伤害率 250.0%），每次伤害率减少 40.0%。首次攻击造成的伤害
+   *   无视规避，并使该目标无法恢复兵力，持续 2 回合」；1 级：伤害率 125.0%、每次减少 20.0%。
+   * 官方：scripts/skill_extra.json id 200927（主动 / 距离 4 / 敌军单体 / 兵种骑；effect 无视规避;
+   *   攻击伤害;不可回复兵力）。来源 https://stzb.163.com/m/skilllist/200927.html
+   *
+   * 口径（策略 A，2026-09-20；推定处已标注）：
+   *   ① 官方 desc 两版本拼接（v1「2-4 次」/ v2「2-5 次」）→ 按仓库 dedupe 口径取**前半 2-4 次**
+   *      （`repeats:[2,4]`，每次次数独立随机），web/data/heroes.json 亦为 2-4；
+   *   ② 「对随机敌军单体发动 2-4 次攻击…首次攻击…并使该目标」的「该目标」为单数 → 目标**选一次**、
+   *      2-4 次攻击打同一目标（战法整体 `targetMode:'random_single'` 锁定，伤害段不重选，推定）；
+   *   ③ 「每次伤害率减少 40.0%」= **按初始值线性**逐次 −40（250→210→170→130，与银龙孤胆递增同口径，
+   *      官方未写递减基准，推定）；
+   *   ④ 「首次攻击造成的伤害无视规避」→ 新引擎件 `physical_damage.ignoresEvasionFirstRepeat`：
+   *      第 1 次攻击不判定/不消耗目标规避，第 2 次起照常判定（推定：后续攻击仍会被规避拦下）；
+   *   ⑤ 「无法恢复兵力，持续 2 回合」→ 既有 `siege`（围困）状态，用 `sameTargetsAsLastDamage`
+   *      挂在本次伤害的同一目标上（全部 repeats 打同一目标，故等同于该目标）；
+   *   ⑥ 无「受属性影响」段、无数值缺口 → **上架**（不登记 OFFLINE_MAIN_SKILLS）。
+   */
+  jiangchu_guanxi: {
+    id: 'jiangchu_guanxi',
+    name: '将出关西',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.35,
+    targetMode: 'random_single',
+    tags: ['damage', 'siege'],
+    output: [
+      // ② 2-4 次攻击同一目标，每次伤害率 −40；④ 首次攻击无视规避
+      {
+        kind: 'physical_damage',
+        rate: 250,
+        repeats: [2, 4],
+        ratePerRepeat: -40,
+        ignoresEvasionFirstRepeat: true,
+      },
+      // ⑤ 无法恢复兵力（围困）2 回合，挂在该目标上
+      { kind: 'inflict_status', sameTargetsAsLastDamage: true, status: { type: 'siege', duration: 2 } },
+    ],
+  },
 };

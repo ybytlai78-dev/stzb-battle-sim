@@ -71,8 +71,8 @@ beforeEach(() => {
 
 describe('配将池「显示下架武将」开关', () => {
   it('默认只显示上架武将，下架将不进池', () => {
-    // 基线口径：上架 84（武将 48 中宫追玺上线后）/ 下架 ≥37（全量 161，已挂主战法 = 上架 + 下架）
-    expect(HEROES.length).toBe(84);
+    // 基线口径：上架 85（武将 51 将出关西上线后）/ 下架 ≥37（全量 161，已挂主战法 = 上架 + 下架）
+    expect(HEROES.length).toBe(85);
     expect(OFFLINE_HEROES.length).toBeGreaterThanOrEqual(37);
     expect(SLOTTED_HEROES.length).toBe(HEROES.length + OFFLINE_HEROES.length);
     expect(cards(ctx.pool).length).toBe(HEROES.length);
