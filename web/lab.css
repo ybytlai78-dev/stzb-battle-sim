@@ -10,35 +10,26 @@
   overflow: hidden;
 }
 
-/* ── 顶部：返回配将 + 标题 ── */
-.lab-topbar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 4px 2px 8px;
-  flex-shrink: 0;
-}
-.lab-topbar .lab-title {
-  font-size: 14px;
-  color: var(--gold);
-  letter-spacing: 1px;
-}
+/* 顶部标题行（.lab-topbar / .lab-title）已删除：返回入口改到顶栏导航按钮
+   （实验室态「伤害测试」→「返回配将」，见 main.ts），省下一整行高度。 */
 
-/* ── 三栏主体（左队伍 ｜ 中武将池 ｜ 右侍卫）── */
+/* ── 三栏主体（左队伍 ｜ 中武将池 ｜ 右侍卫）──
+   左栏 112px：队伍改纯立绘后不需要 300px 的信息列；腾出的宽度给武将池，
+   同时保证 543px 高的小屏（横屏手机）三栏都不出现滚动条。 */
 .lab-main {
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: 300px 1fr 330px;
-  gap: 14px;
+  grid-template-columns: 112px 1fr 300px;
+  gap: 10px;
   align-items: stretch;
 }
 
-/* 左栏：我方测试队伍 */
+/* 左栏：我方测试队伍（纯立绘三格，标题已删——用户 2026-09-19） */
 .lab-team {
   background: var(--panel);
   border: 1px solid var(--line);
-  padding: var(--space-3);
+  padding: 6px;
   box-shadow: 0 3px 16px rgba(0, 0, 0, .35);
   display: flex;
   flex-direction: column;
@@ -48,24 +39,17 @@
 .lab-team-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   flex-shrink: 0;
-  padding: 0 0 8px;
-  margin-bottom: 8px;
+  padding: 0 0 6px;
+  margin-bottom: 6px;
   border-bottom: 1px solid var(--line);
 }
-.lab-team-head h2 {
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: 3px;
-  text-align: left;
-  padding: 0;
-  margin: 0;
-  border: none;
-  font-family: var(--font-kai);
-  color: var(--gold);
-  min-width: 0;
+.lab-team-head .btn {
+  flex: 1;
+  padding: 3px 4px;
+  font-size: 11.5px;
+  letter-spacing: 0;
 }
 .lab-slots {
   flex: 1;
@@ -75,54 +59,67 @@
   grid-template-rows: 1fr 1fr 1fr;
   gap: 6px;
 }
-/* 槽位卡复用主站 .slot（左画像右信息，styles.css 定义；Drop-Zone 高亮 .slot.drag-over 亦在 styles.css） */
+/* 槽位＝纯立绘：卡框/卡面文字已在 styles.css 对 .slot-card 全局隐藏；
+   这里让立绘铺满整格（否则主站桌面规则会给 .slot-card 固定 56px 宽，在 112px 栏里只占一半）。
+   槽位卡仍复用主站 renderSlot，Drop-Zone 拖拽投放与 .slot.drag-over 高亮照旧生效。 */
+.lab-slots .slot { padding: 0; overflow: hidden; }
+.lab-slots .slot-inner { position: relative; display: block; height: 100%; }
+.lab-slots .slot-card { position: absolute; inset: 0; width: auto; height: 100%; aspect-ratio: auto; border-radius: 3px; }
+.lab-slots .slot-art { width: 100%; height: 100%; border: none; border-radius: 0; }
+.lab-slots .slot-main { display: none; }
 
 /* 中栏：武将池（hero-pool 原有样式 + 占满中栏、内部滚动） */
 .lab-pool {
   min-height: 0;
 }
+/* 实验室中栏不再显示「势力 / 兵种 / 重置」筛选行（用户 2026-09-19：中栏的搜索与筛选是多余部分）。
+   搜索框本身已随池子的 .toolbar 搬到顶栏 #pool-search-slot（见 damageLab.ts 的 heroSearchSlot()）。 */
+.lab-pool .hero-filter { display: none; }
 
-/* 右栏：侍卫面板 */
+/* 右栏：木桩侍卫面板 —— 紧凑到「横屏手机 543px 高不下滑就能看全」
+   （删「画像参考值…」小字与「攻击距离…」提示；字段改两列网格 + 兵力独占一行；
+    侍卫战法只在后台随机 D/C，前端不展示） */
 .lab-guard {
   background: rgba(30, 30, 34, 0.92);
   border: 1px solid rgba(212, 175, 55, 0.35);
   border-radius: 8px;
-  padding: 12px 14px;
+  padding: 8px 10px;
   color: var(--text);
   overflow-y: auto;
   min-height: 0;
 }
 .lab-guard h2 {
-  margin: 0 0 4px;
-  font-size: 15px;
+  margin: 0 0 6px;
+  font-size: 14px;
   color: var(--gold);
   letter-spacing: 2px;
 }
-.lab-guard .g-sub {
-  font-size: 11.5px;
-  color: var(--text-dim);
-  margin-bottom: 10px;
-  line-height: 1.5;
+/* 两列字段网格：攻击/防御、谋略/速度 各一行；兵力 .g-row-full 独占一行 */
+.g-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 10px;
 }
 .g-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin: 7px 0;
-  font-size: 12.5px;
+  gap: 6px;
+  margin: 5px 0;
+  font-size: 12px;
 }
 .g-row label {
-  flex: 0 0 52px;
+  flex: 0 0 32px;
   color: var(--text-dim);
 }
 .g-row input[type="number"] {
-  width: 84px;
+  flex: 1;
+  min-width: 0;
   background: #17171a;
   border: 1px solid #3a3a40;
   border-radius: 4px;
   color: var(--text);
   padding: 3px 6px;
-  font-size: 13px;
+  font-size: 12.5px;
 }
 .g-row input:focus {
   outline: none;
@@ -131,11 +128,12 @@
 .g-troops {
   display: flex;
   gap: 6px;
+  flex: 1;
 }
 .g-troops button {
   flex: 1;
-  padding: 4px 0;
-  font-size: 13px;
+  padding: 3px 0;
+  font-size: 12.5px;
   border: 1px solid #3a3a40;
   border-radius: 4px;
   background: #17171a;
@@ -147,44 +145,18 @@
   color: var(--gold);
   background: rgba(212, 175, 55, 0.12);
 }
-.g-troop-hint {
-  font-size: 11px;
-  color: var(--text-dim);
-  margin: 4px 0 2px;
-}
-.g-skills {
-  margin-top: 10px;
-  border-top: 1px dashed #3a3a40;
-  padding-top: 8px;
-}
-.g-skills .g-skill-list {
-  margin: 6px 0;
-  font-size: 12.5px;
-  line-height: 1.9;
-  color: var(--text);
-}
-.g-skills .g-skill-list .d-grade {
-  color: #8fbf6b;
-  font-weight: 600;
-}
-.g-skills .tip {
-  color: var(--text-dim);
-  font-size: 11.5px;
-}
-.g-note {
-  margin-top: 10px;
-  border-top: 1px dashed #3a3a40;
-  padding-top: 8px;
-  font-size: 11px;
-  color: var(--text-dim);
-  line-height: 1.6;
-}
 
-/* ── 底部操作栏（复用 control-bar 样式）── */
+/* ── 底部操作栏（复用 control-bar 样式；高度按用户要求压一档，把高度让给主体）── */
 .lab-control {
-  margin-top: 8px;
+  margin-top: 6px;
   flex-shrink: 0;
+  padding: 3px 10px;
+  min-height: 0;
+  font-size: 12px;
 }
+.lab-control label { font-size: 12px; }
+.lab-control input[type="number"] { width: 64px; padding: 2px 6px; font-size: 12.5px; }
+.lab-control .btn { padding: 5px 18px; font-size: 13px; }
 
 /* ── 伤害分析页（与实验室分离）── */
 .lab-analysis {
@@ -205,6 +177,23 @@
 .la-tabs {
   display: flex;
   gap: 6px;
+}
+/* tab 做成「按键」：底色与页面背景明显区分（用户 2026-09-19：那排要与背景不一致） */
+.la-tabs .btn.ghost {
+  background: rgba(196, 154, 54, .16);
+  border: 1px solid rgba(196, 154, 54, .55);
+  color: var(--gold-bright);
+  border-radius: 6px;
+  padding: 5px 14px;
+  font-size: 13px;
+  letter-spacing: 1px;
+}
+.la-tabs .btn.ghost:hover { background: rgba(196, 154, 54, .28); }
+.la-tabs .btn.ghost.on {
+  background: var(--gold);
+  border-color: var(--gold-bright);
+  color: #1b1917;
+  font-weight: 700;
 }
 .la-head select {
   background: #17171a;
@@ -232,73 +221,51 @@
   min-height: 0;
 }
 
-/* 队伍统计条 */
-.batch-stats {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
-}
-.batch-stat {
-  background: rgba(30, 30, 34, 0.9);
-  border: 1px solid #3a3a40;
-  border-radius: 6px;
-  padding: 8px 14px;
-  min-width: 108px;
-}
-.batch-stat .bs-label {
-  font-size: 11px;
-  color: var(--text-dim);
-}
-.batch-stat .bs-value {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--gold);
-  font-variant-numeric: tabular-nums;
-}
+/* 队伍统计条（场次/胜场/负场/平局/胜率/平均回合）已删除 —— 用户 2026-09-19 要求去掉，
+   数据在「简略战报」tab 里已有，腾出的高度给每将卡片。 */
 
-/* 每将伤害卡片 */
+/* 每将伤害卡片：一行三张（grid 三列，不再按 300px 起跳换行） */
 .share-cards {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 8px;
 }
 .share-card {
   background: rgba(30, 30, 34, 0.92);
   border: 1px solid #3a3a40;
-  border-radius: 8px;
-  padding: 10px 12px;
-  min-width: 260px;
-  flex: 1 1 300px;
+  border-radius: 6px;
+  padding: 7px 8px;
+  min-width: 0;
 }
 .share-card .sc-head {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--text);
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
+  gap: 5px;
+  margin-bottom: 4px;
 }
 .sc-head .sc-avatar {
-  width: 30px;
-  height: 30px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   object-fit: cover;
   border: 1px solid var(--line-strong);
   flex-shrink: 0;
 }
 .sc-head .sc-pos {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-dim);
   font-weight: 400;
 }
 .sc-head .sc-main-skill {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--gold);
   font-weight: 400;
   margin-left: auto;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -306,12 +273,12 @@
 .share-card .sc-body {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
 }
 .sc-pie {
-  width: 120px;
-  height: 120px;
-  flex: 0 0 120px;
+  width: 62px;
+  height: 62px;
+  flex: 0 0 62px;
 }
 .sc-pie svg {
   width: 100%;
@@ -319,22 +286,29 @@
   display: block;
 }
 .sc-legend {
-  font-size: 12px;
-  line-height: 1.85;
+  font-size: 10.5px;
+  line-height: 1.5;
   color: var(--text);
   min-width: 0;
+  flex: 1;
 }
 .sc-legend .lg-item {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  min-width: 0;
   white-space: nowrap;
 }
+/* 标签过长（如「携带战法一」）省略，保证三列窄卡不被撑破 */
+.sc-legend .lg-item > span:not(.lg-dot):not(.lg-pct) {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .sc-legend .lg-dot {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 2px;
-  flex: 0 0 10px;
+  flex: 0 0 8px;
 }
 .sc-legend .lg-pct {
   color: var(--gold);
@@ -342,10 +316,10 @@
   margin-left: auto;
 }
 .share-card .sc-foot {
-  margin-top: 8px;
-  padding-top: 6px;
+  margin-top: 5px;
+  padding-top: 4px;
   border-top: 1px dashed #3a3a40;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-dim);
   display: flex;
   justify-content: space-between;
@@ -353,20 +327,20 @@
 .share-card .sc-total {
   color: var(--gold);
   font-weight: 700;
-  font-size: 14px;
+  font-size: 12.5px;
   font-variant-numeric: tabular-nums;
 }
 
-/* 数学统计表 */
+/* 数学统计表（三列窄卡：字号与内边距同步压一档） */
 .math-table {
   width: 100%;
-  margin-top: 8px;
+  margin-top: 5px;
   border-collapse: collapse;
-  font-size: 11.5px;
+  font-size: 10px;
   color: var(--text);
 }
 .math-table td {
-  padding: 3px 6px;
+  padding: 1px 3px;
   border-top: 1px solid rgba(58, 58, 64, 0.45);
   font-variant-numeric: tabular-nums;
 }

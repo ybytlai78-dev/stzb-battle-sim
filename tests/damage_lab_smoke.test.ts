@@ -63,8 +63,14 @@ function makeHandlers(state: EditorState): EditorHandlers {
   };
 }
 
-function boot(): { state: EditorState; onExit: () => void } {
+function boot(opts: { searchSlot?: boolean } = {}): { state: EditorState; onExit: () => void } {
   document.body.innerHTML = '';
+  // 主站顶栏的搜索框容器：实验室应把武将池 .toolbar 搬到这里（真实页面由 main.ts 提供该节点）
+  if (opts.searchSlot) {
+    const slot = document.createElement('div');
+    slot.id = 'pool-search-slot';
+    document.body.appendChild(slot);
+  }
   const root = document.createElement('div');
   root.id = 'lab-root';
   document.body.appendChild(root);
@@ -175,17 +181,24 @@ describe('伤害测试实验室（主站模块 v2）', () => {
     const { state } = boot();
     expect(state).toBeTruthy();
     expect(document.querySelector('.lab-shell')).toBeTruthy();
-    // 左栏：我方测试队伍（主站同款左画像右信息槽位卡 ×3，无红/蓝队面板）
+    // 左栏：我方队伍＝纯立绘三格（「我方测试队伍」标题已删 — 用户 2026-09-19）
     const team = document.querySelector('.lab-team')!;
-    expect(team.querySelector('.lab-team-head h2')!.textContent).toContain('我方测试队伍');
+    expect(team.querySelector('.lab-team-head h2')).toBeNull();
     expect(team.querySelectorAll('.lab-slots .slot').length).toBe(3);
+    expect(team.querySelector('.lab-slots .slot.empty')).toBeTruthy(); // 空队＝素材加号态（纯立绘在选将后出现）
     expect(document.querySelector('.team-panel.red')).toBeNull();
     expect(document.querySelector('.team-panel.blue')).toBeNull();
     // 中栏：武将池
     expect(document.querySelector('.lab-pool.hero-pool')).toBeTruthy();
     expect(document.querySelectorAll('.lab-pool .hero-card').length).toBeGreaterThan(20);
-    // 右栏：侍卫面板
-    expect(document.querySelector('#guard-panel')!.textContent).toContain('侍卫');
+    // 右栏：木桩侍卫（两列字段 + 兵力独占一行；小字与侍卫战法区已删）
+    const guardPanel = document.querySelector('#guard-panel')!;
+    expect(guardPanel.querySelector('h2')!.textContent).toBe('木桩侍卫');
+    expect(guardPanel.querySelector('.g-sub')).toBeNull();
+    expect(guardPanel.querySelector('.g-troop-hint')).toBeNull();
+    expect(guardPanel.querySelector('.g-skills')).toBeNull();
+    expect(guardPanel.querySelectorAll('.g-grid .g-row').length).toBe(4); // 攻击/防御/谋略/速度
+    expect(guardPanel.querySelector('.g-row-full label')!.textContent).toBe('兵力');
   });
 
   it('侍卫默认画像（亲卫 NPC 模板放大）', () => {
@@ -218,11 +231,10 @@ describe('伤害测试实验室（主站模块 v2）', () => {
     expect((document.querySelector('.lab-main') as HTMLElement).style.display).toBe('none');
     const analysis = document.querySelector('.lab-analysis') as HTMLElement;
     expect(analysis.style.display).not.toBe('none');
-    // 队伍统计
-    const stats = analysis.querySelectorAll('.batch-stat');
-    expect(stats.length).toBe(6); // 场次/胜场/负场/平局/胜率/平均回合
-    expect(stats[0].textContent).toContain('场次');
-    // 每将卡片：头像 + 饼图 + 数学统计
+    // 队伍统计块已按用户要求删除（2026-09-19）
+    expect(analysis.querySelector('.batch-stats')).toBeNull();
+    expect(analysis.querySelector('.batch-stat')).toBeNull();
+    // 每将卡片：头像 + 饼图 + 数学统计（一行三张，样式见 lab.css 的 grid 三列）
     const cards = analysis.querySelectorAll('.share-card');
     expect(cards.length).toBe(3);
     for (const card of Array.from(cards)) {
@@ -294,16 +306,17 @@ describe('伤害测试实验室（主站模块 v2）', () => {
     expect((document.querySelector('.lab-main') as HTMLElement).style.display).not.toBe('none');
   });
 
-  it('模拟十次：聚合统计（场次 10、胜率）', () => {
+  it('模拟十次：聚合 10 场（战报选场 10 个 + 每将卡片一行三张）', () => {
     const { state } = boot();
     fillRedTeam(state, 3);
     simulate(10);
     const analysis = document.querySelector('.lab-analysis')!;
-    const stats = Array.from(analysis.querySelectorAll('.batch-stat .bs-value')).map((el) => el.textContent);
-    expect(stats[0]).toBe('10'); // 场次
-    expect(stats[1]).toMatch(/^\d+$/); // 胜场
-    expect(stats[4]).toMatch(/^\d+%$/); // 胜率
     expect(analysis.querySelectorAll('.share-card').length).toBe(3);
+    // 切到战报类 tab：选场下拉应有 10 场，证明 10 份战报都聚合了（原「场次/胜率」统计块已删）
+    (Array.from(analysis.querySelectorAll('.la-tabs .btn')) as HTMLElement[])
+      .find((b) => b.textContent === '简略战报')!
+      .click();
+    expect(document.querySelectorAll('.la-head select option').length).toBe(10);
   });
 
   it('拖拽武将池卡牌到空槽位（Drop-Zone）：配将成功、槽位渲染、池子保留原卡', () => {
@@ -314,6 +327,8 @@ describe('伤害测试实验室（主站模块 v2）', () => {
     const slots = document.querySelectorAll('.lab-slots .slot');
     expect(slots[0].textContent).toContain(hero.name); // 武将出现在对应编队位置
     expect(slots[0].classList.contains('empty')).toBe(false);
+    // 左栏＝纯立绘：画像层就位（卡框 .frame / 卡面文字 .plate 由 CSS 对槽位隐藏，DOM 仍在）
+    expect(slots[0].querySelector('.slot-card .slot-art')).toBeTruthy();
     // 武将池保留原始武将（不删除）
     const card = Array.from(document.querySelectorAll('.lab-pool .hero-card')).find(
       (c) => (c as HTMLElement).dataset.heroId === hero.id
@@ -363,10 +378,19 @@ describe('伤害测试实验室（主站模块 v2）', () => {
     for (const g of buildGuardTeam()) expect(g.attackRange).toBe(2);
   });
 
-  it('返回配将按钮触发 onExit 回调', () => {
+  it('实验室不再自带「返回配将」行（返回入口收敛到主站顶栏导航）', () => {
     const { onExit } = boot();
-    (document.querySelector('.lab-topbar .btn') as HTMLElement).click();
-    expect(onExit).toHaveBeenCalledTimes(1);
+    expect(document.querySelector('.lab-topbar')).toBeNull();
+    expect(document.querySelector('.lab-title')).toBeNull();
+    expect(onExit).not.toHaveBeenCalled(); // 自带返回入口已删，由 main.ts 的导航按钮触发 onExit
+  });
+
+  it('武将池 toolbar（搜索 + 筛选）搬到顶栏容器 #pool-search-slot：中栏只留卡格', () => {
+    boot({ searchSlot: true });
+    // 用户 2026-09-19 反馈「中栏的搜索框和筛选是多余部分」——现在搬到顶栏
+    expect(document.querySelector('#pool-search-slot .toolbar')).toBeTruthy();
+    expect(document.querySelector('#pool-search-slot input')).toBeTruthy();
+    expect(document.querySelector('.lab-pool .toolbar')).toBeNull();
   });
 
   it('侍卫战法按类型分槽挂载（主动/被动/指挥/追击）', () => {

@@ -130,7 +130,6 @@ export function getGuard(): GuardConfig {
 
 export function setGuard(g: Partial<GuardConfig>): void {
   guard = { ...guard, ...g };
-  updateGuardSkillList();
 }
 
 export function setMorale(m: number): void {
@@ -139,13 +138,12 @@ export function setMorale(m: number): void {
 
 // ─── 左栏：我方队伍（槽位卡复用主站 renderSlot：左画像右信息；Drop-Zone 拖拽投放由 renderSlot 内建）───
 
-/** 左栏面板：标题（我方测试队伍，不分红蓝）+ 部队加成 + 清空 + 3 槽位（复用主站 renderSlot，左画像右信息） */
+/** 左栏面板：部队加成 + 清空 + 3 槽位（槽位=纯立绘，复用主站 renderSlot；
+ *  「我方测试队伍」标题已删（用户 2026-09-19：纯立绘呈现，省一行高度）） */
 function renderLabTeam(): void {
   teamRoot.innerHTML = '';
   const head = document.createElement('div');
   head.className = 'lab-team-head';
-  const title = document.createElement('h2');
-  title.textContent = '我方测试队伍';
   const bonus = document.createElement('button');
   bonus.className = 'btn ghost team-bonus';
   bonus.type = 'button';
@@ -159,7 +157,7 @@ function renderLabTeam(): void {
     handlers.onClearTeam('red');
     renderLabTeam();
   };
-  head.append(title, bonus, clear);
+  head.append(bonus, clear);
   teamRoot.appendChild(head);
 
   const slots = document.createElement('div');
@@ -181,10 +179,17 @@ function wrappedHandlers(): EditorHandlers {
   return proxy as unknown as EditorHandlers;
 }
 
+/** 主站顶栏的搜索框容器（#pool-search-slot）——实验室的池子也把 .toolbar 搬上去。
+ *  不搬的话，搜索框 + 势力/兵种筛选行会留在中栏（用户 2026-09-19 反馈「实验室中栏多余部分」）。
+ *  主站与实验室共用同一个容器，所以退出实验室时 main.ts 要 refresh() 让主站 toolbar 搬回来。 */
+function heroSearchSlot(): HTMLElement | undefined {
+  return app?.ownerDocument.getElementById('pool-search-slot') ?? undefined;
+}
+
 /** 重建武将池（已选标记 picked 随 state 刷新） */
 function refreshPool(): void {
   if (!poolRoot || !poolRoot.parentElement) return;
-  const next = renderHeroPool(state, wrappedHandlers());
+  const next = renderHeroPool(state, wrappedHandlers(), heroSearchSlot());
   next.classList.add('lab-pool');
   poolRoot.parentElement.replaceChild(next, poolRoot);
   poolRoot = next;
@@ -215,26 +220,10 @@ function bindGuardPanel(): void {
     });
   });
 
-  guardPanel.querySelector('#g-random-skills')!.addEventListener('click', () => {
-    guard.skillIds = randomDSkills(3);
-    updateGuardSkillList();
-  });
 }
 
-function updateGuardSkillList(): void {
-  if (!guardPanel) return; // 未挂载（如测试中先 setGuard）
-  const list = guardPanel.querySelector('#g-skill-list')!;
-  if (guard.skillIds.length === 0) {
-    list.innerHTML = '<span class="tip">尚未随机（点击「随机 D 级战法」）</span>';
-    return;
-  }
-  list.innerHTML = guard.skillIds
-    .map((id) => {
-      const s = SKILL_REGISTRY[id];
-      return `<div>${s ? s.name : id} <span class="d-grade">D</span><span class="tip"> · ${s ? typeName(s.type) : ''}</span></div>`;
-    })
-    .join('');
-}
+/** 侍卫战法只在后台随机（C/D 级，见 guard.skillIds 初始化），前端不展示
+ *  （用户 2026-09-19：不展示侍卫战法，省高度做到不下滑看全）。 */
 
 // ─── 统计：普攻 / 主战法 / 携带战法一 / 携带战法二 ───
 
@@ -375,8 +364,8 @@ export function simulate(count: 1 | 10): void {
   const errBox = app.querySelector<HTMLElement>('.lab-err');
   if (errBox) errBox.textContent = '';
   if (guard.skillIds.length === 0) {
+    // 侍卫战法只在后台随机（D/C 级），前端不展示
     guard.skillIds = randomDSkills(3);
-    updateGuardSkillList();
   }
   try {
     const seeds: number[] = [];
@@ -487,24 +476,8 @@ function renderDamageAnalysis(container: HTMLElement): void {
   const reports = lastReports;
   const n = reports.length;
 
-  // ── 队伍统计 ──
-  const wins = reports.filter((r) => r.result === 'win').length;
-  const losses = reports.filter((r) => r.result === 'loss').length;
-  const draws = n - wins - losses;
-  const avgRounds = reports.reduce((a, r) => a + r.rounds, 0) / n;
-
-  const team = document.createElement('div');
-  team.className = 'batch-stats';
-  const stat = (label: string, value: string) =>
-    `<div class="batch-stat"><div class="bs-label">${label}</div><div class="bs-value">${value}</div></div>`;
-  team.innerHTML =
-    stat('场次', `${n}`) +
-    stat('胜场', `${wins}`) +
-    stat('负场', `${losses}`) +
-    stat('平局', `${draws}`) +
-    stat('胜率', n > 0 ? `${((wins / n) * 100).toFixed(0)}%` : '—') +
-    stat('平均回合', avgRounds.toFixed(1));
-  container.appendChild(team);
+  // 队伍统计块（场次 / 胜场 / 负场 / 平局 / 胜率 / 平均回合）已按用户要求删除（2026-09-19）：
+  // 这些数据在「简略战报」tab 里已有；伤害分析页腾出高度给「每将卡片一行三张」。
 
   // ── 每将卡片 ──
   const cards = document.createElement('div');
@@ -605,18 +578,8 @@ export function mountDamageLab(root: HTMLElement, opts: DamageLabOptions): void 
   app.innerHTML = '';
   app.className = 'lab-shell';
 
-  // 顶部：标题 + 返回配将
-  const topbar = document.createElement('div');
-  topbar.className = 'lab-topbar';
-  const back = document.createElement('button');
-  back.className = 'btn ghost';
-  back.textContent = '← 返回配将';
-  back.onclick = () => onExit();
-  const title = document.createElement('span');
-  title.className = 'lab-title';
-  title.textContent = '伤害测试实验室 · 我方测试队伍 vs 侍卫靶子';
-  topbar.append(back, title);
-  app.appendChild(topbar);
+  // 顶部标题行已删除（用户 2026-09-19：省掉一整行给主体腾高度）。
+  // 返回入口改到主站顶栏：实验室态把「伤害测试」导航按钮换成「返回配将」（见 main.ts enterLab/exitLab）。
 
   // ── 三栏主体 ──
   labMain = document.createElement('div');
@@ -629,8 +592,8 @@ export function mountDamageLab(root: HTMLElement, opts: DamageLabOptions): void 
   labMain.appendChild(teamRoot);
   renderLabTeam();
 
-  // 中栏：武将池（可滚动）
-  poolRoot = renderHeroPool(state, wrappedHandlers());
+  // 中栏：武将池（可滚动）；搜索/筛选 toolbar 搬到主站顶栏容器，中栏只留卡格
+  poolRoot = renderHeroPool(state, wrappedHandlers(), heroSearchSlot());
   poolRoot.classList.add('lab-pool');
   labMain.appendChild(poolRoot);
 
@@ -641,29 +604,20 @@ export function mountDamageLab(root: HTMLElement, opts: DamageLabOptions): void 
   labMain.appendChild(guardPanel);
   const troopOn = (t: TroopType) => (guard.troopType === t ? ' class="on"' : '');
   guardPanel.innerHTML = `
-    <h2>敌方靶子 · 侍卫 ×3</h2>
-    <div class="g-sub">画像参考值可自由调整；三个侍卫属性相同（大营/中军/前锋）。</div>
+    <h2>木桩侍卫</h2>
     <div class="g-row"><label>兵种</label><div class="g-troops">
       <button type="button" data-troop="cavalry"${troopOn('cavalry')}>骑</button>
       <button type="button" data-troop="infantry"${troopOn('infantry')}>步</button>
       <button type="button" data-troop="archer"${troopOn('archer')}>弓</button>
     </div></div>
-    <div class="g-troop-hint">攻击距离：骑/步 2、弓 3</div>
-    <div class="g-row"><label>攻击</label><input type="number" id="g-attack" value="${guard.attack}" min="0" /></div>
-    <div class="g-row"><label>防御</label><input type="number" id="g-defense" value="${guard.defense}" min="0" /></div>
-    <div class="g-row"><label>谋略</label><input type="number" id="g-strategy" value="${guard.strategy}" min="0" /></div>
-    <div class="g-row"><label>速度</label><input type="number" id="g-speed" value="${guard.speed}" min="0" /></div>
-    <div class="g-row"><label>兵力</label><input type="number" id="g-troops" value="${guard.troops}" min="0" step="100" /></div>
-    <div class="g-skills">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span style="font-size:12.5px;color:var(--text-dim)">战法（随机 D 级 ×3）</span>
-        <button type="button" class="btn ghost" id="g-random-skills" style="padding:2px 10px;font-size:12px">重新随机</button>
-      </div>
-      <div class="g-skill-list" id="g-skill-list"></div>
+    <div class="g-grid">
+      <div class="g-row"><label>攻击</label><input type="number" id="g-attack" value="${guard.attack}" min="0" /></div>
+      <div class="g-row"><label>防御</label><input type="number" id="g-defense" value="${guard.defense}" min="0" /></div>
+      <div class="g-row"><label>谋略</label><input type="number" id="g-strategy" value="${guard.strategy}" min="0" /></div>
+      <div class="g-row"><label>速度</label><input type="number" id="g-speed" value="${guard.speed}" min="0" /></div>
     </div>
-    <div class="g-note">每次模拟由系统自动生成随机种子；十次模拟使用 10 个不同种子。点「重新随机」可更换侍卫战法。</div>
+    <div class="g-row g-row-full"><label>兵力</label><input type="number" id="g-troops" value="${guard.troops}" min="0" step="100" /></div>
   `;
-  updateGuardSkillList();
   bindGuardPanel();
 
   // ── 底部操作栏：种子 + 士气 + 模拟按钮（模拟后进入伤害分析页）──

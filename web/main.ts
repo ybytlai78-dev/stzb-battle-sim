@@ -468,6 +468,9 @@ function enterLab(): void {
   mountDamageLab(labRoot, { state, handlers, onExit: exitLab });
   labRoot.style.display = '';
   labVisible = true;
+  // 顶栏导航在实验室态变成「返回配将」（用户 2026-09-19：实验室内那行返回按钮已删，返回入口收到顶栏）
+  const nav = app.querySelector<HTMLButtonElement>('[data-nav="lab"]');
+  if (nav) nav.textContent = '返回配将';
 }
 
 function exitLab(): void {
@@ -476,6 +479,11 @@ function exitLab(): void {
   controlBar.style.display = '';
   if (battleWasVisible) battleRoot.style.display = '';
   labVisible = false;
+  const nav = app.querySelector<HTMLButtonElement>('[data-nav="lab"]');
+  if (nav) nav.textContent = '伤害测试';
+  // 实验室的武将池把顶栏 .toolbar（搜索框 + 筛选）搬进了 #pool-search-slot，这里重渲染配将区，
+  // 让主站的 toolbar 搬回顶栏 —— 否则回首页后顶栏搜索框还连着实验室那个已隐藏的池子
+  refresh();
 }
 
 if (typeof document !== 'undefined') {

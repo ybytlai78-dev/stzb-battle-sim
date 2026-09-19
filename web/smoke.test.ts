@@ -179,15 +179,17 @@ describe('Web 战斗模拟器冒烟', () => {
     await boot();
     const labNav = document.querySelector('.nav-link[data-nav="lab"]') as HTMLElement;
     expect(labNav).toBeTruthy();
-    // 进入伤害测试
+    // 进入伤害测试：导航按钮文案变成「返回配将」（用户 2026-09-19）
     labNav.click();
+    expect(labNav.textContent).toBe('返回配将');
     const shell = document.querySelector('.lab-shell') as HTMLElement;
     expect(shell).toBeTruthy();
     expect(shell.style.display).not.toBe('none');
     expect((document.querySelector('main > .team-editor') as HTMLElement).style.display).toBe('none'); // 配将区隐藏
     expect((document.querySelector('#app > .control-bar') as HTMLElement).style.display).toBe('none'); // 主站底栏隐藏
-    // 再点导航返回配将
+    // 再点导航返回配将：文案复原为「伤害测试」
     labNav.click();
+    expect(labNav.textContent).toBe('伤害测试');
     expect(shell.style.display).toBe('none');
     expect((document.querySelector('main > .team-editor') as HTMLElement).style.display).not.toBe('none');
     expect((document.querySelector('#app > .control-bar') as HTMLElement).style.display).not.toBe('none');
