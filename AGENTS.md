@@ -471,20 +471,20 @@ npx tsc --noEmit                    # 类型检查（strict）
 ### 下一次接续（2026-09-20 批次 · 策略 A 推进 §1.4）
 
 - **工作树/分支**：`.dsh/worktrees/c00d4f51acc5/战斗系统`（本会话 DSH 工作区，**detached HEAD**，起点 `main` `19fb1a7`）；
-  武将 33~42 逐个提交在**未命名分支的 detached HEAD** 上（**未 push、未合并**；落地方式待用户定，
+  武将 33~43 逐个提交在**未命名分支的 detached HEAD** 上（**未 push、未合并**；落地方式待用户定，
   合并前先看 `docs/工作树落地流程.md`，且合并回主仓库后必须重灌主库——见下）。
   提交一律**显式列路径**（`git add src/... tests/... web/data/...`），不要 `git add -A` / `git add web`。
-- **已验证基线**：`npx tsc --noEmit` clean；`npm test` **154 files / 1587 passed**（武将 42 后）；golden 字节一致。
+- **已验证基线**：`npx tsc --noEmit` clean；`npm test` **155 files / 1593 passed**（武将 43 后）；golden 字节一致。
 - **策略 A（用户已确认，勿再逐条询问）**：① 官方现页 > 本地旧数据；② 两版拼接描述取**前半**（仓库 dedupe 口径）；
   ③ `targetShow` 与描述冲突以**描述**为准；④ 官方未给数值的段**不实现**（整将缺关键数值则跳过并说明）；
   ⑤ SP 卡 `iconId` 沿用 `portrait_map.json`。另：「两者 / 每个效果独立判断」= **各段各自 roll**
   （鸟云山兵 `independentRolls` / 将门有将逐段独立先例）；含糊表述按最可辩护解读实现 + 注释标「推定」。
 - **§1.4「需先调研」45 位进度**（总表 `docs/research/README.md` + `heroes-research-merged.json`）：
-  - 已完成 **14 位**：h653 将门有将 / h495 二夫之勇 / h788 雪奋短兵 / h815 蛮王御众（武将 29~32，已在 main）
+  - 已完成 **15 位**：h653 将门有将 / h495 二夫之勇 / h788 雪奋短兵 / h815 蛮王御众（武将 29~32，已在 main）
     + **h803 知人待士（33）** / **h102011 胡笳离愁（34）** / **h631 断首何怒（35）** / **h805 勇挚刚毅（36）**
     + **h802 奇门遁甲（37，上架）** / h102002 定军绝战（38，上架）/ h534 破阵强袭（39）/
-    **h810 万军取首（40，上架）** / h593 兵行巧变（41）/ **h648 竭忠尽智（42）**；
-    剩余 **31 位**（口径见重生成的 `docs/下架武将清单.md`）。
+    **h810 万军取首（40，上架）** / h593 兵行巧变（41）/ **h648 竭忠尽智（42）** /
+    **sp_zhaoyun 银龙孤胆（43，上架；兵种骑→步修正）**；剩余 **30 位**（口径见重生成的 `docs/下架武将清单.md`）。
   - 下一步优先（缺口 0、机制可补）：h800 守静却敌（`heal_boost` 已就位）/ h675 抚民励德 / h691 持刀从武 /
     h787 审时定计 / h791 疲兵沮意 / h814 敛微穷极 / h648 竭忠尽智 / h593 兵行巧变 / h645 统军畏慎 /
     h519 藤甲突击 / h534 破阵强袭 / h810 万军取首 / h102002 定军绝战 / sp_zhaoyun 银龙孤胆 …
@@ -501,7 +501,11 @@ npx tsc --noEmit                    # 类型检查（strict）
   - **`positions?: Position[]`（伤害段站位定向）**：`physical_damage` / `strategy_damage` 直接锁定该站位存活敌军
     （万军取首「敌方大营」），不按 targetMode 重选——武将 40；
   - **`damage_reduce.maxStacks`**（同战法同过滤维叠层上限，张昭 竭忠尽智「可叠加 1 次」= 2 层）——武将 42；
-  - **`cowardice.pendingNextAct`**（预备型怯战：下一次行动时才生效，普攻封禁忽略 pending）——武将 42。
+  - **`cowardice.pendingNextAct`**（预备型怯战：下一次行动时才生效，普攻封禁忽略 pending）——武将 42；
+  - **`physical_damage.ratePerRepeat`**（repeats 逐次递增伤害率，百分点；银龙孤胆 7 次 80→87→…→122）——武将 43。
+- **数据修正（武将 43）**：`sp_zhaoyun` 兵种按策略 A ①（官方现页 > 本地旧数据）由 **骑 → 步**：
+  源头 `scripts/build_heroes_seed.mjs` + 生成物 `scripts/seed_heroes.sql` / `web/data/heroes.json`（官方快照本就为步）；
+  仍缺 `sp_zhaoyun_s.jpg` 小头像（官方 card_small 404，登记待补）。
 - **坑（本批踩过）**：`damage_boost.maxStacks` 必须**同时给 `stacks: 1`**（层计数初值），只给 `stack: true` 时
   计数不递增、封顶失效（破阵强袭第 7 次仍 +5%）——文德椒房同款写法。
 - **每将流程**（沿用）：`skills.ts` 定义 → `build_heroes_seed.mjs` 挂槽 → 数据链三条命令
