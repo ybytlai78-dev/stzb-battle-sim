@@ -854,6 +854,12 @@ export interface CommandSkill extends BaseSkill {
      * 母仪浮梦：规避打友军（skill.targetSide='ally'），减伤在敌军行动时判定（targetSide:'enemy'）。
      */
     targetSide?: 'enemy' | 'ally';
+    /** 每回合生效几率递增（鸟云山兵「该效果生效几率每回合提升 10%」）：实际基础率 = rate + increment×(当前回合−startRound) */
+    rateIncrementPerRound?: number;
+    /** 逐段独立判定（鸟云山兵「两个效果独立判断」）：对 skill.output 每段各掷一次，命中段单独结算 */
+    independentRolls?: boolean;
+    /** 只在锁定目标处于这些站位时判定（美人计「中军每回合行动前」） */
+    onlyPositions?: Position[];
   };
   /** 二类指挥动态发动率：初始 base，未生效每回合 +increment，生效后重置（奇兵拒北 30% 起始，未生效+5%） */
   dynamicTriggerRate?: { base: number; increment: number };

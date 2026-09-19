@@ -268,9 +268,9 @@
     "targetDesc": "我军群体（有效距离内2个目标）",
     "effectDesc": "战斗开始后，我军群体每回合行动时有30.0%几率使自身受到的攻击和策略攻击降低60.0%，持续1回合，两个效果独立判断，该效果生效几率每回合提升10%",
     "sources": "【魏·贾诩·弓】【蜀·魏延·步】",
-    "status": "skipped",
-    "missingMechanics": "每回合行动时判定+概率提升",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "roundRepeat 几率递增 + 逐段独立判定 p17"
   },
   {
     "name": "以直报怨",
@@ -645,9 +645,9 @@
     "targetDesc": "敌军群体（有效距离内3个目标）",
     "effectDesc": "1回合准备，对敌军全体发动一次策略攻击（伤害率130.0%，受谋略属性影响），并随机使敌军单体造成的所有伤害大幅度降低（受谋略属性影响），持续1回合",
     "sources": "【魏·郭嘉·骑】【蜀·庞统·步】【吴·陆逊·步】",
-    "status": "skipped",
-    "missingMechanics": "随机单体大幅降低无数值",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "「大幅度降低」无官方数值→用户口径 caused −99.99 p17"
   },
   {
     "name": "及锋而试",

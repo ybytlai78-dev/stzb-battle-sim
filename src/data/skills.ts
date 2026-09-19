@@ -5869,6 +5869,76 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     ],
   },
 
+  // ─── 拆解通用 B+ 第十七阶段：每回合递增几率 / 逐段独立判定 / 全体+S 级准备（2 个）───
+
+  /**
+   * 鸟云山兵（A 指挥·距离 2·一类指挥·我军群体〔有效距离内 2 个目标〕）：
+   * 战斗开始后，我军群体每回合行动时有 30% 几率使自身受到的攻击和策略攻击降低 60%，
+   * 持续 1 回合，**两个效果独立判断**，该效果生效几率每回合提升 10%。
+   * 官方：scripts/skill_extra.json id 200883（1 级 30% / 30%，满级 30% / 60%）。
+   * 引擎配套：`roundRepeat` 新增 ①`rateIncrementPerRound`（每回合几率递增，先加算再走士气，封顶 100%）；
+   *   ②`independentRolls`（对 `skill.output` 每段各掷一次、命中段单独结算 = 「两个效果独立判断」）。
+   * 生效对象为**携带者自身**（我军群体 2 目标各自行动时独立判定）→ roundRepeat 沿用战法目标池
+   * （准备阶段锁定的 2 名友军，`targetSide:'ally'` + `targetMode:'group'`）。
+   * 「持续 1 回合」按**自身行动时施加**口径 duration 1（覆盖其下一次行动之前，即整段被攻击窗口）。
+   */
+  niaoyun_shanbing: {
+    id: 'niaoyun_shanbing',
+    name: '鸟云山兵',
+    type: 'command',
+    phase: 'prep',
+    range: 2,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'ally',
+    tags: ['damage_reduce'],
+    roundRepeat: {
+      startRound: 1,
+      endRound: 8, // 第 1 回合 30% → 每回合 +10% → 第 8 回合 100%（封顶 100%）
+      rate: 0.3,
+      rateIncrementPerRound: 0.1,
+      independentRolls: true,
+    },
+    output: [
+      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.6, duration: 1, damageType: 'physical' } },
+      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.6, duration: 1, damageType: 'strategy' } },
+    ],
+  },
+
+  /**
+   * 十面埋伏（S 主动·1 回合准备·距离 5·40%）：对敌军全体发动一次策略攻击（伤害率 130%，受谋略属性影响），
+   * 并随机使敌军群体 1-2 目标**造成的所有伤害大幅度降低**，持续 1 回合。
+   * 官方：scripts/skill_extra.json id 200715（1 级 65%，满级 130%）；
+   * targetShow 写「敌军群体（有效距离内 3 个目标）」，但满级 desc 明确伤害段为**敌军全体**（距离 5 已覆盖全场）
+   * → 战法目标取 `'all'`，减伤段用输出级 `targetMode:'group'` + `groupCount:[1,2]` 另选 1-2 目标
+   * （全主诿异既有先例）。
+   * 「大幅度降低」无官方数值 → 沿用用户口径 `caused -99.99`（`buffMult` 下限 10%，Web 显示「造成的伤害大幅降低」）；
+   * 减伤对象为敌军、在自身行动中施加 → 「持续 1 回合」按 duration 2（辕门射戟口径）。
+   * 策略伤害 130% 受谋略缩放，官方未给成长率 → `growthRate` 留空（登记《成长率待补名单》§三）。
+   */
+  shimian_maifu: {
+    id: 'shimian_maifu',
+    name: '十面埋伏',
+    type: 'active',
+    prepare: true,
+    range: 5,
+    triggerRate: 0.4,
+    targetMode: 'all',
+    targetSide: 'enemy',
+    tags: ['damage', 'damage_boost'],
+    output: [
+      { kind: 'strategy_damage', rate: 130, strategyScaled: true },
+      {
+        kind: 'inflict_status',
+        targetSide: 'enemy',
+        targetMode: 'group',
+        groupCount: [1, 2],
+        status: { type: 'damage_boost', rate: -99.99, duration: 2, direction: 'caused' },
+      },
+    ],
+  },
+
   // ─── 批量31：下架武将清单 §1.2「补 1 个机制」逐个实现 ───
 
   /**

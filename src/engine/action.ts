@@ -515,15 +515,18 @@ export function triggerPreparedEffectOnAct(ctx: CombatContext, unit: UnitState):
   const locked = ctx.lockedCommands.filter((l) => l.skill.roundRepeat && l.skill.phase === 'prep');
   for (const l of locked) {
     const { skill, casterId } = l;
-    if (ctx.currentRound < skill.roundRepeat!.startRound || ctx.currentRound > skill.roundRepeat!.endRound) continue;
+    const rr = skill.roundRepeat!;
+    if (ctx.currentRound < rr.startRound || ctx.currentRound > rr.endRound) continue;
     const repeatPool = l.repeatTargets ?? l.targets;
     if (!repeatPool.includes(unit)) continue; // 只作用于当前行动的预备判定目标
+    if (rr.onlyPositions && !rr.onlyPositions.includes(unit.general.position)) continue; // 站位过滤（美人计 中军）
     if (!unit.alive) continue;
-    // 士气修正：预备负面生效几率（战必断金 90% 等）按施法者士气乘算
+    // 士气修正：预备负面生效几率（战必断金 90% 等）按施法者士气乘算；
+    // 每回合几率递增（鸟云山兵 +10%/回合）先加算再走士气
     const caster = castUnit(ctx, casterId);
     const morale = caster ? effectiveMorale(caster) : 100;
-    const rate = moraleTriggerRate(morale, skill.roundRepeat!.rate);
-    const success = ctx.rng.chance(rate);
+    const baseRate = Math.min(1, rr.rate + (rr.rateIncrementPerRound ?? 0) * (ctx.currentRound - rr.startRound));
+    const rate = moraleTriggerRate(morale, baseRate);
     ctx.events.push({
       type: 'unit_act_start',
       unitId: casterId,
@@ -531,6 +534,26 @@ export function triggerPreparedEffectOnAct(ctx: CombatContext, unit: UnitState):
       position: '中军',
       phase: 'command_skill',
     });
+    // 逐段独立判定（鸟云山兵「两个效果独立判断」）：每段各掷一次、命中段单独结算
+    if (rr.independentRolls) {
+      for (const out of skill.output) {
+        const hit = ctx.rng.chance(rate);
+        ctx.events.push({
+          type: 'skill_trigger',
+          unitId: casterId,
+          targetId: unit.general.id,
+          skillId: skill.id,
+          skillName: skill.name,
+          success: hit,
+          rate: Math.round(rate * 100),
+          baseRate: Math.round(baseRate * 100),
+          morale,
+        });
+        if (hit) executeSkillOutputs(ctx, caster ?? unit, skill, [unit], [out]);
+      }
+      continue;
+    }
+    const success = ctx.rng.chance(rate);
     ctx.events.push({
       type: 'skill_trigger',
       unitId: casterId,
@@ -539,7 +562,7 @@ export function triggerPreparedEffectOnAct(ctx: CombatContext, unit: UnitState):
       skillName: skill.name,
       success,
       rate: Math.round(rate * 100),
-      baseRate: Math.round(skill.roundRepeat!.rate * 100),
+      baseRate: Math.round(baseRate * 100),
       morale,
     });
     if (!success) continue;
