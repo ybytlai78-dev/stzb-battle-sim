@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Base application theme. -->
+    <style name="AppTheme" parent="Theme.AppCompat.Light.DarkActionBar">
+        <!-- Customize your theme here. -->
+        <item name="colorPrimary">@color/colorPrimary</item>
+        <item name="colorPrimaryDark">@color/colorPrimaryDark</item>
+        <item name="colorAccent">@color/colorAccent</item>
+        <!-- application 级主题也要深色底：SystemBars 插件会把 DecorView 背景设为
+             当前主题的 windowBackground，若此处为浅色，系统栏/挖孔区仍会露白 -->
+        <item name="android:windowBackground">@color/colorPrimaryDark</item>
+    </style>
+
+    <!-- 无 ActionBar 主题：边到边绘制，系统栏 / 挖孔区不再留白。
+         方案与「荣誉换算器」android 工程一致（该工程在真机实测无白边）：
+           · windowBackground 深色 → 露底也是 App 底色，不会出现白
+           · statusBarColor / navigationBarColor 透明 → 内容画到系统栏后面
+           · enforceStatusBarContrast / enforceNavigationBarContrast 关掉
+             → 禁掉 Android 10+ 强制加在透明栏上的半透明对比度遮罩
+           · windowLayoutInDisplayCutoutMode=shortEdges
+             → 内容延伸进挖孔区（否则横屏时挖孔侧会留一条白色竖条）
+           · windowLightStatusBar/NavigationBar=false → 深底上用浅色图标 -->
+    <style name="AppTheme.NoActionBar" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
+        <item name="android:background">@null</item>
+        <item name="android:windowBackground">@color/colorPrimaryDark</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowDrawsSystemBarBackgrounds">true</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="23">false</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">false</item>
+        <item name="android:navigationBarDividerColor" tools:targetApi="27">@android:color/transparent</item>
+        <item name="android:enforceStatusBarContrast" tools:targetApi="29">false</item>
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="29">false</item>
+        <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="27">shortEdges</item>
+    </style>
+
+
+    <!-- 启动主题：同样需要透明的系统栏，否则启动瞬间会闪白边；
+         postSplashScreenTheme 保证启动图结束后切回 AppTheme.NoActionBar -->
+    <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splashBackground</item>
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/ic_launcher_foreground</item>
+        <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
+        <item name="android:background">@drawable/splash</item>
+        <!-- 启动阶段（SplashScreen 主题生效期间）SystemBars 可能已读取 windowBackground，
+             这里同样给深色，避免启动瞬间及首帧露白 -->
+        <item name="android:windowBackground">@color/colorPrimaryDark</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="23">false</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">false</item>
+        <item name="android:enforceStatusBarContrast" tools:targetApi="29">false</item>
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="29">false</item>
+    </style>
+</resources>

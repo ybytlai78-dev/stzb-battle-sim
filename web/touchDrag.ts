@@ -1,30 +1,48 @@
 /**
- * 触屏拖拽（长按激活）：弥补 HTML5 drag 在触屏不可用。
- * 交互：池内武将卡 / 已入队槽卡 → 长按 ~260ms 进入拖动（跟手浮层、原卡半透明）
+ * 拖拽（Pointer/Touch 统一实现）：弥补 HTML5 drag 在 WebView / 触屏不可用。
+ *
+ * 两条事件路径，互不干扰：
+ *   ① 触摸 / 触控笔 —— `touch*` 事件 + 长按 ~260ms 激活（手指滑动留给页面滚动，不抢手势）
+ *   ② 鼠标 / 触控板 —— `pointer*` 事件 + 位移 >6px 激活（无需长按，符合桌面直觉）
+ *
+ * ⚠️ 为什么鼠标也必须自己实现（2026-09-18 实测）：
+ *   Android WebView（Capacitor 原生壳）里 HTML5 `dragstart`/`drop` **不会触发**，
+ *   而 ① 只监听 touch 事件 ⇒ 用鼠标（模拟器、平板接鼠标、桌面 WebView）时两条路全断，
+ *   武将卡完全拖不动。真机手指走 ① 正常。
+ *
+ * 桌面浏览器里原生 HTML5 DnD 是好的，因此鼠标路径一旦收到原生 `dragstart` 就**让位**
+ * （cleanup 掉自实现拖拽），浏览器行为与改动前完全一致。
+ *
+ * 交互：池内武将卡 / 已入队槽卡 → 激活后跟手浮层（原卡半透明）
  *      → 拖到目标槽位松手 = 放入/替换/换位；拖到武将池松手 = 卸下；松手无目标 = 取消。
- * 与桌面鼠标拖拽共用 EditorHandlers（onPickHero / onMoveSlot / onRemoveHero），
- * 不感知拖动过程中的滚动（长按激活前手指位移 > 阈值自动取消，视为滚动意图）。
+ * 与桌面鼠标拖拽共用 EditorHandlers（onPickHero / onMoveSlot / onRemoveHero）。
  */
 import type { EditorHandlers } from './teamEditor';
 
-const LONG_PRESS_MS = 260;
-const CANCEL_DIST = 12;
+const LONG_PRESS_MS = 260; // 触摸/触控笔：长按激活时长
+const MOUSE_MOVE_PX = 6; // 鼠标：位移超过此值即激活
+const CANCEL_DIST = 12; // 触摸：未激活前位移超过此值 = 想滚动，取消
 
-interface TouchDragState {
-  /** pick = 源是武将池卡；move/remove = 源是已入队槽卡 */
+interface DragState {
+  /** pick = 源是武将池卡；slot = 源是已入队槽卡 */
   kind: 'pick' | 'slot';
   heroId: string;
   team?: 'red' | 'blue';
   idx?: number;
   orig: HTMLElement;
   ghost: HTMLElement;
-  timer: ReturnType<typeof setTimeout>;
+  timer: ReturnType<typeof setTimeout> | null;
   active: boolean;
+  path: 'touch' | 'mouse';
   startX: number;
   startY: number;
+  lastX: number;
+  lastY: number;
+  /** 鼠标路径：激活时临时关掉原生 DnD 用，记原值以便恢复 */
+  origDraggable: boolean | null;
 }
 
-let drag: TouchDragState | null = null;
+let drag: DragState | null = null;
 let suppressClickUntil = 0;
 
 /** 拖拽结束后吞掉浏览器自动补发的 click（避免误开详情/误触发槽位选择） */
@@ -32,21 +50,82 @@ function swallowNextClick(): void {
   suppressClickUntil = Date.now() + 400;
 }
 
-function cleanup(restoreClick: boolean): void {
-  if (!drag) return;
-  clearTimeout(drag.timer);
-  drag.orig.classList.remove('dragging');
-  drag.ghost.remove();
-  document.querySelectorAll('.drag-over').forEach((el) => el.classList.remove('drag-over'));
-  if (restoreClick) swallowNextClick();
-  drag = null;
+/** 命中可拖拽源：武将池卡 或 已入队槽卡（弹窗内不响应） */
+function findCard(target: EventTarget | null): HTMLElement | null {
+  const el = (target as Element | null)?.closest?.(
+    '.hero-card[data-hero-id], .slot[data-team][data-hero-id]',
+  ) as HTMLElement | null;
+  if (!el || el.closest('.modal-mask')) return null;
+  return el;
 }
 
-/** 槽位高亮：命中 .slot 或 .hero-pool 时加 .drag-over */
-function highlightAt(x: number, y: number): void {
+function beginDrag(card: HTMLElement, x: number, y: number, path: 'touch' | 'mouse'): DragState {
+  const isSlot = card.classList.contains('slot');
+  const ghost = card.cloneNode(true) as HTMLElement;
+  ghost.classList.add('drag-ghost');
+  // 宽高都要显式带上：手机端槽位是「立绘铺满 + 图标绝对定位」，没有内在高度，
+  // 只给宽度会让浮层塌成一条线（桌面端带高度也能更贴近原卡尺寸）
+  const rect = card.getBoundingClientRect();
+  ghost.style.width = `${rect.width}px`;
+  ghost.style.height = `${rect.height}px`;
+  ghost.style.display = 'none';
+  document.body.appendChild(ghost);
+
+  const state: DragState = {
+    kind: isSlot ? 'slot' : 'pick',
+    heroId: card.dataset.heroId as string,
+    team: isSlot ? (card.dataset.team as 'red' | 'blue') : undefined,
+    idx: isSlot ? Number(card.dataset.slotIndex) : undefined,
+    orig: card,
+    ghost,
+    timer: null,
+    active: false,
+    path,
+    startX: x,
+    startY: y,
+    lastX: x,
+    lastY: y,
+    origDraggable: null,
+  };
+  drag = state;
+  return state;
+}
+
+function activateDrag(): void {
+  if (!drag) return;
+  drag.active = true;
+  if (drag.timer !== null) {
+    clearTimeout(drag.timer);
+    drag.timer = null;
+  }
+  drag.orig.classList.add('dragging');
+  if (drag.path === 'mouse') {
+    // 关掉原生 DnD，避免与自实现拖拽同时生效（cleanup 恢复）
+    drag.origDraggable = drag.orig.draggable;
+    drag.orig.draggable = false;
+  }
+  drag.ghost.style.display = '';
+  moveTo(drag.lastX, drag.lastY);
+}
+
+function moveTo(x: number, y: number): void {
+  if (!drag) return;
+  drag.lastX = x;
+  drag.lastY = y;
+  positionGhost(x, y);
+  highlightAt(x, y);
+}
+
+function cleanup(restoreClick: boolean): void {
+  if (!drag) return;
+  const wasActive = drag.active;
+  if (drag.timer !== null) clearTimeout(drag.timer);
+  drag.orig.classList.remove('dragging');
+  if (drag.origDraggable !== null) drag.orig.draggable = drag.origDraggable;
+  drag.ghost.remove();
   document.querySelectorAll('.drag-over').forEach((el) => el.classList.remove('drag-over'));
-  const hit = document.elementFromPoint(x, y)?.closest?.('.slot[data-team], .hero-pool');
-  if (hit) hit.classList.add('drag-over');
+  if (restoreClick && wasActive) swallowNextClick();
+  drag = null;
 }
 
 function placeAt(x: number, y: number, h: EditorHandlers): void {
@@ -72,81 +151,117 @@ function placeAt(x: number, y: number, h: EditorHandlers): void {
   cleanup(true); // 无目标 = 取消
 }
 
+/** 槽位高亮：命中 .slot 或 .hero-pool 时加 .drag-over */
+function highlightAt(x: number, y: number): void {
+  document.querySelectorAll('.drag-over').forEach((el) => el.classList.remove('drag-over'));
+  const hit = document.elementFromPoint(x, y)?.closest?.('.slot[data-team], .hero-pool');
+  if (hit) hit.classList.add('drag-over');
+}
+
 export function setupTouchDrag(h: EditorHandlers): void {
-  if (typeof window === 'undefined' || !('ontouchstart' in window)) return;
+  if (typeof window === 'undefined') return;
 
-  document.addEventListener('touchstart', (e) => {
-    if (drag || e.touches.length !== 1) return;
-    const t = e.touches[0];
-    // 源：武将池卡 或 已入队槽卡；弹窗内（.modal-mask 后代）不响应
-    const card = (t.target as Element).closest?.('.hero-card[data-hero-id], .slot[data-team][data-hero-id]') as HTMLElement | null;
-    if (!card || card.closest('.modal-mask')) return;
-    const isSlot = card.classList.contains('slot');
-    const heroId = card.dataset.heroId as string;
-    const ghost = card.cloneNode(true) as HTMLElement;
-    ghost.classList.add('drag-ghost');
-    ghost.style.width = `${card.getBoundingClientRect().width}px`;
-    document.body.appendChild(ghost);
-    ghost.style.display = 'none';
+  // ───────────── ① 触摸 / 触控笔：touch 事件 + 长按激活 ─────────────
+  if ('ontouchstart' in window) {
+    document.addEventListener(
+      'touchstart',
+      (e) => {
+        if (drag || e.touches.length !== 1) return;
+        const t = e.touches[0];
+        const card = findCard(t.target);
+        if (!card) return;
+        const state = beginDrag(card, t.clientX, t.clientY, 'touch');
+        state.timer = setTimeout(activateDrag, LONG_PRESS_MS);
+      },
+      { passive: true },
+    );
 
-    const state: TouchDragState = {
-      kind: isSlot ? 'slot' : 'pick',
-      heroId,
-      team: isSlot ? (card.dataset.team as 'red' | 'blue') : undefined,
-      idx: isSlot ? Number(card.dataset.slotIndex) : undefined,
-      orig: card,
-      ghost,
-      timer: setTimeout(() => {
-        // 长按激活（回调执行时 drag 已指向本 state）
-        if (!drag) return;
-        drag.active = true;
-        drag.orig.classList.add('dragging');
-        drag.ghost.style.display = '';
-        positionGhost(t.clientX, t.clientY);
-      }, LONG_PRESS_MS),
-      active: false,
-      startX: t.clientX,
-      startY: t.clientY,
-    };
-    drag = state;
-  }, { passive: true });
+    document.addEventListener(
+      'touchmove',
+      (e) => {
+        if (!drag || drag.path !== 'touch') return;
+        const t = e.touches[0];
+        if (!drag.active) {
+          if (Math.hypot(t.clientX - drag.startX, t.clientY - drag.startY) > CANCEL_DIST) {
+            cleanup(false); // 视为滚动意图
+          }
+          return;
+        }
+        e.preventDefault(); // 激活后禁止页面滚动
+        moveTo(t.clientX, t.clientY);
+      },
+      { passive: false },
+    );
 
-  document.addEventListener('touchmove', (e) => {
-    if (!drag) return;
-    const t = e.touches[0];
-    if (!drag.active) {
-      // 未激活前位移超阈值 = 用户想滚动，取消长按
-      if (Math.hypot(t.clientX - drag.startX, t.clientY - drag.startY) > CANCEL_DIST) {
-        clearTimeout(drag.timer);
-        drag = null;
+    document.addEventListener('touchend', (e) => {
+      if (!drag || drag.path !== 'touch') return;
+      if (!drag.active) {
+        cleanup(false);
+        return; // 未激活 = 普通点击，交给 click 流
       }
-      return;
-    }
-    e.preventDefault(); // 激活后禁止页面滚动
-    positionGhost(t.clientX, t.clientY);
-    highlightAt(t.clientX, t.clientY);
-  }, { passive: false });
+      const t = e.changedTouches[0];
+      placeAt(t.clientX, t.clientY, h);
+    });
 
-  const end = (e: TouchEvent): void => {
-    if (!drag) return;
-    if (!drag.active) {
-      clearTimeout(drag.timer);
-      drag = null;
-      return; // 未激活 = 普通点击，交给 click 流
-    }
-    const t = e.changedTouches[0];
-    placeAt(t.clientX, t.clientY, h);
-  };
-  document.addEventListener('touchend', end);
-  document.addEventListener('touchcancel', () => { if (drag) cleanup(false); });
+    document.addEventListener('touchcancel', () => {
+      if (drag && drag.path === 'touch') cleanup(false);
+    });
+  }
 
-  // 拖拽松手后浏览器会补发 click（手指未位移时）→ capture 阶段吞掉，防止误开详情
-  document.addEventListener('click', (e) => {
-    if (Date.now() < suppressClickUntil) {
-      e.stopPropagation();
+  // ───────────── ② 鼠标 / 触控板：pointer 事件 + 位移激活 ─────────────
+  if ('PointerEvent' in window) {
+    document.addEventListener('pointerdown', (e) => {
+      if (drag || e.pointerType !== 'mouse' || e.button !== 0) return;
+      const card = findCard(e.target);
+      if (!card) return;
+      beginDrag(card, e.clientX, e.clientY, 'mouse');
+    });
+
+    document.addEventListener('pointermove', (e) => {
+      if (!drag || drag.path !== 'mouse') return;
+      if (!drag.active) {
+        if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) <= MOUSE_MOVE_PX) return;
+        activateDrag();
+        if (!drag) return;
+      }
       e.preventDefault();
-    }
-  }, true);
+      moveTo(e.clientX, e.clientY);
+    });
+
+    document.addEventListener('pointerup', (e) => {
+      if (!drag || drag.path !== 'mouse') return;
+      if (!drag.active) {
+        cleanup(false);
+        return; // 未激活 = 点击，交给 click 流
+      }
+      placeAt(e.clientX, e.clientY, h);
+    });
+
+    document.addEventListener('pointercancel', () => {
+      if (drag && drag.path === 'mouse') cleanup(false);
+    });
+
+    // 桌面浏览器里原生 HTML5 DnD 更完整 → 它一启动就让位，保持原行为不变
+    document.addEventListener(
+      'dragstart',
+      () => {
+        if (drag && drag.path === 'mouse') cleanup(false);
+      },
+      true,
+    );
+  }
+
+  // 拖拽松手后浏览器会补发 click（指针未位移时）→ capture 阶段吞掉，防止误开详情
+  document.addEventListener(
+    'click',
+    (e) => {
+      if (Date.now() < suppressClickUntil) {
+        e.stopPropagation();
+        e.preventDefault();
+      }
+    },
+    true,
+  );
 }
 
 function positionGhost(x: number, y: number): void {

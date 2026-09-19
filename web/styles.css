@@ -46,6 +46,12 @@
   --color-focus: var(--color-gold);
   --card-accent: 2px solid var(--color-crimson);
   --radius: 8px;
+  /* 米黄按钮（顶栏导航「战报/战法/伤害测试」+ 面板操作「部队加成/清空本队」）：
+     实心浅底 + 深褐字，与深褐背景强区分；hover 提亮一档 */
+  --beige: #f0e4c8;
+  --beige-hi: #fff3da;
+  --beige-ink: #241c0e;
+  --beige-line: #b9974f;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -88,6 +94,9 @@ input[type="text"]:focus, input[type="number"]:focus, select:focus {
 /* 战报页：隐藏品牌顶栏与配将底栏，只留 .report-dock */
 #app.report-open header.app { display: none; }
 #app.report-open .control-bar { display: none; }
+/* 战报页把品牌顶栏藏了 → main 的上边缘就是屏幕顶，得自己避让状态栏 / 挖孔区。
+   --safe-* 由 web/mobile.css 提供（原生壳里由 MainActivity 注入真实 insets，网页版为 0）。 */
+#app.report-open main { padding-top: max(12px, var(--safe-top, 0px)); }
 
 /* ── 顶栏（率土标题栏：金线 + 暗红双线 + 左上「率」图标） ── */
 header.app {
@@ -95,7 +104,8 @@ header.app {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 10px 24px;
+  /* 顶/左右 padding 兼作系统栏避让：--safe-* = 0 时计算值与原值逐像素相同（网页版不受影响） */
+  padding: max(10px, var(--safe-top, 0px)) max(24px, var(--safe-right, 0px)) 10px max(24px, var(--safe-left, 0px));
   background: linear-gradient(180deg, #26200f, #1b150c);
   border-bottom: 1px solid var(--gold);
   box-shadow: inset 0 -3px 0 rgba(122, 34, 28, .55), 0 2px 12px rgba(0, 0, 0, .5);
@@ -123,24 +133,30 @@ header.app h1 {
 .app-nav {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
   flex-shrink: 0;
   margin-left: auto;
 }
+/* 米黄实心按钮：原来是纯文字链接，与深色顶栏糊在一起、看不出可点 */
 .nav-link {
-  background: none;
-  border: none;
-  color: var(--gold);
+  background: var(--beige);
+  color: var(--beige-ink);
+  border: 1px solid var(--beige-line);
+  border-radius: 6px;
   font-family: var(--font-kai);
   font-size: 15px;
   font-weight: 700;
-  letter-spacing: 4px;
+  letter-spacing: 3px;
   padding: 6px 14px;
   cursor: pointer;
-  transition: color .12s;
+  transition: background .12s, border-color .12s, color .12s;
 }
-.nav-link:hover { color: var(--gold-bright); }
-.nav-link:focus-visible { outline: 1px solid var(--gold); outline-offset: 2px; }
+.nav-link:hover {
+  background: var(--beige-hi);
+  border-color: var(--beige-hi);
+  color: var(--beige-ink);
+}
+.nav-link:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
 
 /* ── 内容区：固定占满剩余高度（不整页滚动）；战报在自身窗口内滚动 ── */
 main {
@@ -201,13 +217,27 @@ main {
 .team-panel.red h2 { color: var(--red); }
 .team-panel.blue h2 { color: var(--blue); }
 .team-head-actions { display: flex; gap: 6px; flex-shrink: 0; }
-.team-bonus { width: auto; flex-shrink: 0; padding: 2px 8px; font-size: 11px; letter-spacing: 1px; }
-.team-clear {
+/* 面板操作按钮：米黄实心（原来是 .btn.ghost 透明文字，和面板底糊在一起、看不出可点）。
+   用 .btn.ghost.xxx 三段类名压过 .btn.ghost，不依赖书写顺序；
+   font-size / padding 一并写死，否则会被文件后面的 .btn 基础规则改回 13px。 */
+.btn.ghost.team-bonus,
+.btn.ghost.team-clear {
   width: auto;
   flex-shrink: 0;
-  padding: 2px 8px;
-  font-size: 11px;
+  background: var(--beige);
+  color: var(--beige-ink);
+  border: 1px solid var(--beige-line);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
   letter-spacing: 1px;
+  padding: 3px 9px;
+}
+.btn.ghost.team-bonus:hover,
+.btn.ghost.team-clear:hover {
+  background: var(--beige-hi);
+  border-color: var(--beige-hi);
+  color: var(--beige-ink);
 }
 /* ── 部队加成弹窗（率土手游复刻：深色古风，红棕磨砂暗纹，三栏并列卡片）── */
 .bm-mask {
@@ -751,7 +781,8 @@ main {
   align-items: center;
   gap: 20px;
   flex-wrap: wrap;
-  padding: 8px 20px;
+  /* 底部 padding 兼作手势条 / 导航栏避让：--safe-* = 0 时与原值逐像素相同 */
+  padding: 8px max(20px, var(--safe-right, 0px)) calc(8px + var(--safe-bottom, 0px)) max(20px, var(--safe-left, 0px));
   background: var(--color-surface);
   border-top: 1px solid var(--color-line);
 }
@@ -848,6 +879,9 @@ main {
   align-items: center;
   justify-content: center;
   z-index: 100;
+  /* 蒙层照旧铺满全屏（含系统栏，背景色不断），但内容只在安全区内居中：
+     否则横屏 88dvh 的弹窗会钻到状态栏 / 手势条底下。--safe-* = 0 时无变化。 */
+  padding: var(--safe-top, 0px) var(--safe-right, 0px) var(--safe-bottom, 0px) var(--safe-left, 0px);
 }
 .modal {
   background: var(--color-surface);
@@ -1497,7 +1531,8 @@ main {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  padding: 8px 12px;
+  /* 战报页隐藏了 .control-bar，底部避让只能由这里负责（--safe-* = 0 时与原值相同） */
+  padding: 8px max(12px, var(--safe-right, 0px)) calc(8px + var(--safe-bottom, 0px)) max(12px, var(--safe-left, 0px));
   background: var(--color-surface);
   border-top: 1px solid var(--line);
 }

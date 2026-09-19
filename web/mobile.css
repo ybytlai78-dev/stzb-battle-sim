@@ -5,8 +5,25 @@
  *  2) 横屏手机 / 矮视口：整体压缩垂直空间，保持固定单屏操作
  *  3) 竖屏手机：降级为整页纵向滚动（不破坏布局）
  *  4) 窄桌面窗口：三列配将区自适应收缩
- *  5) 刘海屏安全区（env(safe-area-inset-*)）
+ *  5) 系统栏安全区（状态栏 / 手势条 / 挖孔区）
  * ============================================================ */
+
+/* ── 0. 系统栏安全区变量 ─────────────────────────────────────
+   单一来源：--safe-area-inset-*，只有两个填值途径 ——
+     ① 原生壳：android/app/src/main/java/.../MainActivity.java 的 installSafeAreaBridge()
+        监听窗口 insets，把 systemBars()|displayCutout() 换算成 CSS px 写进 documentElement。
+        ⚠️ 不能指望 Capacitor 的 SystemBars：它在 insetsHandling:'disable' 下直接 return，
+           一个变量都不注入（SystemBars.java:187-189）；而改成 'css' 又会在 WebView < 140 时
+           给 DecorView 加 padding，把挖孔区整条吃掉（白边/变窄事故）。
+     ② 纯浏览器 / PWA：回退原生 env()（需 viewport-fit=cover，index.html 已设），再兜底 0px。
+        注意 env() 在 Android WebView 上要 M136（仅全屏）或 M144 才带 systemBars 数据，
+        更早版本只报 display cutout —— 这正是"顶部状态栏压住 UI"的根因，故原生壳走 ①。 */
+:root {
+  --safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --safe-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+  --safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --safe-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+}
 
 /* ── 1. 触屏基础 ── */
 @media (hover: none) and (pointer: coarse) {
@@ -28,13 +45,19 @@
   }
 }
 
-/* ── 2. 横屏手机 / 矮视口（固定单屏的紧凑版） ── */
-@media (orientation: landscape) and (max-height: 520px) {
+/* ── 2. 横屏手机（固定单屏的紧凑版） ──
+   触发条件：触屏设备（pointer: coarse）+ 横屏 + 高度 ≤ 620px。
+   · pointer:coarse ⇒ 鼠标拖窄的桌面窗口不吃这套紧凑规则（它只是窄，不是手机）；
+   · 阈值 520 → 620 ⇒ 高 DPR 手机横屏的 CSS 视口高度常落在 520~620 之间
+     （例：1080p@2x = 540px），旧阈值会让这些机型整个掉回桌面布局 ——
+     表现为侧列不收缩、中间武将池被挤窄、队伍字标折成两行；
+   · 平板横屏（≥768px 高）仍被排除，不会被压成手机样式。 */
+@media (orientation: landscape) and (pointer: coarse) and (max-height: 620px) {
   html { font-size: 12px; }
 
   /* 顶栏：压缩高度 */
   header.app {
-    padding: 6px max(14px, env(safe-area-inset-left)) 6px max(14px, env(safe-area-inset-right));
+    padding: max(6px, var(--safe-top)) max(14px, var(--safe-right)) 6px max(14px, var(--safe-left));
     gap: 10px;
   }
   header.app .rate-logo { width: 26px; height: 26px; }
@@ -43,27 +66,62 @@
   /* 内容区 */
   main { padding: 8px 12px 6px; }
 
-  /* 三列配将：侧列收缩，武将池弹性占满 */
+  /* 三列配将：侧列只放立绘（见下「配队槽位」），压到 84px；中间武将池弹性占满 */
   .team-editor {
-    grid-template-columns: minmax(170px, 1fr) minmax(220px, 1.6fr) minmax(170px, 1fr);
-    gap: 10px;
+    grid-template-columns: 84px minmax(0, 1fr) 84px;
+    gap: 6px;
   }
-  .team-panel { padding: 6px 8px; }
-  .team-head { padding-bottom: 4px; margin-bottom: 6px; }
-  .team-panel h2 { font-size: 12px; padding: 0; margin: 0; }
-  .team-clear { font-size: 10px; padding: 1px 6px; }
-  .team-bonus { font-size: 10px; }
+  .team-panel { padding: 4px; }
+  /* 队头：「红队/蓝队」字标的位置改成上下两个米黄按钮（字标在手机端隐藏，队别靠红/蓝底边区分） */
+  .team-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 0 0 4px;
+    margin-bottom: 6px;
+  }
+  .team-panel h2 { display: none; }
+  /* 字标藏了之后，队别就只剩「左红右蓝」的位置线索了 —— 用面板与槽位的底边色带补回颜色线索
+     （原设计里 h2 是唯一的红/蓝区分；--card-accent 会被槽位继承，整列一起变色） */
+  .team-panel.red { --card-accent: 2px solid var(--red); }
+  .team-panel.blue { --card-accent: 2px solid var(--blue); }
+  .team-head-actions { flex-direction: column; gap: 4px; }
+  .btn.ghost.team-bonus,
+  .btn.ghost.team-clear {
+    width: 100%;
+    padding: 3px 2px;
+    font-size: 11px;
+    letter-spacing: 0;
+  }
 
-  /* 卡槽压缩：三槽均分，不再滚动；圆角/绯红底边继承 styles.css 套2 */
-  .slot { padding: 4px; border-radius: var(--radius); }
-  .slot-inner { gap: 6px; }
-  .slot-art { width: 40px; }
-  .slot .hero-name { font-size: 12px; }
-  .slot .hero-meta { font-size: 9.5px; }
-  .slot .hero-skills { --sslot-size: 28px; margin-top: 1px; gap: 2px; }
-  .slot-skill { gap: 1px; }
-  .slot-skill-name { font-size: 8.5px; padding: 0 3px; }
-  .slot .hint, .slot .tip { font-size: 9px; margin-top: 0; }
+  /* 配队槽位：手机端只留「方形立绘 + 主战法图标」——
+     位置标签 / 圆头像 / 名字 / 星级 / 势力·兵种·等级行 / 其余战法图标 全部隐藏 */
+  .slot { padding: 0; border-radius: var(--radius); }
+  .slot-inner { position: relative; display: block; gap: 0; }
+  /* 立绘从 40px 竖条改成铺满整卡的方形（background-size: cover 已有，取上半身靠上裁切） */
+  .slot-art { width: 100%; height: 100%; border: none; border-radius: 0; }
+  /* .slot-main 退化成只承载主战法图标的浮层 */
+  .slot-main { position: absolute; inset: 0; display: block; }
+  .slot .hero-line,
+  .slot .slot-sub { display: none; }
+  .slot .hero-skills {
+    position: absolute;
+    right: 2px;
+    bottom: 2px;
+    margin: 0;
+    gap: 0;
+    --sslot-size: 22px;
+  }
+  .slot-skill { flex: none; max-width: none; }
+  /* 只留主战法那一个（x.main）；其它装配战法、以及"无战法"提示都不显示 */
+  .slot .hero-skills .slot-skill:not(.main) { display: none; }
+  .slot .hero-skills .tip { display: none; }
+  .slot-skill-name { display: none; }
+  /* 空槽：84px 窄列放不下「+ 点击选择 前锋」（会折成四行），只留一个「＋」。
+     文字本身保留在 DOM 里（font-size:0 只是看不见），读屏仍能读到。 */
+  .slot.empty { font-size: 0; letter-spacing: 0; }
+  .slot.empty > span::before { content: '＋'; font-size: 20px; }
+  .slot .hint { font-size: 9px; margin-top: 0; }
 
   /* 武将池：卡片缩小，一屏看更多 */
   .hero-pool { padding: 8px; }
@@ -81,7 +139,7 @@
 
   /* 底栏：紧凑（扁平表面 + 绯红主钮由 styles.css 提供） */
   .control-bar {
-    padding: 5px max(12px, env(safe-area-inset-left)) calc(5px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-right));
+    padding: 5px max(12px, var(--safe-right)) calc(5px + var(--safe-bottom)) max(12px, var(--safe-left));
     gap: 10px;
     background: var(--color-surface);
     border-top: 1px solid var(--color-line);
@@ -97,7 +155,7 @@
     border-color: var(--color-crimson);
   }
 
-  .nav-link { font-size: 13px; letter-spacing: 3px; padding: 4px 10px; }
+  .nav-link { font-size: 13px; letter-spacing: 2px; padding: 5px 10px; }
 
   /* 弹窗 */
   .modal { max-height: 88dvh; }
@@ -175,7 +233,7 @@
     overflow: visible;
   }
   header.app {
-    padding: 8px max(12px, env(safe-area-inset-left)) 8px max(12px, env(safe-area-inset-right));
+    padding: max(8px, var(--safe-top)) max(12px, var(--safe-right)) 8px max(12px, var(--safe-left));
   }
   header.app .rate-logo { width: 30px; height: 30px; }
   header.app h1 { font-size: 15px; letter-spacing: 2px; }
@@ -190,7 +248,7 @@
   .hero-pool { min-height: 400px; }
   .control-bar {
     gap: 8px;
-    padding: 6px max(12px, env(safe-area-inset-left)) calc(6px + env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-right));
+    padding: 6px max(12px, var(--safe-right)) calc(6px + var(--safe-bottom)) max(12px, var(--safe-left));
   }
   .modal { max-height: 90dvh; }
   .history-body { grid-template-columns: 1fr; min-height: 0; }
