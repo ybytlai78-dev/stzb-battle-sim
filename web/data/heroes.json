@@ -2853,7 +2853,7 @@
     "growthDefense": 1.51,
     "growthStrategy": 1.29,
     "growthSpeed": 0.56,
-    "mainSkillId": "",
+    "mainSkillId": "cijian_changqu",
     "mainSkillName": "赐剑长驱",
     "skillDesc": "战斗中自身无法释放主动战法或进行普通攻击，令友军全体每回合首次成功释放主动战法后，有40.0%几率（受谋略属性影响）再次发动（跳过所有准备回合），造成原战法50.0%的伤害和恢复效果"
   },

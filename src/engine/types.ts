@@ -682,6 +682,13 @@ export interface CommandSkill extends BaseSkill {
   /** 二类指挥动态发动率：初始 base，未生效每回合 +increment，生效后重置（奇兵拒北 30% 起始，未生效+5%） */
   dynamicTriggerRate?: { base: number; increment: number };
   /**
+   * 友军「再次发动」监听（赐剑长驱）：令友军全体**每回合首次成功释放主动战法后**，有 `rate`% 几率
+   * 再次发动同一战法（**跳过所有准备回合**），但只造成原战法 `factor` 倍的伤害与恢复效果。
+   * 逐「友军 × 每回合首次成功主动」判定一次（同回合内每名友军最多 1 次）；`rate` 为谋略 80 时的
+   * 基础几率（%），`growthRate` 缺省 = 不缩放（按基值，待反解）；施法者阵亡后不再生效。
+   */
+  allyRecast?: { rate: number; growthRate?: number; factor: number };
+  /**
    * 二类指挥·附加「本回合首次主动战法实际释放成功后」段（鸾凤和鸣）：
    * 与 `roundTrigger` 解耦——主判定时机走 on_act / after_first_active 时，本段仍会在携带者本回合
    * **首次成功释放主动战法后**执行一次（目标池按段内 targetSide/targetMode/groupCount 覆盖）。

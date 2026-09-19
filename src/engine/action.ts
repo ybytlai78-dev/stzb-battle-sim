@@ -196,6 +196,12 @@ export interface CombatContext {
    */
   beforeActiveOnceKeys?: Set<string>;
   /**
+   * 友军再次发动监听（赐剑长驱）：key `${round}:${skillId}:${casterId}:${actorId}` → 已判定，
+   * 保证「友军每回合首次成功释放主动战法后」对每个发动者只判定一次。
+   * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
+   */
+  allyRecastOnceKeys?: Set<string>;
+  /**
    * 受击触发整场次数上限（持玺兴兵）：key `${casterId}:${skillId}` → 已触发次数（整场累计，不随回合重置）。
    * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
    */
@@ -4320,6 +4326,7 @@ export function triggerActiveSkill(
 
   executeSkillWithTargets(ctx, unit, skill, enemies, allies, attackPool);
   triggerAfterFirstActiveCommands(ctx, unit);
+  triggerAllyRecastCommands(ctx, unit, skill);
   triggerPassiveAfterActive(ctx, unit);
   // 三军夺帅：成功发动主动战法后触发；奉令护蜀：本侧友军行动叠层
   triggerActHooks(ctx, unit);
@@ -4336,6 +4343,7 @@ function executePreparedSkill(
   const allies = unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
   executeSkillWithTargets(ctx, unit, skill, enemies, allies, attackPool);
   triggerAfterFirstActiveCommands(ctx, unit);
+  triggerAllyRecastCommands(ctx, unit, skill);
   triggerPassiveAfterActive(ctx, unit);
   // 三军夺帅：成功发动主动战法后触发；奉令护蜀：本侧友军行动叠层
   triggerActHooks(ctx, unit);
@@ -4370,6 +4378,124 @@ function triggerAfterFirstActiveCommands(ctx: CombatContext, unit: UnitState): v
       skillName: skill.name,
     });
     executeSkillOutputs(ctx, unit, skill, selected, mainAfterFirstActive ? skill.output : extraOutput);
+  }
+}
+
+/**
+ * 再次发动的输出缩放（赐剑长驱「造成原战法 50.0% 的伤害和恢复效果」）：
+ * 只缩放**伤害/恢复类数值**——物理/策略/位置伤害 rate、代打定轨两率（recipientDamageByHigherStat）、
+ * DoT rate（妖术/燃烧/恐慌/诅咒/引燃）、heal.rate、grant_first_aid.healRate；
+ * 属性增减 / 控制 / 增减伤等非伤害恢复段保持原样。chance_group / random_pick / morale_branch 递归处理。
+ * 说明：战法链（连环计 chainSkills）等元机制段不在本口径内（再次发动只缩放战法自身 output）。
+ */
+function scaleDamageHealOutputs(outputs: SkillOutput[], factor: number): SkillOutput[] {
+  const scaleRate = (v: number): number => (v === 0 ? 0 : roundRate(v * factor));
+  const scaleRateOrRange = (v: number | [number, number]): number | [number, number] =>
+    Array.isArray(v) ? [scaleRate(v[0]), scaleRate(v[1])] : scaleRate(v);
+  return outputs.map((raw) => {
+    const out = structuredClone(raw) as unknown as Record<string, unknown>;
+    switch (out.kind) {
+      case 'physical_damage': {
+        if (out.rate != null) out.rate = scaleRateOrRange(out.rate as number | [number, number]);
+        const byHigher = out.recipientDamageByHigherStat as { attackRate: number; strategyRate: number } | undefined;
+        if (byHigher) {
+          out.recipientDamageByHigherStat = {
+            attackRate: scaleRate(byHigher.attackRate),
+            strategyRate: scaleRate(byHigher.strategyRate),
+          };
+        }
+        break;
+      }
+      case 'strategy_damage':
+      case 'positional_physical_damage':
+        if (out.rate != null) out.rate = scaleRateOrRange(out.rate as number | [number, number]);
+        break;
+      case 'heal':
+        out.rate = scaleRate(out.rate as number);
+        break;
+      case 'grant_first_aid':
+        out.healRate = scaleRate(out.healRate as number);
+        break;
+      case 'inflict_status': {
+        const statuses = (
+          Array.isArray(out.status) ? out.status : [out.status]
+        ) as Array<Record<string, unknown>>;
+        for (const st of statuses) {
+          if (!st) continue;
+          if (['sorcery', 'burning', 'panic', 'curse', 'ignite'].includes(String(st.type)) && st.rate != null) {
+            st.rate = scaleRate(st.rate as number);
+          }
+        }
+        break;
+      }
+      case 'chance_group':
+        out.outputs = scaleDamageHealOutputs(out.outputs as SkillOutput[], factor);
+        break;
+      case 'random_pick':
+        out.options = (out.options as SkillOutput[][]).map((option) => scaleDamageHealOutputs(option, factor));
+        break;
+      case 'morale_branch':
+        out.high = scaleDamageHealOutputs((out.high ?? []) as SkillOutput[], factor);
+        out.low = scaleDamageHealOutputs((out.low ?? []) as SkillOutput[], factor);
+        break;
+      default:
+        break;
+    }
+    return out as unknown as SkillOutput;
+  });
+}
+
+/**
+ * 友军「再次发动」监听（赐剑长驱）：我军全体**每回合首次成功释放主动战法后**，由存活携带者按
+ * 「基础几率（受谋略缩放）× 士气」判定一次；命中则该友军立即再次发动**同一战法**——跳过所有准备回合、
+ * 重新选目标，但只造成原战法 `factor` 倍的伤害与恢复效果（见 scaleDamageHealOutputs）。
+ * 逐「友军 × 每回合首次成功主动」只判定一次；再次发动走 executeSkillWithTargets（不会再触发本监听）。
+ */
+export function triggerAllyRecastCommands(ctx: CombatContext, actor: UnitState, cast: Skill): void {
+  if (cast.type !== 'active') return; // 官方：「每回合首次成功释放**主动战法**后」
+  const team = actor.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+  const enemies = actor.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
+  for (const caster of team) {
+    if (!caster.alive) continue; // 施法者兵力为 0 后不再生效
+    for (const id of caster.general.commandSkillIds) {
+      const skill = resolveSkill(ctx, id);
+      if (skill?.type !== 'command' || !skill.allyRecast) continue;
+      ctx.allyRecastOnceKeys ??= new Set();
+      const onceKey = `${ctx.currentRound}:${skill.id}:${caster.general.id}:${actor.general.id}`;
+      if (ctx.allyRecastOnceKeys.has(onceKey)) continue;
+      ctx.allyRecastOnceKeys.add(onceKey);
+
+      const cfg = skill.allyRecast;
+      const base = roundRate(scaledValue(cfg.rate, cfg.growthRate ?? 0, effectiveStat(caster, 'strategy'))) / 100;
+      const morale = effectiveMorale(caster);
+      const rate = moraleTriggerRate(morale, base);
+      const success = ctx.rng.chance(rate);
+      ctx.events.push({
+        type: 'skill_trigger',
+        unitId: caster.general.id,
+        targetId: actor.general.id,
+        skillId: skill.id,
+        skillName: skill.name,
+        success,
+        rate: Math.round(rate * 100),
+        baseRate: Math.round(base * 100),
+        morale,
+      });
+      if (!success) continue;
+      // 再次发动：跳过所有准备回合（直接执行输出）、重选目标，伤害/恢复按 factor 缩放
+      const recast = {
+        ...(structuredClone(cast) as Skill),
+        output: scaleDamageHealOutputs(cast.output, cfg.factor),
+      } as Skill;
+      executeSkillWithTargets(
+        ctx,
+        actor,
+        recast,
+        enemies,
+        team,
+        hasStatus(actor, 'rampage') ? mixedPool(ctx, actor) : enemies
+      );
+    }
   }
 }
 

@@ -5387,4 +5387,36 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+  /**
+   * 赐剑长驱（刘禅·蜀步 h689·指挥 A）：距离 3，官方目标「友军全体」。
+   * 战斗中自身无法释放主动战法或进行普通攻击，令友军全体每回合首次成功释放主动战法后，
+   * 有 40.0% 几率（受谋略属性影响）再次发动（跳过所有准备回合），造成原战法 50.0% 的伤害和恢复效果。
+   * 官方：scripts/skill_extra.json id 200962（指挥 A / 距离 3 / 友军全体 / 兵种步；1 级 发动率 20% / 效果 25%）。
+   * 入档判断：**下架** —— 再次发动几率 40%「受谋略属性影响」而官方未给成长系数 → 按基值不缩放 +
+   *   登记 OFFLINE_MAIN_SKILLS，待反解确认后移出。
+   * 引擎配套：
+   *   ① 自身封禁用既有控制状态（犹豫 = 无法主动、怯战 = 无法普攻），准备阶段对自身施加 duration 999
+   *      （与官方效果标签「犹豫(自身);怯战(自身)」一致；可被移除有害效果类战法净化）；
+   *   ② `CommandSkill.allyRecast`（友军每回合首次成功主动后按几率再次发动同一战法、跳过准备、按 factor 缩放
+   *      伤害与恢复）——监听入口 triggerAllyRecastCommands，由主动战法成功释放点调用（含准备战法释放）。
+   * 口径说明（本次新机制）：官方目标列写的「友军全体」是**监听范围**，本战法自身 output 只作用于自身，
+   *   故 targetMode:'self'；再次发动的 50% 只缩放「战法自身 output 的伤害/恢复段」（战法链等元机制段不缩放）。
+   */
+  cijian_changqu: {
+    id: 'cijian_changqu',
+    name: '赐剑长驱',
+    type: 'command',
+    phase: 'prep',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['hesitation', 'cowardice'],
+    output: [
+      // 自身无法释放主动战法（犹豫）/ 无法进行普通攻击（怯战）：整场常驻
+      { kind: 'inflict_status', status: { type: 'hesitation', duration: 999 } },
+      { kind: 'inflict_status', status: { type: 'cowardice', duration: 999 } },
+    ],
+    // 友军全体每回合首次成功释放主动战法后：40%（受谋略，成长率未确认 → 基值）再次发动，伤害/恢复 ×50%
+    allyRecast: { rate: 40, factor: 0.5 },
+  },
 };
