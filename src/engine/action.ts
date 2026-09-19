@@ -36,6 +36,25 @@ function passesCasterPosition(skill: Skill, unit: UnitState): boolean {
   return !allowed || allowed.length === 0 || allowed.includes(unit.general.position);
 }
 
+/**
+ * 取「某属性最高 / 最低」的单体（举抑臧否）：按**生效属性**比较，并列时取先者；空池返回空数组。
+ */
+function pickStatUnit(
+  pool: UnitState[],
+  stat: 'attack' | 'defense' | 'strategy',
+  mode: 'highest' | 'lowest'
+): UnitState[] {
+  if (pool.length === 0) return [];
+  const best = pool.reduce((cur, u) => {
+    const better =
+      mode === 'highest'
+        ? effectiveStat(u, stat) > effectiveStat(cur, stat)
+        : effectiveStat(u, stat) < effectiveStat(cur, stat);
+    return better ? u : cur;
+  });
+  return [best];
+}
+
 /** 兵种克制减伤率（加算进增减伤单一总和）：被克制方攻击克制方 0.3，否则 0 */
 function troopCounterReduceOf(source: UnitState, target: UnitState): number {
   return troopCounterReduce(source.general.troopType, target.general.troopType);
@@ -3763,13 +3782,24 @@ function executeSkillOutputs(
       );
       if (!hit) continue;
     }
-    // 缚父临危：状态段的友军目标选取（① 我军当前攻击属性最高单体，② 按武将名匹配「吕布」等指定武将）
+    // 状态段的目标选取覆盖（缚父临危 / 举抑臧否）：
+    // ① 按武将名匹配「吕布」等；② 我军某属性最高单体（含施法者自身）；③ 敌军某属性最低单体（无视距离）
     if (out.kind === 'inflict_status' && out.targetPick) {
-      if (out.targetPick === 'highest_attack_ally') {
-        const pick = highestStatAlly(allies, 'attack'); // 含施法者自身（「自身及友军攻击属性最高的单体」）
-        pool = pick ? [pick] : [];
-      } else if (out.targetPick === 'ally_named') {
+      const pick = out.targetPick;
+      if (pick === 'ally_named') {
         pool = allies.filter((u) => u.alive && u.general.name === out.targetPickName);
+      } else if (pick === 'highest_attack_ally') {
+        const best = highestStatAlly(allies, 'attack'); // 含施法者自身（「自身及友军攻击属性最高的单体」）
+        pool = best ? [best] : [];
+      } else {
+        const [, mode, stat, side] = /^(highest|lowest)_(attack|defense|strategy)_(ally|enemy)$/.exec(pick) ?? [];
+        if (mode && stat && side) {
+          pool = pickStatUnit(
+            (side === 'ally' ? allies : enemies).filter((u) => u.alive),
+            stat as 'attack' | 'defense' | 'strategy',
+            mode === 'highest' ? 'highest' : 'lowest'
+          );
+        }
       }
     }
     // 三军夺帅 / 地公将军：本段状态打在**上一段伤害**的同一批命中目标上（不按本段 targetMode 重选）

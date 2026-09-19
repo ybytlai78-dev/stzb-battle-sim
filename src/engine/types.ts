@@ -319,12 +319,22 @@ export type SkillOutput =
        */
       sameTargetsAsLastDamage?: boolean;
       /**
-       * 本段友军目标选取覆盖（缚父临危）：
+       * 本段友军目标选取覆盖（缚父临危 / 举抑臧否）：
        *  - `'highest_attack_ally'` = 我军当前**攻击属性最高**单体（含施法者自身，「自身及友军攻击属性最高的单体」）；
-       *  - `'ally_named'` = 按武将名匹配（配合 `targetPickName`，如「吕布」——同名多张卡都算，用户确认）。
-       * 设置后覆盖本段 targetSide / targetMode 的目标池。
+       *  - `'ally_named'` = 按武将名匹配（配合 `targetPickName`，如「吕布」——同名多张卡都算，用户确认）；
+       *  - `'highest_{attack|defense|strategy}_ally'` = 我军该属性**最高**单体（含施法者自身）；
+       *  - `'lowest_{attack|defense|strategy}_enemy'` = 敌军该属性**最低**单体（**无视距离**）。
+       *    （举抑臧否「该属性最低的敌军单体对应属性降低…该属性最高的友军单体对应属性提升…」）
+       * 设置后覆盖本段 targetSide / targetMode 的目标池；按**生效属性**（effectiveStat）比较。
        */
-      targetPick?: 'highest_attack_ally' | 'ally_named';
+      targetPick?:
+        | 'highest_attack_ally'
+        | 'ally_named'
+        | 'highest_defense_ally'
+        | 'highest_strategy_ally'
+        | 'lowest_attack_enemy'
+        | 'lowest_defense_enemy'
+        | 'lowest_strategy_enemy';
       /** `targetPick:'ally_named'` 时的武将名（如 '吕布'） */
       targetPickName?: string;
       /**
