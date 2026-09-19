@@ -2140,9 +2140,9 @@
     "targetDesc": "自己",
     "effectDesc": "战斗中当自身兵力首次低于初始兵力的90%、70%、50%和30%时，使自身下次行动时武将主战法发动率提高50.0%，该效果仅对可造成攻击伤害或策略伤害的战法生效",
     "sources": "【魏·郭皇后·弓】【群·高顺·骑】",
-    "status": "skipped",
-    "missingMechanics": "兵力比例",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "troop-threshold+recover p9"
   },
   {
     "name": "胜敌益强",
@@ -2153,9 +2153,9 @@
     "targetDesc": "自己",
     "effectDesc": "每回合行动时使自身恢复1次兵力（恢复率120.0%，受防御属性影响），第2、4、6回合起，胜敌益强的恢复次数提升至2、3、4次，持续到战斗结束",
     "sources": "【群·袁术·步】【蜀·陈到·步】",
-    "status": "skipped",
-    "missingMechanics": "恢复次数递增",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "troop-threshold+recover p9"
   },
   {
     "name": "胜负先征",

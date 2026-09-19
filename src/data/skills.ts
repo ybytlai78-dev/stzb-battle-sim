@@ -5348,6 +5348,78 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     ],
   },
 
+  // ─── 拆解通用 B+ 第九阶段：兵力阈值 / 恢复次数（A 级 2 个）───
+
+  /**
+   * 甚陷不惧（A 被动·距离 1·目标自己）：
+   * 当自身兵力**首次**低于初始兵力的 90%、70%、50%、30% 时，使自身**下次行动时**武将主战法发动率
+   * 提高 50%（仅对可造成攻击伤害或策略伤害的战法生效）。
+   * 官方：scripts/skill_extra.json id 200941（1 级 25%）。
+   * 用户 2026-09-19 确认：该效果**消耗于自身下次行动**（行动结束清除，不按回合递减）。
+   * 引擎配套：① **新增 `PassiveSkill.troopThresholdBuff`**（受击实际扣兵后逐档检查、每档去重；
+   *   同一次结算跨越多档只结算一次）；② `trigger_boost` 新增 `mainSkillOnly`（只对携带者主战法）、
+   *   `damageSkillsOnly`（输出含物理/策略伤害段）、`expireAfterOwnAct`（行动末清除）；
+   *   ③ `General.mainSkillId`（原先只有 mainSkillName，无法按 id 过滤，本次补上并由 hero-utils 注入）。
+   */
+  shenxian_bujv: {
+    id: 'shenxian_bujv',
+    name: '甚陷不惧',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['damage_boost'],
+    output: [],
+    troopThresholdBuff: {
+      thresholds: [90, 70, 50, 30],
+      output: [
+        {
+          kind: 'inflict_status',
+          target: 'self',
+          status: {
+            type: 'trigger_boost',
+            rate: 0.5,
+            duration: 999,
+            mainSkillOnly: true,
+            damageSkillsOnly: true,
+            expireAfterOwnAct: true,
+          },
+        },
+      ],
+    },
+  },
+  /**
+   * 胜敌益强（A 被动·距离 1·目标自己）：
+   * 每回合行动时使自身恢复 1 次兵力（恢复率 120%，受防御属性影响）；
+   * 第 2、4、6 回合起恢复次数提升至 2、3、4 次，持续到战斗结束。
+   * 官方 id 200261（1 级 60%）。
+   * 引擎配套：① **新增 `PassiveSkill.recoverEachRound`**（按回合取次数、逐次结算；围困拦截）；
+   *   ② `heal` 新增 `defenseScaled`（受防御缩放；成长率未确认 → 留空按基值 120%，必填字段给 0）。
+   */
+  shengdi_yiqiang: {
+    id: 'shengdi_yiqiang',
+    name: '胜敌益强',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['heal'],
+    output: [],
+    recoverEachRound: {
+      tiers: [
+        { startRound: 1, times: 1 },
+        { startRound: 2, times: 2 },
+        { startRound: 4, times: 3 },
+        { startRound: 6, times: 4 },
+      ],
+      rate: 120,
+      growthRate: 0,
+      defenseScaled: true,
+    },
+  },
+
   // ─── 批量31：下架武将清单 §1.2「补 1 个机制」逐个实现 ───
 
   /**

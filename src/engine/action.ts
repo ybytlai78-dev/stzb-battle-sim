@@ -140,6 +140,21 @@ function isAttackClassSkill(skill: Skill): boolean {
   return walk(skill.output);
 }
 
+/** 「可造成攻击伤害或策略伤害的战法」（甚陷不惧 damageSkillsOnly 过滤维）：输出树含伤害段即可 */
+function isDamageClassSkill(skill: Skill): boolean {
+  const walk = (outs: SkillOutput[]): boolean =>
+    outs.some((o) => {
+      if (o.kind === 'physical_damage' || o.kind === 'strategy_damage' || o.kind === 'positional_physical_damage') {
+        return true;
+      }
+      if (o.kind === 'chance_group') return walk(o.outputs);
+      if (o.kind === 'random_pick') return walk(o.options.flat());
+      if (o.kind === 'morale_branch') return walk(o.high) || walk(o.low);
+      return false;
+    });
+  return walk(skill.output);
+}
+
 function boostedBaseRate(unit: UnitState, skillType: SkillType, baseRate: number, skill?: Skill): number {
   let rate = baseRate;
   for (const s of unit.statuses) {
@@ -147,6 +162,10 @@ function boostedBaseRate(unit: UnitState, skillType: SkillType, baseRate: number
     if (s.skillTypes && s.skillTypes.length > 0 && !s.skillTypes.includes(skillType)) continue;
     // 攻击类过滤（侵掠如火）：只对输出含物理伤害的战法生效
     if (s.attackSkillsOnly && (!skill || !isAttackClassSkill(skill))) continue;
+    // 仅携带者主战法（甚陷不惧）
+    if (s.mainSkillOnly && (!skill || skill.id !== unit.general.mainSkillId)) continue;
+    // 仅「可造成攻击伤害或策略伤害的战法」（甚陷不惧）
+    if (s.damageSkillsOnly && (!skill || !isDamageClassSkill(skill))) continue;
     if (s.additive === false) rate *= 1 + s.rate;
     else rate += s.rate;
   }
@@ -203,6 +222,8 @@ export interface CombatContext {
   actLayerCounters?: Map<string, number>;
   /** 层数型受伤减免计数器（百战无怯）：key `${casterId}:${skillId}` → 当前层数（0..maxStacks） */
   stacksReduceCounters?: Map<string, number>;
+  /** 兵力阈值首次跨越去重（甚陷不惧）：key `${skillId}:${unitId}:${threshold}` */
+  troopThresholdKeys?: Set<string>;
   /** 持续型急救计数器（皇裔流离）：战法级共享触发率与总生效次数（全队合计，每达到 N 次提升）。
    *  可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化 */
   firstAidCounters?: FirstAidCounter[];
@@ -1234,6 +1255,21 @@ export function triggerPassiveSkills(
         continue;
       }
     }
+    // 登记型被动（兵力阈值触发 / 每回合行动恢复）：无 output 时只登记，不空跑 executeSkillWithTargets
+    if (
+      skill.output.length === 0 &&
+      !skill.roundStartRepeat &&
+      !skill.onHurt &&
+      (skill.troopThresholdBuff || skill.recoverEachRound)
+    ) {
+      ctx.events.push({
+        type: 'skill_cast',
+        unitId: unit.general.id,
+        skillId: skill.id,
+        skillName: skill.name,
+      });
+      continue;
+    }
     ctx.events.push({
       type: 'unit_act_start',
       unitId: unit.general.id,
@@ -1740,6 +1776,21 @@ function tickStatusesOnActStart(ctx: CombatContext, unit: UnitState): void {
   }
 }
 
+/**
+ * 行动收尾：清除「仅本次行动有效」的发动率提升（甚陷不惧 expireAfterOwnAct）→ 标记已行动 → 发 unit_act_end。
+ */
+function endUnitAct(ctx: CombatContext, unit: UnitState): void {
+  const expiring = unit.statuses.filter((s) => s.type === 'trigger_boost' && s.expireAfterOwnAct);
+  if (expiring.length > 0) {
+    unit.statuses = unit.statuses.filter((s) => !(s.type === 'trigger_boost' && s.expireAfterOwnAct));
+    for (const s of expiring) {
+      ctx.events.push({ type: 'status_expired', unitId: unit.general.id, statusType: s.type });
+    }
+  }
+  unit.hasActedThisRound = true;
+  ctx.events.push({ type: 'unit_act_end', unitId: unit.general.id });
+}
+
 export function actUnit(ctx: CombatContext, unit: UnitState): void {
   const enemies = unit.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
   const allies = unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
@@ -1781,6 +1832,9 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
     executeSkillOutputs(ctx, unit, p, [unit], rs.output);
   }
 
+  // 0.6 被动「每回合行动时恢复 N 次」（胜敌益强）：按当前回合取次数
+  triggerRecoverEachRound(ctx, unit);
+
   // 1. 指挥预备负面效果判定（战必/措手/白衣，目标行动时）
   triggerPreparedEffectOnAct(ctx, unit);
 
@@ -1806,12 +1860,11 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
   }
   tickDots(ctx, unit);
   if (!unit.alive) {
-    unit.hasActedThisRound = true;
-    ctx.events.push({ type: 'unit_act_end', unitId: unit.general.id });
+    endUnitAct(ctx, unit);
     return;
   }
 
-  // 混乱：禁主动战法 + 普攻 + 追击（但被动/指挥/DoT已在上方判定完成）
+  // 混乱：禁主动战法 + 普攻 + 追击（但被动/指挥/DoT 已在上方判定完成）
   if (hasStatus(unit, 'confusion')) {
     ctx.events.push({
       type: 'no_attack_target',
@@ -1819,8 +1872,7 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
       name: unit.general.name,
       reason: '混乱：无法行动',
     });
-    unit.hasActedThisRound = true;
-    ctx.events.push({ type: 'unit_act_end', unitId: unit.general.id });
+    endUnitAct(ctx, unit);
     return;
   }
 
@@ -1937,8 +1989,7 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
     }
   }
 
-  unit.hasActedThisRound = true;
-  ctx.events.push({ type: 'unit_act_end', unitId: unit.general.id });
+  endUnitAct(ctx, unit);
 }
 
 function resolveSkill(ctx: CombatContext, id: string): Skill | null {
@@ -2602,6 +2653,16 @@ function pushStatus(
     // 攻击类过滤（侵掠如火：只提升攻击类主动战法发动率）
     if (type === 'trigger_boost' && 'attackSkillsOnly' in create && create.attackSkillsOnly) {
       (push as { attackSkillsOnly?: boolean }).attackSkillsOnly = true;
+    }
+    // 主战法 / 伤害类 / 仅本次行动 过滤（甚陷不惧）
+    if (type === 'trigger_boost' && 'mainSkillOnly' in create && create.mainSkillOnly) {
+      (push as { mainSkillOnly?: boolean }).mainSkillOnly = true;
+    }
+    if (type === 'trigger_boost' && 'damageSkillsOnly' in create && create.damageSkillsOnly) {
+      (push as { damageSkillsOnly?: boolean }).damageSkillsOnly = true;
+    }
+    if (type === 'trigger_boost' && 'expireAfterOwnAct' in create && create.expireAfterOwnAct) {
+      (push as { expireAfterOwnAct?: boolean }).expireAfterOwnAct = true;
     }
     target.statuses.push(push);
     // 战报 detail：duration ≥ 999（战斗结束约定）→「持续至战斗结束」；
@@ -3921,6 +3982,78 @@ function gainStacksReduceOnDeal(ctx: CombatContext, source?: UnitState): void {
   }
 }
 
+/**
+ * 兵力阈值首次跨越触发（甚陷不惧）：持有者受击实际扣兵后逐档检查，
+ * 命中未触发过的档位（`ctx.troopThresholdKeys` 去重）则对持有者自身结算 output。
+ * 同一次结算跨越多档时只结算一次（同源发动率提升不叠加）。
+ */
+function triggerTroopThresholdBuff(ctx: CombatContext, target: UnitState): void {
+  if (!target.alive) return;
+  for (const id of target.general.passiveSkillIds) {
+    const skill = resolveSkill(ctx, id);
+    if (skill?.type !== 'passive' || !skill.troopThresholdBuff) continue;
+    if (!passesCasterPosition(skill, target)) continue;
+    const cfg = skill.troopThresholdBuff;
+    const pct = (target.troops / target.general.maxTroops) * 100;
+    ctx.troopThresholdKeys ??= new Set();
+    let fired = false;
+    for (const t of cfg.thresholds) {
+      if (!(pct < t)) continue;
+      const key = `${skill.id}:${target.general.id}:${t}`;
+      if (ctx.troopThresholdKeys.has(key)) continue;
+      ctx.troopThresholdKeys.add(key);
+      fired = true;
+    }
+    if (!fired) continue;
+    // 同源发动率提升已在身上 → 多档同时跨越只算一次
+    if (target.statuses.some((s) => s.type === 'trigger_boost' && s.sourceSkillId === skill.id)) continue;
+    executeSkillOutputs(ctx, target, skill, [target], cfg.output);
+  }
+}
+
+/**
+ * 被动「每回合自身行动时恢复 N 次」（胜敌益强）：按当前回合取 `tiers` 中 `startRound ≤ 回合` 的最后一项，
+ * 逐次按恢复公式结算（围困拦截；恢复率受防御缩放，未确认成长率时按基值）。
+ */
+function triggerRecoverEachRound(ctx: CombatContext, unit: UnitState): void {
+  if (!unit.alive) return;
+  for (const id of unit.general.passiveSkillIds) {
+    const skill = resolveSkill(ctx, id);
+    if (skill?.type !== 'passive' || !skill.recoverEachRound) continue;
+    if (!passesCasterPosition(skill, unit)) continue;
+    const cfg = skill.recoverEachRound;
+    let times = 0;
+    for (const tier of cfg.tiers) {
+      if (ctx.currentRound >= tier.startRound) times = tier.times;
+    }
+    if (times <= 0) continue;
+    if (hasStatus(unit, 'siege')) {
+      ctx.events.push({ type: 'siege_blocked', unitId: unit.general.id, skillId: skill.id });
+      continue;
+    }
+    const rate = roundRate(
+      scaledValue(cfg.rate, cfg.growthRate, cfg.defenseScaled ? effectiveStat(unit, 'defense') : 80)
+    );
+    for (let i = 0; i < times; i++) {
+      if (!unit.alive) break;
+      const before = unit.troops;
+      const healed = recoverTroops(ctx, unit, calcHealAmount(unit.troops, rate));
+      if (healed > 0) {
+        ctx.events.push({
+          type: 'heal',
+          sourceId: unit.general.id,
+          targetId: unit.general.id,
+          skillId: skill.id,
+          skillName: skill.name,
+          amount: healed,
+          before,
+          after: unit.troops,
+        });
+      }
+    }
+  }
+}
+
 function executeSkillOutputs(
   ctx: CombatContext,
   caster: UnitState,
@@ -4533,6 +4666,9 @@ function executeSkillOutputs(
         if (out.strategyScaled) {
           const scaled = scaledValue(out.rate, out.growthRate, caster.general.strategy);
           rate = roundRate(scaled);
+        } else if (out.defenseScaled) {
+          // 胜敌益强「恢复率受防御属性影响」
+          rate = roundRate(scaledValue(out.rate, out.growthRate, effectiveStat(caster, 'defense')));
         }
         for (const t of pool) {
           if (!t.alive) continue;
@@ -6220,6 +6356,8 @@ export function applyDamage(
     }
     // 百战无怯：受到伤害（实际扣兵）后 −1 层并恢复（0 层不掉不回血）；致死一击不回血
     if (target.alive) loseStacksReduceOnEvent(ctx, target);
+    // 兵力阈值首次跨越（甚陷不惧）：受击实际扣兵后逐档检查
+    triggerTroopThresholdBuff(ctx, target);
   }
   // 受击引燃（火势风威）：受到伤害时额外引发一次燃烧（触发后移除标记）
   triggerIgniteOnHurt(ctx, target);
