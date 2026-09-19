@@ -3997,6 +3997,61 @@ function gainStacksReduceOnDeal(ctx: CombatContext, source?: UnitState): void {
 }
 
 /**
+ * 「成功发动主动 / 追击战法后」钩子（乘间击隙 / 勠力同心）：
+ * - `afterMainActiveStacks`：携带者**主动主战法**发动后同源叠层，满层触发一次 `triggerOutput` 并清空状态；
+ * - `dapingCastBuff`：**大营**发动主动/追击后，给指定站位友军（前锋/中军）同源叠层。
+ * `castSkill` 为本次实际发动（释放）的战法（准备战法在释放时算发动）。
+ */
+function triggerCastKindHooks(
+  ctx: CombatContext,
+  actor: UnitState,
+  kind: 'active' | 'pursuit',
+  castSkill?: Skill
+): void {
+  if (!actor.alive) return;
+  // ① 乘间击隙
+  for (const id of actor.general.commandSkillIds) {
+    const skill = resolveSkill(ctx, id);
+    const cfg = skill?.afterMainActiveStacks;
+    if (!skill || !cfg) continue;
+    if (kind !== 'active') continue;
+    if (!castSkill || castSkill.id !== actor.general.mainSkillId) continue;
+    const stacksOf = () => {
+      const st = actor.statuses.find(
+        (s): s is Extract<typeof s, { type: 'damage_boost' }> =>
+          s.type === 'damage_boost' && s.sourceSkillId === skill.id
+      );
+      return st?.stacks ?? 0;
+    };
+    if (stacksOf() >= cfg.maxStacks) continue;
+    inflictStatus(ctx, actor, cfg.status, skill.type, skill.id, actor.general.id);
+    if (stacksOf() >= cfg.maxStacks) {
+      // 满层：先按当前增伤打出一次群体攻击（目标由段内 targetMode 重选），随后清空增伤
+      executeSkillOutputs(ctx, actor, skill, [actor], cfg.triggerOutput);
+      actor.statuses = actor.statuses.filter(
+        (s) => !(s.type === 'damage_boost' && s.sourceSkillId === skill.id)
+      );
+      ctx.events.push({ type: 'status_expired', unitId: actor.general.id, statusType: 'damage_boost' });
+    }
+  }
+  // ② 勠力同心（大营发动 → 前锋/中军叠层）
+  const allies = actor.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+  for (const holder of allies) {
+    if (!holder.alive) continue;
+    for (const id of holder.general.commandSkillIds) {
+      const skill = resolveSkill(ctx, id);
+      const cfg = skill?.dapingCastBuff;
+      if (!skill || !cfg) continue;
+      if (!cfg.actorPositions.includes(actor.general.position)) continue;
+      for (const t of allies) {
+        if (!t.alive || !cfg.targetPositions.includes(t.general.position)) continue;
+        inflictStatus(ctx, t, cfg.status, skill.type, skill.id, holder.general.id);
+      }
+    }
+  }
+}
+
+/**
  * 「每回合自身首次造成伤害后」钩子（以直报怨）：按「回合 × 战法 × 施法者」去重，
  * 命中则对**本次伤害目标**执行 output（每次实际扣兵 > 0 计一次）。
  */
@@ -5188,6 +5243,8 @@ export function triggerActiveSkill(
   triggerPassiveAfterActive(ctx, unit);
   // 三军夺帅：成功发动主动战法后触发；奉令护蜀：本侧友军行动叠层
   triggerActHooks(ctx, unit);
+  // 乘间击隙 / 勠力同心：主动战法成功发动后钩子（准备战法在释放时同样算发动）
+  triggerCastKindHooks(ctx, unit, 'active', skill);
 }
 
 /** 准备完成的战法自动发动 */
@@ -5205,6 +5262,8 @@ function executePreparedSkill(
   triggerPassiveAfterActive(ctx, unit);
   // 三军夺帅：成功发动主动战法后触发；奉令护蜀：本侧友军行动叠层
   triggerActHooks(ctx, unit);
+  // 乘间击隙 / 勠力同心：主动战法成功发动后钩子（准备战法在释放时同样算发动）
+  triggerCastKindHooks(ctx, unit, 'active', skill);
 }
 
 /**
@@ -5665,6 +5724,8 @@ function triggerPursuitSkill(
   executeSkillOutputs(ctx, unit, skill, [hitTarget]);
   // 三军夺帅：成功发动追击战法后触发；奉令护蜀：本侧友军行动叠层
   triggerActHooks(ctx, unit);
+  // 乘间击隙 / 勠力同心：追击战法成功发动后钩子
+  triggerCastKindHooks(ctx, unit, 'pursuit', skill);
 }
 
 // ─── 普通攻击 ───

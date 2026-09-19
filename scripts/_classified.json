@@ -177,9 +177,9 @@
     "targetDesc": "自己",
     "effectDesc": "自身每发动主动主战法后，使自身造成的攻击伤害提升10.0%，最多叠加3次。该效果每叠加3次后，对敌军群体发动1次攻击（伤害率200.0%），发动后攻击伤害提升效果消失",
     "sources": "【魏·程昱·弓】【吴·丁奉·步】",
-    "status": "skipped",
-    "missingMechanics": "发动主战法后叠加",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "cast-kind p12"
   },
   {
     "name": "先驱突击",
@@ -216,9 +216,9 @@
     "targetDesc": "我军全体",
     "effectDesc": "战斗中，我方大营每次发动主动战法或追击战法后，前锋和中军下次行动阶段主动战法和追击战法造成的伤害提升40.0%，此效果可额外叠加1次。",
     "sources": "【蜀·周仓·步】【群·田丰·骑】",
-    "status": "skipped",
-    "missingMechanics": "大营发动后增益",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "cast-kind p12"
   },
   {
     "name": "合纵连横",

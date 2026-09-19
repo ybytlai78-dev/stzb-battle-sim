@@ -666,6 +666,19 @@ interface BaseSkill {
    */
   allyDealStack?: { damageType?: DamageType; skillTypes?: SkillType[]; status: CreateStatus };
   /**
+   * 自身**主动主战法**发动后叠层，满层触发一次攻击并清空（乘间击隙「自身每发动主动主战法后，使自身造成的
+   * 攻击伤害提升 15%，最多叠加 3 次。该效果每叠加 3 次后，对敌军群体发动 1 次攻击（240%），发动后攻击伤害
+   * 提升效果消失」）：每次发动携带者主战法（且为主动型）后 `status` 同源 +1 层（`maxStacks` 上限），
+   * 达到上限时执行 `triggerOutput`（段内自带 targetMode 重选敌军群体）随后移除该状态。
+   */
+  afterMainActiveStacks?: { maxStacks: number; status: CreateStatus; triggerOutput: SkillOutput[] };
+  /**
+   * 大营发动主动/追击后给指定站位友军叠层（勠力同心「我方大营每次发动主动战法或追击战法后，前锋和中军
+   * 下次行动阶段主动和追击战法造成的伤害提升 40%，此效果可额外叠加 1 次」）：
+   * `actorPositions` 判定**发动者站位**、`targetPositions` 为受益友军站位；叠层由 `status.maxStacks` 控制。
+   */
+  dapingCastBuff?: { actorPositions: Position[]; targetPositions: Position[]; status: CreateStatus };
+  /**
    * 战法链（连环计「依次发动下列战法…每个战法的效果与原战法在同等级下效果相同」）：
    * 最外层发动时按顺序把**其他已注册战法**（`SKILL_REGISTRY`）的 `output` 当作本战法效果执行，
    * 事件 / 统计归属**被引用战法**（战报显示「发动了一次伐谋」）。

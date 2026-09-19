@@ -5588,6 +5588,76 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     },
   },
 
+  // ─── 拆解通用 B+ 第十二阶段：行动后叠层（A 级 2 个）───
+
+  /**
+   * 乘间击隙（A 一类指挥·距离 4·目标自己）：
+   * 自身每发动**主动主战法**后，使自身造成的**攻击伤害提升 15%**，最多叠加 3 次；
+   * 该效果每叠加 3 次后，对敌军群体发动 1 次攻击（伤害率 240%），发动后攻击伤害提升效果消失。
+   * 官方：scripts/skill_extra.json id 200259（1 级 7.5% / 120%）。
+   * 引擎配套：**新增 `CommandSkill.afterMainActiveStacks`** —— 携带者主动主战法发动后同源叠层
+   *   （`status` + `maxStacks`），满层执行 `triggerOutput`（段内自带 `targetMode` 重选敌军群体）后清空状态。
+   * 无「受属性影响」→ 15% / 240% 固定，不缩放。
+   */
+  chengjian_jixi: {
+    id: 'chengjian_jixi',
+    name: '乘间击隙',
+    type: 'command',
+    phase: 'prep',
+    range: 4,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['damage_boost', 'damage'],
+    output: [],
+    afterMainActiveStacks: {
+      maxStacks: 3,
+      status: {
+        type: 'damage_boost',
+        rate: 0.15,
+        duration: 999,
+        direction: 'caused',
+        attackOnly: true,
+        stacks: 1,
+        maxStacks: 3,
+      },
+      triggerOutput: [{ kind: 'physical_damage', rate: 240, targetMode: 'group', groupCount: 3 }],
+    },
+  },
+  /**
+   * 勠力同心（A 一类指挥·距离 2·我军全体）：
+   * 我方**大营**每次发动主动战法或追击战法后，**前锋和中军**下次行动阶段主动和追击战法造成的伤害
+   * 提升 40%，此效果可额外叠加 1 次（最多 2 层）。
+   * 官方 id 200967（1 级 20%）。
+   * 引擎配套：**新增 `CommandSkill.dapingCastBuff`** —— 「成功发动主动/追击战法后」钩子里判定
+   *   `actorPositions:['大营']`，给 `targetPositions:['前锋','中军']` 的友军同源叠层（`maxStacks:2`）。
+   *   「下次行动阶段」按行动中施加给他人口径取 duration 2（覆盖其下一次行动；辕门射戟/反击同口径）。
+   * 无「受属性影响」→ 40% 固定，不缩放。
+   */
+  luli_tongxin: {
+    id: 'luli_tongxin',
+    name: '勠力同心',
+    type: 'command',
+    phase: 'prep',
+    range: 2,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['damage_boost'],
+    output: [],
+    dapingCastBuff: {
+      actorPositions: ['大营'],
+      targetPositions: ['前锋', '中军'],
+      status: {
+        type: 'damage_boost',
+        rate: 0.4,
+        duration: 2,
+        direction: 'caused',
+        skillTypes: ['active', 'pursuit'],
+        stacks: 1,
+        maxStacks: 2,
+      },
+    },
+  },
+
   // ─── 批量31：下架武将清单 §1.2「补 1 个机制」逐个实现 ───
 
   /**
