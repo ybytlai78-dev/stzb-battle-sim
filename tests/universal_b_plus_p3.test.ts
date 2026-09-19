@@ -178,7 +178,7 @@ describe('万箭齐发（A 主动 35%：群体 2 攻击 150% + 策略造成 −5
     expect(s.targetMode).toBe('group');
   });
 
-  it('机制：output[0] 攻击 150；output[1] 策略 caused −0.5 duration 2 attackScaled 无 growthRate', () => {
+  it('机制：output[0] 攻击 150；output[1] 策略 caused −0.5 duration 1 attackScaled 无 growthRate', () => {
     const s = asActive('wanjian_qifa');
     expect(s.output[0].kind).toBe('physical_damage');
     if (s.output[0].kind === 'physical_damage') expect(s.output[0].rate).toBe(150);
@@ -186,7 +186,7 @@ describe('万箭齐发（A 主动 35%：群体 2 攻击 150% + 策略造成 −5
     expect(st?.type).toBe('damage_boost');
     if (st?.type === 'damage_boost') {
       expect(st.rate).toBe(-0.5);
-      expect(st.duration).toBe(2);
+      expect(st.duration).toBe(1); // 官方「持续 1 回合」字面值（新口径 action-end 递减）
       expect(st.direction).toBe('caused');
       expect(st.damageType).toBe('strategy');
       expect(st.attackScaled).toBe(true);

@@ -73,11 +73,21 @@ function run(team: General[], seed = 1, maxRounds = 8) {
 const casts = (report: ReturnType<typeof run>, name: string) =>
   report.events.filter((e) => e.type === 'skill_cast' && e.skillName === name);
 
-const inflicted = (report: ReturnType<typeof run>, statusType: string) =>
-  report.events.filter(
+const inflictedOf = (events: BattleEvent[], statusType: string) =>
+  events.filter(
     (e): e is Extract<BattleEvent, { type: 'status_inflicted' }> =>
       e.type === 'status_inflicted' && e.statusType === statusType
   );
+
+const inflicted = (report: ReturnType<typeof run>, statusType: string) =>
+  inflictedOf(report.events, statusType);
+
+/** 只取第 1 回合事件：新口径（行动结束后递减）下张宁自身的属性增益会活到她下次行动，
+ *  第 2 回合起再吸取会按已增益的谋略结算 → 数值变大；基值/成长断言只看首次结算。 */
+function firstRound(events: BattleEvent[]): BattleEvent[] {
+  const end = events.findIndex((e) => e.type === 'round_start' && e.round === 2);
+  return end < 0 ? events : events.slice(0, end);
+}
 
 // ─── 确定性直构单元（对照 morale.test.ts）───
 
@@ -225,11 +235,12 @@ describe('黄天余音（张宁，主动：吸取敌军单体全属性 26 附加
     // 谋略 80：敌/自身为基值 26；先补给自身后再给队友 → 队友 26+0.20×26=31
     const report = run(fullTeam(zhangningAt(80)), 1);
     expect(casts(report, '黄天余音').length).toBeGreaterThan(0);
-    const enemyDebuffs = inflicted(report, 'attack_buff').filter((e) => e.unitId.startsWith('enemy'));
+    const events = firstRound(report.events);
+    const enemyDebuffs = inflictedOf(events, 'attack_buff').filter((e) => e.unitId.startsWith('enemy'));
     expect(enemyDebuffs.length).toBeGreaterThan(0);
     expect(enemyDebuffs.every((e) => e.detail.includes('降低了26('))).toBe(true);
-    const selfBuffs = inflicted(report, 'attack_buff').filter((e) => e.unitId === 'h474');
-    const allyBuffs = inflicted(report, 'attack_buff').filter((e) => !e.unitId.startsWith('enemy') && e.unitId !== 'h474');
+    const selfBuffs = inflictedOf(events, 'attack_buff').filter((e) => e.unitId === 'h474');
+    const allyBuffs = inflictedOf(events, 'attack_buff').filter((e) => !e.unitId.startsWith('enemy') && e.unitId !== 'h474');
     expect(selfBuffs.length).toBeGreaterThan(0);
     expect(selfBuffs.every((e) => e.detail.includes('提高了26('))).toBe(true);
     expect(allyBuffs.length).toBeGreaterThan(0);
@@ -238,14 +249,15 @@ describe('黄天余音（张宁，主动：吸取敌军单体全属性 26 附加
 
   it('吸取数值：谋略 80 时敌/自身 ±26、队友 31；仅持续 1 回合', () => {
     const report = run(fullTeam(zhangningAt(80)), 1);
+    const events = firstRound(report.events);
     for (const st of ['attack_buff', 'defense_buff', 'strategy_buff', 'speed_buff']) {
-      const enemyAll = inflicted(report, st).filter((e) => e.unitId.startsWith('enemy'));
+      const enemyAll = inflictedOf(events, st).filter((e) => e.unitId.startsWith('enemy'));
       expect(enemyAll.length).toBeGreaterThan(0);
       expect(enemyAll.every((e) => e.detail.includes('降低了26('))).toBe(true);
-      const selfAll = inflicted(report, st).filter((e) => e.unitId === 'h474');
+      const selfAll = inflictedOf(events, st).filter((e) => e.unitId === 'h474');
       expect(selfAll.length).toBeGreaterThan(0);
       expect(selfAll.every((e) => e.detail.includes('提高了26('))).toBe(true);
-      const allyAll = inflicted(report, st).filter((e) => !e.unitId.startsWith('enemy') && e.unitId !== 'h474');
+      const allyAll = inflictedOf(events, st).filter((e) => !e.unitId.startsWith('enemy') && e.unitId !== 'h474');
       expect(allyAll.length).toBeGreaterThan(0);
       expect(allyAll.every((e) => e.detail.includes('提高了31('))).toBe(true);
     }
@@ -253,9 +265,10 @@ describe('黄天余音（张宁，主动：吸取敌军单体全属性 26 附加
 
   it('吸取成长 0.20：谋略 283 时敌/自身 67，补给自身后再给队友 80', () => {
     const report = run(fullTeam(zhangningAt(283)), 1);
-    const enemy = inflicted(report, 'attack_buff').filter((e) => e.unitId.startsWith('enemy'));
-    const self = inflicted(report, 'attack_buff').filter((e) => e.unitId === 'h474');
-    const ally = inflicted(report, 'attack_buff').filter((e) => !e.unitId.startsWith('enemy') && e.unitId !== 'h474');
+    const events = firstRound(report.events);
+    const enemy = inflictedOf(events, 'attack_buff').filter((e) => e.unitId.startsWith('enemy'));
+    const self = inflictedOf(events, 'attack_buff').filter((e) => e.unitId === 'h474');
+    const ally = inflictedOf(events, 'attack_buff').filter((e) => !e.unitId.startsWith('enemy') && e.unitId !== 'h474');
     expect(enemy.every((e) => e.detail.includes('降低了67('))).toBe(true);
     expect(self.every((e) => e.detail.includes('提高了67('))).toBe(true);
     expect(ally.every((e) => e.detail.includes('提高了80('))).toBe(true);

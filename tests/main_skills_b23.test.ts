@@ -108,12 +108,13 @@ describe('怀橘遗亲（陆绩，一类指挥：每回合开始时大营 +20 / 
     expect(['ally-front', 'ally-mid']).toContain([...hit][0]);
   });
 
-  it('数值：首回合三段共 9 条（自身 3 + 非大营单体 3 + 大营 3）；同战法重复施加为静默刷新', () => {
+  it('数值：每回合三段各 3 条（自身 3 + 非大营单体 3 + 大营 3）；上回合状态在行动结束后到期 → 次回合重新施加', () => {
     const report = run(teamWithLuAt('前锋'), 1, 2);
     const r2 = report.events.findIndex((e) => e.type === 'round_start' && e.round === 2);
     expect(r2).toBeGreaterThan(0);
-    expect(statEvents(report.events.slice(0, r2)).length).toBeGreaterThanOrEqual(9);
-    // 第 2 回合同样施加同一批属性 → 同战法累加/刷新，静默（不重复推送事件）
-    expect(statEvents(report.events.slice(r2))).toHaveLength(0);
+    expect(statEvents(report.events.slice(0, r2))).toHaveLength(9);
+    // 新口径（行动结束后递减）：第 1 回合施加的属性在携带者行动结束时到期，
+    // 第 2 回合开始重新施加 → 再推 9 条（「持续至该回合结束」不再依赖静默刷新路径）
+    expect(statEvents(report.events.slice(r2))).toHaveLength(9);
   });
 });

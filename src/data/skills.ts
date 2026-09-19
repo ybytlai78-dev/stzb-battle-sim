@@ -9,8 +9,8 @@ import type { CreateStatus, Skill, SkillOutput } from '../engine/types';
  * 举抑臧否（许劭）单属性效果组：随机选取属性后一次性结算的四段 ——
  * ① 该属性最低的敌军单体 −20（受谋略）；② 60% 概率 犹豫/怯战/围困 之一；
  * ③ 该属性最高的友军单体 +20（受谋略）；④ 60% 概率 先手/洞察/无视规避 之一。
- * 持续时间口径（官方「持续 1 回合」）：
- *  - 控制 / 属性 / 洞察：行动中施加 → duration 2（覆盖目标下一个行动回合，沿用辕门射戟用户口径）；
+ * 持续时间口径（官方「持续 1 回合」）：新口径（2026-09-18）下行动中施加的状态在携带者行动**结束后**递减，
+ * duration 即官方字面回合数 = 目标接下来 N 次行动 → 控制 / 属性 / 洞察一律 duration 1；
  *  - 先手（priority）：duration 1（只影响下一回合出手顺序；duration 2 会连吃两次排序）；
  *  - 无视规避：消耗制（由下一次造成伤害消耗，tick 不递减）→ duration 999 占位。
  */
@@ -18,11 +18,11 @@ function juyizangfouOption(attr: 'attack' | 'defense' | 'strategy'): SkillOutput
   const statStatus = (amount: number): CreateStatus => {
     switch (attr) {
       case 'attack':
-        return { type: 'attack_buff', amount, duration: 2, strategyScaled: true, growthRate: 0 };
+        return { type: 'attack_buff', amount, duration: 1, strategyScaled: true, growthRate: 0 };
       case 'defense':
-        return { type: 'defense_buff', amount, duration: 2, strategyScaled: true, growthRate: 0 };
+        return { type: 'defense_buff', amount, duration: 1, strategyScaled: true, growthRate: 0 };
       case 'strategy':
-        return { type: 'strategy_buff', amount, duration: 2, strategyScaled: true, growthRate: 0 };
+        return { type: 'strategy_buff', amount, duration: 1, strategyScaled: true, growthRate: 0 };
     }
   };
   return [
@@ -32,9 +32,9 @@ function juyizangfouOption(attr: 'attack' | 'defense' | 'strategy'): SkillOutput
       targetPick: `lowest_${attr}_enemy`,
       chance: 0.6,
       status: [
-        { type: 'hesitation', duration: 2 },
-        { type: 'cowardice', duration: 2 },
-        { type: 'siege', duration: 2 },
+        { type: 'hesitation', duration: 1 },
+        { type: 'cowardice', duration: 1 },
+        { type: 'siege', duration: 1 },
       ],
     },
     { kind: 'inflict_status', targetPick: `highest_${attr}_ally`, status: statStatus(20) },
@@ -44,7 +44,7 @@ function juyizangfouOption(attr: 'attack' | 'defense' | 'strategy'): SkillOutput
       chance: 0.6,
       status: [
         { type: 'priority', duration: 1 },
-        { type: 'insight', duration: 2 },
+        { type: 'insight', duration: 1 },
         { type: 'ignore_evasion', duration: 999 },
       ],
     },
@@ -653,7 +653,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
   },
   /** 辕门射戟（群弓吕布 SP 主战法）：对敌军群体发动二次无视兵种相克的攻击（140%，每次攻击目标独立选择，
    *  目标数 50% 概率 2 个 / 50% 概率 3 个）；第一次攻击命中后对目标施加「造成攻击伤害降低 9999%」debuff
-   *  （buffMult 10% 伤害下限 → 强制造成伤害 min 10%，持续 1 回合——duration 2 覆盖目标下一个行动回合）；
+   *  （buffMult 10% 伤害下限 → 强制造成伤害 min 10%，官方「持续 1 回合」→ duration 1；
+   *  新口径下行动中施加的状态在携带者行动结束后递减，duration 即字面回合数 = 目标接下来 1 次行动）；
    *  「无视兵种相克」引擎无相克系统自动满足 */
   yuanmen_sheji: {
     id: 'yuanmen_sheji',
@@ -667,7 +668,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     groupCount: [2, 3],
     tags: ['damage', 'damage_boost'],
     output: [
-      { kind: 'physical_damage', rate: 140, targetMode: 'group', groupCount: [2, 3], markCausedReduce: { rate: -99.99, duration: 2 } },
+      { kind: 'physical_damage', rate: 140, targetMode: 'group', groupCount: [2, 3], markCausedReduce: { rate: -99.99, duration: 1 } },
       { kind: 'physical_damage', rate: 140, targetMode: 'group', groupCount: [2, 3] },
     ],
   },
@@ -3828,7 +3829,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     output: [],
   },
 
-  /** 以诱待来（A 被动）：受击 50% 挑衅来源 1 回合（duration 2 覆盖下次行动）；来源挑衅自己时恢复 150%（不受谋略）。 */
+  /** 以诱待来（A 被动）：受击 50% 挑衅来源 1 回合（官方字面 duration 1 = 来源接下来 1 次行动）；
+   *  来源挑衅自己时恢复 150%（不受谋略）。 */
   yiyou_dailai: {
     id: 'yiyou_dailai',
     name: '以诱待来',
@@ -3843,7 +3845,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         victim: 'self',
         rate: 0.5,
         applyTo: 'source',
-        output: [{ kind: 'inflict_status', status: { type: 'taunt', duration: 2, targetId: '' } }],
+        output: [{ kind: 'inflict_status', status: { type: 'taunt', duration: 1, targetId: '' } }],
       },
       {
         victim: 'self',
@@ -4327,7 +4329,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     }],
   },
   /**
-   * 万箭齐发（A 主动 35% 距离 5）：敌军群体 2 攻击 150%；目标策略造成伤害 −50%（受攻击，无成长率）持续 1 回合（行动中施加 duration 2）。
+   * 万箭齐发（A 主动 35% 距离 5）：敌军群体 2 攻击 150%；目标策略造成伤害 −50%（受攻击，无成长率）持续 1 回合
+   * （官方字面 duration 1；新口径下 action-end 递减，1 = 目标接下来 1 次行动）。
    */
   wanjian_qifa: {
     id: 'wanjian_qifa',
@@ -4347,7 +4350,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         status: {
           type: 'damage_boost',
           rate: -0.5,
-          duration: 2,
+          duration: 1,
           direction: 'caused',
           damageType: 'strategy',
           attackScaled: true,
@@ -5758,7 +5761,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    * 入档判断：**上架** —— 三个数值（30% / 每回合 +10% / 分兵 100%）官方均给确定值，且无「受属性影响」段。
    * 引擎配套（新机制 `BaseSkill.roundRampingChance`）：输出段未显式给 `chance` 时，基础率改为
    *   `min(1, base + increment × (当前回合 − 1))`（再走士气修正），逐段**独立**判定、各自发 `skill_trigger`；
-   *   连击 / 分兵均为既有状态（行动中施加 `duration: 1` = 持续到本回合行动结束，覆盖本轮普攻与分兵）。
+   *   连击 / 分兵均为既有状态（行动中施加 `duration: 1`：本次行动生效完、携带者行动结束后递减 → 本次普攻与分兵仍覆盖）。
    */
   jiangmen_youjiang: {
     id: 'jiangmen_youjiang',
@@ -5789,8 +5792,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    *      方向 'caused'（使目标的主动战法**造成**伤害 −50%）与 'taken'（使目标**受到**主动战法伤害 +25%）；
    *   ③ 两条状态用 `sameTargetsAsLastDamage` 打在 ① 的同一批 2 个命中目标上（不重选池）；
    *      同战法同过滤维**异方向**不冲突（各自独立共存，与「正负相反不冲突」同口径）。
-   * 持续时间口径：官方「持续 2 回合」= duration **2**（行动中施加：覆盖目标本回合与下一回合的行动，
-   *   与 强势 / 地公将军 / 密谋定蜀 同口径；官方「持续 1 回合」才需按辕门射戟兜底到 duration 2）。
+   * 持续时间口径：官方「持续 2 回合」= duration **2**（新口径：行动中施加在携带者行动结束后递减，
+   *   duration 即字面回合数 = 目标接下来 N 次行动；与 强势 / 地公将军 / 密谋定蜀 同口径）。
    */
   erfu_zhiyong: {
     id: 'erfu_zhiyong',

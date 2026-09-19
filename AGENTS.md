@@ -498,6 +498,12 @@ npx tsc --noEmit                    # 类型检查（strict）
 
 ### 已踩过的坑
 
+- **行动中施加的状态（`appliedRound>0`）：在携带者行动「结束后」递减**（`markStatusesOnActStart` 只标记、
+  `tickStatusesOnActEnd` 在 `actUnit` 三出口统一减），`duration` = **官方字面回合数 = 目标接下来 N 次行动**，
+  与双方出手先后无关（旧口径「下次行动开始前递减」在目标已出手时只生效 N−1 次）；
+  例外：`priority`（作用在回合初排序，改时点会被吃掉）/`counter`（窗口「直到携带者下回合行动前」）
+  保持「行动开始前递减 + 即时移除」。数据层同步回归：辕门射戟 `markCausedReduce.duration` 2→1、
+  举抑臧否 属性/控制/洞察 2→1、以诱待来 taunt 2→1、万箭齐发 `damage_boost` 2→1（全为官方字面「1 回合」）。
 - 生成器幂等但**行尾**会漂移（CRLF/LF）：`git diff --numstat` 为 0 时属行尾噪声，`git checkout` 即可丢；
   `heroes.json` 末尾换行已在 `export_web_data` / `sync_hero_mainskill` 统一补 `\n`。
 - 一类指挥若 `output: []` 且走「普通一类指挥直接执行」分支，须在条件里追加自己的新字段

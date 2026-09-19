@@ -11990,6 +11990,12 @@
           }
         },
         {
+          "type": "status_inflicted",
+          "unitId": "enemy-back",
+          "statusType": "confusion",
+          "detail": "混乱 1 回合"
+        },
+        {
           "type": "unit_act_end",
           "unitId": "taishici"
         },
@@ -12140,17 +12146,10 @@
           "unitId": "enemy-mid"
         },
         {
-          "type": "unit_act_start",
-          "unitId": "enemy-back",
-          "name": "木桩大营",
-          "position": "大营",
-          "phase": "normal_attack"
-        },
-        {
           "type": "no_attack_target",
           "unitId": "enemy-back",
           "name": "木桩大营",
-          "reason": "攻击距离 2 内无存活敌军"
+          "reason": "混乱：无法行动"
         },
         {
           "type": "unit_act_end",
@@ -12218,11 +12217,11 @@
         10000
       ],
       "finalEnemyTroops": [
-        3066,
-        3820,
-        3581
+        3813,
+        1935,
+        4714
       ],
-      "eventCount": 393,
+      "eventCount": 399,
       "events": [
         {
           "type": "battle_start",
@@ -13433,12 +13432,6 @@
           "morale": 100
         },
         {
-          "type": "status_inflicted",
-          "unitId": "enemy-front",
-          "statusType": "cowardice",
-          "detail": "怯战 1 回合"
-        },
-        {
           "type": "unit_act_start",
           "unitId": "enemy-front",
           "name": "木桩前锋",
@@ -13472,12 +13465,6 @@
           "rate": 90,
           "baseRate": 90,
           "morale": 100
-        },
-        {
-          "type": "status_inflicted",
-          "unitId": "enemy-mid",
-          "statusType": "cowardice",
-          "detail": "怯战 1 回合"
         },
         {
           "type": "unit_act_start",
@@ -14431,6 +14418,24 @@
           }
         },
         {
+          "type": "status_inflicted",
+          "unitId": "enemy-front",
+          "statusType": "cowardice",
+          "detail": "怯战 2 回合"
+        },
+        {
+          "type": "status_inflicted",
+          "unitId": "enemy-mid",
+          "statusType": "cowardice",
+          "detail": "怯战 2 回合"
+        },
+        {
+          "type": "status_inflicted",
+          "unitId": "enemy-back",
+          "statusType": "cowardice",
+          "detail": "怯战 2 回合"
+        },
+        {
           "type": "unit_act_start",
           "unitId": "zhouyu",
           "name": "周瑜",
@@ -14909,10 +14914,10 @@
           "phase": "normal_attack"
         },
         {
-          "type": "evasion_blocked",
-          "unitId": "zhouyu",
-          "sourceId": "enemy-front",
-          "remainingStacks": 3
+          "type": "no_attack_target",
+          "unitId": "enemy-front",
+          "name": "木桩前锋",
+          "reason": "怯战：无法进行普通攻击"
         },
         {
           "type": "unit_act_end",
@@ -14939,7 +14944,7 @@
           "type": "no_attack_target",
           "unitId": "enemy-back",
           "name": "木桩大营",
-          "reason": "攻击距离 2 内无存活敌军"
+          "reason": "怯战：无法进行普通攻击"
         },
         {
           "type": "unit_act_end",
@@ -15001,12 +15006,717 @@
         {
           "type": "attack_hit",
           "sourceId": "taishici",
-          "targetId": "enemy-back",
-          "distance": 3,
+          "targetId": "enemy-mid",
+          "distance": 2,
+          "damage": 409,
+          "breakdown": {
+            "troopBase": 211,
+            "base": 28,
+            "main": 170
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": [
+              {
+                "unitId": "enemy-mid",
+                "skillId": "troop_counter",
+                "skillName": "兵种克制",
+                "rate": 0.3,
+                "direction": "reduce"
+              }
+            ]
+          }
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "taishici",
+          "name": "太史慈",
+          "position": "前锋",
+          "phase": "pursuit_skill"
+        },
+        {
+          "type": "skill_trigger",
+          "unitId": "taishici",
+          "skillId": "fangzhen_tuji",
+          "skillName": "方阵突击",
+          "success": false,
+          "rate": 30,
+          "baseRate": 30,
+          "morale": 100
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "taishici",
+          "name": "太史慈",
+          "position": "前锋",
+          "phase": "pursuit_skill"
+        },
+        {
+          "type": "skill_trigger",
+          "unitId": "taishici",
+          "skillId": "wenjiu_zhanjiang",
+          "skillName": "温酒斩将",
+          "success": false,
+          "rate": 35,
+          "baseRate": 35,
+          "morale": 100
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "taishici"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "sunquan",
+          "name": "孙权",
+          "position": "前锋",
+          "phase": "passive_skill"
+        },
+        {
+          "type": "skill_target",
+          "unitId": "sunquan",
+          "skillId": "bubu_weiyin",
+          "targetIds": [
+            "sunquan"
+          ]
+        },
+        {
+          "type": "skill_cast",
+          "unitId": "sunquan",
+          "skillId": "bubu_weiyin",
+          "skillName": "步步为营"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "sunquan",
+          "name": "孙权",
+          "position": "前锋",
+          "phase": "passive_skill"
+        },
+        {
+          "type": "skill_target",
+          "unitId": "sunquan",
+          "skillId": "qingnang_miyao",
+          "targetIds": [
+            "sunquan"
+          ]
+        },
+        {
+          "type": "skill_cast",
+          "unitId": "sunquan",
+          "skillId": "qingnang_miyao",
+          "skillName": "青囊秘要"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "sunquan",
+          "name": "孙权",
+          "position": "前锋",
+          "phase": "active_skill"
+        },
+        {
+          "type": "skill_trigger",
+          "unitId": "sunquan",
+          "skillId": "jiuxi_huanglong",
+          "skillName": "九锡黄龙",
+          "success": true,
+          "rate": 35,
+          "baseRate": 35,
+          "morale": 100
+        },
+        {
+          "type": "skill_target",
+          "unitId": "sunquan",
+          "skillId": "jiuxi_huanglong",
+          "targetIds": [
+            "taishici",
+            "zhouyu",
+            "sunquan"
+          ]
+        },
+        {
+          "type": "skill_cast",
+          "unitId": "sunquan",
+          "skillId": "jiuxi_huanglong",
+          "skillName": "九锡黄龙"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "sunquan",
+          "name": "孙权",
+          "position": "前锋",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "sunquan",
+          "targetId": "enemy-mid",
+          "distance": 4,
+          "damage": 371,
+          "breakdown": {
+            "troopBase": 211,
+            "base": 22,
+            "main": 138
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": [
+              {
+                "unitId": "enemy-mid",
+                "skillId": "troop_counter",
+                "skillName": "兵种克制",
+                "rate": 0.3,
+                "direction": "reduce"
+              }
+            ]
+          }
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "sunquan"
+        },
+        {
+          "type": "prepare_end",
+          "unitId": "zhouyu",
+          "skillId": "hunshui_moyu",
+          "skillName": "浑水摸鱼",
+          "success": true
+        },
+        {
+          "type": "skill_target",
+          "unitId": "zhouyu",
+          "skillId": "hunshui_moyu",
+          "targetIds": [
+            "enemy-front",
+            "enemy-mid"
+          ]
+        },
+        {
+          "type": "skill_cast",
+          "unitId": "zhouyu",
+          "skillId": "hunshui_moyu",
+          "skillName": "浑水摸鱼"
+        },
+        {
+          "type": "status_inflicted",
+          "unitId": "enemy-front",
+          "statusType": "confusion",
+          "detail": "混乱 2 回合"
+        },
+        {
+          "type": "status_inflicted",
+          "unitId": "enemy-mid",
+          "statusType": "confusion",
+          "detail": "混乱 2 回合"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "zhouyu",
+          "name": "周瑜",
+          "position": "前锋",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "zhouyu",
+          "targetId": "enemy-front",
+          "distance": 2,
+          "damage": 361,
+          "breakdown": {
+            "troopBase": 211,
+            "base": 19,
+            "main": 131
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": [
+              {
+                "unitId": "enemy-front",
+                "skillId": "troop_counter",
+                "skillName": "兵种克制",
+                "rate": 0.3,
+                "direction": "reduce"
+              }
+            ]
+          }
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "zhouyu"
+        },
+        {
+          "type": "no_attack_target",
+          "unitId": "enemy-front",
+          "name": "木桩前锋",
+          "reason": "混乱：无法行动"
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "enemy-front"
+        },
+        {
+          "type": "no_attack_target",
+          "unitId": "enemy-mid",
+          "name": "木桩中军",
+          "reason": "混乱：无法行动"
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "enemy-mid"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "enemy-back",
+          "name": "木桩大营",
+          "position": "大营",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "no_attack_target",
+          "unitId": "enemy-back",
+          "name": "木桩大营",
+          "reason": "攻击距离 2 内无存活敌军"
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "enemy-back"
+        },
+        {
+          "type": "round_end",
+          "round": 6,
+          "myTroops": [
+            10000,
+            10000,
+            10000
+          ],
+          "enemyTroops": [
+            4825,
+            3399,
+            5730
+          ],
+          "myWounded": [
+            0,
+            0,
+            0
+          ],
+          "enemyWounded": [
+            3488,
+            4166,
+            2884
+          ],
+          "myDead": [
+            0,
+            0,
+            0
+          ],
+          "enemyDead": [
+            1687,
+            2435,
+            1386
+          ]
+        },
+        {
+          "type": "round_start",
+          "round": 7,
+          "turnOrder": [
+            "taishici",
+            "sunquan",
+            "zhouyu",
+            "enemy-front",
+            "enemy-mid",
+            "enemy-back"
+          ]
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "taishici",
+          "name": "太史慈",
+          "position": "前锋",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "taishici",
+          "targetId": "enemy-front",
+          "distance": 1,
           "damage": 408,
           "breakdown": {
             "troopBase": 211,
             "base": 27,
+            "main": 170
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": [
+              {
+                "unitId": "enemy-front",
+                "skillId": "troop_counter",
+                "skillName": "兵种克制",
+                "rate": 0.3,
+                "direction": "reduce"
+              }
+            ]
+          }
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "taishici",
+          "name": "太史慈",
+          "position": "前锋",
+          "phase": "pursuit_skill"
+        },
+        {
+          "type": "skill_trigger",
+          "unitId": "taishici",
+          "skillId": "fangzhen_tuji",
+          "skillName": "方阵突击",
+          "success": true,
+          "rate": 30,
+          "baseRate": 30,
+          "morale": 100
+        },
+        {
+          "type": "skill_target",
+          "unitId": "taishici",
+          "skillId": "fangzhen_tuji",
+          "targetIds": [
+            "enemy-front"
+          ]
+        },
+        {
+          "type": "skill_cast",
+          "unitId": "taishici",
+          "skillId": "fangzhen_tuji",
+          "skillName": "方阵突击"
+        },
+        {
+          "type": "damage",
+          "sourceId": "taishici",
+          "targetId": "enemy-front",
+          "skillId": "fangzhen_tuji",
+          "skillName": "方阵突击",
+          "damageType": "physical",
+          "damage": 604,
+          "breakdown": {
+            "troopBase": 211,
+            "base": 54,
+            "main": 339
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": [
+              {
+                "unitId": "enemy-front",
+                "skillId": "troop_counter",
+                "skillName": "兵种克制",
+                "rate": 0.3,
+                "direction": "reduce"
+              }
+            ]
+          }
+        },
+        {
+          "type": "status_inflicted",
+          "unitId": "enemy-front",
+          "statusType": "confusion",
+          "detail": "混乱 1 回合"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "taishici",
+          "name": "太史慈",
+          "position": "前锋",
+          "phase": "pursuit_skill"
+        },
+        {
+          "type": "skill_trigger",
+          "unitId": "taishici",
+          "skillId": "wenjiu_zhanjiang",
+          "skillName": "温酒斩将",
+          "success": false,
+          "rate": 35,
+          "baseRate": 35,
+          "morale": 100
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "taishici"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "sunquan",
+          "name": "孙权",
+          "position": "前锋",
+          "phase": "passive_skill"
+        },
+        {
+          "type": "skill_target",
+          "unitId": "sunquan",
+          "skillId": "bubu_weiyin",
+          "targetIds": [
+            "sunquan"
+          ]
+        },
+        {
+          "type": "skill_cast",
+          "unitId": "sunquan",
+          "skillId": "bubu_weiyin",
+          "skillName": "步步为营"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "sunquan",
+          "name": "孙权",
+          "position": "前锋",
+          "phase": "passive_skill"
+        },
+        {
+          "type": "skill_target",
+          "unitId": "sunquan",
+          "skillId": "qingnang_miyao",
+          "targetIds": [
+            "sunquan"
+          ]
+        },
+        {
+          "type": "skill_cast",
+          "unitId": "sunquan",
+          "skillId": "qingnang_miyao",
+          "skillName": "青囊秘要"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "sunquan",
+          "name": "孙权",
+          "position": "前锋",
+          "phase": "active_skill"
+        },
+        {
+          "type": "skill_trigger",
+          "unitId": "sunquan",
+          "skillId": "jiuxi_huanglong",
+          "skillName": "九锡黄龙",
+          "success": false,
+          "rate": 35,
+          "baseRate": 35,
+          "morale": 100
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "sunquan",
+          "name": "孙权",
+          "position": "前锋",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "sunquan",
+          "targetId": "enemy-mid",
+          "distance": 4,
+          "damage": 370,
+          "breakdown": {
+            "troopBase": 211,
+            "base": 21,
+            "main": 138
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": [
+              {
+                "unitId": "enemy-mid",
+                "skillId": "troop_counter",
+                "skillName": "兵种克制",
+                "rate": 0.3,
+                "direction": "reduce"
+              }
+            ]
+          }
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "sunquan"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "zhouyu",
+          "name": "周瑜",
+          "position": "前锋",
+          "phase": "active_skill"
+        },
+        {
+          "type": "skill_trigger",
+          "unitId": "zhouyu",
+          "skillId": "xuanwu_fuliu",
+          "skillName": "玄武洰流",
+          "success": false,
+          "rate": 40,
+          "baseRate": 40,
+          "morale": 100
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "zhouyu",
+          "name": "周瑜",
+          "position": "前锋",
+          "phase": "active_skill"
+        },
+        {
+          "type": "skill_trigger",
+          "unitId": "zhouyu",
+          "skillId": "hunshui_moyu",
+          "skillName": "浑水摸鱼",
+          "success": true,
+          "rate": 35,
+          "baseRate": 35,
+          "morale": 100
+        },
+        {
+          "type": "prepare_start",
+          "unitId": "zhouyu",
+          "skillId": "hunshui_moyu",
+          "skillName": "浑水摸鱼"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "zhouyu",
+          "name": "周瑜",
+          "position": "前锋",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "zhouyu",
+          "targetId": "enemy-mid",
+          "distance": 3,
+          "damage": 362,
+          "breakdown": {
+            "troopBase": 211,
+            "base": 20,
+            "main": 131
+          },
+          "modifiers": {
+            "caused": [],
+            "taken": [],
+            "reduce": [
+              {
+                "unitId": "enemy-mid",
+                "skillId": "troop_counter",
+                "skillName": "兵种克制",
+                "rate": 0.3,
+                "direction": "reduce"
+              }
+            ]
+          }
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "zhouyu"
+        },
+        {
+          "type": "no_attack_target",
+          "unitId": "enemy-front",
+          "name": "木桩前锋",
+          "reason": "混乱：无法行动"
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "enemy-front"
+        },
+        {
+          "type": "no_attack_target",
+          "unitId": "enemy-mid",
+          "name": "木桩中军",
+          "reason": "混乱：无法行动"
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "enemy-mid"
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "enemy-back",
+          "name": "木桩大营",
+          "position": "大营",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "no_attack_target",
+          "unitId": "enemy-back",
+          "name": "木桩大营",
+          "reason": "攻击距离 2 内无存活敌军"
+        },
+        {
+          "type": "unit_act_end",
+          "unitId": "enemy-back"
+        },
+        {
+          "type": "round_end",
+          "round": 7,
+          "myTroops": [
+            10000,
+            10000,
+            10000
+          ],
+          "enemyTroops": [
+            3813,
+            2667,
+            5730
+          ],
+          "myWounded": [
+            0,
+            0,
+            0
+          ],
+          "enemyWounded": [
+            3599,
+            4247,
+            2884
+          ],
+          "myDead": [
+            0,
+            0,
+            0
+          ],
+          "enemyDead": [
+            2588,
+            3086,
+            1386
+          ]
+        },
+        {
+          "type": "round_start",
+          "round": 8,
+          "turnOrder": [
+            "taishici",
+            "sunquan",
+            "zhouyu",
+            "enemy-front",
+            "enemy-mid",
+            "enemy-back"
+          ]
+        },
+        {
+          "type": "unit_act_start",
+          "unitId": "taishici",
+          "name": "太史慈",
+          "position": "前锋",
+          "phase": "normal_attack"
+        },
+        {
+          "type": "attack_hit",
+          "sourceId": "taishici",
+          "targetId": "enemy-back",
+          "distance": 3,
+          "damage": 407,
+          "breakdown": {
+            "troopBase": 211,
+            "base": 26,
             "main": 170
           },
           "modifiers": {
@@ -15193,12 +15903,12 @@
         {
           "type": "attack_hit",
           "sourceId": "sunquan",
-          "targetId": "enemy-front",
-          "distance": 3,
-          "damage": 367,
+          "targetId": "enemy-mid",
+          "distance": 4,
+          "damage": 370,
           "breakdown": {
             "troopBase": 211,
-            "base": 18,
+            "base": 21,
             "main": 138
           },
           "modifiers": {
@@ -15206,7 +15916,7 @@
             "taken": [],
             "reduce": [
               {
-                "unitId": "enemy-front",
+                "unitId": "enemy-mid",
                 "skillId": "troop_counter",
                 "skillName": "兵种克制",
                 "rate": 0.3,
@@ -15231,8 +15941,8 @@
           "unitId": "zhouyu",
           "skillId": "hunshui_moyu",
           "targetIds": [
-            "enemy-mid",
-            "enemy-front"
+            "enemy-front",
+            "enemy-back"
           ]
         },
         {
@@ -15243,13 +15953,13 @@
         },
         {
           "type": "status_inflicted",
-          "unitId": "enemy-mid",
+          "unitId": "enemy-front",
           "statusType": "confusion",
           "detail": "混乱 2 回合"
         },
         {
           "type": "status_inflicted",
-          "unitId": "enemy-front",
+          "unitId": "enemy-back",
           "statusType": "confusion",
           "detail": "混乱 2 回合"
         },
@@ -15265,10 +15975,10 @@
           "sourceId": "zhouyu",
           "targetId": "enemy-mid",
           "distance": 3,
-          "damage": 359,
+          "damage": 362,
           "breakdown": {
             "troopBase": 211,
-            "base": 17,
+            "base": 20,
             "main": 131
           },
           "modifiers": {
@@ -15300,672 +16010,6 @@
           "unitId": "enemy-front"
         },
         {
-          "type": "no_attack_target",
-          "unitId": "enemy-mid",
-          "name": "木桩中军",
-          "reason": "混乱：无法行动"
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "enemy-mid"
-        },
-        {
-          "type": "no_attack_target",
-          "unitId": "enemy-back",
-          "name": "木桩大营",
-          "reason": "混乱：无法行动"
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "enemy-back"
-        },
-        {
-          "type": "round_end",
-          "round": 6,
-          "myTroops": [
-            10000,
-            10000,
-            10000
-          ],
-          "enemyTroops": [
-            4819,
-            3820,
-            4713
-          ],
-          "myWounded": [
-            0,
-            0,
-            0
-          ],
-          "enemyWounded": [
-            3490,
-            4061,
-            3138
-          ],
-          "myDead": [
-            0,
-            0,
-            0
-          ],
-          "enemyDead": [
-            1691,
-            2119,
-            2149
-          ]
-        },
-        {
-          "type": "round_start",
-          "round": 7,
-          "turnOrder": [
-            "taishici",
-            "sunquan",
-            "zhouyu",
-            "enemy-front",
-            "enemy-mid",
-            "enemy-back"
-          ]
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "taishici",
-          "name": "太史慈",
-          "position": "前锋",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "taishici",
-          "targetId": "enemy-back",
-          "distance": 3,
-          "damage": 409,
-          "breakdown": {
-            "troopBase": 211,
-            "base": 28,
-            "main": 170
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": [
-              {
-                "unitId": "enemy-back",
-                "skillId": "troop_counter",
-                "skillName": "兵种克制",
-                "rate": 0.3,
-                "direction": "reduce"
-              }
-            ]
-          }
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "taishici",
-          "name": "太史慈",
-          "position": "前锋",
-          "phase": "pursuit_skill"
-        },
-        {
-          "type": "skill_trigger",
-          "unitId": "taishici",
-          "skillId": "fangzhen_tuji",
-          "skillName": "方阵突击",
-          "success": false,
-          "rate": 30,
-          "baseRate": 30,
-          "morale": 100
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "taishici",
-          "name": "太史慈",
-          "position": "前锋",
-          "phase": "pursuit_skill"
-        },
-        {
-          "type": "skill_trigger",
-          "unitId": "taishici",
-          "skillId": "wenjiu_zhanjiang",
-          "skillName": "温酒斩将",
-          "success": false,
-          "rate": 35,
-          "baseRate": 35,
-          "morale": 100
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "taishici"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "sunquan",
-          "name": "孙权",
-          "position": "前锋",
-          "phase": "passive_skill"
-        },
-        {
-          "type": "skill_target",
-          "unitId": "sunquan",
-          "skillId": "bubu_weiyin",
-          "targetIds": [
-            "sunquan"
-          ]
-        },
-        {
-          "type": "skill_cast",
-          "unitId": "sunquan",
-          "skillId": "bubu_weiyin",
-          "skillName": "步步为营"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "sunquan",
-          "name": "孙权",
-          "position": "前锋",
-          "phase": "passive_skill"
-        },
-        {
-          "type": "skill_target",
-          "unitId": "sunquan",
-          "skillId": "qingnang_miyao",
-          "targetIds": [
-            "sunquan"
-          ]
-        },
-        {
-          "type": "skill_cast",
-          "unitId": "sunquan",
-          "skillId": "qingnang_miyao",
-          "skillName": "青囊秘要"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "sunquan",
-          "name": "孙权",
-          "position": "前锋",
-          "phase": "active_skill"
-        },
-        {
-          "type": "skill_trigger",
-          "unitId": "sunquan",
-          "skillId": "jiuxi_huanglong",
-          "skillName": "九锡黄龙",
-          "success": false,
-          "rate": 35,
-          "baseRate": 35,
-          "morale": 100
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "sunquan",
-          "name": "孙权",
-          "position": "前锋",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "sunquan",
-          "targetId": "enemy-front",
-          "distance": 3,
-          "damage": 368,
-          "breakdown": {
-            "troopBase": 211,
-            "base": 19,
-            "main": 138
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": [
-              {
-                "unitId": "enemy-front",
-                "skillId": "troop_counter",
-                "skillName": "兵种克制",
-                "rate": 0.3,
-                "direction": "reduce"
-              }
-            ]
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "sunquan"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "zhouyu",
-          "name": "周瑜",
-          "position": "前锋",
-          "phase": "active_skill"
-        },
-        {
-          "type": "skill_trigger",
-          "unitId": "zhouyu",
-          "skillId": "xuanwu_fuliu",
-          "skillName": "玄武洰流",
-          "success": false,
-          "rate": 40,
-          "baseRate": 40,
-          "morale": 100
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "zhouyu",
-          "name": "周瑜",
-          "position": "前锋",
-          "phase": "active_skill"
-        },
-        {
-          "type": "skill_trigger",
-          "unitId": "zhouyu",
-          "skillId": "hunshui_moyu",
-          "skillName": "浑水摸鱼",
-          "success": false,
-          "rate": 35,
-          "baseRate": 35,
-          "morale": 100
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "zhouyu",
-          "name": "周瑜",
-          "position": "前锋",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "zhouyu",
-          "targetId": "enemy-back",
-          "distance": 4,
-          "damage": 361,
-          "breakdown": {
-            "troopBase": 211,
-            "base": 19,
-            "main": 131
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": [
-              {
-                "unitId": "enemy-back",
-                "skillId": "troop_counter",
-                "skillName": "兵种克制",
-                "rate": 0.3,
-                "direction": "reduce"
-              }
-            ]
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "zhouyu"
-        },
-        {
-          "type": "no_attack_target",
-          "unitId": "enemy-front",
-          "name": "木桩前锋",
-          "reason": "混乱：无法行动"
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "enemy-front"
-        },
-        {
-          "type": "no_attack_target",
-          "unitId": "enemy-mid",
-          "name": "木桩中军",
-          "reason": "混乱：无法行动"
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "enemy-mid"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "enemy-back",
-          "name": "木桩大营",
-          "position": "大营",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "no_attack_target",
-          "unitId": "enemy-back",
-          "name": "木桩大营",
-          "reason": "攻击距离 2 内无存活敌军"
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "enemy-back"
-        },
-        {
-          "type": "round_end",
-          "round": 7,
-          "myTroops": [
-            10000,
-            10000,
-            10000
-          ],
-          "enemyTroops": [
-            4451,
-            3820,
-            3943
-          ],
-          "myWounded": [
-            0,
-            0,
-            0
-          ],
-          "enemyWounded": [
-            3530,
-            4061,
-            3223
-          ],
-          "myDead": [
-            0,
-            0,
-            0
-          ],
-          "enemyDead": [
-            2019,
-            2119,
-            2834
-          ]
-        },
-        {
-          "type": "round_start",
-          "round": 8,
-          "turnOrder": [
-            "taishici",
-            "sunquan",
-            "zhouyu",
-            "enemy-front",
-            "enemy-mid",
-            "enemy-back"
-          ]
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "taishici",
-          "name": "太史慈",
-          "position": "前锋",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "taishici",
-          "targetId": "enemy-front",
-          "distance": 1,
-          "damage": 410,
-          "breakdown": {
-            "troopBase": 211,
-            "base": 29,
-            "main": 170
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": [
-              {
-                "unitId": "enemy-front",
-                "skillId": "troop_counter",
-                "skillName": "兵种克制",
-                "rate": 0.3,
-                "direction": "reduce"
-              }
-            ]
-          }
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "taishici",
-          "name": "太史慈",
-          "position": "前锋",
-          "phase": "pursuit_skill"
-        },
-        {
-          "type": "skill_trigger",
-          "unitId": "taishici",
-          "skillId": "fangzhen_tuji",
-          "skillName": "方阵突击",
-          "success": false,
-          "rate": 30,
-          "baseRate": 30,
-          "morale": 100
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "taishici",
-          "name": "太史慈",
-          "position": "前锋",
-          "phase": "pursuit_skill"
-        },
-        {
-          "type": "skill_trigger",
-          "unitId": "taishici",
-          "skillId": "wenjiu_zhanjiang",
-          "skillName": "温酒斩将",
-          "success": true,
-          "rate": 35,
-          "baseRate": 35,
-          "morale": 100
-        },
-        {
-          "type": "skill_target",
-          "unitId": "taishici",
-          "skillId": "wenjiu_zhanjiang",
-          "targetIds": [
-            "enemy-front"
-          ]
-        },
-        {
-          "type": "skill_cast",
-          "unitId": "taishici",
-          "skillId": "wenjiu_zhanjiang",
-          "skillName": "温酒斩将"
-        },
-        {
-          "type": "damage",
-          "sourceId": "taishici",
-          "targetId": "enemy-front",
-          "skillId": "wenjiu_zhanjiang",
-          "skillName": "温酒斩将",
-          "damageType": "physical",
-          "damage": 604,
-          "breakdown": {
-            "troopBase": 211,
-            "base": 54,
-            "main": 339
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": [
-              {
-                "unitId": "enemy-front",
-                "skillId": "troop_counter",
-                "skillName": "兵种克制",
-                "rate": 0.3,
-                "direction": "reduce"
-              }
-            ]
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "taishici"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "sunquan",
-          "name": "孙权",
-          "position": "前锋",
-          "phase": "passive_skill"
-        },
-        {
-          "type": "skill_target",
-          "unitId": "sunquan",
-          "skillId": "bubu_weiyin",
-          "targetIds": [
-            "sunquan"
-          ]
-        },
-        {
-          "type": "skill_cast",
-          "unitId": "sunquan",
-          "skillId": "bubu_weiyin",
-          "skillName": "步步为营"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "sunquan",
-          "name": "孙权",
-          "position": "前锋",
-          "phase": "passive_skill"
-        },
-        {
-          "type": "skill_target",
-          "unitId": "sunquan",
-          "skillId": "qingnang_miyao",
-          "targetIds": [
-            "sunquan"
-          ]
-        },
-        {
-          "type": "skill_cast",
-          "unitId": "sunquan",
-          "skillId": "qingnang_miyao",
-          "skillName": "青囊秘要"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "sunquan",
-          "name": "孙权",
-          "position": "前锋",
-          "phase": "active_skill"
-        },
-        {
-          "type": "skill_trigger",
-          "unitId": "sunquan",
-          "skillId": "jiuxi_huanglong",
-          "skillName": "九锡黄龙",
-          "success": false,
-          "rate": 35,
-          "baseRate": 35,
-          "morale": 100
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "sunquan",
-          "name": "孙权",
-          "position": "前锋",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "sunquan",
-          "targetId": "enemy-front",
-          "distance": 3,
-          "damage": 371,
-          "breakdown": {
-            "troopBase": 211,
-            "base": 22,
-            "main": 138
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": [
-              {
-                "unitId": "enemy-front",
-                "skillId": "troop_counter",
-                "skillName": "兵种克制",
-                "rate": 0.3,
-                "direction": "reduce"
-              }
-            ]
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "sunquan"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "zhouyu",
-          "name": "周瑜",
-          "position": "前锋",
-          "phase": "active_skill"
-        },
-        {
-          "type": "skill_trigger",
-          "unitId": "zhouyu",
-          "skillId": "xuanwu_fuliu",
-          "skillName": "玄武洰流",
-          "success": true,
-          "rate": 40,
-          "baseRate": 40,
-          "morale": 100
-        },
-        {
-          "type": "prepare_start",
-          "unitId": "zhouyu",
-          "skillId": "xuanwu_fuliu",
-          "skillName": "玄武洰流"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "zhouyu",
-          "name": "周瑜",
-          "position": "前锋",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "attack_hit",
-          "sourceId": "zhouyu",
-          "targetId": "enemy-back",
-          "distance": 4,
-          "damage": 362,
-          "breakdown": {
-            "troopBase": 211,
-            "base": 20,
-            "main": 131
-          },
-          "modifiers": {
-            "caused": [],
-            "taken": [],
-            "reduce": [
-              {
-                "unitId": "enemy-back",
-                "skillId": "troop_counter",
-                "skillName": "兵种克制",
-                "rate": 0.3,
-                "direction": "reduce"
-              }
-            ]
-          }
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "zhouyu"
-        },
-        {
-          "type": "unit_act_start",
-          "unitId": "enemy-front",
-          "name": "木桩前锋",
-          "position": "前锋",
-          "phase": "normal_attack"
-        },
-        {
-          "type": "evasion_blocked",
-          "unitId": "zhouyu",
-          "sourceId": "enemy-front",
-          "remainingStacks": 4
-        },
-        {
-          "type": "unit_act_end",
-          "unitId": "enemy-front"
-        },
-        {
           "type": "unit_act_start",
           "unitId": "enemy-mid",
           "name": "木桩中军",
@@ -15976,24 +16020,17 @@
           "type": "evasion_blocked",
           "unitId": "taishici",
           "sourceId": "enemy-mid",
-          "remainingStacks": 5
+          "remainingStacks": 7
         },
         {
           "type": "unit_act_end",
           "unitId": "enemy-mid"
         },
         {
-          "type": "unit_act_start",
-          "unitId": "enemy-back",
-          "name": "木桩大营",
-          "position": "大营",
-          "phase": "normal_attack"
-        },
-        {
           "type": "no_attack_target",
           "unitId": "enemy-back",
           "name": "木桩大营",
-          "reason": "攻击距离 2 内无存活敌军"
+          "reason": "混乱：无法行动"
         },
         {
           "type": "unit_act_end",
@@ -16008,9 +16045,9 @@
             10000
           ],
           "enemyTroops": [
-            3066,
-            3820,
-            3581
+            3813,
+            1935,
+            4714
           ],
           "myWounded": [
             0,
@@ -16018,9 +16055,9 @@
             0
           ],
           "enemyWounded": [
-            3530,
-            4061,
-            3223
+            3599,
+            4247,
+            2884
           ],
           "myDead": [
             0,
@@ -16028,9 +16065,9 @@
             0
           ],
           "enemyDead": [
-            3404,
-            2119,
-            3196
+            2588,
+            3818,
+            2402
           ]
         },
         {
@@ -16043,9 +16080,9 @@
             10000
           ],
           "enemyTroops": [
-            3066,
-            3820,
-            3581
+            3813,
+            1935,
+            4714
           ]
         }
       ]
@@ -18684,7 +18721,7 @@
         3773,
         3689
       ],
-      "eventCount": 239,
+      "eventCount": 237,
       "events": [
         {
           "type": "battle_start",
@@ -19449,12 +19486,6 @@
           "morale": 100
         },
         {
-          "type": "status_inflicted",
-          "unitId": "enemy-front",
-          "statusType": "cowardice",
-          "detail": "怯战 1 回合"
-        },
-        {
           "type": "unit_act_start",
           "unitId": "enemy-front",
           "name": "木桩前锋",
@@ -19488,12 +19519,6 @@
           "rate": 100,
           "baseRate": 100,
           "morale": 100
-        },
-        {
-          "type": "status_inflicted",
-          "unitId": "enemy-mid",
-          "statusType": "cowardice",
-          "detail": "怯战 1 回合"
         },
         {
           "type": "unit_act_start",
@@ -21257,14 +21282,14 @@
       "result": "draw",
       "rounds": 8,
       "finalMyTroops": [
-        6873,
+        6898,
         9000,
         9000
       ],
       "finalEnemyTroops": [
-        3250,
-        5267,
-        8002
+        2926,
+        5012,
+        7901
       ],
       "eventCount": 263,
       "events": [
@@ -21744,18 +21769,18 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(265)"
+          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(298)"
         },
         {
           "type": "attack_hit",
           "sourceId": "taishici",
           "targetId": "enemy-front",
           "distance": 2,
-          "damage": 544,
+          "damage": 564,
           "breakdown": {
             "troopBase": 201,
-            "base": 69,
-            "main": 274
+            "base": 77,
+            "main": 286
           },
           "modifiers": {
             "caused": [],
@@ -21854,18 +21879,18 @@
           "type": "status_inflicted",
           "unitId": "sunquan",
           "statusType": "attack_buff",
-          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(167)"
+          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(200)"
         },
         {
           "type": "attack_hit",
           "sourceId": "sunquan",
           "targetId": "enemy-front",
           "distance": 3,
-          "damage": 456,
+          "damage": 486,
           "breakdown": {
             "troopBase": 201,
-            "base": 37,
-            "main": 218
+            "base": 45,
+            "main": 240
           },
           "modifiers": {
             "caused": [],
@@ -21896,18 +21921,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "attack_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(184)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(217)"
         },
         {
           "type": "attack_hit",
           "sourceId": "weiguan",
           "targetId": "enemy-mid",
           "distance": 2,
-          "damage": 581,
+          "damage": 620,
           "breakdown": {
             "troopBase": 195,
-            "base": 64,
-            "main": 322
+            "base": 76,
+            "main": 349
           },
           "modifiers": {
             "caused": [],
@@ -21991,8 +22016,8 @@
             9000
           ],
           "enemyTroops": [
-            7865,
-            8957,
+            7815,
+            8918,
             10000
           ],
           "myWounded": [
@@ -22001,8 +22026,8 @@
             0
           ],
           "enemyWounded": [
-            1888,
-            910,
+            1929,
+            941,
             0
           ],
           "myDead": [
@@ -22011,8 +22036,8 @@
             0
           ],
           "enemyDead": [
-            247,
-            133,
+            256,
+            141,
             0
           ]
         },
@@ -22039,18 +22064,18 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(265)"
+          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(298)"
         },
         {
           "type": "attack_hit",
           "sourceId": "taishici",
           "targetId": "enemy-mid",
           "distance": 3,
-          "damage": 545,
+          "damage": 566,
           "breakdown": {
             "troopBase": 201,
-            "base": 70,
-            "main": 274
+            "base": 79,
+            "main": 286
           },
           "modifiers": {
             "caused": [],
@@ -22115,18 +22140,18 @@
           "type": "status_inflicted",
           "unitId": "sunquan",
           "statusType": "attack_buff",
-          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(167)"
+          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(200)"
         },
         {
           "type": "attack_hit",
           "sourceId": "sunquan",
           "targetId": "enemy-front",
           "distance": 3,
-          "damage": 456,
+          "damage": 486,
           "breakdown": {
             "troopBase": 201,
-            "base": 37,
-            "main": 218
+            "base": 45,
+            "main": 240
           },
           "modifiers": {
             "caused": [],
@@ -22157,18 +22182,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "attack_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(184)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(217)"
         },
         {
           "type": "attack_hit",
           "sourceId": "weiguan",
           "targetId": "enemy-front",
           "distance": 1,
-          "damage": 580,
+          "damage": 618,
           "breakdown": {
             "troopBase": 195,
-            "base": 63,
-            "main": 322
+            "base": 74,
+            "main": 349
           },
           "modifiers": {
             "caused": [],
@@ -22221,11 +22246,11 @@
           "sourceId": "enemy-mid",
           "targetId": "weiguan",
           "distance": 2,
-          "damage": 295,
+          "damage": 293,
           "breakdown": {
-            "troopBase": 195,
+            "troopBase": 194,
             "base": 19,
-            "main": 81
+            "main": 80
           },
           "modifiers": {
             "caused": [],
@@ -22258,23 +22283,23 @@
           "type": "round_end",
           "round": 3,
           "myTroops": [
-            8104,
+            8106,
             9000,
             9000
           ],
           "enemyTroops": [
-            6829,
-            8412,
+            6711,
+            8352,
             10000
           ],
           "myWounded": [
-            769,
+            767,
             0,
             0
           ],
           "enemyWounded": [
-            2583,
-            1275,
+            2669,
+            1320,
             0
           ],
           "myDead": [
@@ -22283,8 +22308,8 @@
             0
           ],
           "enemyDead": [
-            588,
-            313,
+            620,
+            328,
             0
           ]
         },
@@ -22311,18 +22336,18 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(265)"
+          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(298)"
         },
         {
           "type": "attack_hit",
           "sourceId": "taishici",
           "targetId": "enemy-back",
           "distance": 4,
-          "damage": 540,
+          "damage": 560,
           "breakdown": {
             "troopBase": 201,
-            "base": 65,
-            "main": 274
+            "base": 73,
+            "main": 286
           },
           "modifiers": {
             "caused": [],
@@ -22373,7 +22398,7 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(298)"
+          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(331)"
         },
         {
           "type": "damage",
@@ -22382,11 +22407,11 @@
           "skillId": "fangzhen_tuji",
           "skillName": "方阵突击",
           "damageType": "physical",
-          "damage": 911,
+          "damage": 950,
           "breakdown": {
             "troopBase": 201,
-            "base": 138,
-            "main": 572
+            "base": 153,
+            "main": 596
           },
           "modifiers": {
             "caused": [],
@@ -22440,18 +22465,18 @@
           "type": "status_inflicted",
           "unitId": "sunquan",
           "statusType": "attack_buff",
-          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(167)"
+          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(200)"
         },
         {
           "type": "attack_hit",
           "sourceId": "sunquan",
           "targetId": "enemy-front",
           "distance": 3,
-          "damage": 455,
+          "damage": 484,
           "breakdown": {
             "troopBase": 201,
-            "base": 36,
-            "main": 218
+            "base": 43,
+            "main": 240
           },
           "modifiers": {
             "caused": [],
@@ -22482,18 +22507,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "attack_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(184)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(217)"
         },
         {
           "type": "attack_hit",
           "sourceId": "weiguan",
           "targetId": "enemy-mid",
           "distance": 2,
-          "damage": 581,
+          "damage": 622,
           "breakdown": {
             "troopBase": 191,
-            "base": 72,
-            "main": 318
+            "base": 85,
+            "main": 346
           },
           "modifiers": {
             "caused": [],
@@ -22523,11 +22548,11 @@
           "sourceId": "enemy-front",
           "targetId": "weiguan",
           "distance": 1,
-          "damage": 266,
+          "damage": 263,
           "breakdown": {
-            "troopBase": 169,
+            "troopBase": 167,
             "base": 23,
-            "main": 74
+            "main": 73
           },
           "modifiers": {
             "caused": [],
@@ -22557,9 +22582,9 @@
           "sourceId": "enemy-mid",
           "targetId": "weiguan",
           "distance": 2,
-          "damage": 274,
+          "damage": 273,
           "breakdown": {
-            "troopBase": 188,
+            "troopBase": 187,
             "base": 18,
             "main": 68
           },
@@ -22587,34 +22612,34 @@
           "type": "round_end",
           "round": 4,
           "myTroops": [
-            7564,
+            7570,
             9000,
             9000
           ],
           "enemyTroops": [
-            6374,
-            7831,
-            8549
+            6227,
+            7730,
+            8490
           ],
           "myWounded": [
-            1055,
+            1051,
             0,
             0
           ],
           "enemyWounded": [
-            2824,
-            1583,
-            769
+            2926,
+            1650,
+            800
           ],
           "myDead": [
-            381,
+            379,
             0,
             0
           ],
           "enemyDead": [
-            802,
-            586,
-            682
+            847,
+            620,
+            710
           ]
         },
         {
@@ -22640,18 +22665,18 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(265)"
+          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(331)"
         },
         {
           "type": "attack_hit",
           "sourceId": "taishici",
           "targetId": "enemy-back",
           "distance": 4,
-          "damage": 547,
+          "damage": 589,
           "breakdown": {
             "troopBase": 201,
-            "base": 72,
-            "main": 274
+            "base": 90,
+            "main": 298
           },
           "modifiers": {
             "caused": [],
@@ -22738,18 +22763,18 @@
           "type": "status_inflicted",
           "unitId": "sunquan",
           "statusType": "attack_buff",
-          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(167)"
+          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(200)"
         },
         {
           "type": "attack_hit",
           "sourceId": "sunquan",
           "targetId": "enemy-mid",
           "distance": 4,
-          "damage": 461,
+          "damage": 491,
           "breakdown": {
             "troopBase": 201,
-            "base": 42,
-            "main": 218
+            "base": 50,
+            "main": 240
           },
           "modifiers": {
             "caused": [],
@@ -22780,18 +22805,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "attack_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(184)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(217)"
         },
         {
           "type": "attack_hit",
           "sourceId": "weiguan",
           "targetId": "enemy-front",
           "distance": 1,
-          "damage": 561,
+          "damage": 599,
           "breakdown": {
             "troopBase": 185,
-            "base": 64,
-            "main": 312
+            "base": 76,
+            "main": 338
           },
           "modifiers": {
             "caused": [],
@@ -22870,34 +22895,34 @@
           "type": "round_end",
           "round": 5,
           "myTroops": [
-            7564,
+            7570,
             9000,
             9000
           ],
           "enemyTroops": [
-            5813,
-            7370,
-            8002
+            5628,
+            7239,
+            7901
           ],
           "myWounded": [
-            1055,
+            1051,
             0,
             0
           ],
           "enemyWounded": [
-            3043,
-            1763,
-            982
+            3160,
+            1841,
+            1030
           ],
           "myDead": [
-            381,
+            379,
             0,
             0
           ],
           "enemyDead": [
-            1144,
-            867,
-            1016
+            1212,
+            920,
+            1069
           ]
         },
         {
@@ -22923,18 +22948,18 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(265)"
+          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(298)"
         },
         {
           "type": "attack_hit",
           "sourceId": "taishici",
           "targetId": "enemy-front",
           "distance": 2,
-          "damage": 540,
+          "damage": 560,
           "breakdown": {
             "troopBase": 201,
-            "base": 65,
-            "main": 274
+            "base": 73,
+            "main": 286
           },
           "modifiers": {
             "caused": [],
@@ -22999,18 +23024,18 @@
           "type": "status_inflicted",
           "unitId": "sunquan",
           "statusType": "attack_buff",
-          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(167)"
+          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(200)"
         },
         {
           "type": "attack_hit",
           "sourceId": "sunquan",
           "targetId": "enemy-front",
           "distance": 3,
-          "damage": 460,
+          "damage": 490,
           "breakdown": {
             "troopBase": 201,
-            "base": 41,
-            "main": 218
+            "base": 49,
+            "main": 240
           },
           "modifiers": {
             "caused": [],
@@ -23041,18 +23066,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "attack_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(184)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(217)"
         },
         {
           "type": "attack_hit",
           "sourceId": "weiguan",
           "targetId": "enemy-mid",
           "distance": 2,
-          "damage": 565,
+          "damage": 603,
           "breakdown": {
             "troopBase": 185,
-            "base": 68,
-            "main": 312
+            "base": 80,
+            "main": 338
           },
           "modifiers": {
             "caused": [],
@@ -23131,34 +23156,34 @@
           "type": "round_end",
           "round": 6,
           "myTroops": [
-            7564,
+            7570,
             9000,
             9000
           ],
           "enemyTroops": [
-            4813,
-            6805,
-            8002
+            4578,
+            6636,
+            7901
           ],
           "myWounded": [
-            1055,
+            1051,
             0,
             0
           ],
           "enemyWounded": [
-            3293,
-            1904,
-            982
+            3422,
+            1992,
+            1030
           ],
           "myDead": [
-            381,
+            379,
             0,
             0
           ],
           "enemyDead": [
-            1894,
-            1291,
-            1016
+            2000,
+            1372,
+            1069
           ]
         },
         {
@@ -23184,18 +23209,18 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(265)"
+          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(298)"
         },
         {
           "type": "attack_hit",
           "sourceId": "taishici",
           "targetId": "enemy-front",
           "distance": 2,
-          "damage": 531,
+          "damage": 550,
           "breakdown": {
             "troopBase": 201,
-            "base": 56,
-            "main": 274
+            "base": 63,
+            "main": 286
           },
           "modifiers": {
             "caused": [],
@@ -23260,18 +23285,18 @@
           "type": "status_inflicted",
           "unitId": "sunquan",
           "statusType": "attack_buff",
-          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(167)"
+          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(200)"
         },
         {
           "type": "attack_hit",
           "sourceId": "sunquan",
           "targetId": "enemy-front",
           "distance": 3,
-          "damage": 463,
+          "damage": 494,
           "breakdown": {
             "troopBase": 201,
-            "base": 44,
-            "main": 218
+            "base": 53,
+            "main": 240
           },
           "modifiers": {
             "caused": [],
@@ -23302,18 +23327,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "attack_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(184)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(217)"
         },
         {
           "type": "attack_hit",
           "sourceId": "weiguan",
           "targetId": "enemy-front",
           "distance": 1,
-          "damage": 569,
+          "damage": 608,
           "breakdown": {
             "troopBase": 185,
-            "base": 72,
-            "main": 312
+            "base": 85,
+            "main": 338
           },
           "modifiers": {
             "caused": [],
@@ -23343,11 +23368,11 @@
           "sourceId": "enemy-front",
           "targetId": "weiguan",
           "distance": 1,
-          "damage": 188,
+          "damage": 177,
           "breakdown": {
-            "troopBase": 111,
+            "troopBase": 103,
             "base": 22,
-            "main": 55
+            "main": 52
           },
           "modifiers": {
             "caused": [],
@@ -23377,9 +23402,9 @@
           "sourceId": "enemy-mid",
           "targetId": "weiguan",
           "distance": 2,
-          "damage": 262,
+          "damage": 260,
           "breakdown": {
-            "troopBase": 175,
+            "troopBase": 173,
             "base": 22,
             "main": 65
           },
@@ -23414,34 +23439,34 @@
           "type": "round_end",
           "round": 7,
           "myTroops": [
-            7114,
+            7133,
             9000,
             9000
           ],
           "enemyTroops": [
-            3250,
-            6805,
-            8002
+            2926,
+            6636,
+            7901
           ],
           "myWounded": [
-            1105,
+            1099,
             0,
             0
           ],
           "enemyWounded": [
-            3465,
-            1904,
-            982
+            3603,
+            1992,
+            1030
           ],
           "myDead": [
-            781,
+            768,
             0,
             0
           ],
           "enemyDead": [
-            3285,
-            1291,
-            1016
+            3471,
+            1372,
+            1069
           ]
         },
         {
@@ -23467,18 +23492,18 @@
           "type": "status_inflicted",
           "unitId": "taishici",
           "statusType": "attack_buff",
-          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(265)"
+          "detail": "【太史慈】执行来自【卫瓘】的【持节镇西】效果！\n【太史慈】的攻击属性提高了33(298)"
         },
         {
           "type": "attack_hit",
           "sourceId": "taishici",
           "targetId": "enemy-mid",
           "distance": 3,
-          "damage": 538,
+          "damage": 558,
           "breakdown": {
             "troopBase": 201,
-            "base": 63,
-            "main": 274
+            "base": 71,
+            "main": 286
           },
           "modifiers": {
             "caused": [],
@@ -23543,18 +23568,18 @@
           "type": "status_inflicted",
           "unitId": "sunquan",
           "statusType": "attack_buff",
-          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(167)"
+          "detail": "【孙权】执行来自【卫瓘】的【持节镇西】效果！\n【孙权】的攻击属性提高了33(200)"
         },
         {
           "type": "attack_hit",
           "sourceId": "sunquan",
           "targetId": "enemy-mid",
           "distance": 4,
-          "damage": 454,
+          "damage": 483,
           "breakdown": {
             "troopBase": 201,
-            "base": 35,
-            "main": 218
+            "base": 42,
+            "main": 240
           },
           "modifiers": {
             "caused": [],
@@ -23585,18 +23610,18 @@
           "type": "status_inflicted",
           "unitId": "weiguan",
           "statusType": "attack_buff",
-          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(184)"
+          "detail": "【卫瓘】执行来自【卫瓘】的【持节镇西】效果！\n【卫瓘】的攻击属性提高了33(217)"
         },
         {
           "type": "attack_hit",
           "sourceId": "weiguan",
           "targetId": "enemy-mid",
           "distance": 2,
-          "damage": 546,
+          "damage": 583,
           "breakdown": {
             "troopBase": 179,
-            "base": 61,
-            "main": 306
+            "base": 72,
+            "main": 332
           },
           "modifiers": {
             "caused": [],
@@ -23649,11 +23674,11 @@
           "sourceId": "enemy-mid",
           "targetId": "weiguan",
           "distance": 2,
-          "damage": 241,
+          "damage": 235,
           "breakdown": {
-            "troopBase": 152,
+            "troopBase": 147,
             "base": 21,
-            "main": 68
+            "main": 67
           },
           "modifiers": {
             "caused": [],
@@ -23686,34 +23711,34 @@
           "type": "round_end",
           "round": 8,
           "myTroops": [
-            6873,
+            6898,
             9000,
             9000
           ],
           "enemyTroops": [
-            3250,
-            5267,
-            8002
+            2926,
+            5012,
+            7901
           ],
           "myWounded": [
-            1105,
+            1099,
             0,
             0
           ],
           "enemyWounded": [
-            3465,
-            1904,
-            982
+            3603,
+            1992,
+            1030
           ],
           "myDead": [
-            1022,
+            1003,
             0,
             0
           ],
           "enemyDead": [
-            3285,
-            2829,
-            1016
+            3471,
+            2996,
+            1069
           ]
         },
         {
@@ -23721,14 +23746,14 @@
           "result": "draw",
           "rounds": 8,
           "myTroops": [
-            6873,
+            6898,
             9000,
             9000
           ],
           "enemyTroops": [
-            3250,
-            5267,
-            8002
+            2926,
+            5012,
+            7901
           ]
         }
       ]

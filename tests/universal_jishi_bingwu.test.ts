@@ -101,16 +101,29 @@ describe('兵无常势（A 被动：每回合行动时随机 3 选 2）', () => 
         x.e.type === 'skill_cast' && x.e.skillId === 'bingwu_changshi'
       );
     expect(casts.length).toBeGreaterThanOrEqual(8);
+    const groups = (after: BattleEvent[]): boolean[] => [
+      after.some((e) => e.type === 'heal' && e.skillId === 'bingwu_changshi'),
+      after.some(
+        (e) =>
+          (e.type === 'status_inflicted' || e.type === 'status_changed') &&
+          ['attack_buff', 'defense_buff', 'strategy_buff'].includes(e.statusType ?? '') &&
+          e.unitId === 'carrier'
+      ),
+      after.some(
+        (e) =>
+          (e.type === 'status_inflicted' || e.type === 'status_changed') &&
+          e.statusType === 'damage_reduce' &&
+          e.unitId === 'carrier'
+      ),
+    ];
+    // 首次发动：三种效果池中恰好命中两组（新施加必有事件）
+    expect(groups(eventsAfterCast(report.events, casts[0].i)).filter(Boolean)).toHaveLength(2);
+    // 后续回合：新口径下上一回合的 buff 会活到本次行动，若连续命中同一组则走同源刷新
+    //（属性类发 status_changed、减伤类静默刷新）→ 事件流上至少能看到一组，绝不出现三组
     for (const { i } of casts) {
-      const after = eventsAfterCast(report.events, i);
-      const heal = after.some((e) => e.type === 'heal' && e.skillId === 'bingwu_changshi');
-      const attr = after.some(
-        (e) => e.type === 'status_inflicted' && e.statusType === 'attack_buff' && e.unitId === 'carrier'
-      );
-      const reduce = after.some(
-        (e) => e.type === 'status_inflicted' && e.statusType === 'damage_reduce' && e.unitId === 'carrier'
-      );
-      expect([heal, attr, reduce].filter(Boolean).length).toBe(2);
+      const count = groups(eventsAfterCast(report.events, i)).filter(Boolean).length;
+      expect(count).toBeGreaterThanOrEqual(1);
+      expect(count).toBeLessThanOrEqual(2);
     }
   });
 

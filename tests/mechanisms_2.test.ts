@@ -287,19 +287,16 @@ describe('DoT 伤害：妖术/燃烧/恐慌', () => {
     tickStatuses(ctx, [u]);
     expect(hasStatus(u, 'panic')).toBe(true);
 
-    // 回合 2: 仍跳一次 DoT（行动中施加：下次行动开始前递减，此时 remaining 2→1）
+    // 回合 2: 第 2 次（也是最后一次）跳伤；新口径「行动结束后递减」→ 跳完才 1→0 移除
     ctx.currentRound = 2;
     actUnit(ctx, u);
     const r2Dot = ctx.events.filter((e) => e.type === 'dot_tick');
-    expect(r2Dot.length).toBeGreaterThan(r1Dot.length);
-    expect(hasStatus(u, 'panic')).toBe(true); // 仍在
-
-    // 回合 3 行动开始前：行动中施加的计数器减到 0 移除（tickStatuses 只减行动前施加，不减这里）
-    ctx.currentRound = 3;
-    actUnit(ctx, u);
-    expect(hasStatus(u, 'panic')).toBe(false);
+    expect(r2Dot.length).toBe(r1Dot.length + 1);
+    expect(hasStatus(u, 'panic')).toBe(false); // duration 2 = 稳定跳 2 次后移除
 
     // 回合 3: panic 已移除，无新增 DoT
+    ctx.currentRound = 3;
+    actUnit(ctx, u);
     const r3Dot = ctx.events.filter((e) => e.type === 'dot_tick');
     expect(r3Dot.length).toBe(r2Dot.length); // 无新增
   });
