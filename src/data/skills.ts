@@ -8504,4 +8504,45 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'inflict_status', sameTargetsAsLastDamage: true, status: { type: 'siege', duration: 2 } },
     ],
   },
+
+  /**
+   * 京观垒冢（皇甫嵩·汉步 h630 主战法）：被动 S（battle_start 登记型），距离 1，目标自己。
+   * 满级「自身造成伤害时，有 70.0% 几率对目标额外发动一次攻击（伤害率 200.0%）或策略攻击
+   *   （伤害率 200.0%）」；1 级：伤害率 100.0%（概率 70% 不变）。
+   * 官方：scripts/skill_extra.json id 200898（被动 / 距离 1 / 目标自己 / 兵种步；effect 攻击伤害）。
+   *   来源 https://stzb.163.com/m/skilllist/200898.html
+   *
+   * 口径（策略 A，2026-09-20；推定处已标注）：
+   *   ① 新引擎件 `PassiveSkill.dealExtraStrike`：携带者每次造成伤害（实际扣兵 > 0）后按 chance 判定
+   *      （走士气修正，同 actLayer / first_aid 口径，**推定**；`ctx.resolvingDealStrike` 保证追加打击
+   *      自身不再回灌本钩子，防无限递归）；命中则对**同一目标**（原伤害目标，不重选）结算 output；
+   *   ② 「攻击…或策略攻击」的「或」官方未给判定方式 → 按**每次触发 50/50 随机**（`random_pick`
+   *      count 1、两组各一条；三军夺帅「或」= 50/50 的用户确认先例，**推定**）；
+   *   ③ 两段伤害率 200.0% 官方均未标「受…属性影响」→ 固定倍率不缩放
+   *      （策略段 `strategyScaled:false`）→ 无成长率缺口 → **上架**。
+   */
+  jingguan_leizhong: {
+    id: 'jingguan_leizhong',
+    name: '京观垒冢',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['damage'],
+    output: [],
+    dealExtraStrike: {
+      chance: 0.7,
+      output: [
+        {
+          kind: 'random_pick',
+          count: 1,
+          options: [
+            [{ kind: 'physical_damage', rate: 200 }],
+            [{ kind: 'strategy_damage', rate: 200, strategyScaled: false }],
+          ],
+        },
+      ],
+    },
+  },
 };

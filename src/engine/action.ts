@@ -357,6 +357,10 @@ export interface CombatContext {
   actingUnitId?: string;
   /** 当前行动阶段内已造成伤害的目标缓冲（endUnitAct 时落账到 lastActDamageTargets） */
   actDamageTargets?: string[];
+  /**
+   * 「自身造成伤害后追加打击」重入保护（京观垒冢）：追加打击自身造成的伤害不再回灌同一钩子（防递归）。
+   */
+  resolvingDealStrike?: boolean;
 }
 
 /** 持续型急救战法级计数器（皇裔流离/金匮要略）：一个战法一个实例，全队共享。
@@ -6964,6 +6968,36 @@ function triggerCurseOnPursuit(ctx: CombatContext, unit: UnitState): void {
 /** 引燃标记（火势风威）：携带者受到伤害时触发——额外引发一次燃烧伤害（挂上时冻结），
  *  随后标记移除（一次性）。 */
 /**
+ * 自身造成伤害后追加打击（京观垒冢，皇甫嵩「自身造成伤害时，有 70.0% 几率对目标额外发动一次攻击
+ * （伤害率 200.0%）或策略攻击（伤害率 200.0%）」）：携带者每次造成伤害（实际扣兵 > 0）后按 `chance`
+ * 判定（走士气修正，同 actLayer / first_aid 口径，**推定**），命中则对**同一目标**结算 `output`
+ * （「或」= `random_pick` 50/50，三军夺帅先例）。追加打击自身不再回灌本钩子（`resolvingDealStrike`）。
+ */
+function triggerDealExtraStrike(ctx: CombatContext, source: UnitState, target: UnitState): void {
+  for (const id of source.general.passiveSkillIds) {
+    const skill = resolveSkill(ctx, id);
+    const cfg = skill?.type === 'passive' ? skill.dealExtraStrike : undefined;
+    if (!skill || !cfg) continue;
+    const morale = effectiveMorale(source);
+    const rate = moraleTriggerRate(morale, cfg.chance);
+    const success = ctx.rng.chance(rate);
+    ctx.events.push({
+      type: 'skill_trigger',
+      unitId: source.general.id,
+      targetId: target.general.id,
+      skillId: skill.id,
+      skillName: skill.name,
+      success,
+      rate: Math.round(rate * 100),
+      baseRate: Math.round(cfg.chance * 100),
+      morale,
+    });
+    if (!success) continue;
+    executeSkillOutputs(ctx, source, skill, [target], cfg.output);
+  }
+}
+
+/**
  * 避锐消耗后的附加效果（疲兵沮意「避锐效果生效后有 50% 几率令敌军单体陷入燃烧状态（伤害率 150%，
  * 受谋略），持续 1 回合，并使其后续受到疲兵沮意的燃烧伤害伤害率提升 80%，可叠加至战斗结束」）：
  * 由消耗该层的施法者按 `avoidOnConsume.chance` 判定（士气修正，同 actLayer 口径），命中则对
@@ -7506,6 +7540,15 @@ export function applyDamage(
     if (target.alive) loseStacksReduceOnEvent(ctx, target);
     // 兵力阈值首次跨越（甚陷不惧）：受击实际扣兵后逐档检查
     triggerTroopThresholdBuff(ctx, target);
+    // 自身造成伤害后追加打击（京观垒冢）：对同一目标额外发动一次攻击或策略攻击（不递归回灌）
+    if (source && source.alive && !ctx.resolvingDealStrike) {
+      ctx.resolvingDealStrike = true;
+      try {
+        triggerDealExtraStrike(ctx, source, target);
+      } finally {
+        ctx.resolvingDealStrike = false;
+      }
+    }
   }
   // 受击引燃（火势风威）：受到伤害时额外引发一次燃烧（触发后移除标记）
   triggerIgniteOnHurt(ctx, target);

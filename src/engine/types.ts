@@ -1299,6 +1299,13 @@ export interface PassiveSkill extends BaseSkill {
   rangeDecayPerRound?: { perRound: number; min: number };
   /** 受击触发（同仇敌忾 / 舍身卫主）：战斗开始只登记，不立刻结算 output */
   onHurt?: OnHurtConfig | OnHurtConfig[];
+  /**
+   * 自身造成伤害后追加打击（京观垒冢，皇甫嵩「自身造成伤害时，有 70.0% 几率对目标额外发动一次攻击
+   * （伤害率 200.0%）或策略攻击（伤害率 200.0%）」）：携带者每次造成伤害（实际扣兵 > 0）后按
+   * `chance` 判定（士气修正，同 actLayer/first_aid 口径），命中则对**同一目标**结算 `output`
+   * （「或」用 `random_pick` 50/50，三军夺帅先例）；追加打击自身不再回灌本钩子（`ctx.resolvingDealStrike` 防递归）。
+   */
+  dealExtraStrike?: { chance: number; output: SkillOutput[] };
   onHeal?: OnHealConfig;
   /**
    * 「友军大营上次行动阶段造成伤害的目标」独立重复攻击（持刀从武，XP周仓）：

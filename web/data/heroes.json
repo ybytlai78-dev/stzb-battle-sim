@@ -1961,7 +1961,7 @@
     "growthDefense": 1.19,
     "growthStrategy": 1.75,
     "growthSpeed": 0.62,
-    "mainSkillId": "",
+    "mainSkillId": "jingguan_leizhong",
     "mainSkillName": "京观垒冢",
     "skillDesc": "自身造成伤害时，有70.0%几率对目标额外发动一次攻击（伤害率200.0%）或策略攻击（伤害率200.0%）"
   },

@@ -181,6 +181,7 @@ const SKILL_ID_BY_NAME = {
   抚民励德: 'fumin_lide',
   疲兵沮意: 'pibing_juyi',
   将出关西: 'jiangchu_guanxi',
+  京观垒冢: 'jingguan_leizhong',
 };
 
 /** 现有 8 个武将固定拼音 id（测试直接引用 HERO_REGISTRY.<id>） */
