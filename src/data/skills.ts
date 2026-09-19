@@ -5732,6 +5732,77 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     },
   },
 
+  // ─── 拆解通用 B+ 第十四阶段：指挥时机（S 级 2 个）───
+
+  /**
+   * 众谋不懈（S 二类指挥·距离 5·敌军单体）：
+   * 战斗中，每当自身**试图发动主动及追击战法前**，有 40% 几率对距离 5 以内的敌军单体发动一次策略攻击
+   * （伤害率 194%，受谋略属性影响）。
+   * 官方：scripts/skill_extra.json id 200800（1 级 97%；官方文本两处条件几率均为 40%）。
+   * 引擎配套：① 主动侧复用既有 `roundTrigger:'before_active'`（每次试图发动主动战法前逐段按 `chance`
+   *   判定，运筹决胜同链路）；② 追击侧复用 p10 新增的 `BaseSkill.onPursuitAttempt`，段内用
+   *   `chance_group{chance:0.4}` 承载「40% 几率」（before_active 走独立链路、不走通用 chance 闸门）。
+   * 受谋略缩放但成长率未确认 → `growthRate` 留空（基值 194%），登记《成长率待补名单》§三。
+   */
+  zhongmou_buxie: {
+    id: 'zhongmou_buxie',
+    name: '众谋不懈',
+    type: 'command',
+    phase: 'round',
+    roundTrigger: 'before_active',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['damage'],
+    output: [
+      { kind: 'strategy_damage', rate: 194, strategyScaled: true, chance: 0.4, targetMode: 'random_single' },
+    ],
+    onPursuitAttempt: {
+      output: [
+        {
+          kind: 'chance_group',
+          chance: 0.4,
+          outputs: [{ kind: 'strategy_damage', rate: 194, strategyScaled: true, targetMode: 'random_single' }],
+        },
+      ],
+    },
+  },
+  /**
+   * 反计之策（S 一类指挥·距离 4·敌军群体 2 目标）：
+   * 战斗开始后前 3 回合，使敌军群体**发动主动战法时造成的伤害大幅下降**；
+   * 并在**首回合**有 100% 几率使其陷入犹豫状态，无法发动主动战法。
+   * 官方 id 200220（1 级 50%；「大幅下降」官方未给数值）。
+   * 引擎配套：**无需新机制** —— ① 主动伤害大幅下降按用户 2026-09-19 口径取辕门射戟同款
+   *   「伤害降至引擎下限 10%」（`damage_boost caused -99.99` + `skillTypes:['active']`，duration 3 = 前 3 回合）；
+   *   ② 首回合犹豫（满级 100%）= `hesitation` duration 1（准备阶段施加、回合末递减掉）。
+   */
+  fanji_zhence: {
+    id: 'fanji_zhence',
+    name: '反计之策',
+    type: 'command',
+    phase: 'prep',
+    range: 4,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage_boost', 'hesitation'],
+    output: [
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'damage_boost',
+          rate: -99.99,
+          duration: 3,
+          direction: 'caused',
+          skillTypes: ['active'],
+        },
+      },
+      { kind: 'inflict_status', status: { type: 'hesitation', duration: 1 } },
+    ],
+  },
+
   // ─── 批量31：下架武将清单 §1.2「补 1 个机制」逐个实现 ───
 
   /**

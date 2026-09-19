@@ -21,9 +21,9 @@
     "targetDesc": "敌军单体",
     "effectDesc": "战斗中，每当自身试图发动主动及追击战法前，有40.0%的几率对距离5以内的敌军单体发动一次策略攻击（伤害率194.0%，受谋略属性影响）",
     "sources": "【汉·朱儁·弓·SP】【群·张梁·步·SP】【群·张宝·弓·SP】",
-    "status": "skipped",
-    "missingMechanics": "试图发动前触发",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "command-timing p14"
   },
   {
     "name": "反计之策",
@@ -34,9 +34,9 @@
     "targetDesc": "敌军群体（有效距离内2个目标）",
     "effectDesc": "战斗开始后前3回合，使敌军群体发动主动战法时造成的伤害大幅下降，并在首回合有100.0%的几率使其陷入犹豫状态，无法发动主动战法",
     "sources": "【群·张角·骑】【吴·孙尚香·弓】【群·张角·骑·SP】【蜀·孙尚香·弓·SP】",
-    "status": "skipped",
-    "missingMechanics": "发动主动战法伤害降低机制",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "command-timing p14"
   },
   {
     "name": "大赏三军",
