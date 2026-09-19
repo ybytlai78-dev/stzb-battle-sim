@@ -47,7 +47,7 @@ let blueMorale = 120;
  * 起因：测试包 versionCode/versionName 长期不动，装机后分不清装的是新版还是旧版，
  * 只能靠肉眼猜 UI 有没有变。
  */
-export const BUILD_TAG = 'v2.0测试r3';
+export const BUILD_TAG = 'v2.0';
 
 const errBox = document.createElement('div');
 errBox.className = 'err-msg';
