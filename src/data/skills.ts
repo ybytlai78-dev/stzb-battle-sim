@@ -5420,6 +5420,80 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     },
   },
 
+  // ─── 拆解通用 B+ 第十阶段：追击链路（S/A 2 个）───
+
+  /**
+   * 乘胜追击（S 追击·发动 25%–35%·攻击目标）：
+   * 普通攻击后对攻击目标发动一次攻击（伤害率 150%）；每次发动攻击后有 **60% 概率**对攻击目标再次发动攻击
+   * （伤害率 100%），此概率每次降低 20%（60→40→20→0），战法结束后概率重置。
+   * 官方：scripts/skill_extra.json id 200980（1 级 75% / 50%）；发动率区间按仓库口径取**上界 35%**
+   * （与「温酒斩将 20–35 → 0.35」同口径）。
+   * 引擎配套：① 复用既有 `physical_damage.chain`（`chance` + `decay`，按士气修正逐次判定、成功重打同一段）；
+   *   **新增 `chain.sameTarget`**（乘胜追击是「对攻击目标」，既有连锁默认按战法距离随机单体）；
+   *   ② 首次额外攻击（60%）用输出级 `chance: 0.6`（**本次把输出级 chance 扩展到追击战法**），
+   *   连锁从 40% 起递减（60 → 40 → 20 → 0），与原描述「每次发动攻击后有 60% 概率…每次降低 20%」一致。
+   * 无「受属性影响」→ 150% / 100% 均固定，不缩放。
+   */
+  chengsheng_zhuiji: {
+    id: 'chengsheng_zhuiji',
+    name: '乘胜追击',
+    type: 'pursuit',
+    range: 0,
+    triggerRate: 0.35,
+    tags: ['damage'],
+    output: [
+      { kind: 'physical_damage', rate: 150 },
+      {
+        kind: 'physical_damage',
+        rate: 100,
+        chance: 0.6,
+        chain: { chance: 0.4, decay: 0.2, sameTarget: true },
+      },
+    ],
+  },
+  /**
+   * 势无虚动（A 被动·距离 1·目标自己）：
+   * 自身**每次试图发动追击战法时**：① 使下一次造成伤害无视规避；② 下一次发动追击战法造成伤害提升 40%，
+   * 最多叠加 3 次（伤害提升效果在下一次追击打出后清空）。
+   * 官方 id 200949（1 级 20%）。
+   * 用户 2026-09-19 确认：② 为**消耗制**——层数累加（最多 3 层），下一次追击实际打出后清空全部层数。
+   * 引擎配套：**新增 `BaseSkill.onPursuitAttempt`**（进入追击发动率判定前，无论结果，逐战法执行 output）。
+   *   ① 复用既有 `ignore_evasion`（消耗制：下次造成伤害时移除）；
+   *   ② 复用 `damage_boost`（`direction:'caused'` + `skillTypes:['pursuit']` + `stacks/maxStacks:3`
+   *   + `charges:1` + `chargesStack:true`）：每次试图发动 +1 层并累加 rate，追击打出消耗 charges 即整条移除。
+   */
+  shiwu_xudong: {
+    id: 'shiwu_xudong',
+    name: '势无虚动',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['damage_boost'],
+    output: [],
+    onPursuitAttempt: {
+      output: [
+        { kind: 'inflict_status', target: 'self', status: { type: 'ignore_evasion', duration: 999 } },
+        {
+          kind: 'inflict_status',
+          target: 'self',
+          status: {
+            type: 'damage_boost',
+            rate: 0.4,
+            duration: 999,
+            direction: 'caused',
+            skillTypes: ['pursuit'],
+            stacks: 1,
+            maxStacks: 3,
+            charges: 1,
+            chargesStack: true,
+          },
+        },
+      ],
+    },
+  },
+
   // ─── 批量31：下架武将清单 §1.2「补 1 个机制」逐个实现 ───
 
   /**

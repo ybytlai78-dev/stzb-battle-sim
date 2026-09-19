@@ -191,7 +191,7 @@ export type SkillOutput =
        * 本段打出后连锁：当前概率 `p = chance`；`p > 0` 时按施法者士气 `moraleTriggerRate(p)`，
        * 成功则在战法距离内独立 `random_single` 再打同一段（循环驱动，递归调用时去掉 chain），然后 `p -= decay`。
        */
-      chain?: { chance: number; decay: number };
+      chain?: { chance: number; decay: number; /** 连锁重打**同一目标**（乘胜追击「对攻击目标再次发动攻击」）；缺省按战法距离随机单体 */ sameTarget?: boolean };
       /** 为 true 时本次结算不加算兵种克制 −30% */
       ignoresTroopCounter?: boolean;
       /**
@@ -234,7 +234,7 @@ export type SkillOutput =
        * 本段打出后连锁：当前概率 `p = chance`；`p > 0` 时按施法者士气 `moraleTriggerRate(p)`，
        * 成功则在战法距离内独立 `random_single` 再打同一段（循环驱动，递归调用时去掉 chain），然后 `p -= decay`。
        */
-      chain?: { chance: number; decay: number };
+      chain?: { chance: number; decay: number; /** 连锁重打**同一目标**（乘胜追击「对攻击目标再次发动攻击」）；缺省按战法距离随机单体 */ sameTarget?: boolean };
       /**
        * 本段选敌距离（不攻每回合策略 5）。缺省 `skill.range`。
        * 与 physical_damage.range 同口径。
@@ -649,6 +649,11 @@ interface BaseSkill {
    * `startRound`：第 N 回合起才生效（疾风迅雷 3）。
    */
   onBasicHit?: { rate: number; startRound?: number; output: SkillOutput[] };
+  /**
+   * 「**试图发动追击战法时**」钩子（势无虚动 / 众谋不懈）：进入追击发动率判定前（无论判定结果）
+   * 对携带者执行 `output`；段内缺省目标池 = 本次追击的攻击目标。
+   */
+  onPursuitAttempt?: { output: SkillOutput[] };
   /**
    * 战法链（连环计「依次发动下列战法…每个战法的效果与原战法在同等级下效果相同」）：
    * 最外层发动时按顺序把**其他已注册战法**（`SKILL_REGISTRY`）的 `output` 当作本战法效果执行，

@@ -1260,7 +1260,7 @@ export function triggerPassiveSkills(
       skill.output.length === 0 &&
       !skill.roundStartRepeat &&
       !skill.onHurt &&
-      (skill.troopThresholdBuff || skill.recoverEachRound)
+      (skill.troopThresholdBuff || skill.recoverEachRound || skill.onPursuitAttempt)
     ) {
       ctx.events.push({
         type: 'skill_cast',
@@ -3603,7 +3603,11 @@ function executeDamageChain(
     });
     if (!success) break;
     const { chain: _omit, ...rest } = out;
-    executeSkillOutputs(ctx, caster, skill, targets, [{ ...rest, chain: undefined, targetMode: 'random_single' }]);
+    // sameTarget（乘胜追击「对攻击目标再次发动攻击」）：沿用本段目标池；缺省按战法距离随机单体
+    const next: SkillOutput = out.chain.sameTarget
+      ? { ...rest, chain: undefined }
+      : { ...rest, chain: undefined, targetMode: 'random_single' };
+    executeSkillOutputs(ctx, caster, skill, targets, [next]);
     p -= out.chain.decay;
     if (out.chain.decay <= 0) break;
   }
@@ -3983,6 +3987,22 @@ function gainStacksReduceOnDeal(ctx: CombatContext, source?: UnitState): void {
 }
 
 /**
+ * 「试图发动追击战法时」钩子（势无虚动 / 众谋不懈）：按携带者（被动 + 指挥）逐个执行 `output`，
+ * 目标池缺省 = 本次追击的攻击目标（段内 `target:'self'` 可落回自身）。
+ */
+function triggerPursuitAttemptHooks(ctx: CombatContext, unit: UnitState, hitTarget: UnitState): void {
+  if (!unit.alive) return;
+  for (const id of [...unit.general.passiveSkillIds, ...unit.general.commandSkillIds]) {
+    const skill = resolveSkill(ctx, id);
+    const cfg = skill?.onPursuitAttempt;
+    if (!skill || !cfg) continue;
+    if (!passesCasterPosition(skill, unit)) continue;
+    executeSkillOutputs(ctx, unit, skill, [hitTarget], cfg.output);
+    if (!unit.alive) return;
+  }
+}
+
+/**
  * 兵力阈值首次跨越触发（甚陷不惧）：持有者受击实际扣兵后逐档检查，
  * 命中未触发过的档位（`ctx.troopThresholdKeys` 去重）则对持有者自身结算 output。
  * 同一次结算跨越多档时只结算一次（同源发动率提升不叠加）。
@@ -4125,13 +4145,14 @@ function executeSkillOutputs(
       if (success) executeSkillOutputs(ctx, caster, skill, targets, out.outputs);
       continue;
     }
-    // 独立发动率（被动/主动/指挥；击势 65%、举抑臧否 60%、望风而降 50%、指挥 roundStartRepeat chance）：
-    // 士气修正后判定，失败则跳过该段
+    // 独立发动率（被动/主动/追击/指挥；击势 65%、举抑臧否 60%、望风而降 50%、乘胜追击首次连锁 60%、
+    // 指挥 roundStartRepeat chance）：士气修正后判定，失败则跳过该段
     // before_active 指挥（运筹决胜）已在 triggerBeforeActiveCommands 逐段判定，此处不再重复
     // recipient 代打改在每人上 roll，不走整段一次判定（先声夺人等非代打仍走此处）
     if (
       (skill.type === 'passive' ||
         skill.type === 'active' ||
+        skill.type === 'pursuit' ||
         (skill.type === 'command' && skill.roundTrigger !== 'before_active')) &&
       'chance' in out &&
       out.chance != null &&
@@ -5557,6 +5578,9 @@ function triggerPursuitSkill(
 ): void {
   // 妖术诅咒（密谋定蜀）：试图发动追击战法时（进入判定，无论发动率结果）受到妖术诅咒伤害；诅咒致死则终止判定
   triggerCurseOnPursuit(ctx, unit);
+  if (!unit.alive) return;
+  // 「试图发动追击战法时」钩子（势无虚动 / 众谋不懈）：进入发动率判定前（无论结果）
+  triggerPursuitAttemptHooks(ctx, unit, hitTarget);
   if (!unit.alive) return;
   // 七步释嫌等：进入追击发动率判定即「试图发动」
   triggerAllyActCommands(ctx, unit);
