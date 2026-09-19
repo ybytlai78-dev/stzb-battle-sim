@@ -5245,4 +5245,37 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+  /**
+   * 连环计（王允·汉弓 h693·主动 A）：距离 4，敌军单体，官方发动率 20%-30%（**取上界 30% = 满级口径**，
+   * 同浑水摸鱼 25-35→35 / 妖术 30-50→50 / 九锡黄龙 25-35→35 的既有惯例）。
+   * 对敌军单体施加连环计，**依次发动**下列战法：对连环计目标发动一次「伐谋」；
+   * 若连环计目标谋略低于自身，则对随机敌军单体发动一次「迷阵」；
+   * 若连环计目标处于暴走状态，则对随机敌军单体发动一次「落雷」。每个战法的效果与原战法在同等级下效果相同。
+   * 官方：scripts/skill_extra.json id 200714（主动 A / 距离 4 / 敌军单体 / 兵种弓）。
+   * 入档判断：**上架**——三段效果全部借用已注册战法（伐谋 209%/2.175、迷阵 155%/1.5、落雷 148%/1.35，
+   *   成长率均已确认），本战法自身无数值待定。
+   * 引擎配套：**新增 `BaseSkill.chainSkills`（战法链）** —— 依序执行其他已注册战法的 `output`，
+   *   每步条件在**该步执行时**求值（伐谋先降主目标谋略 → 影响迷阵判定；迷阵命中主目标时挂暴走 → 影响落雷判定）；
+   *   被引用战法的 triggerRate 不参与判定（本战法已掷过发动率）。
+   */
+  lianhuanji: {
+    id: 'lianhuanji',
+    name: '连环计',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.3,
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['damage', 'rampage', 'confusion', 'debuff_attack', 'debuff_strategy'],
+    output: [],
+    chainSkills: [
+      // ① 对连环计目标发动一次「伐谋」（策略 209% 受谋略 + 攻/谋 −45 两回合）
+      { skillId: 'famou' },
+      // ② 若连环计目标谋略低于自身 → 对随机敌军单体发动「迷阵」（策略 155% + 暴走 1 回合）
+      { skillId: 'mizhen', targetMode: 'random_single', requireTargetStrategyBelowSelf: true },
+      // ③ 若连环计目标处于暴走状态 → 对随机敌军单体发动「落雷」（策略 148% + 混乱 1 回合）
+      { skillId: 'luolei', targetMode: 'random_single', requireTargetStatus: 'rampage' },
+    ],
+  },
 };

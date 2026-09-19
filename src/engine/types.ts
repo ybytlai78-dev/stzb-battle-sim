@@ -513,6 +513,23 @@ interface BaseSkill {
    */
   triggerRateDecayPerCast?: number;
   /**
+   * 战法链（连环计「依次发动下列战法…每个战法的效果与原战法在同等级下效果相同」）：
+   * 最外层发动时按顺序把**其他已注册战法**（`SKILL_REGISTRY`）的 `output` 当作本战法效果执行，
+   * 事件 / 统计归属**被引用战法**（战报显示「发动了一次伐谋」）。
+   * 每步前置条件在**该步执行时**求值——前一步的效果（如降谋略、施加暴走）可影响后一步判定。
+   * 被引用战法自身的 `triggerRate` 不参与判定（本战法已掷过发动率）。
+   */
+  chainSkills?: Array<{
+    /** 被发动战法 id（须已在 SKILL_REGISTRY 注册） */
+    skillId: string;
+    /** 目标池覆盖：`'random_single'` = 在本战法距离内随机敌军单体（迷阵 / 落雷段）；缺省 = 本战法主目标 */
+    targetMode?: 'random_single';
+    /** 仅当本战法**主目标**的生效谋略 **低于** 施法者生效谋略时结算（迷阵段） */
+    requireTargetStrategyBelowSelf?: boolean;
+    /** 仅当本战法**主目标**带此状态时结算（落雷段 `'rampage'`；迷阵命中主目标时可在其后满足） */
+    requireTargetStatus?: StatusType;
+  }>;
+  /**
    * 按「造成伤害次数」递增本战法 `chance_group` 的基础发动率（霸王渡江「每次攻击造成伤害后可使
    * 霸王渡江发动率提升 3.0%，该效果可叠加 5 次」）：
    * 本战法每造成 1 次伤害（实际扣兵 > 0）计 1 层（上限 maxStacks），

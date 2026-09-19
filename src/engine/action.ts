@@ -3286,6 +3286,51 @@ function executeDamageChain(
   }
 }
 
+/**
+ * 战法链（连环计）：最外层发动时依次把**其他已注册战法**的 output 当作本战法效果执行
+ * （官方「每个战法的效果与原战法在同等级下效果相同」→ 直接用注册表里该战法的 output，事件归属该战法）。
+ * 每步条件在**该步执行时**求值：前一步可能降主目标谋略（伐谋）或给主目标挂暴走（迷阵命中主目标），
+ * 从而影响后一步（迷阵 / 落雷）是否结算——顺序不可预先求值。
+ */
+function runChainSkills(ctx: CombatContext, caster: UnitState, skill: Skill, targets: UnitState[]): void {
+  const chain = 'chainSkills' in skill ? skill.chainSkills : undefined;
+  if (!chain || chain.length === 0) return;
+  const enemies = caster.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
+  const primary = targets[0]; // 本战法主目标 = 连环计目标
+  for (const step of chain) {
+    if (step.requireTargetStrategyBelowSelf) {
+      if (!primary || !primary.alive) continue;
+      if (effectiveStat(primary, 'strategy') >= effectiveStat(caster, 'strategy')) continue;
+    }
+    if (step.requireTargetStatus) {
+      if (!primary || !primary.alive || !hasStatus(primary, step.requireTargetStatus)) continue;
+    }
+    const ref = resolveSkill(ctx, step.skillId);
+    if (!ref) continue;
+    const pool: UnitState[] =
+      step.targetMode === 'random_single'
+        ? skillTargets(ctx, caster, enemies, ref.range ?? skill.range, 'random_single')
+        : primary
+          ? [primary]
+          : [];
+    if (pool.length === 0) continue;
+    ctx.events.push({
+      type: 'skill_target',
+      unitId: caster.general.id,
+      skillId: ref.id,
+      targetIds: pool.map((t) => t.general.id),
+    });
+    ctx.events.push({
+      type: 'skill_cast',
+      unitId: caster.general.id,
+      skillId: ref.id,
+      skillName: ref.name,
+    });
+    executeSkillOutputs(ctx, caster, ref, pool, ref.output, false);
+    if (!caster.alive) break;
+  }
+}
+
 function executeSkillOutputs(
   ctx: CombatContext,
   caster: UnitState,
@@ -3313,6 +3358,8 @@ function executeSkillOutputs(
     }
   }
   const list = outputs ?? skill.output;
+  // 战法链（连环计）：仅最外层发动执行（nested 调用都带显式 outputs，故不会递归触发）
+  if (!outputs) runChainSkills(ctx, caster, skill, targets);
   /** 属性/兵力/增减伤的读取来源；缺省与施法者同体（旧口径） */
   const statU = statSource ?? caster;
   /** 上两段伤害输出的实际目标，供 onlyIfOverlapPrevious（怀德畏威重合混乱）取交集 */
