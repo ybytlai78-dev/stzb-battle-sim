@@ -4941,6 +4941,184 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     ],
   },
 
+  // ─── 拆解通用 B+ 第六阶段：受击链路收尾（5 个）───
+
+  /**
+   * 垒实迎击（S 被动·距离 1·目标自己）：
+   * ① 受到**普通攻击**伤害时，50% 使自身恢复兵力（恢复率 200%，受谋略，成长率未确认 → 0 = 不缩放）；
+   * ② 50% 移除自身**由主动及追击战法带来的负面**效果；
+   * ③ 50% 使自身进入规避状态（免疫下 1 次受到的伤害）；
+   * ④ 同时当自身位于中军及前锋时，每回合开始 50% **援护友军全体**，持续 1 回合。
+   * 官方：scripts/skill_extra.json id 200900（1 级 25% / 100%）。
+   * 用户 2026-09-19 确认：①②③ 三个 50% **各自独立判定**（同一场受击可同时奶 + 解负面 + 规避）。
+   * 引擎配套：
+   *   - ①②③ 走 `onHurt` 数组（三段各自独立判定；`damageSource:'basic'` 只吃普攻）；
+   *   - ② 复用 `remove_by_source_skill_type` + **新增 `debuffsOnly`**（辞后定朝口径是有害+有益都移除，
+   *     垒实迎击只要移除负面）；
+   *   - ③ 复用 `grant_evasion`；④ 复用 `cover` 状态（普攻改由 cover 持有者承受）+ 段级 `casterPositions`；
+   *   - ④ 的 50% 走输出级 `chance`（士气修正）；
+   *   - ④ 每回合开始走被动 `roundStartRepeat`（行动阶段、主动/普攻之前），duration 1 恰覆盖本回合。
+   */
+  leishi_yingji: {
+    id: 'leishi_yingji',
+    name: '垒实迎击',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['heal', 'evasion', 'immunity', 'cover'],
+    output: [],
+    onHurt: [
+      {
+        victim: 'self',
+        rate: 0.5,
+        damageSource: 'basic',
+        applyTo: 'victim',
+        output: [{ kind: 'heal', rate: 200, strategyScaled: true, growthRate: 0, target: 'self' }],
+      },
+      {
+        victim: 'self',
+        rate: 0.5,
+        damageSource: 'basic',
+        applyTo: 'victim',
+        output: [
+          {
+            kind: 'remove_by_source_skill_type',
+            target: 'self',
+            skillTypes: ['active', 'pursuit'],
+            debuffsOnly: true,
+          },
+        ],
+      },
+      {
+        victim: 'self',
+        rate: 0.5,
+        damageSource: 'basic',
+        applyTo: 'victim',
+        output: [{ kind: 'grant_evasion', stacks: 1, target: 'self' }],
+      },
+    ],
+    roundStartRepeat: {
+      output: [
+        {
+          kind: 'inflict_status',
+          target: 'self',
+          casterPositions: ['中军', '前锋'],
+          chance: 0.5,
+          status: { type: 'cover', duration: 1 },
+        },
+      ],
+    },
+  },
+  /**
+   * 百战无怯（S 被动·距离 1·目标自己）：
+   * 自身位于中军或前锋时，战斗开始即获得 3 层「受到的攻击伤害与策略伤害降低 20%/层」（最多 3 层）；
+   * 造成伤害后 +1 层；**每回合开始**、以及**受到攻击或策略攻击伤害后**，失去 1 层并恢复兵力（恢复率 200%，
+   * 受谋略，成长率未确认 → 0 = 不缩放）。
+   * 官方：scripts/skill_extra.json id 200252（1 级 10% / 100%）。
+   * 用户 2026-09-19 确认：**0 层时既不掉层也不回血**（掉层与恢复绑定）。
+   * 引擎配套：**新增 `PassiveSkill.stacksReduceHeal`**（层数体系）——
+   *   开局满层挂一个 `damage_reduce`（rate = perStack × 层数）；
+   *   `applyDamage` 内：造成方 +1 层、受击方 −1 层（掉层才走 `heal`）；
+   *   `tickRoundStartStatuses` 每回合开始对所有单位 −1 层（掉层才回血）。
+   * 位置条件走 `BaseSkill.casterPositions`（整次生效；含开局挂层与所有钩子）。
+   * 注：DoT 跳伤也走 `applyDamage(strategy)` → 同样触发掉层回血（「受到策略攻击伤害」口径内）。
+   */
+  baizhan_wuqie: {
+    id: 'baizhan_wuqie',
+    name: '百战无怯',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    casterPositions: ['中军', '前锋'],
+    tags: ['damage_reduce', 'heal'],
+    output: [],
+    stacksReduceHeal: {
+      perStack: 0.2,
+      maxStacks: 3,
+      healRate: 200,
+      healGrowthRate: 0,
+    },
+  },
+  /**
+   * 疾风迅雷（B 一类指挥·距离 1·目标自己）：
+   * 战斗中能够**优先行动**；第 3 回合起，当**自身普通攻击命中目标后**有 40% 几率使其混乱，持续 1 回合。
+   * 官方：scripts/skill_extra.json id 200646（1 级 20%）。
+   * 用户 2026-09-19 确认：「普通攻击命中后」仅指**携带者自身**的普攻（非我军全体）。
+   * 引擎配套：
+   *   - 全程先手复用 `CommandSkill.priorityRounds: 999`（先驱突击同字段）；
+   *   - **新增 `BaseSkill.onBasicHit`**：`dealAttack` 命中并实际结算后（被规避不触发）按 rate 经士气修正判定，
+   *     命中则对**该普攻目标**执行 output；
+   *   - 「持续 1 回合」按行动中施加给他人口径 → duration 2（辕门射戟 / 举抑臧否）。
+   *   - 注：EffectTag 无「先手」项（同举抑臧否），故 tags 只标混乱。
+   */
+  jifeng_xunlei: {
+    id: 'jifeng_xunlei',
+    name: '疾风迅雷',
+    type: 'command',
+    phase: 'prep',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    priorityRounds: 999,
+    tags: ['confusion'],
+    output: [],
+    onBasicHit: {
+      rate: 0.4,
+      startRound: 3,
+      output: [{ kind: 'inflict_status', status: { type: 'confusion', duration: 2 } }],
+    },
+  },
+  /**
+   * 反击（D 主动·距离 1·发动 25%–30%·目标自己）：使自身受到普通攻击时能进行反击（伤害率 75%），持续 2 回合。
+   * 官方：scripts/skill_extra.json id 200221（1 级 37.5%）；发动率区间按仓库口径取**上界 30%**。
+   * 引擎配套：**无需新机制** —— `counter` 状态已实现（反击之策 / 一夫当关；`settleCounterOnHurt`）。
+   * 「持续 2 回合」按用户 2026-09-19 确认取 **duration 3**（行动中给自身施加，覆盖后续两个完整行动回合）。
+   */
+  fanji_counter: {
+    id: 'fanji_counter',
+    name: '反击',
+    type: 'active',
+    prepare: false,
+    range: 1,
+    triggerRate: 0.3,
+    targetMode: 'self',
+    tags: ['counter'],
+    output: [{ kind: 'inflict_status', status: { type: 'counter', duration: 3, rate: 75 } }],
+  },
+  /**
+   * 诱敌深入（A 一类指挥·距离 5·目标自己）：
+   * 战斗开始后第 3 回合起，自身在我军全体每回合首次受到伤害后，有 50% 几率对**伤害来源**
+   * 造成一次策略攻击（伤害率 136%，受谋略，成长率未确认 → 留空按基值）。
+   * 官方：scripts/skill_extra.json id 201008（1 级 68%）。
+   * 用户 2026-09-19 确认：「每回合首次」= **每名友军各自每回合首次**（复用 `onHurt.oncePerRound` 语义）。
+   * 引擎配套：**无需新机制** —— `onHurt`（`victim:'ally'` 含施法者自身 / `startRound:3` / `oncePerRound` /
+   *   `applyTo:'source'`）+ 既有 `strategy_damage`。
+   * 注：按一类指挥默认口径，施法者阵亡后本效果停止（未写 `retainAfterDeath`）。
+   */
+  youdi_shenru: {
+    id: 'youdi_shenru',
+    name: '诱敌深入',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['damage'],
+    output: [],
+    onHurt: {
+      victim: 'ally',
+      rate: 0.5,
+      startRound: 3,
+      oncePerRound: true,
+      applyTo: 'source',
+      output: [{ kind: 'strategy_damage', rate: 136, strategyScaled: true }],
+    },
+  },
+
   // ─── 批量31：下架武将清单 §1.2「补 1 个机制」逐个实现 ───
 
   /**

@@ -255,9 +255,9 @@
     "targetDesc": "自己",
     "effectDesc": "战斗开始后第3回合起，自身在我军全体每回合首次受到伤害后，有50.0%的几率对伤害来源造成一次策略攻击（伤害率136.0%，受谋略属性影响）",
     "sources": "【吴·鲁肃·步】【汉·阴丽华·弓】【群·沮授·步】",
-    "status": "skipped",
-    "missingMechanics": "受击后反击",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "hit-chain p6"
   },
   {
     "name": "鸟云山兵",
@@ -359,9 +359,9 @@
     "targetDesc": "自己",
     "effectDesc": "战斗中能够优先行动，第3回合开始，当普通攻击命中目标后将有40.0%的几率使其混乱，持续1回合",
     "sources": "【吴·甘宁·步】【吴·诸葛恪·弓】",
-    "status": "skipped",
-    "missingMechanics": "先手+受击混乱",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "hit-chain p6"
   },
   {
     "name": "穷追猛打",
@@ -1750,9 +1750,9 @@
     "targetDesc": "自己",
     "effectDesc": "使自身受到普通攻击时能进行反击（伤害率75.0%），持续2回合",
     "sources": "【群·宋宪·骑】【群·宋宪·骑】",
-    "status": "skipped",
-    "missingMechanics": "受击反击",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "hit-chain p6"
   },
   {
     "name": "固阵",
@@ -1997,9 +1997,9 @@
     "targetDesc": "自己",
     "effectDesc": "受到普通攻击伤害时，有50.0%几率使自身恢复一定兵力（恢复率200.0%）；有50.0%几率移除自身由主动及追击战法带来的负面效果；使自身进入规避状态，有50.0%几率免疫下1次受到的伤害。同…",
     "sources": "【汉·皇甫嵩·步】【蜀·严颜·骑】",
-    "status": "skipped",
-    "missingMechanics": "受击触发",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "hit-chain p6"
   },
   {
     "name": "百战无怯",
@@ -2010,9 +2010,9 @@
     "targetDesc": "自己",
     "effectDesc": "自身位于中军或前锋时，在战斗开始后获得以下效果：造成伤害后，受到的攻击伤害与策略伤害降低20.0%，此效果最多叠加3次；战斗开始时已叠加3次，每回合开始时、受到攻击或策略攻击伤害后，失去1次叠加次数并恢复一定兵力（恢复率200.0%）",
     "sources": "【吴·黄盖·步】【群·马腾·骑】",
-    "status": "skipped",
-    "missingMechanics": "位置条件+造成伤害叠层+受击/回合开始掉层恢复",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "hit-chain p6"
   },
   {
     "name": "三军齐出",

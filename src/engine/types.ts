@@ -382,6 +382,11 @@ export type SkillOutput =
       /** 只移除这些来源战法类型施加的状态（指挥 / 主动 / 追击 / 被动） */
       skillTypes: SkillType[];
       target?: 'self';
+      /**
+       * 只移除**有害**状态（垒实迎击「移除自身由主动及追击战法带来的负面效果」）。
+       * 缺省 false = 有害 + 有益都移除（辞后定朝口径）。
+       */
+      debuffsOnly?: boolean;
     }
   | { kind: 'grant_evasion'; stacks: number; target?: 'self' }
   | {
@@ -610,6 +615,13 @@ interface BaseSkill {
    * 因此结算中读到的是「此前发动次数」。加算在受谋略缩放**之前**（先加后缩放）。
    */
   damageRatePerCast?: number;
+  /**
+   * 普通攻击**命中并实际结算后**的钩子（疾风迅雷「第 3 回合起，当普通攻击命中目标后将有 40% 的几率使其混乱」）：
+   * 仅**携带者自身**的普攻触发（用户 2026-09-19 确认；被规避时不触发）；按 `rate` 经士气修正掷一次，
+   * 命中则对**该普攻目标**执行 `output`（段内缺省目标池 = 该目标）。
+   * `startRound`：第 N 回合起才生效（疾风迅雷 3）。
+   */
+  onBasicHit?: { rate: number; startRound?: number; output: SkillOutput[] };
   /**
    * 战法链（连环计「依次发动下列战法…每个战法的效果与原战法在同等级下效果相同」）：
    * 最外层发动时按顺序把**其他已注册战法**（`SKILL_REGISTRY`）的 `output` 当作本战法效果执行，
@@ -1097,6 +1109,26 @@ export interface PassiveSkill extends BaseSkill {
    * 目标池：交给 output 段的 targetMode 重选（缺省传入对侧全体存活作为兜底）。
    */
   afterAct?: { output: SkillOutput[] };
+  /**
+   * 层数型受伤减免 + 掉层回血（百战无怯）：
+   * ① 战斗开始即 `maxStacks` 层，每层使**受到的所有伤害**降低 `perStack`（进 sumReduce 单一总和）；
+   * ② 携带者**造成伤害**（实际扣兵 > 0）后 +1 层（封顶 maxStacks）；
+   * ③ **每回合开始**、以及**受到伤害**（实际扣兵 > 0）后 −1 层；
+   * ④ 每次**实际掉 1 层**时按 `healRate`%（受施法者谋略缩放；`healGrowthRate` 未确认 → 0）恢复自身；
+   *    0 层时既不掉层也不回血（用户 2026-09-19 确认）。
+   * 计数走 `ctx.stacksReduceCounters`（键 `${casterId}:${skillId}`），状态表现为一个
+   * `damage_reduce`（rate = perStack × 当前层数，随层数同步刷新）。
+   */
+  stacksReduceHeal?: {
+    /** 每层减伤比例（0.2 = 20%） */
+    perStack: number;
+    /** 层数上限 / 开局层数（3） */
+    maxStacks: number;
+    /** 掉 1 层时的恢复率（谋略 80 基准，受谋略缩放） */
+    healRate: number;
+    /** 恢复率成长率（未确认 → 0 = 不缩放） */
+    healGrowthRate: number;
+  };
   /**
    * 「任意友军成功发动普攻 / 主动 / 追击后」叠层（奉令护蜀）：本侧每次成功发动
    * （**含自身**，沿用徽言龙凤「友军全体」含己的口径）→ 给持有者挂 / 叠加 `pending_stacks`（上限 maxStacks）。

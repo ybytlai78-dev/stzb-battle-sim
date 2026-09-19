@@ -201,6 +201,8 @@ export interface CombatContext {
   /** 二类指挥行动叠层计数器（奋疾先登）：key `${casterId}:${skillId}` → 当前增伤层数。
    *  可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化 */
   actLayerCounters?: Map<string, number>;
+  /** 层数型受伤减免计数器（百战无怯）：key `${casterId}:${skillId}` → 当前层数（0..maxStacks） */
+  stacksReduceCounters?: Map<string, number>;
   /** 持续型急救计数器（皇裔流离）：战法级共享触发率与总生效次数（全队合计，每达到 N 次提升）。
    *  可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化 */
   firstAidCounters?: FirstAidCounter[];
@@ -1218,6 +1220,20 @@ export function triggerPassiveSkills(
     const skill = resolveSkill(ctx, id);
     if (skill?.type !== 'passive' || skill.timing !== timing) continue;
     if (!passesCasterPosition(skill, unit)) continue; // 站位条件（同战法口径）
+    // 层数型受伤减免（百战无怯）：战斗开始即满层 + 挂常驻减伤
+    // （无 output / 无回合段 / 无受击段时只登记，不空跑 executeSkillWithTargets）
+    if (skill.stacksReduceHeal) {
+      initStacksReduce(ctx, unit, skill);
+      if (skill.output.length === 0 && !skill.roundStartRepeat && !skill.onHurt) {
+        ctx.events.push({
+          type: 'skill_cast',
+          unitId: unit.general.id,
+          skillId: skill.id,
+          skillName: skill.name,
+        });
+        continue;
+      }
+    }
     ctx.events.push({
       type: 'unit_act_start',
       unitId: unit.general.id,
@@ -2875,6 +2891,8 @@ export function tickStatuses(ctx: CombatContext, units: UnitState[]): void {
 export function tickRoundStartStatuses(ctx: CombatContext): void {
   const decayEighthsNow = ctx.currentRound !== 1; // 第 1 回合不衰减（保 8/8）
   const units = [...ctx.myTeam, ...ctx.enemyTeam];
+  // 百战无怯：每回合开始失去 1 层并恢复（0 层不掉也不回血）——先于本回合任何伤害结算
+  for (const u of units) loseStacksReduceOnEvent(ctx, u);
   // 玉玺结转（僭号天子）：第二回合起，每回合开始时对持有者结算「上一回合承担量 × 本回合承担比例」；
   // 本回合承担比例 = 50% 起、每回合 +10%，封顶 100%。账本结算后清零。
   for (const seal of ctx.sealLedgers ?? []) {
@@ -2981,9 +2999,11 @@ export function tickRoundStartStatuses(ctx: CombatContext): void {
   }
 }
 
+/** 有害状态类型（removeDebuffs 全清 / 垒实迎击「只移除负面」共用同一口径） */
+const DEBUFF_TYPES: StatusType[] = ['confusion', 'rampage', 'cowardice', 'hesitation', 'siege', 'sorcery', 'burning', 'panic', 'curse', 'ignite', 'taunt'];
+
 /** 移除所有有害状态（孙权九锡黄龙） */
 export function removeDebuffs(ctx: CombatContext, targets: UnitState[]): void {
-  const DEBUFF_TYPES: StatusType[] = ['confusion', 'rampage', 'cowardice', 'hesitation', 'siege', 'sorcery', 'burning', 'panic', 'curse', 'ignite', 'taunt'];
   for (const t of targets) {
     if (!t.alive) continue;
     const before = t.statuses.filter((s) => DEBUFF_TYPES.includes(s.type as StatusType));
@@ -3717,6 +3737,129 @@ function damageRatePerCastBonus(ctx: CombatContext, caster: UnitState, skill: Sk
   if (step == null) return 0;
   const prior = ctx.skillCastCounters?.get(`${caster.general.id}:${skill.id}`) ?? 0;
   return step * prior;
+}
+
+/**
+ * 普通攻击**命中并实际结算后**的钩子（疾风迅雷「普攻命中目标后 40% 几率使其混乱」）：
+ * 仅**攻击者自身**携带的战法触发（用户 2026-09-19 确认）；被规避（未命中）时不触发。
+ * 按 `onBasicHit.rate` 经士气修正掷一次（几率类一律吃士气加成），命中则对该普攻目标执行 output。
+ */
+function triggerBasicHitHooks(ctx: CombatContext, attacker: UnitState, hitTarget: UnitState): void {
+  if (!attacker.alive || !hitTarget.alive) return;
+  const morale = effectiveMorale(attacker);
+  for (const id of [...attacker.general.commandSkillIds, ...attacker.general.passiveSkillIds]) {
+    const skill = resolveSkill(ctx, id);
+    const cfg = skill?.onBasicHit;
+    if (!skill || !cfg) continue;
+    if (!passesCasterPosition(skill, attacker)) continue;
+    if (cfg.startRound != null && ctx.currentRound < cfg.startRound) continue;
+    const rate = moraleTriggerRate(morale, cfg.rate);
+    const success = ctx.rng.chance(rate);
+    ctx.events.push({
+      type: 'skill_trigger',
+      unitId: attacker.general.id,
+      targetId: hitTarget.general.id,
+      skillId: skill.id,
+      skillName: skill.name,
+      success,
+      rate: Math.round(rate * 100),
+      baseRate: Math.round(cfg.rate * 100),
+      morale,
+    });
+    if (!success) continue;
+    executeSkillOutputs(ctx, attacker, skill, [hitTarget], cfg.output);
+  }
+}
+
+/** 百战无怯 / 层数型受伤减免：只吃被动战法定义 */
+type StacksReducePassive = Extract<Skill, { type: 'passive' }>;
+
+/**
+ * 层数型受伤减免（百战无怯）·初始化：战斗开始即 maxStacks 层，挂一个 `damage_reduce`
+ * （rate = perStack × 层数，整场常驻）；同一「战法 × 携带者」只初始化一次。
+ */
+function initStacksReduce(ctx: CombatContext, unit: UnitState, skill: StacksReducePassive): void {
+  const cfg = skill.stacksReduceHeal;
+  if (!cfg) return;
+  ctx.stacksReduceCounters ??= new Map();
+  const key = `${unit.general.id}:${skill.id}`;
+  if (ctx.stacksReduceCounters.has(key)) return;
+  ctx.stacksReduceCounters.set(key, cfg.maxStacks);
+  inflictStatus(
+    ctx,
+    unit,
+    { type: 'damage_reduce', rate: cfg.perStack * cfg.maxStacks, duration: 999 },
+    skill.type,
+    skill.id,
+    unit.general.id
+  );
+}
+
+/**
+ * 层数变化（+delta，自动封顶 / 不低于 0）：返回**实际变化量**（正 = 加层，负 = 掉层，0 = 无变化），
+ * 并同步刷新 `damage_reduce` 的 rate（= perStack × 当前层数）。
+ */
+function changeStacksReduce(ctx: CombatContext, unit: UnitState, skill: StacksReducePassive, delta: number): number {
+  const cfg = skill.stacksReduceHeal;
+  if (!cfg || !unit.alive) return 0;
+  ctx.stacksReduceCounters ??= new Map();
+  const key = `${unit.general.id}:${skill.id}`;
+  const cur = ctx.stacksReduceCounters.get(key) ?? 0;
+  const next = Math.max(0, Math.min(cfg.maxStacks, cur + delta));
+  if (next === cur) return 0;
+  ctx.stacksReduceCounters.set(key, next);
+  const st = unit.statuses.find((s) => s.type === 'damage_reduce' && s.sourceSkillId === skill.id);
+  if (st && st.type === 'damage_reduce') st.rate = cfg.perStack * next;
+  return next - cur;
+}
+
+/** 百战无怯·掉层回血：每次实际掉 1 层按 healRate%（受携带者谋略缩放）恢复自身 */
+function healOnStacksReduceLost(ctx: CombatContext, unit: UnitState, skill: StacksReducePassive): void {
+  const cfg = skill.stacksReduceHeal;
+  if (!cfg) return;
+  if (hasStatus(unit, 'siege')) {
+    ctx.events.push({ type: 'siege_blocked', unitId: unit.general.id, skillId: skill.id });
+    return;
+  }
+  const rate = roundRate(scaledValue(cfg.healRate, cfg.healGrowthRate, effectiveStat(unit, 'strategy')));
+  const amount = calcHealAmount(unit.troops, rate);
+  const before = unit.troops;
+  const healed = recoverTroops(ctx, unit, amount);
+  if (healed > 0) {
+    ctx.events.push({
+      type: 'heal',
+      sourceId: unit.general.id,
+      targetId: unit.general.id,
+      skillId: skill.id,
+      skillName: skill.name,
+      amount: healed,
+      before,
+      after: unit.troops,
+    });
+  }
+}
+
+/** 百战无怯·每回合开始 / 受击后：掉 1 层并回血（0 层不掉也不回血） */
+function loseStacksReduceOnEvent(ctx: CombatContext, unit: UnitState): void {
+  if (!unit.alive) return;
+  for (const id of unit.general.passiveSkillIds) {
+    const skill = resolveSkill(ctx, id);
+    if (skill?.type !== 'passive' || !skill.stacksReduceHeal) continue;
+    if (!passesCasterPosition(skill, unit)) continue;
+    const lost = changeStacksReduce(ctx, unit, skill, -1);
+    if (lost < 0) healOnStacksReduceLost(ctx, unit, skill);
+  }
+}
+
+/** 百战无怯·造成伤害后 +1 层（封顶 maxStacks） */
+function gainStacksReduceOnDeal(ctx: CombatContext, source?: UnitState): void {
+  if (!source?.alive) return;
+  for (const id of source.general.passiveSkillIds) {
+    const skill = resolveSkill(ctx, id);
+    if (skill?.type !== 'passive' || !skill.stacksReduceHeal) continue;
+    if (!passesCasterPosition(skill, source)) continue;
+    changeStacksReduce(ctx, source, skill, +1);
+  }
 }
 
 function executeSkillOutputs(
@@ -4534,15 +4677,19 @@ function executeSkillOutputs(
         break;
       case 'remove_by_source_skill_type': {
         // 辞后定朝：移除目标身上由指定来源战法类型施加的状态（有害 + 有益都移除）
+        // 垒实迎击：debuffsOnly = true 时只移除**有害**状态（主动/追击带来的负面效果）
         const fromTypes = out.skillTypes;
+        const isTarget = (s: Status) =>
+          fromTypes.includes(s.sourceSkillType) &&
+          (!out.debuffsOnly || DEBUFF_TYPES.includes(s.type as StatusType));
         for (const t of pool) {
           if (!t.alive) continue;
-          const removed = t.statuses.filter((s) => fromTypes.includes(s.sourceSkillType));
+          const removed = t.statuses.filter(isTarget);
           if (removed.length === 0) continue;
           for (const s of removed) {
             ctx.events.push({ type: 'status_expired', unitId: t.general.id, statusType: s.type });
           }
-          t.statuses = t.statuses.filter((s) => !fromTypes.includes(s.sourceSkillType));
+          t.statuses = t.statuses.filter((s) => !isTarget(s));
           ctx.events.push({
             type: 'status_changed',
             unitId: t.general.id,
@@ -5328,6 +5475,8 @@ function dealAttack(ctx: CombatContext, unit: UnitState, target: UnitState, dist
     modifiers: collectDamageModifiers(ctx, unit, hit, true, hitCtx),
   });
   applyDamage(ctx, hit, capped, unit, 'physical', 'basic');
+  // 普攻命中后钩子（疾风迅雷）：未被规避且命中目标存活时判定
+  triggerBasicHitHooks(ctx, unit, hit);
   consumeAttackCharges(ctx, unit, { damageSource: 'basic', damageType: 'physical' });
   // 奉令护蜀：普攻打出后清空待发层数（攻击已消耗本次增伤）
   consumePendingStacks(ctx, unit);
@@ -5939,6 +6088,8 @@ export function applyDamage(
     decayFifthsOnHit(ctx, target, hit);
     // 奉令护蜀：受到实际伤害后清空待发层数（本次减伤已被 sumReduce 计入）
     consumePendingStacks(ctx, target);
+    // 百战无怯：造成伤害后 +1 层（封顶）
+    gainStacksReduceOnDeal(ctx, source);
     if (source && damageType === 'physical') {
       for (const id of source.general.passiveSkillIds) {
         const skill = resolveSkill(ctx, id);
@@ -5947,6 +6098,8 @@ export function applyDamage(
         }
       }
     }
+    // 百战无怯：受到伤害（实际扣兵）后 −1 层并恢复（0 层不掉不回血）；致死一击不回血
+    if (target.alive) loseStacksReduceOnEvent(ctx, target);
   }
   // 受击引燃（火势风威）：受到伤害时额外引发一次燃烧（触发后移除标记）
   triggerIgniteOnHurt(ctx, target);
