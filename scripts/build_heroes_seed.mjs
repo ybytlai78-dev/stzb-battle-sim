@@ -183,6 +183,7 @@ const SKILL_ID_BY_NAME = {
   将出关西: 'jiangchu_guanxi',
   京观垒冢: 'jingguan_leizhong',
   统军畏慎: 'tongjun_weishen',
+  登锋陷阵: 'dengfeng_xianzhen',
 };
 
 /** 现有 8 个武将固定拼音 id（测试直接引用 HERO_REGISTRY.<id>） */

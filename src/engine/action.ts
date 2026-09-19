@@ -4931,9 +4931,16 @@ function triggerTroopThresholdBuff(ctx: CombatContext, target: UnitState): void 
       fired = true;
     }
     if (!fired) continue;
-    // 同源发动率提升已在身上 → 多档同时跨越只算一次
-    if (target.statuses.some((s) => s.type === 'trigger_boost' && s.sourceSkillId === skill.id)) continue;
-    executeSkillOutputs(ctx, target, skill, [target], cfg.output);
+    // 同源发动率提升已在身上 → 该**段**不再重复施加（甚陷不惧「多档同时跨越只算一次」）；
+    // 其余段照常结算（登锋陷阵：每档都要新增 1 层规避，只挡 trigger_boost 段）。
+    const hasSameBoost = target.statuses.some((s) => s.type === 'trigger_boost' && s.sourceSkillId === skill.id);
+    const output = hasSameBoost
+      ? cfg.output.filter(
+          (o) => !(o.kind === 'inflict_status' && !Array.isArray(o.status) && o.status.type === 'trigger_boost')
+        )
+      : cfg.output;
+    if (output.length === 0) continue;
+    executeSkillOutputs(ctx, target, skill, [target], output);
   }
 }
 

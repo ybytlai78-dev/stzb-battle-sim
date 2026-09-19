@@ -8609,4 +8609,59 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       ],
     },
   },
+
+  /**
+   * 登锋陷阵（高顺·群骑 h656 主战法）：被动 A（battle_start 登记型），距离 1，目标自己。
+   * 满级「战斗中使自身处于洞察状态，当自身兵力首次低于初始兵力的 90%、70%、50% 和 30% 时，
+   *   进入规避状态，免疫下 1 次伤害，使自身下次行动时所有攻击类主动战法发动率提高 120.0%」；
+   * 1 级：发动率提高 60.0%（洞察/规避/四档阈值同）。
+   * 官方：scripts/skill_extra.json id 200939（被动 / 距离 1 / 目标自己 / 兵种骑；effect 洞察;
+   *   发动率提高;规避(预备)）。来源 https://stzb.163.com/m/skilllist/200939.html
+   *
+   * 口径（策略 A，2026-09-20；推定处已标注；**零引擎改动**）：
+   *   ① 官方原文两版拼接（前段只有「发动率提高」；后段为**前半的超集**：多「进入规避状态，免疫下 1 次
+   *      伤害」）→ 按仓库 dedupe 口径「后半是前半超集取后半」→ 实现**含规避**版（与官方 effect 标签
+   *      「规避(预备)」一致）；本地旧数据/heroes.json 为前段版本，属本地旧数据（策略 A ①）；
+   *   ② 「战斗中使自身处于洞察状态」官方未写持续回合 → `insight` duration 999（整场，**推定**）；
+   *   ③ 「免疫下 1 次伤害」= 既有层数式必挡 `grant_evasion` stacks 1（雪奋短兵先例）；
+   *   ④ 四档兵力首次跨越 → 既有 `PassiveSkill.troopThresholdBuff` thresholds [90,70,50,30]
+   *      （甚陷不惧先例；每档去重、同一次结算跨越多档只结算一次）；
+   *   ⑤ 「下次行动时所有攻击类主动战法发动率提高 120%」= 既有 `trigger_boost`
+   *      rate 1.2 + skillTypes ['active']（仅主动）+ attackSkillsOnly（输出含物理伤害）+ `expireAfterOwnAct`
+   *      （下次行动末清除，甚陷不惧用户确认口径）；发动率**加法**结算（引擎缺省，超过 100% 封顶必发）；
+   *   ⑥ 无数值缺口（120%/四档阈值/洞察均官方给定）→ **上架**。
+   */
+  dengfeng_xianzhen: {
+    id: 'dengfeng_xianzhen',
+    name: '登锋陷阵',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['insight', 'evasion', 'trigger_boost'],
+    output: [
+      // ② 战斗中使自身处于洞察状态（整场；被动/指挥不受影响）
+      { kind: 'inflict_status', status: { type: 'insight', duration: 999 } },
+    ],
+    // ④ 兵力首次低于 90/70/50/30% 逐档：③ 免疫下 1 次伤害 + ⑤ 下次行动攻击类主动战法发动率 +120%
+    troopThresholdBuff: {
+      thresholds: [90, 70, 50, 30],
+      output: [
+        { kind: 'grant_evasion', stacks: 1, target: 'self' },
+        {
+          kind: 'inflict_status',
+          target: 'self',
+          status: {
+            type: 'trigger_boost',
+            rate: 1.2,
+            duration: 999,
+            skillTypes: ['active'],
+            attackSkillsOnly: true,
+            expireAfterOwnAct: true,
+          },
+        },
+      ],
+    },
+  },
 };
