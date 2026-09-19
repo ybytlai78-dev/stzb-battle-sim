@@ -51,6 +51,7 @@ export const OFFLINE_MAIN_SKILLS: Record<string, string> = {
   qianmou_yuanji: '恢复 100% / 策略 140% / 谋略防御 +15 受谋略成长未确认（按基值不缩放）',
   xinzhan_weishang: '攻心恢复 50% 受谋略成长未确认（按基值不缩放；士气 −5 ×9 固定）',
   juyizangfou: '属性 ±20 受谋略成长未确认（按基值不缩放；控制/先手/洞察 60% 与持续回合固定）',
+  cihou_dingchao: '属性 +40 受谋略成长未确认（按基值不缩放；前 3 回合移除与性别分支无数值）',
 };
 
 /**

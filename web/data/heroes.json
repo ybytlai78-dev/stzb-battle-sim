@@ -3491,7 +3491,7 @@
     "growthDefense": 1.39,
     "growthStrategy": 1.48,
     "growthSpeed": 0.66,
-    "mainSkillId": "",
+    "mainSkillId": "cihou_dingchao",
     "mainSkillName": "辞后定朝",
     "skillDesc": "战斗前3回合，自身行动时有90.0%几率移除自身受到的由指挥、主动、追击战法带来的有害和有益效果；第4回合开始，使友军全体中男性武将攻击和防御属性提升40.0（受谋略属性影响），女性武将谋略和防御属性提升40.0（受谋略属性影响）"
   },

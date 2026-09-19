@@ -239,6 +239,11 @@ export interface CombatContext {
    */
   healOnDamageTriggers?: Map<string, number>;
   /**
+   * 行动时分段 `once` 已执行标记（辞后定朝）：key `${skillId}:${casterId}:${段序号}`。
+   * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
+   */
+  onActSegmentFired?: Set<string>;
+  /**
    * 【扬砂】层数计数器（伏波扬砂）：key `${casterId}:${skillId}` → { acc（未满阈值的累计百分点）, stacks（层数） }。
    * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
    */
@@ -739,6 +744,7 @@ export function triggerRoundCommandOnAct(ctx: CombatContext, unit: UnitState): v
         morale,
       });
       executeRoundCommand(ctx, unit, skill, locked.targets);
+      executeOnActSegments(ctx, unit, skill);
     } else {
       // 未生效：发动率 +increment
       if (skill.dynamicTriggerRate) {
@@ -3464,6 +3470,42 @@ function runChainSkills(ctx: CombatContext, caster: UnitState, skill: Skill, tar
 const YANGSHA_MAX_EXTRA_ATTACKS = 20;
 
 /**
+ * 二类指挥·行动时分段（辞后定朝）：携带者行动时（主段之后）按窗口逐段执行。
+ * 每段按 `rate`（缺省必发）经士气修正掷一次，命中则结算 `output`（目标池由段内 targetSide /
+ * targetMode / targetPick / requireGender 覆盖，缺省沿用锁定目标）；`once: true` 整场只执行一次。
+ */
+function executeOnActSegments(ctx: CombatContext, unit: UnitState, skill: CommandSkill): void {
+  const segments = skill.onActSegments;
+  if (!segments || segments.length === 0) return;
+  for (const [index, seg] of segments.entries()) {
+    if (seg.startRound != null && ctx.currentRound < seg.startRound) continue;
+    if (seg.endRound != null && ctx.currentRound > seg.endRound) continue;
+    const onceKey = `${skill.id}:${unit.general.id}:${index}`;
+    if (seg.once) {
+      ctx.onActSegmentFired ??= new Set<string>();
+      if (ctx.onActSegmentFired.has(onceKey)) continue;
+    }
+    const base = seg.rate ?? 1;
+    const morale = effectiveMorale(unit);
+    const rate = moraleTriggerRate(morale, base);
+    const success = ctx.rng.chance(rate);
+    ctx.events.push({
+      type: 'skill_trigger',
+      unitId: unit.general.id,
+      skillId: skill.id,
+      skillName: skill.name,
+      success,
+      rate: Math.round(rate * 100),
+      baseRate: Math.round(base * 100),
+      morale,
+    });
+    if (!success) continue;
+    if (seg.once) ctx.onActSegmentFired!.add(onceKey);
+    executeSkillOutputs(ctx, unit, skill, [unit], seg.output);
+  }
+}
+
+/**
  * 攻心 + 士气降低（心战为上）：我军每次**对敌军造成伤害**后（实际扣兵 > 0）——
  * ① 使伤害目标士气 −`moraleReduce`（`morale_boost` 负值状态、整场常驻、同战法累加），
  *    全队累计最多 `maxTriggers` 次（`ctx.healOnDamageTriggers`）；
@@ -3762,6 +3804,10 @@ function executeSkillOutputs(
     if (out.kind === 'strategy_damage' && out.requireTargetStrategyBelowSelf) {
       const selfStrategy = effectiveStat(caster, 'strategy');
       pool = pool.filter((t) => effectiveStat(t, 'strategy') < selfStrategy);
+    }
+    // 性别过滤（辞后定朝：男性 / 女性武将各自一段）——无性别数据的单位不匹配任何一段
+    if (out.kind === 'inflict_status' && out.requireGender) {
+      pool = pool.filter((u) => u.general.gender === out.requireGender);
     }
     // 怀德畏威：混乱只打「友军随机单体攻击 ∩ 自身群体策略」重合目标，不再按战法整体目标重选
     if (out.kind === 'inflict_status' && out.onlyIfOverlapPrevious) {
@@ -4410,6 +4456,26 @@ function executeSkillOutputs(
       case 'remove_debuffs':
         removeDebuffs(ctx, pool);
         break;
+      case 'remove_by_source_skill_type': {
+        // 辞后定朝：移除目标身上由指定来源战法类型施加的状态（有害 + 有益都移除）
+        const fromTypes = out.skillTypes;
+        for (const t of pool) {
+          if (!t.alive) continue;
+          const removed = t.statuses.filter((s) => fromTypes.includes(s.sourceSkillType));
+          if (removed.length === 0) continue;
+          for (const s of removed) {
+            ctx.events.push({ type: 'status_expired', unitId: t.general.id, statusType: s.type });
+          }
+          t.statuses = t.statuses.filter((s) => !fromTypes.includes(s.sourceSkillType));
+          ctx.events.push({
+            type: 'status_changed',
+            unitId: t.general.id,
+            statusType: removed[0].type,
+            detail: `移除 ${removed.length} 个由${fromTypes.map((x) => skillTypeName(x)).join('/')}战法带来的效果`,
+          });
+        }
+        break;
+      }
       case 'grant_evasion':
         for (const t of pool) {
           if (!t.alive) continue;

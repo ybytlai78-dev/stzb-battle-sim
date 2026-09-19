@@ -262,6 +262,8 @@ export type SkillOutput =
       groupCount?: number | [number, number];
       /** 从友军池排除施法者（「自身 + 友军单体」的友军段：奇佐鬼谋 / 黄天余音） */
       excludeSelf?: boolean;
+      /** 只对指定性别的目标结算（辞后定朝：男性 / 女性武将各自一段）；无性别数据的单位不匹配 */
+      requireGender?: 'male' | 'female';
       /**
        * 段级按阵营过滤**本战法整体（锁定）目标**（率尔方雅）：
        * 只结算锁定目标中与施法者**同侧**（'ally'）/ **对侧**（'enemy'）/ **自身**（'self'）者，
@@ -345,6 +347,16 @@ export type SkillOutput =
       requireAnyPrevDamageTargetStatus?: StatusType[];
     }
   | { kind: 'remove_debuffs'; target?: 'self'; troopTypes?: TroopType[] }
+  /**
+   * 移除目标身上**由指定来源战法类型施加**的状态（辞后定朝「移除自身受到的由指挥、主动、追击战法
+   * 带来的有害和有益效果」）：有害与有益都移除、被动/战法自带（准备阶段）的不动；逐条记 status_expired。
+   */
+  | {
+      kind: 'remove_by_source_skill_type';
+      /** 只移除这些来源战法类型施加的状态（指挥 / 主动 / 追击 / 被动） */
+      skillTypes: SkillType[];
+      target?: 'self';
+    }
   | { kind: 'grant_evasion'; stacks: number; target?: 'self' }
   | {
       kind: 'heal';
@@ -704,6 +716,20 @@ export interface CommandSkill extends BaseSkill {
   };
   /** 二类指挥动态发动率：初始 base，未生效每回合 +increment，生效后重置（奇兵拒北 30% 起始，未生效+5%） */
   dynamicTriggerRate?: { base: number; increment: number };
+  /**
+   * 二类指挥·**行动时分段**（辞后定朝）：携带者行动时（`triggerRoundCommandOnAct` 主段之后）按
+   * `startRound`/`endRound` 窗口逐段执行，与主段并列、各自独立判定：
+   * 每段按 `rate`（缺省必发）经士气修正掷一次，命中则结算 `output`；
+   * 段内可用 `targetSide`/`targetMode`/`targetPick`/`requireGender` 覆盖目标池（缺省沿用锁定目标）。
+   * `once: true` = 整场只执行一次（第 4 回合起的一次性光环，避免逐回合重复施加同源累加）。
+   */
+  onActSegments?: Array<{
+    startRound?: number;
+    endRound?: number;
+    rate?: number;
+    once?: boolean;
+    output: SkillOutput[];
+  }>;
   /**
    * 攻心 + 士气降低（心战为上）：我军每次**对敌军造成伤害**后 ——
    * ① `moraleReduce` > 0 时使伤害目标士气 −该值（走 `morale_boost` 负值状态，整场常驻；
@@ -1081,6 +1107,12 @@ export interface General {
   /** COST（统率值） */
   cost: number;
   faction: string;
+  /**
+   * 性别（辞后定朝「男性武将…女性武将…」等按性别分支的战法用）：
+   * 由 `web/data/hero_meta.json`（`scripts/sync_hero_meta.mjs` 按官方 sex 补齐）注入；
+   * 缺省 undefined = 数据缺失 → 不匹配任何性别分支。
+   */
+  gender?: 'male' | 'female';
   /** 限定/赛季标签：sp / xp / s2 等，可多个 */
   tags: string[];
   /**
@@ -1126,6 +1158,8 @@ export interface HeroRecord {
   rarity: '4星' | '5星';
   cost: number;
   faction: string;
+  /** 性别（由 `web/data/hero_meta.json` 注入；详见 General.gender） */
+  gender?: 'male' | 'female';
   tags: string[];
   mutualExclusionGroup: string | null;
   troopType: TroopType;

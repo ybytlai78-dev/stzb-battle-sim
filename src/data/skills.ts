@@ -5671,4 +5671,81 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+  /**
+   * 辞后定朝（阴丽华·汉弓 h742·指挥 A）：距离 3，我军全体。
+   * 战斗前 3 回合，自身行动时有 90.0% 几率移除自身受到的由指挥、主动、追击战法带来的有害和有益效果；
+   * 第 4 回合开始，使友军全体中男性武将攻击和防御属性提升 40.0（受谋略属性影响），
+   * 女性武将谋略和防御属性提升 40.0（受谋略属性影响）。
+   * 官方：scripts/skill_extra.json id 201007（指挥 A / 距离 3 / 我军全体 / 兵种弓步；1 级 45% / 属性 20）。
+   * 入档判断：**下架** —— 属性 +40「受谋略属性影响」而官方未给成长系数 → 按基值不缩放 +
+   *   登记 OFFLINE_MAIN_SKILLS，待反解确认后移出。
+   * 引擎配套：
+   *   ① `CommandSkill.onActSegments`（行动时分段：窗口 + 独立几率 + once）承载「前 3 回合」与「第 4 回合起」两段；
+   *   ② 新输出段 `remove_by_source_skill_type`（移除指定来源战法类型施加的状态，有害+有益都移除）；
+   *   ③ 新过滤 `inflict_status.requireGender`（男性 / 女性分支）；
+   *   ④ 性别数据：`General.gender` ← `web/data/hero_meta.json`（`scripts/sync_hero_meta.mjs` 按官方 sex 补全 161 条）。
+   * 口径：②「第 4 回合开始」= 整场一次的光环（`once: true`）——逐回合重复会把同源属性 buff 累加，与官方「提升 40」不符。
+   */
+  cihou_dingchao: {
+    id: 'cihou_dingchao',
+    name: '辞后定朝',
+    type: 'command',
+    phase: 'round',
+    roundTrigger: 'on_act',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['immunity', 'buff_attack', 'buff_defense', 'buff_strategy'],
+    output: [],
+    onActSegments: [
+      // ① 前 3 回合自身行动时 90%：移除自身受到的（指挥 / 主动 / 追击来源）有害与有益效果
+      {
+        startRound: 1,
+        endRound: 3,
+        rate: 0.9,
+        output: [
+          {
+            kind: 'remove_by_source_skill_type',
+            target: 'self',
+            skillTypes: ['command', 'active', 'pursuit'],
+          },
+        ],
+      },
+      // ② 第 4 回合开始（整场一次）：男性 攻击/防御 +40；女性 谋略/防御 +40（受谋略，成长率未确认 → 0）
+      {
+        startRound: 4,
+        once: true,
+        output: [
+          {
+            kind: 'inflict_status',
+            targetSide: 'ally',
+            targetMode: 'all',
+            requireGender: 'male',
+            status: { type: 'attack_buff', amount: 40, duration: 999, strategyScaled: true, growthRate: 0 },
+          },
+          {
+            kind: 'inflict_status',
+            targetSide: 'ally',
+            targetMode: 'all',
+            requireGender: 'male',
+            status: { type: 'defense_buff', amount: 40, duration: 999, strategyScaled: true, growthRate: 0 },
+          },
+          {
+            kind: 'inflict_status',
+            targetSide: 'ally',
+            targetMode: 'all',
+            requireGender: 'female',
+            status: { type: 'strategy_buff', amount: 40, duration: 999, strategyScaled: true, growthRate: 0 },
+          },
+          {
+            kind: 'inflict_status',
+            targetSide: 'ally',
+            targetMode: 'all',
+            requireGender: 'female',
+            status: { type: 'defense_buff', amount: 40, duration: 999, strategyScaled: true, growthRate: 0 },
+          },
+        ],
+      },
+    ],
+  },
 };
