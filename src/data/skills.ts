@@ -5455,4 +5455,49 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     // 玉玺：我方全体受击的 32%（受防御，成长率未确认 → 基值）转入账本，每回合开始结转给自身
     sealTransfer: { rate: 32 },
   },
+  /**
+   * 伏波扬砂（马腾·群骑 h785·指挥 S）：距离 5，我军全体。
+   * 使我军全体普通攻击伤害提升 25.0%（受攻击属性影响）。当友军全体发动普通攻击时，造成的伤害
+   * 共计提升幅度每达到 40%，马腾获得 1 层【扬砂】效果，最多叠加 20 层；马腾发动普通攻击后，
+   * 将消耗 4 层【扬砂】效果进入连击状态，额外发动一次普通攻击，此效果将重复触发直到不足 4 层。
+   * 官方：scripts/skill_extra.json id 200255（指挥 S / 距离 5 / 我军全体 / 兵种骑；1 级 12.5%）。
+   * 入档判断：**下架** —— 25%「受攻击属性影响」而官方未给成长系数 → 按基值不缩放 +
+   *   登记 OFFLINE_MAIN_SKILLS，待反解确认后移出。
+   * 引擎配套（新机制「层数累计 + 消耗触发」`stacksConsume`）：
+   *   ① 普攻增伤段：`damage_boost` direction:'caused' + `damageSource:'basic'`（只作用于普通攻击）
+   *      + `attackScaled`（受攻击，成长率未确认 → 基值 25%），整场常驻施加给我军全体；
+   *   ② 层数累计：`dealAttack` 命中后把该次普攻的**增减伤净幅度**（`buffMult(...) − 1` ×100 个百分点，
+   *      总增伤 − 总减伤，含兵种克制）累入 `ctx.stacksConsumeCounters`；每满 40 扣 40 并 +1 层（上限 20）；
+   *   ③ 消耗触发：`actUnit` 普攻阶段后，马腾每 4 层换一次额外普通攻击，重复触发至不足 4 层
+   *      （额外普攻同样累计层数；单次行动上限 20 次防失控）。
+   * 口径（**用户 2026-09-19 口述**）：「伤害共计提升幅度」= 该次普攻的**总增伤与总减伤净合计**（百分点），
+   *   用变量累计、每满 40% 扣 40% 得 1 层（余数保留）。
+   */
+  fuboyangsha: {
+    id: 'fuboyangsha',
+    name: '伏波扬砂',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['damage_boost', 'combo'],
+    output: [
+      // 我军全体：普通攻击伤害 +25%（受攻击，成长率未确认 → 基值），整场常驻
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'damage_boost',
+          rate: 0.25,
+          duration: 999,
+          direction: 'caused',
+          attackScaled: true,
+          damageSource: 'basic',
+        },
+      },
+    ],
+    // 【扬砂】：每次普攻按「增减伤净幅度」累计，每满 40% 得 1 层（上限 20）；普攻后每 4 层换 1 次额外普攻
+    stacksConsume: { threshold: 40, maxStacks: 20, consumePerAttack: 4 },
+  },
 };

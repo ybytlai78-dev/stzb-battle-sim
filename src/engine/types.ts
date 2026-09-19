@@ -682,6 +682,21 @@ export interface CommandSkill extends BaseSkill {
   /** 二类指挥动态发动率：初始 base，未生效每回合 +increment，生效后重置（奇兵拒北 30% 起始，未生效+5%） */
   dynamicTriggerRate?: { base: number; increment: number };
   /**
+   * 【扬砂】层数累计 + 消耗触发（伏波扬砂，马腾）：我军（含携带者）每次**普通攻击命中**后，把该次普攻的
+   * **增减伤净幅度**（总增伤 − 总减伤，百分点，即 `buffMult(...) − 1`）×100 累入计数器；
+   * 每满 `threshold`（40）个百分点扣掉阈值并 +1 层，层数上限 `maxStacks`（20）；
+   * 携带者发动普通攻击**后**，每 `consumePerAttack`（4）层换一次额外普通攻击，重复触发至不足 4 层。
+   * 计数走 `ctx.stacksConsumeCounters`（键 `${casterId}:${skillId}`，整场累计不重置）。
+   */
+  stacksConsume?: {
+    /** 每满多少个百分点得 1 层（40） */
+    threshold: number;
+    /** 层数上限（20） */
+    maxStacks: number;
+    /** 每次额外普通攻击消耗的层数（4） */
+    consumePerAttack: number;
+  };
+  /**
    * 玉玺·伤害转移（僭号天子）：我军全体受到伤害的 `rate`%（受施法者**生效防御**缩放）由玉玺承担，
    * 计入账本本回合不从受击者扣兵；第二回合起每回合开始时，玉玺对施法者造成
    * 「上一回合承担量 × 本回合承担比例」的兵力损失（比例 50% 起、每回合 +10%，封顶 100%）。

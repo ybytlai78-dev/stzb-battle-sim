@@ -149,6 +149,7 @@ const SKILL_ID_BY_NAME = {
   鸾凤和鸣: 'luanfeng_heming',
   赐剑长驱: 'cijian_changqu',
   僭号天子: 'jianhao_tianzi',
+  伏波扬砂: 'fuboyangsha',
   万箭齐发: 'wanjian_qifa',
   文伐: 'wenfa',
   不攻: 'bugong',

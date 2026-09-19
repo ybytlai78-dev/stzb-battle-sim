@@ -209,6 +209,11 @@ export interface CombatContext {
   /** 正在结算玉玺结转（防止玉玺 → 持有者的伤害又被玉玺自己转移，形成自循环） */
   sealResolving?: boolean;
   /**
+   * 【扬砂】层数计数器（伏波扬砂）：key `${casterId}:${skillId}` → { acc（未满阈值的累计百分点）, stacks（层数） }。
+   * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
+   */
+  stacksConsumeCounters?: Map<string, { acc: number; stacks: number }>;
+  /**
    * 受击触发整场次数上限（持玺兴兵）：key `${casterId}:${skillId}` → 已触发次数（整场累计，不随回合重置）。
    * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
    */
@@ -1796,9 +1801,8 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
   // 7+8. 普通攻击阶段（连击：至多两次普攻，非乘算；怯战无法普攻）。
   // 追击战法在每次普攻命中后立即判定（连击：普攻→追击→普攻→追击），而非全部普攻结束后统一判定。
   // 时序依赖追击的战法（烈火焚舟：第二刀引爆第一刀挂上的燃烧）依赖该穿插顺序。
-  const comboCount = hasStatus(unit, 'combo') ? 2 : 1;
   const hits: UnitState[] = [];
-  for (let i = 0; i < comboCount; i++) {
+  const doOneAttack = (): UnitState | null => {
     ctx.events.push({
       type: 'unit_act_start',
       unitId: unit.general.id,
@@ -1822,8 +1826,16 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
         });
         triggerPursuitSkill(ctx, unit, pursuit, hit, enemies);
       }
-      if (!hit.alive) continue; // 目标已死，继续按连击打下一个
     }
+    return hit;
+  };
+  const comboCount = hasStatus(unit, 'combo') ? 2 : 1;
+  for (let i = 0; i < comboCount; i++) doOneAttack();
+  // 伏波扬砂（马腾）：普攻后每消耗 4 层【扬砂】追加一次普攻，可重复触发直到不足 4 层
+  // （额外普攻同样是普攻 → 继续累计层数；上限 20 次防失控）
+  for (let extra = 0; extra < YANGSHA_MAX_EXTRA_ATTACKS; extra++) {
+    if (!consumeStacksForExtraAttack(ctx, unit, canNormalAttack)) break;
+    doOneAttack();
   }
 
   // 9. 分兵攻击阶段（普攻后无视攻击距离对相邻目标造成比例伤害）
@@ -3410,6 +3422,57 @@ function runChainSkills(ctx: CombatContext, caster: UnitState, skill: Skill, tar
   }
 }
 
+/** 【扬砂】额外普攻单次行动上限（安全阀：层数可在额外普攻中继续累计） */
+const YANGSHA_MAX_EXTRA_ATTACKS = 20;
+
+/**
+ * 【扬砂】层数累计（伏波扬砂）：我军（含携带者）每次普攻命中后，把该次伤害的**增减伤净幅度**
+ * （百分点，`buffMult(...) − 1` ×100，含兵种克制减伤）累入计数器；每满 `threshold` 扣阈值 +1 层，
+ * 层数达到 `maxStacks` 后不再累计（官方「最多叠加 20 层」）。
+ * 计数走 `ctx.stacksConsumeCounters`（整场累计不重置；施法者阵亡后不再累计）。
+ */
+function accumulateStacksConsume(ctx: CombatContext, attacker: UnitState, points: number): void {
+  if (!Number.isFinite(points) || points === 0) return;
+  const team = attacker.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+  for (const holder of team) {
+    if (!holder.alive) continue;
+    for (const id of holder.general.commandSkillIds) {
+      const skill = resolveSkill(ctx, id);
+      const cfg = skill?.type === 'command' ? skill.stacksConsume : undefined;
+      if (!cfg) continue;
+      ctx.stacksConsumeCounters ??= new Map<string, { acc: number; stacks: number }>();
+      const key = `${holder.general.id}:${skill!.id}`;
+      const state = ctx.stacksConsumeCounters.get(key) ?? { acc: 0, stacks: 0 };
+      if (state.stacks < cfg.maxStacks) {
+        state.acc += points;
+        while (state.acc >= cfg.threshold && state.stacks < cfg.maxStacks) {
+          state.acc -= cfg.threshold;
+          state.stacks += 1;
+        }
+      }
+      ctx.stacksConsumeCounters.set(key, state);
+    }
+  }
+}
+
+/**
+ * 【扬砂】消耗换额外普攻（伏波扬砂）：携带者普攻后每 `consumePerAttack` 层换 1 次额外普攻。
+ * 层数足够且可普攻（非怯战）时扣层并返回 true，调用方追加一次普攻（可重复触发至不足 4 层）。
+ */
+function consumeStacksForExtraAttack(ctx: CombatContext, unit: UnitState, canNormalAttack: boolean): boolean {
+  if (!canNormalAttack || !unit.alive) return false;
+  for (const id of unit.general.commandSkillIds) {
+    const skill = resolveSkill(ctx, id);
+    const cfg = skill?.type === 'command' ? skill.stacksConsume : undefined;
+    if (!cfg) continue;
+    const state = ctx.stacksConsumeCounters?.get(`${unit.general.id}:${skill!.id}`);
+    if (!state || state.stacks < cfg.consumePerAttack) continue;
+    state.stacks -= cfg.consumePerAttack;
+    return true;
+  }
+  return false;
+}
+
 /**
  * 玉玺账本（僭号天子）：取受击者一侧、持有者存活的账本（我方全体受击都走这一份；持有者阵亡则不再转移）。
  */
@@ -4952,6 +5015,7 @@ function dealAttack(ctx: CombatContext, unit: UnitState, target: UnitState, dist
   const hitCtx: DamageHitContext = { damageSource: 'basic', damageType: 'physical' };
   const { causedMult, takenMult } = damageBoosts(ctx, unit, hit, hitCtx);
   const reduce = sumReduce(hit, hitCtx) + troopCounterReduceOf(unit, hit);
+  const mult = buffMult(causedMult, takenMult, reduce);
   const { damage, breakdown } = calcDamage(
     {
       damageType: 'physical',
@@ -4961,7 +5025,7 @@ function dealAttack(ctx: CombatContext, unit: UnitState, target: UnitState, dist
       attackerTroops: unit.troops,
       targetDefense: def,
       targetStrategy: hit.general.strategy,
-      mult: buffMult(causedMult, takenMult, reduce),
+      mult,
     },
     ctx.rng
   );
@@ -4974,6 +5038,9 @@ function dealAttack(ctx: CombatContext, unit: UnitState, target: UnitState, dist
     consumePendingStacks(ctx, unit);
     return;
   }
+
+  // 伏波扬砂：普攻命中后把该次伤害的**增减伤净幅度**（百分点，含兵种克制）累入【扬砂】计数器
+  accumulateStacksConsume(ctx, unit, (mult - 1) * 100);
 
   ctx.events.push({
     type: 'attack_hit',

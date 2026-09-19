@@ -2423,7 +2423,7 @@
     "growthDefense": 1.8,
     "growthStrategy": 0.72,
     "growthSpeed": 1.56,
-    "mainSkillId": "",
+    "mainSkillId": "fuboyangsha",
     "mainSkillName": "伏波扬砂",
     "skillDesc": "使我军全体普通攻击伤害提升25.0%（受攻击属性影响）。当友军全体发动普通攻击时，造成的伤害共计提升幅度每达到40%，马腾获得1层【扬砂】效果，最多叠加20层；马腾发动普通攻击后，将消耗4层【扬砂】效果进入连击状态，额外发动一次普通攻击，此效果将重复触发直到【扬砂】效果不足4层"
   },
