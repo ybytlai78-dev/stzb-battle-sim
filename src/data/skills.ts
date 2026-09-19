@@ -7642,4 +7642,50 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+  /**
+   * 胡笳离愁（SP蔡文姬·汉步 h102011·主动 B）：距离 2，发动率 40%，目标我军群体（有效距离内 2 个目标）。
+   * 恢复我军群体较多兵力（恢复率 157.0%，受谋略属性影响），并使其进入休整状态，每回合再度恢复大量兵力
+   * （恢复率 206.0%，受谋略属性影响），持续 1 回合。
+   * 官方：scripts/skill_extra.json id 200004（主动 B / 距离 2 / 我军群体（有效距离内2个目标）/ 兵种步骑；
+   *   1 级 恢复 78.5% / 休整 103.0%）。来源 https://stzb.163.com/m/skilllist/200004.html
+   * 入档判断：**下架** —— 恢复与休整两段均「受谋略属性影响」而官方未给成长系数 → 按仓库批次口径
+   *   「按基值不缩放」（`strategyScaled` 保留、`growthRate` 给 0）→ 登记 OFFLINE_MAIN_SKILLS，
+   *   待 `scripts/derive_growth_rate.mjs` 反解后移出。
+   * 引擎配套（全部既有，零引擎改动）：
+   *   ① 单段 `heal`（targetSide:'ally' + targetMode:'group' + groupCount:2）= 官方「我军群体 2 目标」，
+   *      三段同一批目标：`attachStatus` 由 15a54f1（知人待士）新增，在 heal 结算后对**同一目标**施加休整
+   *      （不重选池，避免第二次独立选靶换人）；
+   *   ② `rest` 状态：挂上时按施法者兵力/谋略冻结每次恢复值，携带者行动时（`tickRests`）跳恢复并 remaining −1
+   *      → 「持续 1 回合」= duration 1（最多再触发 1 次，触发后移除）。
+   * 官方 effect 标签 `急救;休整`：本战法无受击触发段，`急救` 即「立即恢复」语义（由 heal 段承载），
+   *   不进 tags；`rest` 进 tags。
+   * 口径（策略 A · 用户 2026-09-19 已确认）：官方现页 > 本地旧数据；本战法无两版拼接；
+   *   targetShow 与描述冲突以描述为准（本战法一致）；官方未给数值的段不实现（无此段）。
+   */
+  hujia_lichou: {
+    id: 'hujia_lichou',
+    name: '胡笳离愁',
+    type: 'active',
+    prepare: false,
+    range: 2,
+    triggerRate: 0.4,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'ally',
+    tags: ['heal', 'rest'],
+    output: [
+      // 恢复我军群体 2 目标 157%（受谋略，成长未确认 → growthRate 0 = 基值），
+      // 并对**同一批目标**续挂休整：每回合再恢复 206%（同样按基值不缩放），持续 1 回合
+      {
+        kind: 'heal',
+        rate: 157,
+        strategyScaled: true,
+        growthRate: 0,
+        targetSide: 'ally',
+        targetMode: 'group',
+        groupCount: 2,
+        attachStatus: { type: 'rest', rate: 206, growthRate: 0, strategyScaled: true, duration: 1 },
+      },
+    ],
+  },
 };

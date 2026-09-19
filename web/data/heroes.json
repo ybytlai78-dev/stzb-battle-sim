@@ -2721,7 +2721,7 @@
     "growthDefense": 0.99,
     "growthStrategy": 1.53,
     "growthSpeed": 0.54,
-    "mainSkillId": "",
+    "mainSkillId": "hujia_lichou",
     "mainSkillName": "胡笳离愁",
     "skillDesc": "恢复我军群体较多兵力（恢复率157.0%，受谋略属性影响），并使其进入休整状态，每回合再度恢复大量兵力（恢复率206.0%，受谋略属性影响），持续1回合"
   },
