@@ -74,6 +74,19 @@ export function attackRangeOf(unit: UnitState): number {
   return unit.general.attackRange + bonus;
 }
 
+/**
+ * 战法有效距离（含 `skill_range_buff` 状态加成）：战法面板 range + Σ skill_range_buff.amount。
+ * 合纵连横「令我军全体武将战法距离 +1」用此口径——只影响战法选目标的距离上限，
+ * 不影响普攻可达范围（`attackRangeOf`，对应 `range_buff`）。
+ */
+export function skillRangeOf(unit: UnitState, base: number): number {
+  let bonus = 0;
+  for (const s of unit.statuses) {
+    if (s.type === 'skill_range_buff') bonus += s.amount;
+  }
+  return base + bonus;
+}
+
 /** 攻击范围内随机一个存活敌军（率土普攻目标选取：距离内均匀随机，非最近优先）。距离实时计算 */
 export function nearestEnemy(ctx: CombatContext, attacker: UnitState, enemies: UnitState[]): UnitState | null {
   const range = attackRangeOf(attacker);
@@ -114,8 +127,10 @@ export function skillTargets(
 
   if (mode === 'all') return alive;
 
+  // 战法有效距离 = 面板 range + Σ skill_range_buff（合纵连横「我军全体战法距离+1」）
+  const effRange = skillRangeOf(caster, range);
   const inRange = alive
-    .filter((e) => skillDistance(ctx, caster, e) <= range)
+    .filter((e) => skillDistance(ctx, caster, e) <= effRange)
     .sort((a, b) => skillDistance(ctx, caster, a) - skillDistance(ctx, caster, b) || sortByPosition(a, b));
 
   if (inRange.length === 0) return [];
@@ -159,7 +174,8 @@ export function unitsInSkillRange(
   units: UnitState[],
   range: number
 ): UnitState[] {
-  return units.filter((u) => u.alive && skillDistance(ctx, caster, u) <= range);
+  const effRange = skillRangeOf(caster, range);
+  return units.filter((u) => u.alive && skillDistance(ctx, caster, u) <= effRange);
 }
 
 /** 分兵相邻目标：同队中与目标站位相邻的存活单位（前锋↔中军，中军↔前锋+大营，大营↔中军） */

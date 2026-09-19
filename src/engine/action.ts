@@ -113,6 +113,15 @@ export function teamPassesTroopFilter(team: UnitState[], allowed: TroopType[]): 
   return set.size > 0 || allowed.length === 0;
 }
 
+/**
+ * 我军出战名单是否「3 名武将阵营两两不同」（合纵连横「我方出战的 3 名武将阵营均不相同时」）。
+ * 读部署名单（不论 alive）；名单不足 3 人视为不满足（该条件以 3 将阵容为前提）。
+ */
+export function teamFactionsDistinct(team: UnitState[]): boolean {
+  if (team.length < 3) return false;
+  return new Set(team.map((u) => u.general.faction)).size === team.length;
+}
+
 /** 带发动率属性的战法生效概率 = 基础率 × 施法者士气系数（四舍五入取整到百分位），上限 100% */
 function moraleTriggerRate(morale: number, baseRate: number): number {
   return Math.min(1, Math.round(baseRate * moraleRate(morale) * 100) / 100);
@@ -215,6 +224,8 @@ export interface CombatContext {
   lockedCommands: LockedCommand[];
   /** 常驻伤害前叠层 buff（持节镇西）：准备阶段对友军全体注册，友军每次造成/受到伤害前按层叠属性 */
   stackBuffs: StackBuffEffect[];
+  /** 我军全体「普攻命中后」钩子（合纵连横）：准备阶段按锁定友军逐单位注册（可选，惰性初始化） */
+  basicHitProcs?: BasicHitProcEffect[];
   /** 当前回合数（预备怯战/延迟结算判定用） */
   currentRound: number;
   /** 二类指挥行动叠层计数器（奋疾先登）：key `${casterId}:${skillId}` → 当前增伤层数。
@@ -335,6 +346,18 @@ export interface StackBuffEffect {
   config: NonNullable<CommandSkill['stackBuff']>;
 }
 
+/** 我军全体「普攻命中后」钩子（合纵连横）：准备阶段按锁定友军逐单位注册，该单位普攻命中后判定 */
+export interface BasicHitProcEffect {
+  skillId: string;
+  /** 战法携带者（战报归因 / 状态归属） */
+  casterId: string;
+  /** 实际生效单位（被注册的我军友军） */
+  unitId: string;
+  rate: number;
+  targetFactionNotSelf?: boolean;
+  output: SkillOutput[];
+}
+
 /** 暴走/混乱目标池：所有存活单位（不分敌我，不含自己） */
 function mixedPool(ctx: CombatContext, unit: UnitState): UnitState[] {
   const allies = unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
@@ -404,6 +427,8 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
       unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam,
       skill.teamTroopFilter
     )) continue;
+    // 阵营条件（合纵连横）：我军出战 3 将阵营两两不同，否则整次不生效
+    if (skill.teamFactionDistinct && !teamFactionsDistinct(unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam)) continue;
     ctx.events.push({
       type: 'skill_target',
       unitId: unit.general.id,
@@ -470,6 +495,23 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
       for (const t of targets) {
         if (!t.alive) continue;
         inflictStatus(ctx, t, skill.allyDealStack.status, skill.type, skill.id, unit.general.id);
+      }
+    }
+
+    // 我军全体「普攻命中后」钩子（合纵连横）：准备阶段按锁定友军逐单位注册
+    if (skill.basicHitProc) {
+      ctx.basicHitProcs ??= [];
+      for (const t of targets) {
+        if (!t.alive) continue;
+        if (ctx.basicHitProcs.some((e) => e.skillId === skill.id && e.unitId === t.general.id)) continue;
+        ctx.basicHitProcs.push({
+          skillId: skill.id,
+          casterId: unit.general.id,
+          unitId: t.general.id,
+          rate: skill.basicHitProc.rate,
+          targetFactionNotSelf: skill.basicHitProc.targetFactionNotSelf,
+          output: skill.basicHitProc.output,
+        });
       }
     }
 
@@ -2252,7 +2294,7 @@ export function inflictStatus(
     // 同一战法重复触发：数值类累加，规避加层，控制刷新剩余
     if (sameSource.type === 'evasion') {
       if (create.type === 'evasion') sameSource.stacks += create.stacks;
-    } else if (sameSource.type === 'attack_buff' || sameSource.type === 'defense_buff' || sameSource.type === 'strategy_buff' || sameSource.type === 'speed_buff' || sameSource.type === 'damage_reduce' || sameSource.type === 'damage_boost' || sameSource.type === 'trigger_boost' || sameSource.type === 'morale_boost' || sameSource.type === 'range_buff') {
+    } else if (sameSource.type === 'attack_buff' || sameSource.type === 'defense_buff' || sameSource.type === 'strategy_buff' || sameSource.type === 'speed_buff' || sameSource.type === 'damage_reduce' || sameSource.type === 'damage_boost' || sameSource.type === 'trigger_boost' || sameSource.type === 'morale_boost' || sameSource.type === 'range_buff' || sameSource.type === 'skill_range_buff') {
       if ('amount' in sameSource && 'amount' in create) {
         sameSource.amount += create.amount;
         // 官方口径（疮痍累身截图）：同类属性增益重复施加 → 「【周泰】的攻击属性提高效果刷新了」
@@ -2475,7 +2517,10 @@ function sameDamageBoostFilter(existing: Status, incoming: CreateStatus): boolea
     hasCharges(existing) === hasCharges(incoming) &&
     // 「仅进行攻击」维（缚父临危）：与全局增伤是两条独立轨，不判同源
     ('attackOnly' in existing ? Boolean(existing.attackOnly) : false) ===
-      ('attackOnly' in incoming ? Boolean(incoming.attackOnly) : false)
+      ('attackOnly' in incoming ? Boolean(incoming.attackOnly) : false) &&
+    // 「仅非自身阵营目标」维（合纵连横）：与全域增伤是两条独立轨，不判同源
+    ('targetFactionNotSelf' in existing ? Boolean(existing.targetFactionNotSelf) : false) ===
+      ('targetFactionNotSelf' in incoming ? Boolean(incoming.targetFactionNotSelf) : false)
   );
 }
 
@@ -2614,6 +2659,20 @@ function pushStatus(
     });
     return;
   }
+  if (type === 'skill_range_buff') {    // 战法有效距离提高（合纵连横「我军全体武将战法距离 +1」）：
+    // 由 target.ts skillRangeOf 求和（skillTargets / unitsInSkillRange 均生效），不影响普攻可达距离
+    const push: Status = { type, remaining, appliedRound, sourceSkillType, sourceSkillId } as Status;
+    (push as { amount: number }).amount = create.amount;
+    if (casterId) (push as { sourceUnitId?: string }).sourceUnitId = casterId;
+    target.statuses.push(push);
+    ctx.events.push({
+      type: 'status_inflicted',
+      unitId: target.general.id,
+      statusType: type,
+      detail: `战法距离 +${create.amount} ${create.duration >= 999 ? '持续至战斗结束' : `持续 ${create.duration} 回合`}`,
+    });
+    return;
+  }
   if (type === 'attack_buff' || type === 'defense_buff' || type === 'strategy_buff' || type === 'speed_buff') {
     const kind = ATTR_STAT_KIND[type];
     const before = effectiveStat(target, kind);
@@ -2675,6 +2734,10 @@ function pushStatus(
     // 仅「进行攻击」的增减伤（缚父临危「下两次**攻击**造成的伤害提升 30%」）：普攻 / 物理主动 / 追击
     if (type === 'damage_boost' && 'attackOnly' in create && create.attackOnly) {
       (push as { attackOnly?: boolean }).attackOnly = true;
+    }
+    // 仅对非自身阵营目标的增伤（合纵连横）：按携带者与受击者阵营比较，同阵营不生效
+    if (type === 'damage_boost' && 'targetFactionNotSelf' in create && create.targetFactionNotSelf) {
+      (push as { targetFactionNotSelf?: boolean }).targetFactionNotSelf = true;
     }
     // 谋议宏图减伤 / 虎豹督军增伤按 8/8 衰减：冻结满额率为 baseRate
     if ((type === 'damage_reduce' || type === 'damage_boost') && 'decayEighths' in create && create.decayEighths) {
@@ -3156,6 +3219,7 @@ export function isBeneficialStatus(s: Status): boolean {
     case 'cover':
     case 'ignore_def':
     case 'range_buff':
+    case 'skill_range_buff':
     case 'priority':
     case 'counter':
     case 'retaliate':
@@ -3365,8 +3429,14 @@ function damageBoosts(
   target: UnitState,
   hit?: DamageHitContext
 ): { causedMult: number; takenMult: number } {
+  // 阵营条件（合纵连横「对非自身阵营的武将造成攻击与策略伤害提升 10%」）：
+  // 状态挂在攻击者身上，按**携带者阵营 vs 受击者阵营**判定；同阵营则该增伤不生效。
+  const factionOk = (s: { targetFactionNotSelf?: boolean }) =>
+    !s.targetFactionNotSelf || source.general.faction !== target.general.faction;
   const causedBoost = sumRates(
-    source.statuses.filter((s) => s.type === 'damage_boost' && statusMatchesHit(s, hit)),
+    source.statuses.filter(
+      (s) => s.type === 'damage_boost' && statusMatchesHit(s, hit) && factionOk(s)
+    ),
     'damage_boost',
     'caused'
   );
@@ -3479,6 +3549,7 @@ function statusName(type: StatusType): string {
     case 'ignore_evasion': return '无视规避';
     case 'control_spread': return '控制效果 +1 目标';
     case 'range_buff': return '攻击距离';
+    case 'skill_range_buff': return '战法距离';
   }
 }
 
@@ -3939,6 +4010,32 @@ function triggerBasicHitHooks(ctx: CombatContext, attacker: UnitState, hitTarget
     });
     if (!success) continue;
     executeSkillOutputs(ctx, attacker, skill, [hitTarget], cfg.output);
+  }
+
+  // 我军全体「普攻命中后」钩子（合纵连横「对非自身阵营的武将普通攻击后有 40% 几率使目标陷入围困」）：
+  // 与上面的 `onBasicHit` 不同——作用单位是**被注册的任意友军**（准备阶段逐单位登记），不是战法携带者本人
+  for (const eff of ctx.basicHitProcs ?? []) {
+    if (eff.unitId !== attacker.general.id) continue;
+    if (eff.targetFactionNotSelf && attacker.general.faction === hitTarget.general.faction) continue;
+    const skill = resolveSkill(ctx, eff.skillId);
+    if (!skill) continue;
+    const effRate = moraleTriggerRate(morale, eff.rate);
+    const hitProc = ctx.rng.chance(effRate);
+    ctx.events.push({
+      type: 'skill_trigger',
+      unitId: attacker.general.id,
+      targetId: hitTarget.general.id,
+      skillId: skill.id,
+      skillName: skill.name,
+      success: hitProc,
+      rate: Math.round(effRate * 100),
+      baseRate: Math.round(eff.rate * 100),
+      morale,
+    });
+    if (!hitProc) continue;
+    // 结算来源 = 战法携带者（战报归因），属性/兵力读取 = 实际普攻者（监听类通例）
+    const owner = castUnit(ctx, eff.casterId) ?? attacker;
+    executeSkillOutputs(ctx, owner, skill, [hitTarget], eff.output, false, attacker);
   }
 }
 
@@ -4470,6 +4567,11 @@ function executeSkillOutputs(
     // 性别过滤（辞后定朝：男性 / 女性武将各自一段）——无性别数据的单位不匹配任何一段
     if (out.kind === 'inflict_status' && out.requireGender) {
       pool = pool.filter((u) => u.general.gender === out.requireGender);
+    }
+    // 阵营过滤（合纵连横「对非自身阵营的武将普通攻击后…使目标陷入围困」）：同阵营目标不结算本段。
+    // 「自身」取**实际行动者**（监听类调用传 statSource = 触发者，缺省与 caster 同体）
+    if (out.kind === 'inflict_status' && out.targetFactionNotSelf) {
+      pool = pool.filter((u) => u.general.faction !== statU.general.faction);
     }
     // 怀德畏威：混乱只打「友军随机单体攻击 ∩ 自身群体策略」重合目标，不再按战法整体目标重选
     if (out.kind === 'inflict_status' && out.onlyIfOverlapPrevious) {
@@ -5833,6 +5935,8 @@ function executeSkillWithTargets(
     unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam,
     skill.teamTroopFilter
   )) return;
+  // 阵营条件（合纵连横）：我军出战 3 将阵营两两不同，否则整次不生效
+  if (skill.teamFactionDistinct && !teamFactionsDistinct(unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam)) return;
 
   ctx.events.push({
     type: 'skill_cast',

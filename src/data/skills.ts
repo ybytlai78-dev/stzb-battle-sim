@@ -5939,6 +5939,58 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     ],
   },
 
+  // ─── 拆解通用 B+ 第十八阶段：阵营条件 / 战法距离 / 普攻后围困（A 级 1 个 · 合纵连横）───
+
+  /**
+   * 合纵连横（A 指挥·距离 3·一类指挥·我军全体）：我方出战 3 名武将**阵营均不相同**时——
+   * ① 我军全体武将**战法距离 +1**；② 对**非自身阵营**的武将造成攻击与策略伤害提升 10%；
+   * ③ 对非自身阵营的武将**普通攻击后** 40% 几率使目标陷入围困，持续 1 回合。
+   * 官方：scripts/skill_extra.json id 200964（1 级 5% / 20%，满级 10% / 40%）。
+   * 引擎配套（4 项）：
+   *   ① `BaseSkill.teamFactionDistinct` —— 阵营条件整次开关（与 `teamTroopFilter` 同判定点）；
+   *   ② 新状态 `skill_range_buff` + `target.ts skillRangeOf` —— 战法选目标距离上限加算
+   *      （`skillTargets` / `unitsInSkillRange` 均生效；普攻距离仍走 `range_buff` / `attackRangeOf`，互不影响）；
+   *   ③ `damage_boost.targetFactionNotSelf` —— 增伤过滤维，按**携带者阵营 vs 受击者阵营**实时判定
+   *      （同阵营则该增伤不生效；与全域增伤是同名不同轨，不判同源累加）；
+   *   ④ `inflict_status.targetFactionNotSelf`（段级阵营过滤）+ `BaseSkill.basicHitProc`
+   *      —— 第三个效果作用于**我军全体**（非携带者本人），故不能用只认携带者自身的 `onBasicHit`：
+   *      准备阶段按锁定友军逐单位注册到 `ctx.basicHitProcs`，任一被注册友军普攻命中后按 40% 判定。
+   * 「持续 1 回合」的围困在自身行动中施加给他人口径 → duration 2（辕门射戟 / 举抑臧否口径）；
+   * 战法距离 +1 与增伤为「战斗中」常驻 → duration 999。
+   * 阵营条件（3 将互不相同）读**部署名单**（不论 alive），战斗中不再复查。
+   */
+  hezong_lianheng: {
+    id: 'hezong_lianheng',
+    name: '合纵连横',
+    type: 'command',
+    phase: 'prep',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    retainAfterDeath: true,
+    teamFactionDistinct: true,
+    tags: ['range_buff', 'damage_boost', 'siege'],
+    output: [
+      { kind: 'inflict_status', status: { type: 'skill_range_buff', amount: 1, duration: 999 } },
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'damage_boost',
+          rate: 0.1,
+          duration: 999,
+          direction: 'caused',
+          targetFactionNotSelf: true,
+        },
+      },
+    ],
+    basicHitProc: {
+      rate: 0.4,
+      targetFactionNotSelf: true,
+      output: [{ kind: 'inflict_status', targetFactionNotSelf: true, status: { type: 'siege', duration: 2 } }],
+    },
+  },
+
   // ─── 批量31：下架武将清单 §1.2「补 1 个机制」逐个实现 ───
 
   /**

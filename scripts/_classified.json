@@ -229,9 +229,9 @@
     "targetDesc": "我军全体",
     "effectDesc": "战斗中，我方出战的3名武将阵营均不相同时，令我军全体武将战法距离+1，对非自身阵营的武将造成攻击与策略伤害提升10.0%，对非自身阵营的武将普通攻击后有40.0%几率令目标无法恢复兵力，持续1回合",
     "sources": "【蜀·刘禅·步】【群·西施·弓】",
-    "status": "skipped",
-    "missingMechanics": "阵营组合+距离+1",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "阵营条件 + 战法距离+1 + 非自身阵营增伤/围困 p18"
   },
   {
     "name": "白刃",
