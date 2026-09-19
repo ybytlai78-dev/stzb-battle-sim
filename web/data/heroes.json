@@ -1675,7 +1675,7 @@
     "growthDefense": 1.78,
     "growthStrategy": 1.02,
     "growthSpeed": 1.32,
-    "mainSkillId": "",
+    "mainSkillId": "bingxing_qiaobian",
     "mainSkillName": "兵行巧变",
     "skillDesc": "1回合准备，对敌军群体2目标发动一次攻击（伤害率260.0%），使其攻击、防御、谋略属性下降40.0（受攻击属性影响），同时我军群体攻击、防御、谋略属性提升40.0，持续2回合；或对敌军全体3目标发动一次攻击（伤害率200.0%），并使其攻击、防御、谋略属性下降80.0（受攻击属性影响），持续2回合"
   },

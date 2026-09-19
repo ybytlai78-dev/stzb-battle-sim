@@ -7936,4 +7936,102 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'physical_damage', rate: 160, chance: 0.5, positions: ['大营'] },
     ],
   },
+  /**
+   * 兵行巧变（张郃·群骑 h593 主战法）：主动 A（1 回合准备），距离 4，发动率 40%。
+   * 满级（官方原文为**两版拼接**——仓库 dedupe 口径取**前半 v1**，见 scripts/gen_skill_data.mjs dedupeDesc）：
+   *   1 回合准备，对敌军群体 2 目标发动一次攻击（伤害率 260.0%），使其攻击、防御、谋略属性下降 40.0
+   *   （受攻击属性影响），同时我军群体攻击、防御、谋略属性提升 40.0，持续 2 回合；
+   *   或对敌军全体 3 目标发动一次攻击（伤害率 200.0%），并使其攻击、防御、谋略属性下降 80.0
+   *   （受攻击属性影响），持续 2 回合。
+   *   （v2 差异：缺「我军群体属性提升」句、结尾写「3 回合」——**不采用**；社区来源均支持 2 回合。）
+   * 1 级：攻击 130.0% / 属性 −20 与 +20；分支 B 攻击 100.0% / 属性 −40。
+   * 官方：scripts/skill_extra.json id 200849（主动 / 距离 4 / 敌军群体（有效距离内 2-3 个目标）/ 兵种骑；
+   *   effect 标签 攻击伤害;攻击属性降低;防御属性降低;谋略属性降低;攻击属性提高;防御属性提高;谋略属性提高）。
+   *   来源 https://stzb.163.com/m/skilllist/200849.html
+   * 口径（策略 A，2026-09-20；推定处已标注）：
+   *   ① 官方两版拼接 → 取**前半 v1**（策略 A ②；`desc` 与 `desc(level1)` 两处均含拼接，取前半）。
+   *   ② 分支 A / 分支 B 之间的「或」官方未说明判定方式 → **50/50 随机**（复用既有 `random_pick`
+   *      count:1 + 两组 options；同「三军夺帅 或=50/50 随机」同类推定）——**推定**。
+   *   ③ 属性下降段「受攻击属性影响」官方未给成长系数 → `attackScaled: true` + `growthRate` 缺
+   *      （按基值不缩放）→ 登记 `src/data/listing.ts` 的 `OFFLINE_MAIN_SKILLS` → **武将下架**
+   *      （上架池保持 80，待 scripts/derive_growth_rate.mjs 反解）。
+   *   ④ 「我军群体」属性提升 = 我军全体（`targetSide:'ally'` + `targetMode:'all'`）；40 点未标受属性影响
+   *      → 固定值不缩放。
+   *   ⑤ 减益段用 `sameTargetsAsLastDamage: true`（打在攻击段同一批命中目标上，不重选池——二夫之勇先例）；
+   *      多条属性用 `status: CreateStatus[]` + `applyAll: true`（黄天余音四维先例）。
+   *   ⑥ 持续 2 回合 = `duration: 2`（2026-09-20 口径：duration = 官方字面回合数）。
+   * 引擎配套：**零引擎改动**（`random_pick` + 段级 targetMode/groupCount + `sameTargetsAsLastDamage`
+   *   + status 数组 `applyAll` 均已存在）。
+   * 注：外层 `targetMode:'all'` / `targetSide:'enemy'` 仅占位（不消耗 RNG；实际目标与目标数由内层
+   *   random_pick 各分支的段级 targetMode / targetSide 重选——铁戟金戈同款写法）。
+   */
+  bingxing_qiaobian: {
+    id: 'bingxing_qiaobian',
+    name: '兵行巧变',
+    type: 'active',
+    prepare: true,
+    range: 4,
+    triggerRate: 0.4,
+    // 外层仅占位（不消耗 RNG）；实际 2/3 目标与敌我属性段由内层 random_pick 分支重选
+    targetMode: 'all',
+    targetSide: 'enemy',
+    tags: [
+      'damage',
+      'debuff_attack',
+      'debuff_defense',
+      'debuff_strategy',
+      'attack_buff',
+      'defense_buff',
+      'strategy_buff',
+    ],
+    output: [
+      {
+        kind: 'random_pick',
+        count: 1,
+        options: [
+          // 分支 A：敌军群体 2 目标
+          [
+            { kind: 'physical_damage', rate: 260, targetMode: 'group', groupCount: 2 },
+            {
+              kind: 'inflict_status',
+              targetSide: 'enemy',
+              sameTargetsAsLastDamage: true,
+              applyAll: true,
+              status: [
+                { type: 'attack_buff', amount: -40, duration: 2, attackScaled: true },
+                { type: 'defense_buff', amount: -40, duration: 2, attackScaled: true },
+                { type: 'strategy_buff', amount: -40, duration: 2, attackScaled: true },
+              ],
+            },
+            {
+              kind: 'inflict_status',
+              targetSide: 'ally',
+              targetMode: 'all',
+              applyAll: true,
+              status: [
+                { type: 'attack_buff', amount: 40, duration: 2 },
+                { type: 'defense_buff', amount: 40, duration: 2 },
+                { type: 'strategy_buff', amount: 40, duration: 2 },
+              ],
+            },
+          ],
+          // 分支 B：敌军全体 3 目标
+          [
+            { kind: 'physical_damage', rate: 200, targetMode: 'all' },
+            {
+              kind: 'inflict_status',
+              targetSide: 'enemy',
+              sameTargetsAsLastDamage: true,
+              applyAll: true,
+              status: [
+                { type: 'attack_buff', amount: -80, duration: 2, attackScaled: true },
+                { type: 'defense_buff', amount: -80, duration: 2, attackScaled: true },
+                { type: 'strategy_buff', amount: -80, duration: 2, attackScaled: true },
+              ],
+            },
+          ],
+        ],
+      },
+    ],
+  },
 };
