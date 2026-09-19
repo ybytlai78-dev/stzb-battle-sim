@@ -28,7 +28,12 @@ export type DamageType = 'physical' | 'strategy';
  *    —— 用户确认：按战法有效距离内选人，取**生效属性**最低）。
  * 设置后覆盖本段 targetMode 的目标池，只结算这 1 个目标。
  */
-export type DamageTargetPick = 'lowest_defense' | 'lowest_defense_in_range' | 'lowest_strategy_in_range';
+export type DamageTargetPick =
+  | 'lowest_defense'
+  | 'lowest_defense_in_range'
+  | 'lowest_strategy_in_range'
+  /** 战法有效距离内**当前兵力最低**的存活敌军（知人待士「对敌军兵力最低单体发动一次策略攻击」） */
+  | 'lowest_troops_in_range';
 
 /** DoT 类型（妖术 / 燃烧 / 恐慌 / 妖术诅咒 / 引燃）——「被施加的 DoT 伤害提升」按此维度过滤 */
 export type DotType = 'sorcery' | 'burning' | 'panic' | 'curse' | 'ignite';
@@ -465,6 +470,17 @@ export type SkillOutput =
       excludeSelf?: boolean;
       /** 兵力阈值条件：不满足的目标不结算本段（巧音唤蝶「兵力低于 50% 时恢复 82%」） */
       troopRatio?: TroopRatioCond;
+      /**
+       * 恢复目标选取覆盖：`'lowest_troops_ally'` = 我军**当前兵力最低**的存活单体
+       * （知人待士「我军兵力最低单体恢复一定兵力」，含施法者自身；按当前兵力比较）。
+       */
+      targetPick?: 'lowest_troops_ally';
+      /**
+       * 恢复的同时对**同一目标**追加一条状态（知人待士「并使其受到所有伤害减少 15.0%」）：
+       * 逐恢复目标在 heal 事件之后施加（走 `inflictStatus`，来源 = 本战法），
+       * 因此不受「恢复改变了兵力排序」影响（与「并使其」的同一性语义一致）。
+       */
+      attachStatus?: CreateStatus;
     }
   | {
       kind: 'grant_first_aid';

@@ -7567,4 +7567,79 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       ],
     },
   },
+  /**
+   * 知人待士（汉·刘备 h803·指挥 A·Ⅱ 类）：距离 5，目标我军单体。
+   * 每回合行动时，有 45.0% 几率触发以下两种效果，两者独立判断：
+   *  ① 可使我军兵力最低单体恢复一定兵力（恢复率 120.0%，受谋略属性影响）并使其受到所有伤害
+   *     减少 15.0%（受谋略属性影响），持续 1 回合；
+   *  ② 可使自身对敌军兵力最低单体发动一次策略攻击（伤害率 120.0%，受谋略属性影响），
+   *     并使我军攻击属性最高单体对敌军单体发动一次攻击（伤害率 100.0%）。
+   * 官方：scripts/skill_extra.json id 200286（指挥 A / 距离 5 / 我军单体 / 兵种弓步骑；
+   *   1 级 恢复 60% / 减伤 7.5% / 策略 60% / 代打 50%）。来源 https://stzb.163.com/m/skilllist/200286.html
+   * 类型口径：Ⅱ 类指挥（「每回合行动时」判定，被混乱 / 犹豫仍执行）→ `phase:'round'` + `roundTrigger:'on_act'`。
+   * 「两者独立判断」= 两个效果**各自**按 45% 独立判定（同将门有将「每个效果独立判断」的仓库口径：逐段独立
+   *   roll）→ 两段各用 `chance_group(chance 0.45)` 承载，各自发一条 `skill_trigger`（baseRate 45、走士气修正）；
+   *   指挥自身 `triggerRate: 1`（= 每回合必然进入两段判定），未再叠 dynamicTriggerRate。
+   * 入档判断：**下架** —— 恢复 / 减伤 / 策略三段均「受谋略属性影响」而官方未给成长系数 → 按基值不缩放
+   *   （`strategyScaled` 标记在、`growthRate` 缺；heal 必填字段给 `0`）+ 登记 OFFLINE_MAIN_SKILLS，
+   *   待 `scripts/derive_growth_rate.mjs` 反解后移出。效果②代打段 100% 未标受属性影响 → 固定不缩放。
+   * 引擎配套：
+   *   ① `heal.targetPick: 'lowest_troops_ally'`（我军**当前兵力最低**的存活单体，含施法者自身）；
+   *   ② `heal.attachStatus`：恢复的同时对**同一目标**追加状态（「并使其受到所有伤害减少 15%」），
+   *      在该目标恢复结算后按同一 `t` 施加、不重选池（避免恢复改变兵力排序后减伤挂错人）；
+   *   ③ `DamageTargetPick` 新增 `'lowest_troops_in_range'`（战法有效距离内当前兵力最低的敌军，
+   *      用于效果②的策略攻击；与 `highest_troops_enemy` 同为按当前兵力比较）；
+   *   ④ 代打段复用西陵克晋的 `physical_damage.attacker:'highest_attack_ally'`（我军攻击最高，含自身；
+   *      杀伤统计 creditToId 归刘备）。
+   * 口径（本次认定 · 待复核）：效果②代打段的目标官方只写「敌军单体」（未写兵力最低）→ 按**距离内随机单体**
+   *   （`targetMode:'random_single'`，同西陵克晋）；持续 1 回合 = `duration: 1`（官方字面回合数）。
+   */
+  zhiren_daishi: {
+    id: 'zhiren_daishi',
+    name: '知人待士',
+    type: 'command',
+    phase: 'round',
+    roundTrigger: 'on_act',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['heal', 'damage_reduce', 'damage'],
+    output: [
+      // 效果①：我军兵力最低单体恢复 120%（受谋略）+ 受到所有伤害减少 15%（受谋略）1 回合
+      {
+        kind: 'chance_group',
+        chance: 0.45,
+        outputs: [
+          {
+            kind: 'heal',
+            rate: 120,
+            strategyScaled: true,
+            growthRate: 0,
+            targetSide: 'ally',
+            targetPick: 'lowest_troops_ally',
+            attachStatus: { type: 'damage_reduce', rate: 0.15, duration: 1, strategyScaled: true },
+          },
+        ],
+      },
+      // 效果②：自身策略攻击敌军兵力最低单体 120%（受谋略）+ 我军攻击最高单体代打敌军单体 100%
+      {
+        kind: 'chance_group',
+        chance: 0.45,
+        outputs: [
+          {
+            kind: 'strategy_damage',
+            rate: 120,
+            strategyScaled: true,
+            targetPick: 'lowest_troops_in_range',
+          },
+          {
+            kind: 'physical_damage',
+            rate: 100,
+            attacker: 'highest_attack_ally',
+            targetMode: 'random_single',
+          },
+        ],
+      },
+    ],
+  },
 };

@@ -80,10 +80,12 @@ function resolveCombatTargetMode(mode: string | undefined, fallback: CombatTarge
 }
 
 /**
- * 伤害段选敌覆盖（兼弱攻昧 / 四世三公）：返回 0 或 1 个目标。
+ * 伤害段选敌覆盖（兼弱攻昧 / 四世三公 / 知人待士）：返回 0 或 1 个目标。
  * - `'lowest_defense'`：存活敌军中**生效防御最低**者（无视距离，四世三公旧口径）；
  * - `'lowest_defense_in_range'` / `'lowest_strategy_in_range'`：仅战法有效距离内的存活敌军，
- *   取生效防御 / 生效谋略最低者（兼弱攻昧，用户确认口径：按有效距离内选人）。
+ *   取生效防御 / 生效谋略最低者（兼弱攻昧，用户确认口径：按有效距离内选人）；
+ * - `'lowest_troops_in_range'`：仅战法有效距离内的存活敌军，取**当前兵力最低**者
+ *   （知人待士「对敌军兵力最低单体发动一次策略攻击」，与 `highest_troops_enemy` 同为按当前兵力比较）。
  */
 function pickEnemyByDamageTargetPick(
   ctx: CombatContext,
@@ -94,6 +96,9 @@ function pickEnemyByDamageTargetPick(
 ): UnitState[] {
   const pool = pick === 'lowest_defense' ? enemies.filter((u) => u.alive) : unitsInSkillRange(ctx, caster, enemies, range);
   if (pool.length === 0) return [];
+  if (pick === 'lowest_troops_in_range') {
+    return [pool.reduce((best, u) => (u.troops < best.troops ? u : best))];
+  }
   const stat = pick === 'lowest_strategy_in_range' ? 'strategy' : 'defense';
   return [
     pool.reduce((best, u) => (effectiveStat(u, stat) < effectiveStat(best, stat) ? u : best)),
@@ -4780,6 +4785,12 @@ function executeSkillOutputs(
     if ((out.kind === 'physical_damage' || out.kind === 'strategy_damage') && out.targetPick) {
       pool = pickEnemyByDamageTargetPick(ctx, caster, enemies, outRange, out.targetPick);
     }
+    // 恢复段选人覆盖（知人待士「我军兵力最低单体恢复一定兵力」）：按**当前兵力**取最低的存活友军
+    // （含施法者自身；与 inflict_status.targetPick 的池无关，直接锁定 1 人）
+    if (out.kind === 'heal' && out.targetPick === 'lowest_troops_ally') {
+      const alive = allyPickPool.filter((u) => u.alive);
+      pool = alive.length ? [alive.reduce((best, u) => (u.troops < best.troops ? u : best))] : [];
+    }
     // 兵力阈值条件（段级 troopRatio）：不满足的目标从本段目标池剔除
     // （巧音唤蝶「兵力低于初始 50% 时恢复 82%」/ 持玺兴兵「兵力低于初始 50% 才恢复」）
     if ('troopRatio' in out && out.troopRatio) {
@@ -5295,6 +5306,11 @@ function executeSkillOutputs(
               before,
               after: t.troops,
             });
+          }
+          // 恢复的同时对**同一目标**追加状态（知人待士「并使其受到所有伤害减少 15%」）：
+          // 在本目标恢复结算之后按同一 `t` 施加，不重选池（不受恢复改变兵力排序影响）。
+          if (out.attachStatus) {
+            inflictStatus(ctx, t, out.attachStatus, skill.type, skill.id, caster.general.id);
           }
         }
         break;
