@@ -5748,4 +5748,32 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+  /**
+   * 将门有将（XP关兴＆张苞·蜀步 h653·被动 A）：距离 1，目标自己。
+   * 每回合自身行动时有 30.0% 的概率获得以下效果（每个效果独立判断）：
+   * ① 获得连击效果，持续 1 回合；② 获得分兵效果（伤害率 100.0%），持续 1 回合；
+   * 此概率每回合结束时提高 10.0%（可累加，官方未给上限）。
+   * 官方：scripts/skill_extra.json id 200933（被动 A / 距离 1 / 自己 / 兵种步；1 级 15% / 分兵 50% / 每回合 +5%）。
+   * 来源：https://stzb.163.com/m/skilllist/200933.html
+   * 入档判断：**上架** —— 三个数值（30% / 每回合 +10% / 分兵 100%）官方均给确定值，且无「受属性影响」段。
+   * 引擎配套（新机制 `BaseSkill.roundRampingChance`）：输出段未显式给 `chance` 时，基础率改为
+   *   `min(1, base + increment × (当前回合 − 1))`（再走士气修正），逐段**独立**判定、各自发 `skill_trigger`；
+   *   连击 / 分兵均为既有状态（行动中施加 `duration: 1` = 持续到本回合行动结束，覆盖本轮普攻与分兵）。
+   */
+  jiangmen_youjiang: {
+    id: 'jiangmen_youjiang',
+    name: '将门有将',
+    type: 'passive',
+    triggerRate: 1,
+    timing: 'round_start',
+    range: 1,
+    targetMode: 'self',
+    tags: ['combo', 'split'],
+    output: [
+      { kind: 'inflict_status', target: 'self', status: { type: 'combo', duration: 1 } },
+      { kind: 'inflict_status', target: 'self', status: { type: 'split', rate: 100, duration: 1 } },
+    ],
+    // 官方口径：30% 起、每回合结束时 +10%（可累加、官方未给上限 → 概率封顶 100%）
+    roundRampingChance: { base: 0.3, increment: 0.1 },
+  },
 };

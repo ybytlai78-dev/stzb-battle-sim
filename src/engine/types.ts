@@ -596,6 +596,15 @@ interface BaseSkill {
    * 计数走 `ctx.skillDamageCounters`（键 `${casterId}:${skillId}`，整场累计不重置）。
    */
   chanceBoostPerDamage?: { increment: number; maxStacks: number };
+  /**
+   * 行动时判定几率**随回合递增**（将门有将「每回合自身行动时有 30.0% 的概率获得以下效果…
+   * 此概率每回合结束时提高 10.0%，每个效果独立判断」）：
+   * 本战法输出段**未显式给 `chance`** 时，改用 `min(1, base + increment × (当前回合 − 1))` 作为基础率，
+   * 再走士气修正（`moraleTriggerRate`）——逐段**独立**判定、各自发 `skill_trigger`（baseRate = 递增后的基础率）。
+   * 递增在回合结束时发生但与触发结果无关：第 1 回合 base、第 2 回合 base+increment…整场累加不重置；
+   * 官方未给上限 → 概率封顶 100%。仅被动 / 非 before_active 指挥的输出段走此口径（同 `chance`）。
+   */
+  roundRampingChance?: { base: number; increment: number };
 }
 
 /** 普通主动战法 */

@@ -3733,14 +3733,19 @@ function executeSkillOutputs(
     // 被动/指挥输出级独立发动率（击势 65%、指挥 roundStartRepeat chance）：士气修正后判定，失败则跳过该段
     // before_active 指挥（运筹决胜）已在 triggerBeforeActiveCommands 逐段判定，此处不再重复
     // recipient 代打改在每人上 roll，不走整段一次判定（先声夺人等非代打仍走此处）
+    // 输出未显式给 chance 时，可退回战法级「随回合递增几率」（将门有将：30% 起、每回合 +10%、封顶 100%）
+    const explicitChance = 'chance' in out && out.chance != null ? out.chance : null;
+    const rampCfg = skill.roundRampingChance;
+    const outChance =
+      explicitChance ??
+      (rampCfg ? Math.min(1, rampCfg.base + rampCfg.increment * (ctx.currentRound - 1)) : null);
     if (
       (skill.type === 'passive' || (skill.type === 'command' && skill.roundTrigger !== 'before_active')) &&
-      'chance' in out &&
-      out.chance != null &&
+      outChance != null &&
       !(out.kind === 'physical_damage' && out.attacker === 'recipient')
     ) {
       const morale = effectiveMorale(caster);
-      const rate = moraleTriggerRate(morale, out.chance);
+      const rate = moraleTriggerRate(morale, outChance);
       const success = ctx.rng.chance(rate);
       ctx.events.push({
         type: 'skill_trigger',
@@ -3749,7 +3754,7 @@ function executeSkillOutputs(
         skillName: skill.name,
         success,
         rate: Math.round(rate * 100),
-        baseRate: Math.round(out.chance * 100),
+        baseRate: Math.round(outChance * 100),
         morale,
       });
       if (!success) continue;

@@ -128,13 +128,22 @@ describe('批量补入 · XP 卡（season=XP，100xxx 段）', () => {
   });
 
   it('XP 卡一律空槽下架（主战法未实现）', () => {
-    for (const id of ['h652', 'h653', 'h675', 'h684', 'h691', 'h784', 'h787', 'h788', 'h791', 'h792', 'h795', 'h800', 'h802', 'h808', 'h810', 'h815']) {
+    // h653（XP关兴＆张苞·将门有将）已实现并上架（2026-09-19 武将 29）→ 从本表移出
+    for (const id of ['h652', 'h675', 'h684', 'h691', 'h784', 'h787', 'h788', 'h791', 'h792', 'h795', 'h800', 'h802', 'h808', 'h810', 'h815']) {
       const r = HERO_RECORDS[id];
       expect(r, `${id} 应已入库`).toBeTruthy();
       expect(r.name.startsWith('XP'), `${id} 应以 XP 前缀命名`).toBe(true);
       expect(r.mainSkillId, `${id} 应为空槽`).toBe('');
       expect(isHeroListed(r), `${id} 应下架`).toBe(false);
     }
+  });
+
+  it('XP关兴＆张苞 h653：主战法将门有将已实现 → 上架（不再空槽）', () => {
+    const r = HERO_RECORDS['h653'];
+    expect(r.name).toBe('XP关兴＆张苞');
+    expect(r.mainSkillName).toBe('将门有将');
+    expect(r.mainSkillId).toBe('jiangmen_youjiang');
+    expect(isHeroListed(r)).toBe(true);
   });
 });
 
