@@ -2516,6 +2516,12 @@ function inflictStatusCore(
     return;
   }
 
+  // 策略伤害浮动（敛微穷极）：整场光环标记，不参与冲突判定；同战法重复施加只刷新
+  if (type === 'strategy_flux') {
+    pushStatus(ctx, target, create, sourceSkillType, sourceSkillId, casterId);
+    return;
+  }
+
   // DoT（妖术/燃烧/恐慌）+ 妖术诅咒（curse）+ 引燃标记（ignite）：各自独立共存，不参与冲突判定。
   // 挂上时结算（滞后触发）：施法者可解析时，按挂上时的增伤合计/施法者兵力/目标防御谋略/减伤
   // 预先计算每次跳伤并冻结（stored），之后触发直接打出；施法者不可解析时无 stored，
@@ -3029,6 +3035,13 @@ function refreshDecayCounters(same: Status, create: CreateStatus): void {
   }
   // 造成伤害按份衰减（抚民励德「每次施加可刷新」）：同源重挂 → 份数与满额数值一并重置
   const dealParts = 'decayOnDeal' in create ? create.decayOnDeal : undefined;
+  // 每回合结束按份衰减（敛微穷极「每次施加可刷新」）：同源重挂 → 份数与满额率重置
+  const roundParts = 'decayRoundParts' in create ? create.decayRoundParts : undefined;
+  if (roundParts && (same.type === 'damage_boost' || same.type === 'damage_reduce') && (create.type === 'damage_boost' || create.type === 'damage_reduce')) {
+    same.roundParts = roundParts;
+    same.roundPartsBase = roundParts;
+    same.baseRate = create.rate;
+  }
   if (dealParts) {
     if (same.type === 'damage_reduce' && create.type === 'damage_reduce') {
       same.dealParts = dealParts;
@@ -3162,6 +3175,39 @@ function pushStatus(
         detail: `避锐 +${create.stacks} 层（每层减伤 ${Math.round(create.perStackRate * 100)}%）`,
       });
     }
+    return;
+  }
+  if (type === 'strategy_flux') {
+    // 策略伤害浮动（敛微穷极）：整场光环；同战法重复施加只刷新（数值替换 + remaining 取 max）
+    const existing = target.statuses.find(
+      (s): s is Extract<Status, { type: 'strategy_flux' }> => s.type === 'strategy_flux' && s.sourceSkillId === sourceSkillId
+    );
+    if (existing) {
+      existing.low = create.low;
+      existing.high = create.high;
+      existing.mid = create.mid;
+      existing.convergeRounds = create.convergeRounds;
+      existing.remaining = Math.max(existing.remaining, remaining);
+    } else {
+      target.statuses.push({
+        type: 'strategy_flux',
+        low: create.low,
+        high: create.high,
+        mid: create.mid,
+        convergeRounds: create.convergeRounds,
+        remaining,
+        appliedRound,
+        sourceSkillType,
+        sourceSkillId,
+        sourceUnitId: casterId,
+      });
+    }
+    ctx.events.push({
+      type: 'status_inflicted',
+      unitId: target.general.id,
+      statusType: type,
+      detail: `策略伤害浮动 ${create.low}%~${create.high}%（${create.convergeRounds} 回合内收敛至 ${create.mid}%）`,
+    });
     return;
   }
   if (type === 'evade_chance') {
@@ -3330,6 +3376,12 @@ function pushStatus(
     if (type === 'damage_reduce' && 'decayOnDeal' in create && create.decayOnDeal) {
       (push as { dealParts?: number }).dealParts = create.decayOnDeal;
       (push as { dealPartsBase?: number }).dealPartsBase = create.decayOnDeal;
+      (push as { baseRate?: number }).baseRate = create.rate;
+    }
+    // 每回合结束按份衰减（敛微穷极）：满额 rate + 份数
+    if ((type === 'damage_boost' || type === 'damage_reduce') && 'decayRoundParts' in create && create.decayRoundParts) {
+      (push as { roundParts?: number }).roundParts = create.decayRoundParts;
+      (push as { roundPartsBase?: number }).roundPartsBase = create.decayRoundParts;
       (push as { baseRate?: number }).baseRate = create.rate;
     }
     // 增减伤/发动率类状态记录施法者（战报归因用）：神兵天降/大赏三军/减伤/奋疾先登降速等
@@ -3742,6 +3794,23 @@ export function tickRoundStartStatuses(ctx: CombatContext): void {
   for (const unit of units) {
     if (!unit.alive || !decayEighthsNow) continue;
     for (const s of [...unit.statuses]) {
+      // 每回合结束按份衰减（敛微穷极 6）：−1 份，rate = baseRate × 剩余/初始
+      if ((s.type === 'damage_boost' || s.type === 'damage_reduce') && s.roundParts !== undefined && s.baseRate !== undefined && s.roundPartsBase !== undefined) {
+        s.roundParts -= 1;
+        if (s.roundParts <= 0) {
+          unit.statuses = unit.statuses.filter((x) => x !== s);
+          ctx.events.push({ type: 'status_expired', unitId: unit.general.id, statusType: s.type });
+          continue;
+        }
+        s.rate = s.baseRate * (s.roundParts / s.roundPartsBase);
+        ctx.events.push({
+          type: 'status_changed',
+          unitId: unit.general.id,
+          statusType: s.type,
+          detail: `${s.rate >= 0 ? '造成的伤害提高' : '造成的伤害降低'} ${Math.round(Math.abs(s.rate) * 100)}% 剩余 ${s.roundParts}/${s.roundPartsBase} 回合`,
+        });
+        continue;
+      }
       if ((s.type !== 'damage_reduce' && s.type !== 'damage_boost') || s.eighths === undefined || s.baseRate === undefined) continue;
       s.eighths -= 1;
       if (s.eighths <= 0) {
@@ -3867,6 +3936,7 @@ export function isBeneficialStatus(s: Status): boolean {
     case 'pending_stacks':
     case 'ignore_evasion':
     case 'avoid_charge':
+    case 'strategy_flux':
     case 'control_spread':
     case 'jump_prep':
       return true;
@@ -4216,6 +4286,7 @@ function statusName(type: StatusType): string {
     case 'retaliate': return '受击追加攻击';
     case 'pending_stacks': return '叠层待发';
     case 'avoid_charge': return '避锐';
+    case 'strategy_flux': return '策略伤害浮动';
     case 'ignore_evasion': return '无视规避';
     case 'control_spread': return '控制效果 +1 目标';
     case 'range_buff': return '攻击距离';
@@ -5809,6 +5880,14 @@ function executeSkillOutputs(
             let rate = out.rate + damageRatePerCastBonus(ctx, caster, skill);
             if (out.strategyScaled && out.growthRate !== undefined) {
               rate = roundRate(scaledValue(rate, out.growthRate, effStrategy));
+            }
+            // 策略伤害浮动（敛微穷极）：率 × 当前收敛区间内均匀随机系数（区间随回合线性收敛到 mid）
+            const flux = getStatus(stratSrc, 'strategy_flux');
+            if (flux && flux.type === 'strategy_flux') {
+              const t01 = Math.max(0, 1 - (ctx.currentRound - 1) / Math.max(1, flux.convergeRounds - 1));
+              const low = flux.mid - (flux.mid - flux.low) * t01;
+              const high = flux.mid + (flux.high - flux.mid) * t01;
+              rate = rate * ((low + (high - low) * ctx.rng.next()) / 100);
             }
             const hit: DamageHitContext = {
               damageSource: 'skill',

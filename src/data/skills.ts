@@ -8817,4 +8817,68 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       statuses: ['taunt', 'siege', 'confusion', 'rampage', 'cowardice', 'hesitation'],
     },
   },
+
+  /**
+   * 敛微穷极（刘徽·晋弓 h814 主战法）：指挥 S（一类指挥 prep），距离 5，友军全体，发动率 --。
+   * 满级「战斗开始后，令友军全体造成的策略伤害提升 40.0%（受谋略属性影响），每回合结束时降低 1/6。
+   *   同时友军全体造成策略伤害时，令其伤害率在原基础的 80.0%-150.0%（上限受谋略属性影响）范围随机浮动，
+   *   浮动范围每回合收敛 1/6，最终第六回合收敛至 115.0%（受谋略属性影响），持续到战斗结束」；
+   * 1 级：提升 20.0% / 区间 40.0%-75.0% / 收敛至 57.5%。
+   * 官方：scripts/skill_extra.json id 200296（指挥 / 距离 5 / 友军全体 / 兵种弓步骑；effect 策略攻击伤害提高）。
+   *   来源 https://stzb.163.com/m/skilllist/200296.html
+   *
+   * 口径（策略 A，2026-09-20；推定处已标注）：
+   *   ① 「造成策略伤害提升 40%，每回合结束时降低 1/6」= `damage_boost` direction:'caused'
+   *      damageType:'strategy' + 新引擎件 `decayRoundParts: 6`（每回合结束 −1 份，rate = 满额 × 剩余/6：
+   *      40%→33.3%→26.7%→20%→13.3%→6.7%→0；按**初始值线性**衰减，同谋议宏图 8/8 口径，**推定**）；
+   *   ② 「伤害率在原基础 80%-150% 范围随机浮动，浮动范围每回合收敛 1/6，第六回合收敛至 115%」→
+   *      新状态 `strategy_flux`（low 80 / high 150 / mid 115 / convergeRounds 6）：携带者造成策略伤害时
+   *      率 × 区间内均匀随机系数；区间随回合线性收敛、**第 6 回合恰好收敛到 mid（115%）**。
+   *      口径说明：官方「每回合收敛 1/6」与「第六回合收敛至 115%」数学上只能取一（6 步 × 1/6 会到第 7
+   *      回合；5 步 × 1/5 恰好第 6 回合到位）→ 本实现取**明写的终值（第 6 回合 = 115%）**，步长按等分，
+   *      **推定**；第 1 回合为满区间 [80,150]（与官方「80.0%-150.0% 范围」一致）；
+   *   ③ 「上限受谋略属性影响」+「收敛值 115%（受谋略）」→ 区间与中点同比例受谋略缩放
+   *      （`strategyScaled` + growthRate 未确认 → 基值；因 115 = (80+150)/2，整体等比即等价）；
+   *   ④ 浮动只作用于 `strategy_damage` 输出段（DoT 挂上时冻结、不参与浮动，**推定**）；
+   *   ⑤ 两处「受谋略属性影响」成长系数官方未给 → 基值不缩放 → 登记 OFFLINE_MAIN_SKILLS（刘徽下架）。
+   */
+  lianwei_qiongji: {
+    id: 'lianwei_qiongji',
+    name: '敛微穷极',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['damage_boost'],
+    output: [],
+    // 准备阶段一次性：友军全体（a）策略增伤 40% 每回合 −1/6；（b）策略伤害浮动区间 [80,150] 收敛到 115
+    initialOutput: [
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'damage_boost',
+          rate: 0.4,
+          duration: 999,
+          direction: 'caused',
+          damageType: 'strategy',
+          strategyScaled: true,
+          decayRoundParts: 6,
+        },
+      },
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'strategy_flux',
+          low: 80,
+          high: 150,
+          mid: 115,
+          convergeRounds: 6,
+          duration: 999,
+          strategyScaled: true,
+        },
+      },
+    ],
+  },
 };

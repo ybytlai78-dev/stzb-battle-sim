@@ -187,6 +187,7 @@ const SKILL_ID_BY_NAME = {
   藤甲突击: 'tengjia_tuji',
   佐命晋武: 'zuoming_jinwu',
   审时定计: 'shenshi_dingji',
+  敛微穷极: 'lianwei_qiongji',
 };
 
 /** 现有 8 个武将固定拼音 id（测试直接引用 HERO_REGISTRY.<id>） */
