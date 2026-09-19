@@ -144,6 +144,133 @@ function triggerExtraTickOnDotApply(
   }
 }
 
+/**
+ * 天子诏令（XP献帝）：每回合开始随机点名一名敌军单体 → 使其「受到所有伤害提升」按份叠加
+ * （`takenBoostRate`%，受谋略、持续至战斗结束），并把点名写入 `ctx.decrees`（供首击强制选靶 / 回合内受击追加）。
+ * 由 combat.ts 回合开始时调用（`tickRoundStartStatuses` 之后、单位行动之前）。
+ */
+export function triggerImperialDecrees(ctx: CombatContext): void {
+  for (const l of ctx.lockedCommands) {
+    const skill = l.skill;
+    if (skill.type !== 'command' || !skill.imperialDecree) continue;
+    const caster = ctx.myTeam.concat(ctx.enemyTeam).find((u) => u.general.id === l.casterId);
+    if (!caster) continue;
+    if (!caster.alive && !skill.retainAfterDeath) continue;
+    const enemies = (caster.side === 'my' ? ctx.enemyTeam : ctx.myTeam).filter((u) => u.alive);
+    if (enemies.length === 0) continue;
+    const target = enemies[ctx.rng.int(enemies.length)];
+    ctx.decrees = (ctx.decrees ?? []).filter((d) => d.round !== ctx.currentRound);
+    ctx.decrees.push({ round: ctx.currentRound, skillId: skill.id, casterId: caster.general.id, targetId: target.general.id });
+    ctx.events.push({
+      type: 'status_changed',
+      unitId: target.general.id,
+      statusType: 'damage_boost',
+      detail: `【${skill.name}】点名为目标（本回合首次伤害/普攻将选中该目标）`,
+    });
+    executeSkillOutputs(ctx, caster, skill, [target], [
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'damage_boost',
+          rate: skill.imperialDecree.takenBoostRate / 100,
+          duration: 999,
+          direction: 'taken',
+          stack: true,
+          strategyScaled: skill.imperialDecree.strategyScaled,
+        },
+      },
+    ]);
+  }
+}
+
+/**
+ * 天子诏令·首击强制选靶：本侧单位**本回合首次**造成伤害（主动战法伤害或普通攻击）时按
+ * `forceTargetRate` 判定（士气修正、逐次发 skill_trigger）；命中则返回点名目标（调用方据此改目标，无视距离）。
+ * 每「单位 × 回合」只判定一次（`ctx.decreeConsumed`）。
+ */
+function decreeForceTarget(ctx: CombatContext, unit: UnitState): UnitState | undefined {
+  if (!ctx.decrees || ctx.decrees.length === 0) return undefined;
+  ctx.decreeConsumed ??= new Set();
+  const key = `${ctx.currentRound}:${unit.general.id}`;
+  if (ctx.decreeConsumed.has(key)) return undefined;
+  for (const d of ctx.decrees) {
+    if (d.round !== ctx.currentRound) continue;
+    const caster = castUnit(ctx, d.casterId);
+    if (!caster || caster.side !== unit.side) continue;
+    const skill = resolveSkill(ctx, d.skillId);
+    const cfg = skill?.type === 'command' ? skill.imperialDecree : undefined;
+    const target = ctx.myTeam.concat(ctx.enemyTeam).find((u) => u.general.id === d.targetId && u.alive);
+    if (!cfg || !skill) continue;
+    ctx.decreeConsumed.add(key);
+    const morale = effectiveMorale(unit);
+    const rate = moraleTriggerRate(morale, forceTargetRateOf(cfg));
+    const success = ctx.rng.chance(rate);
+    ctx.events.push({
+      type: 'skill_trigger',
+      unitId: unit.general.id,
+      targetId: target?.general.id,
+      skillId: skill.id,
+      skillName: skill.name,
+      success,
+      rate: Math.round(rate * 100),
+      baseRate: Math.round(forceTargetRateOf(cfg) * 100),
+      morale,
+    });
+    return success ? target : undefined;
+  }
+  return undefined;
+}
+
+/** 首击强制选靶概率（含受谋略缩放：growthRate 给定时按携带者谋略缩放，未确认 → 基值）。 */
+function forceTargetRateOf(cfg: NonNullable<CommandSkill['imperialDecree']>): number {
+  return cfg.forceTargetRate;
+}
+
+/**
+ * 天子诏令·回合内受击追加：点名目标本回合累计受到 `threshold` 次伤害时，追加一层受伤提升 + 全属性下降
+ * （受谋略、可叠加、持续至战斗结束），每回合只触发一次（恰好达到阈值的那一次）。
+ */
+function decreePunish(ctx: CombatContext, target: UnitState): void {
+  if (!ctx.decrees || ctx.decrees.length === 0) return;
+  for (const d of ctx.decrees) {
+    if (d.round !== ctx.currentRound || d.targetId !== target.general.id) continue;
+    const skill = resolveSkill(ctx, d.skillId);
+    const cfg = skill?.type === 'command' ? skill.imperialDecree : undefined;
+    const caster = castUnit(ctx, d.casterId);
+    if (!cfg || !skill || !caster) continue;
+    ctx.decreeCounters ??= new Map();
+    const key = `${ctx.currentRound}:${d.skillId}:${target.general.id}`;
+    const n = (ctx.decreeCounters.get(key) ?? 0) + 1;
+    ctx.decreeCounters.set(key, n);
+    if (n !== cfg.threshold) continue;
+    ctx.events.push({
+      type: 'status_changed',
+      unitId: target.general.id,
+      statusType: 'damage_boost',
+      detail: `【${skill.name}】回合内受到 ${cfg.threshold} 次伤害，追加受伤提升与全属性下降`,
+    });
+    const attr = (type: 'attack_buff' | 'defense_buff' | 'strategy_buff' | 'speed_buff') =>
+      ({ kind: 'inflict_status', status: { type, amount: -cfg.punishAttrPercent, percent: true, duration: 999, strategyScaled: true, stack: true } }) as const;
+    executeSkillOutputs(ctx, caster, skill, [target], [
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'damage_boost',
+          rate: cfg.takenBoostRate / 100,
+          duration: 999,
+          direction: 'taken',
+          stack: true,
+          strategyScaled: cfg.strategyScaled,
+        },
+      },
+      attr('attack_buff'),
+      attr('defense_buff'),
+      attr('strategy_buff'),
+      attr('speed_buff'),
+    ]);
+  }
+}
+
 /** 是否「不受敌方指挥战法影响」（藤甲突击）：携带者装有任何 commandImmune 被动即为真。 */function hasCommandImmune(ctx: CombatContext, unit: UnitState): boolean {
   return unit.general.passiveSkillIds.some((id) => {
     const s = resolveSkill(ctx, id);
@@ -490,6 +617,12 @@ export interface CombatContext {
   dotReceivedKeys?: Set<string>;
   /** 伤害分摊重入保护（言出必克 / 雅虑适时）：分摊出去的伤害不再被二次分摊 */
   resolvingDamageShare?: boolean;
+  /** 天子诏令·本回合点名（每回合开始时写入，回合内有效） */
+  decrees?: Array<{ round: number; skillId: string; casterId: string; targetId: string }>;
+  /** 天子诏令·点名目标回合内受击计数：key `${round}:${skillId}:${targetId}` */
+  decreeCounters?: Map<string, number>;
+  /** 天子诏令·本侧单位本回合「首击强制选靶」已判定：key `${round}:${unitId}` */
+  decreeConsumed?: Set<string>;
 }
 
 /** 持续型急救战法级计数器（皇裔流离/金匮要略）：一个战法一个实例，全队共享。
@@ -5842,6 +5975,12 @@ function executeSkillOutputs(
         }
         let attacked = false;
         const selectedIds: string[] = [];
+        // 天子诏令：主动战法本回合首次伤害强制选中点名目标（无视距离）；代打段（recipient）在上面分支内
+        // 单独结算并 break，故此处只需判战法类型（不会消耗代打者的首击判定）
+        if (skill.type === 'active') {
+          const decreeT = decreeForceTarget(ctx, caster);
+          if (decreeT) pool = [decreeT];
+        }
         const times = Array.isArray(out.repeats)
           ? ctx.rng.intInclusive(out.repeats[0], out.repeats[1])
           : (out.repeats ?? 1);
@@ -5977,6 +6116,11 @@ function executeSkillOutputs(
       }
       case 'strategy_damage': {
         const selectedIds: string[] = [];
+        // 天子诏令：主动战法本回合首次伤害强制选中点名目标（无视距离）
+        if (skill.type === 'active' && out.attacker !== 'recipient') {
+          const decreeT = decreeForceTarget(ctx, caster);
+          if (decreeT) pool = [decreeT];
+        }
         // 代打者（西陵克晋）：我军当前谋略属性最高者出手；缺省 = statU（既有口径零回归）
         const stratRider =
           out.attacker === 'highest_strategy_ally' ? highestStatAlly(allies, 'strategy') : undefined;
@@ -7200,6 +7344,8 @@ function normalAttack(
 
 /** 计算并结算一次攻击伤害普攻（含连击的追击加成待做） */
 function dealAttack(ctx: CombatContext, unit: UnitState, target: UnitState, distance: number): void {
+  // 天子诏令：本回合首次伤害/普攻强制选中点名目标（无视距离）
+  target = decreeForceTarget(ctx, unit) ?? target;
   const hit = redirectPhysicalHit(ctx, target);
   if (!hit.alive) return;
   // 常驻伤害前叠层（持节镇西）：攻击方叠攻击、受击者叠防御
@@ -8033,6 +8179,8 @@ export function applyDamage(
     }
     // 造成伤害按份衰减（抚民励德）：携带者造成伤害后其自身属性/减伤 −1/4
     if (source) decayOnDealStatuses(ctx, source);
+    // 天子诏令：点名目标回合内累计受击达阈值 → 追加受伤提升 + 全属性下降
+    decreePunish(ctx, target);
     const hit: DamageHitContext = { damageSource, damageType };
     // 全队累计伤害门槛（徽言龙凤）：本侧造成伤害即计数，达到门槛激活光环
     if (source) noteTeamDamage(ctx, source);

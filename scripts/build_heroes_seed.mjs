@@ -191,6 +191,7 @@ const SKILL_ID_BY_NAME = {
   衔命建功: 'xianming_jiangong',
   言出必克: 'yanchu_bike',
   雅虑适时: 'yalv_shishi',
+  天子诏令: 'tianzi_zhaoling',
 };
 
 /** 现有 8 个武将固定拼音 id（测试直接引用 HERO_REGISTRY.<id>） */

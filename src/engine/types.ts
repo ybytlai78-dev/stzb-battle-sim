@@ -1116,6 +1116,24 @@ export interface CommandSkill extends BaseSkill {
    */
   extraTickOnDotApply?: { startRound: number };
   /**
+   * 「天子诏令」（XP献帝）：① 每回合开始随机点名一名**敌军单体**，使其「受到所有伤害提升」按份叠加
+   * （`takenBoostRate`%，受谋略缩放，持续至战斗结束）；② 本侧每个单位**本回合首次伤害/首次普攻**
+   * 按 `forceTargetRate` 判定，命中则强制选中点名目标（无视距离）；③ 回合内该目标累计受到 `threshold` 次
+   * 伤害时追加一层受伤提升 + 全属性下降 `punishAttrPercent`%（受谋略、可叠加、持续至战斗结束）。
+   */
+  imperialDecree?: {
+    /** 每回合点名：受到所有伤害提升（百分点，1 级减半）；strategyScaled + growthRate 给定时按施法者谋略缩放 */
+    takenBoostRate: number;
+    strategyScaled?: boolean;
+    growthRate?: number;
+    /** 友军本回合首次伤害/普攻强制选中点名目标的概率（0~1，士气修正） */
+    forceTargetRate: number;
+    /** 回合内点名目标累计受击次数阈值（3） */
+    threshold: number;
+    /** 阈值追加：全属性下降（百分点，受谋略，可叠加） */
+    punishAttrPercent: number;
+  };
+  /**
    * 我军全体士气提升时触发（佐命晋武，裴秀）：**本侧任意单位**被施加正士气提升（morale_boost
    * amount > 0）后，由存活携带者对**我军全体存活单位**结算 `output`。
    * 每次触发叠 1 层（同源叠层与上限由状态自身 `maxStacks` 控制）；`ctx.resolvingMoraleRaise` 防递归。
