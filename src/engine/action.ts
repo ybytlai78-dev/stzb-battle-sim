@@ -215,6 +215,11 @@ export interface CombatContext {
   /** 正在结算玉玺结转（防止玉玺 → 持有者的伤害又被玉玺自己转移，形成自循环） */
   sealResolving?: boolean;
   /**
+   * 攻心/士气降低计数器（心战为上）：key `${casterId}:${skillId}` → 已触发次数（整场累计，不随回合重置）。
+   * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
+   */
+  healOnDamageTriggers?: Map<string, number>;
+  /**
    * 【扬砂】层数计数器（伏波扬砂）：key `${casterId}:${skillId}` → { acc（未满阈值的累计百分点）, stacks（层数） }。
    * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
    */
@@ -396,7 +401,8 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
       !skill.onHurt &&
       !skill.onAttrChange &&
       !skill.strategyAdjacentBonus &&
-      !skill.sealTransfer
+      !skill.sealTransfer &&
+      !skill.healOnDamage
     ) {
       executeSkillOutputs(ctx, unit, skill, targets);
     }
@@ -2040,6 +2046,7 @@ export function inflictStatus(
   // 大赏 +30% 被当成「正负相反、共存」，同号的 +16.8% 永远进不了取较高。
   const sameTypeUsesSign =
     type === 'damage_boost' ||
+    type === 'morale_boost' || // 士气提高 vs 士气降低（负值）：正负相反各自共存，由 effectiveMorale 相加
     type === 'attack_buff' || type === 'defense_buff' ||
     type === 'strategy_buff' || type === 'speed_buff';
   const incomingSign = sameTypeUsesSign ? conflictSign(statusValue(create)) : undefined;
@@ -2113,7 +2120,7 @@ export function inflictStatus(
         type: 'status_inflicted',
         unitId: target.general.id,
         statusType: 'morale_boost',
-        detail: `${statusName('morale_boost')} ${sameSource.amount} ${durText}`,
+        detail: `${sameSource.amount < 0 ? '士气降低' : '士气提高'} ${Math.abs(sameSource.amount)} ${durText}`,
       });
     }
     if (sameSource.type === 'damage_boost' && create.type === 'damage_boost' && create.chargesStack && 'rate' in sameSource) {
@@ -2158,9 +2165,10 @@ export function inflictStatus(
       sameType.type === 'attack_buff' || sameType.type === 'defense_buff' ||
       sameType.type === 'strategy_buff' || sameType.type === 'speed_buff';
     const isBoost = sameType.type === 'damage_boost';
+    const isMorale = sameType.type === 'morale_boost';
     const incomingVal = statusValue(create);
     const curVal = statusValue(sameType);
-    if ((isAttrBuff || isBoost) && conflictSign(incomingVal) !== conflictSign(curVal)) {
+    if ((isAttrBuff || isBoost || isMorale) && conflictSign(incomingVal) !== conflictSign(curVal)) {
       // 正负相反 → 不冲突，新增独立实例共存（增伤与减伤由 buffMult 单一总和模型互相抵消）
       pushStatus(ctx, target, create, sourceSkillType, sourceSkillId, casterId);
       return;
@@ -2560,6 +2568,9 @@ function pushStatus(
       detail = `${statusName(type)} ${create.rate} 剩余 ${create.decayEighths}/8 ${durText}`;
     } else if (type === 'ignore_def') {
       detail = `无视防御 ${Math.round(create.rate * 100)}% ${durText}`;
+    } else if (type === 'morale_boost' && 'amount' in create) {
+      // amount 为负 = 士气降低（心战为上）
+      detail = `${create.amount < 0 ? '士气降低' : '士气提高'} ${Math.abs(create.amount)} ${durText}`;
     } else {
       detail = `${statusName(type)} ${amount}${'amount' in create && 'percent' in create && create.percent ? '%' : ''} ${durText}`;
     }
@@ -3432,6 +3443,71 @@ function runChainSkills(ctx: CombatContext, caster: UnitState, skill: Skill, tar
 
 /** 【扬砂】额外普攻单次行动上限（安全阀：层数可在额外普攻中继续累计） */
 const YANGSHA_MAX_EXTRA_ATTACKS = 20;
+
+/**
+ * 攻心 + 士气降低（心战为上）：我军每次**对敌军造成伤害**后（实际扣兵 > 0）——
+ * ① 使伤害目标士气 −`moraleReduce`（`morale_boost` 负值状态、整场常驻、同战法累加），
+ *    全队累计最多 `maxTriggers` 次（`ctx.healOnDamageTriggers`）；
+ * ② 本次为**攻击伤害**（physical）时，造成伤害者按 `healRate`%（受施法者谋略缩放）恢复兵力，
+ *    恢复量 = 本次实际扣兵 × 恢复率；heal 事件归属战法施法者（战报统计口径）。
+ */
+function triggerHealOnDamageCommands(
+  ctx: CombatContext,
+  source: UnitState,
+  target: UnitState,
+  damage: number,
+  damageType?: DamageType
+): void {
+  if (damage <= 0 || source.side === target.side) return; // 只算对敌军的伤害（暴走打自己人不算）
+  const team = source.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+  for (const holder of team) {
+    if (!holder.alive) continue;
+    for (const id of holder.general.commandSkillIds) {
+      const skill = resolveSkill(ctx, id);
+      const cfg = skill?.type === 'command' ? skill.healOnDamage : undefined;
+      if (!cfg) continue;
+      // ① 士气降低：全队累计上限内逐次施加（同战法同源累加）
+      if (cfg.moraleReduce && cfg.moraleReduce > 0) {
+        ctx.healOnDamageTriggers ??= new Map<string, number>();
+        const key = `${holder.general.id}:${skill!.id}`;
+        const used = ctx.healOnDamageTriggers.get(key) ?? 0;
+        if (used < (cfg.maxTriggers ?? Number.POSITIVE_INFINITY)) {
+          ctx.healOnDamageTriggers.set(key, used + 1);
+          inflictStatus(
+            ctx,
+            target,
+            { type: 'morale_boost', amount: -cfg.moraleReduce, duration: 999 },
+            skill!.type,
+            skill!.id,
+            holder.general.id
+          );
+        }
+      }
+      // ② 攻心：仅攻击伤害（普攻 / 物理主动 / 追击 / 分兵 / 反击等 physical 路径）
+      if (damageType === 'physical') {
+        const rate =
+          roundRate(scaledValue(cfg.healRate, cfg.growthRate ?? 0, effectiveStat(holder, 'strategy'))) / 100;
+        const want = Math.round(damage * rate);
+        if (want > 0) {
+          const before = source.troops;
+          const healed = recoverTroops(ctx, source, want);
+          if (healed > 0) {
+            ctx.events.push({
+              type: 'heal',
+              sourceId: holder.general.id,
+              targetId: source.general.id,
+              skillId: skill!.id,
+              skillName: skill!.name,
+              amount: healed,
+              before,
+              after: source.troops,
+            });
+          }
+        }
+      }
+    }
+  }
+}
 
 /**
  * 【扬砂】层数累计（伏波扬砂）：我军（含携带者）每次普攻命中后，把该次伤害的**增减伤净幅度**
@@ -5665,6 +5741,8 @@ export function applyDamage(
     const hit: DamageHitContext = { damageSource, damageType };
     // 全队累计伤害门槛（徽言龙凤）：本侧造成伤害即计数，达到门槛激活光环
     if (source) noteTeamDamage(ctx, source);
+    // 攻心 / 士气降低（心战为上）：我军对敌军造成伤害后的监听（伤害值 = 本次实际扣兵）
+    if (source) triggerHealOnDamageCommands(ctx, source, target, actual, damageType);
     consumeTakenCharges(target, hit);
     decayFifthsOnHit(ctx, target, hit);
     // 奉令护蜀：受到实际伤害后清空待发层数（本次减伤已被 sumReduce 计入）

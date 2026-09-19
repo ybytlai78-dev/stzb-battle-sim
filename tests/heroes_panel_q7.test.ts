@@ -74,7 +74,7 @@ describe('七将面板入库（空槽 / 取基值下架）', () => {
     expect(isHeroListed(rec)).toBe(false);
   });
 
-  it('马谡 h799 蜀骑面板对齐 extra，心战为上空槽', () => {
+  it('马谡 h799 蜀骑面板对齐 extra，心战为上已实现并挂槽（取基值下架）', () => {
     const rec = HERO_RECORDS['h799'];
     const g = HERO_REGISTRY['h799'];
     expect(g.name).toBe('马谡');
@@ -85,7 +85,7 @@ describe('七将面板入库（空槽 / 取基值下架）', () => {
     expect(rec.baseStrategy).toBe(90);
     expect(rec.baseSpeed).toBe(92);
     expect(rec.growthStrategy).toBe(1.79);
-    expect(rec.mainSkillId).toBe('');
+    expect(rec.mainSkillId).toBe('xinzhan_weishang'); // 2026-09-19 已实现（受谋略成长未确认 → 下架）
     expect(rec.mainSkillName).toBe('心战为上');
     expect(isHeroListed(rec)).toBe(false);
   });

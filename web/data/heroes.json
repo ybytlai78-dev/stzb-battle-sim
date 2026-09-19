@@ -2445,7 +2445,7 @@
     "growthDefense": 1.19,
     "growthStrategy": 1.79,
     "growthSpeed": 1.48,
-    "mainSkillId": "",
+    "mainSkillId": "xinzhan_weishang",
     "mainSkillName": "心战为上",
     "skillDesc": "使我军全体每对敌军造成一次伤害时，伤害目标士气降低5点，我军全体累计可触发9次；使我军全体对敌军造成攻击伤害后，借此恢复相当于伤害值50.0%（受谋略属性影响）的兵力"
   },

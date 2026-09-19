@@ -489,7 +489,9 @@ export type CreateStatus =
    * startRound：第 N 回合起才跳恢复（重整旗鼓/援军秘策 = 5）。
    */
   | { type: 'rest'; rate: number; growthRate: number; duration: number; startRound?: number; strategyScaled?: boolean; troopRatio?: TroopRatioCond }
-  /** 士气提高（谋议宏图）：amount 为士气点数；同战法累加，不同指挥战法冲突取较高 */
+  /** 士气提高（谋议宏图）：amount 为士气点数；同战法累加，不同指挥战法冲突取较高。
+   *  **amount 为负 = 士气降低**（心战为上：每次伤害使目标 −5，整场常驻、同战法累加）；
+   *  正负相反（士气提高 vs 士气降低）不冲突、各自共存，由 `effectiveMorale` 相加得净士气 */
   | { type: 'morale_boost'; amount: number; duration: number }
   /** 无视防御比例（0.6 = 60%），自身攻击时目标防御 × (1 − rate) */
   | { type: 'ignore_def'; rate: number; duration: number }
@@ -692,6 +694,23 @@ export interface CommandSkill extends BaseSkill {
   };
   /** 二类指挥动态发动率：初始 base，未生效每回合 +increment，生效后重置（奇兵拒北 30% 起始，未生效+5%） */
   dynamicTriggerRate?: { base: number; increment: number };
+  /**
+   * 攻心 + 士气降低（心战为上）：我军每次**对敌军造成伤害**后 ——
+   * ① `moraleReduce` > 0 时使伤害目标士气 −该值（走 `morale_boost` 负值状态，整场常驻；
+   *    同一战法重复触发累加），全队累计最多 `maxTriggers` 次；
+   * ② 本次为**攻击伤害**（`damageType:'physical'`）时，造成伤害者按 `healRate`%（受施法者谋略缩放，
+   *    `growthRate` 缺省 = 按基值）恢复兵力，恢复量 = 本次实际扣兵 × 恢复率。
+   * 计数走 `ctx.healOnDamageTriggers`（键 `${casterId}:${skillId}`，整场累计不重置）。
+   */
+  healOnDamage?: {
+    /** 每次伤害使目标士气降低点数（心战为上 5） */
+    moraleReduce?: number;
+    /** 全队累计触发上限（心战为上 9） */
+    maxTriggers?: number;
+    /** 攻心恢复率（心战为上 50，受施法者谋略缩放） */
+    healRate: number;
+    growthRate?: number;
+  };
   /**
    * 【扬砂】层数累计 + 消耗触发（伏波扬砂，马腾）：我军（含携带者）每次**普通攻击命中**后，把该次普攻的
    * **增减伤净幅度**（总增伤 − 总减伤，百分点，即 `buffMult(...) − 1`）×100 累入计数器；

@@ -49,6 +49,7 @@ export const OFFLINE_MAIN_SKILLS: Record<string, string> = {
   fuboyangsha: '普攻增伤 25% 受攻击成长未确认（按基值不缩放；层数阈值 40%/上限 20/消耗 4 固定）',
   // ─── 2026-09-19 批量34：§1.3「需补多个机制」（潜谋远计起）───
   qianmou_yuanji: '恢复 100% / 策略 140% / 谋略防御 +15 受谋略成长未确认（按基值不缩放）',
+  xinzhan_weishang: '攻心恢复 50% 受谋略成长未确认（按基值不缩放；士气 −5 ×9 固定）',
 };
 
 /**
