@@ -9,7 +9,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SKILL_REGISTRY } from '../src/data/skills';
-import { skillTypeIcon, gradeFrame, gradeRibbon } from '../web/heroes';
+import { skillTypeIcon, gradeFrame, gradeRibbon, gradePlate } from '../web/heroes';
 
 const SKILLS_DIR = fileURLToPath(new URL('../public/skills/', import.meta.url));
 
@@ -45,5 +45,19 @@ describe('战法图标素材（public/skills）', () => {
 
   it('未装配加号素材存在（slot-add.png：白底 JPG 已抠成透明 PNG）', () => {
     expect(existsSync(join(SKILLS_DIR, 'slot-add.png'))).toBe(true);
+  });
+
+  it('五星武将卡框素材存在（card-frame-5.png：白底已抠透，画像位/竖带为半透明遮罩）', () => {
+    expect(existsSync(join(SKILLS_DIR, 'card-frame-5.png'))).toBe(true);
+  });
+
+  it('战法名背景框：S/A/B 三档有素材，C/D 明确无素材（返回空串而非坏路径 → CSS 芯片兜底）', () => {
+    for (const g of ['S', 'A', 'B']) {
+      const src = gradePlate(g);
+      expect(src).toContain(`grade-plate-${g.toLowerCase()}.png`);
+      expect(existsSync(diskPath(src)), `缺战法名背景框 ${src}`).toBe(true);
+    }
+    expect(gradePlate('C')).toBe('');
+    expect(gradePlate('D')).toBe('');
   });
 });

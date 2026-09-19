@@ -91,6 +91,19 @@ export function rednessStars(r: number): string {
   return `<span class="stars-red">${red}</span><span class="stars-gold">${gold}</span>`;
 }
 
+/** 兵种 → 单字（官方卡底部兵种位；无兵种图标素材时用文字） */
+export const TROOP_CHAR: Record<string, string> = { cavalry: '骑', infantry: '步', archer: '弓' };
+
+/** 势力 → 势力字配色类（官方卡左上角势力字：魏蓝 / 蜀绿 / 吴红 / 群紫 / 汉金 / 晋黄绿） */
+export const FACTION_CLASS: Record<string, string> = {
+  汉: 'han', 魏: 'wei', 蜀: 'shu', 吴: 'wu', 群: 'qun', 晋: 'jin',
+};
+
+/** 武将卡框素材（五星卡框 wujiang5：画像铺满 + 左竖带/顶栏半透明遮罩 + 底部等级栏） */
+export function cardFrameSrc(): string {
+  return asset('/skills/card-frame-5.png');
+}
+
 /** 战法官方描述（满级效果），无则返回空串 */
 export function skillDesc(skillId: string): string {
   return SKILL_DESCS[skillId]?.desc ?? '';
@@ -116,7 +129,7 @@ export function skillTypeIcon(skillId: string): string {
 }
 
 /** 品级圆环（外框）：grade-ring-{s|a|b|c|d}.png
- *  S/A/B 已是官方粗环；C/D 暂用旧细环占位（待素材补齐后替换同名文件即可，无需改代码） */
+ *  官方素材 S001/A001/B001/CD001 —— C 与 D 共用 CD001（同图，两个文件名各自独立） */
 export function gradeFrame(grade: string): string {
   return asset(`/skills/grade-ring-${grade.toLowerCase()}.png`);
 }
@@ -124,6 +137,12 @@ export function gradeFrame(grade: string): string {
 /** 品级字母角标：grade-badge-{s|a|b|c|d}.png */
 export function gradeRibbon(grade: string): string {
   return asset(`/skills/grade-badge-${grade.toLowerCase()}.png`);
+}
+
+/** 战法名背景框（官方色板素材）：目前只有 S/A/B 三档；C/D 无素材 → 返回空串，由 CSS 兜底半透明芯片 */
+export function gradePlate(grade: string): string {
+  const g = grade.toLowerCase();
+  return g === 's' || g === 'a' || g === 'b' ? asset(`/skills/grade-plate-${g}.png`) : '';
 }
 
 /** 任意等级基础面板（不含加点/红度）：属性 = 初始 + (L-1)×成长（四舍五入） */

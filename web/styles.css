@@ -541,17 +541,81 @@ main {
   filter: drop-shadow(0 0 5px color-mix(in srgb, var(--gold) 70%, transparent));
 }
 .slot-inner { display: flex; gap: 8px; width: 100%; height: 100%; min-height: 0; }
-.slot-art {
-  width: 56px;
-  flex-shrink: 0;
+/* 配将槽位卡左＝官方卡面（比例 242:350 随槽高缩放），右＝信息列 */
+.slot-card {
+  position: relative;
   height: 100%;
-  max-height: 100%;
+  flex-shrink: 0;
+  aspect-ratio: 242 / 350;
+  overflow: hidden;
+  border-radius: 3px;
+  background: var(--color-bg);
+}
+.slot-card .slot-art {
+  position: absolute;
+  inset: 0;
   background-size: cover;
   background-position: top center;
-  border: 1px solid var(--color-line);
-  border-radius: 4px;
   background-color: var(--color-bg);
 }
+.slot-card .fac { position: absolute; left: 1px; top: 2px; width: 19%; font-size: 8px; }
+.slot-card .hero-name {
+  position: absolute;
+  left: 1px;
+  top: 14%;
+  width: 19%;
+  /* 竖排名封顶 + 裁切：长名（小乔&大乔 / SP赵云）不许压到底栏或灌出边框 */
+  max-height: 46%;
+  overflow: hidden;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  display: flex;
+  justify-content: center;
+  font-family: var(--font-kai);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #e9c983;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .9);
+}
+.slot-card .sp-badge {
+  position: absolute;
+  left: 1px;
+  bottom: 13%;
+  font-size: 6.5px;
+  line-height: 1.3;
+  padding: 0 1px;
+  color: var(--gold-bright);
+  border: 1px solid var(--gold);
+  border-radius: 2px;
+}
+.slot-card .hero-stars {
+  position: absolute;
+  right: 6%;
+  top: 1.5%;
+  font-size: 6.5px;
+  letter-spacing: 0;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.slot-card .card-bar {
+  position: absolute;
+  /* 底栏文字内缩到边框以内（卡框紫边约 2/242 宽、底栏 42/350 高） */
+  left: 5%;
+  right: 6%;
+  bottom: 1.5%;
+  height: 12%;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-kai);
+  font-size: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.slot-card .card-bar .lv { color: #f2ece0; flex: 0 1 auto; }
+.slot-card .card-bar .lv i { font-style: normal; color: var(--gold); margin-right: 1px; }
+.slot-card .card-bar .troop { color: var(--gold-bright); flex: 0 0 auto; }
 .slot-main {
   flex: 1;
   min-width: 0;
@@ -577,22 +641,6 @@ main {
   object-position: 50% 18%;
   flex-shrink: 0;
 }
-.slot .hero-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ink);
-  font-family: var(--font-kai);
-  letter-spacing: 1px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.slot-sub {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
 .slot .hero-meta {
   font-size: 10.5px;
   color: var(--text-dim);
@@ -601,6 +649,7 @@ main {
   overflow: hidden;
   text-overflow: ellipsis;
   min-width: 0;
+  flex: 1;
 }
 .slot .hero-skills {
   --sslot-size: 48px;
@@ -626,10 +675,12 @@ main {
   width: var(--sslot-size);
   height: var(--sslot-size);
 }
+/* 战法名：仿率土战法条（参考图「运筹决胜」）——加粗衬线 + 近白字 + 暗色描影，压在品级板上 */
 .slot-skill-name {
-  font-size: 10px;
-  line-height: 1.3;
-  color: var(--ink);
+  font-size: 10.5px;
+  line-height: 1.35;
+  font-weight: 700;
+  color: #f7f3ea;
   text-align: center;
   white-space: nowrap;
   overflow: hidden;
@@ -639,6 +690,18 @@ main {
   background: rgba(8, 6, 3, .45);
   border-radius: 8px;
   font-family: var(--font-kai);
+  letter-spacing: .3px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .9), 0 0 3px rgba(0, 0, 0, .55);
+}
+/* 战法名背景框：官方色板素材（S/A/B 三档，两端斜切）；C/D 无素材 → 保持上面的半透明芯片兜底。
+   background-image 由 teamEditor 内联写入（走 asset() 加 BASE_URL，子路径部署不 404）。 */
+.slot-skill-name.has-plate {
+  background-color: transparent;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 100% 100%;
+  border-radius: 0;
+  padding: 0 10px;
 }
 .slot .hint { font-size: 10px; color: var(--text-weak); margin-top: 5px; }
 .slot .tip { font-size: 10px; color: var(--text-weak); }
@@ -694,69 +757,113 @@ main {
   grid-auto-rows: min-content;
   padding: 2px;
 }
+/* ── 武将卡：官方「wujiang5」卡框（画像铺满 + 名字/等级/兵种按卡位）── */
 .hero-card {
   position: relative;
-  background: var(--color-surface-2);
-  border: 1px solid var(--color-line);
-  border-radius: var(--radius);
-  border-bottom: var(--card-accent);
+  aspect-ratio: 242 / 350;      /* 与卡框素材同比例 */
   cursor: pointer;
   overflow: hidden;
-  transition: border-color .12s, box-shadow .12s;
-  display: flex;
-  flex-direction: column;
+  border-radius: 3px;
+  background: var(--color-bg);
+  transition: box-shadow .12s, opacity .12s;
 }
 .hero-card:hover {
-  border-color: var(--color-gold);
-  border-bottom: var(--card-accent);
-  box-shadow: 0 5px 16px color-mix(in srgb, var(--color-bg) 55%, transparent);
+  box-shadow: inset 0 0 0 2px var(--color-gold), 0 5px 16px color-mix(in srgb, var(--color-bg) 55%, transparent);
 }
+.hero-card.picked { opacity: .45; }
+/* 画像：铺满整张卡——左侧竖带与顶部渐变是卡框的半透明遮罩，画像透过它显示 */
 .hero-card .art {
-  /* 固定高度：长页面模式下自然排布，永不折叠 */
-  height: 126px;
-  flex-shrink: 0;
+  position: absolute;
+  inset: 0;
   background-size: cover;
   background-position: top center;
   background-color: var(--color-bg);
-  border-bottom: 1px solid var(--color-line);
 }
-.hero-card .plate {
-  padding: 5px 7px 6px;
-  background: var(--color-surface);
-  flex-shrink: 0;
+/* 卡框素材层（卡面通用：武将池卡 / 配将槽位卡 / 简略战报卡；background-image 内联注入，走 asset() 加 BASE_URL） */
+.frame {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  pointer-events: none;
+  z-index: 2;
 }
-.hero-card .n {
-  font-size: 12.5px;
+/* 卡面信息层（绝对定位铺满卡面，不吃鼠标事件；overflow:hidden 兜底——卡面文字一律不越框） */
+.plate { position: absolute; inset: 0; z-index: 3; pointer-events: none; overflow: hidden; }
+/* 信息层：左上势力字 + 竖排名 / 右上五星 / 底部 Lv·兵种·主战法 */
+.hero-card .fac { position: absolute; left: 1px; top: 3px; width: 19%; font-size: 10px; }
+/* 势力字配色（卡面通用：武将池卡 / 配将槽位卡 / 简略战报卡） */
+.fac {
+  font-family: var(--font-kai);
   font-weight: 700;
-  color: var(--ink);
+  text-align: center;
+  line-height: 1.1;
+}
+.fac.han { color: #d9b45c; }
+.fac.wei { color: #7fb0e8; }
+.fac.shu { color: #7cc98f; }
+.fac.wu { color: #e88a80; }
+.fac.qun { color: #c9a8e0; }
+.fac.jin { color: #b9c9a2; }
+.hero-card .n {
+  position: absolute;
+  left: 1px;
+  top: 15%;
+  width: 19%;
+  /* 竖排名封顶 + 裁切：长名不许压到底栏或灌出边框 */
+  max-height: 46%;
+  overflow: hidden;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  display: flex;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
   font-family: var(--font-kai);
   letter-spacing: 1px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  color: #e9c983;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .9);
 }
-.hero-card .f { font-size: 10.5px; color: var(--text-dim); }
-.hero-card .s {
-  font-size: 10px;
-  color: var(--text-weak);
-  margin-top: 1px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+.hero-card .sp-badge {
+  position: absolute;
+  left: 2px;
+  bottom: 13%;
+  font-size: 7.5px;
+  line-height: 1.3;
+  padding: 0 2px;
+  color: var(--gold-bright);
+  border: 1px solid var(--gold);
+  border-radius: 2px;
 }
 .hero-card .stars {
-  color: var(--gold);
+  position: absolute;
+  right: 6%;
+  top: 2%;
   font-size: 9px;
-  letter-spacing: 2px;
-  margin-top: 1px;
-  text-shadow: 0 0 8px rgba(201, 164, 92, .65);
-  line-height: 1.2;
+  letter-spacing: 1px;
+  color: var(--gold);
+  text-shadow: 0 0 6px rgba(201, 164, 92, .7);
+  white-space: nowrap;
+  overflow: hidden;
 }
-.hero-card.picked {
-  border-color: var(--color-gold);
-  border-bottom: var(--card-accent);
-  opacity: .45;
+.hero-card .bar {
+  position: absolute;
+  /* 底栏文字内缩到边框以内 */
+  left: 5%;
+  right: 6%;
+  bottom: 1.5%;
+  height: 12%;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-kai);
+  font-size: 9.5px;
+  white-space: nowrap;
+  overflow: hidden;
 }
+.hero-card .bar .lv { flex: 0 1 auto; color: #f2ece0; }
+.hero-card .bar .lv i { font-style: normal; color: var(--gold); margin-right: 1px; }
+.hero-card .bar .troop { flex: 0 0 auto; color: var(--gold-bright); }
 
 /* ── 底栏（士气 + 开始模拟；对齐套2 botbar，扁平表面）── */
 .control-bar {
@@ -1400,23 +1507,21 @@ main {
   min-height: 0;
   max-width: 220px;
   text-align: center;
-  border: 1px solid var(--line);
-  background: var(--panel-2);
-  padding: 6px 6px 8px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
 }
-.sum-hero .sh-art {
+/* 卡面：比例锁死 242:350（与卡框素材同比例），画像铺满，卡框压在最上层 */
+.sum-hero .sh-card {
   position: relative;
   width: 100%;
-  border: 1px solid var(--line-strong);
-  background: #000;
+  aspect-ratio: 242 / 350;
   overflow: hidden;
-  flex: 1 1 0;
-  min-height: 0;
+  border-radius: 3px;
+  background: var(--color-bg);
+  flex-shrink: 0;
 }
-.sum-hero .sh-art img {
+.sum-hero .sh-art {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -1425,45 +1530,71 @@ main {
   object-position: top center;
   display: block;
 }
-.sum-hero .sh-stars {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  text-align: center;
-  font-size: 12px;
-  letter-spacing: 3px;
-  background: linear-gradient(180deg, transparent, rgba(0, 0, 0, .78));
-  padding: 16px 0 4px;
-  line-height: 1.2;
-}
+.sum-hero .fac { position: absolute; left: 1px; top: 3px; width: 19%; font-size: 11px; }
 .sum-hero .sh-name {
+  position: absolute;
+  left: 1px;
+  top: 15%;
+  width: 19%;
+  /* 竖排名封顶 + 裁切：长名不许压到底栏或灌出边框 */
+  max-height: 46%;
+  overflow: hidden;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  display: flex;
+  justify-content: center;
   font-family: var(--font-kai);
   font-size: 14px;
-  color: var(--ink);
+  font-weight: 700;
   letter-spacing: 1px;
-  margin: 6px 0 1px;
+  color: #e9c983;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, .9);
+}
+.sum-hero .sh-stars {
+  position: absolute;
+  left: auto;
+  right: 6%;
+  top: 2%;
+  bottom: auto;
+  background: none;
+  padding: 0;
+  font-size: 9px;
+  letter-spacing: 1px;
+  line-height: 1.2;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
-  flex-shrink: 0;
 }
+.sum-hero .card-bar {
+  position: absolute;
+  /* 底栏文字内缩到边框以内 */
+  left: 5%;
+  right: 6%;
+  bottom: 1.5%;
+  height: 12%;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-kai);
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.sum-hero .card-bar .lv { flex: 0 1 auto; color: #f2ece0; }
+.sum-hero .card-bar .lv i { font-style: normal; color: var(--gold); margin-right: 1px; }
+.sum-hero .card-bar .troop { flex: 0 0 auto; color: var(--gold-bright); }
 .sum-hero .sh-meta {
   font-size: 11px;
   color: var(--text-dim);
   letter-spacing: 1px;
-  margin-bottom: 4px;
+  margin: 4px 0 3px;
   flex-shrink: 0;
 }
 .sum-hero .sh-troops { font-size: 12px; color: var(--text-dim); margin-top: 3px; flex-shrink: 0; }
 .sum-hero .troopbar { height: 12px; flex-shrink: 0; }
 .sum-hero.dead {
-  background: #2e2c28;
-  border-color: #4a4a44;
-  filter: grayscale(1);
+  filter: grayscale(1) brightness(.72);
 }
 .sum-hero.dead .sh-name, .sum-hero.dead .sh-troops, .sum-hero.dead .sh-meta { color: #8a8a80; }
-.sum-hero.dead .sh-art { border-color: #55554e; }
 
 /* VS 图标（率土风：金色描边 + 双线）；回合/种子叠在中间列，不另占底行 */
 .vs-badge {
@@ -2291,7 +2422,9 @@ main {
 }
 .sslot-empty-tip { font-size: 11px; color: var(--text-weak); margin-bottom: 2px; }
 .sslot-icon { position: relative; display: block; flex-shrink: 0; }
-.sslot-icon .ti { position: absolute; inset: 6px; width: calc(100% - 12px); height: calc(100% - 12px); object-fit: contain; }
+/* 类型图标铺满整个框（原 inset:6px 固定内缩 → 小尺寸下图标只剩 57%，看着"缩在框里"）：
+   类型图像素材的圆内切画布、品级环素材的外径也内切画布，两者重叠后图标圆边正好被环带压住 = 图标与框相切 */
+.sslot-icon .ti { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
 .sslot-icon .kf { position: absolute; inset: 0; width: 100%; height: 100%; }
 .sslot-icon .rb { position: absolute; top: 0; left: 0; width: 34%; height: auto; }
 .sslot-name {
@@ -2457,7 +2590,7 @@ main {
 }
 .hist-detail-summary .battle-summary { padding: 0; justify-content: flex-start; gap: 12px; overflow: visible; }
 .hist-detail-summary .sum-hero { max-width: 112px; }
-.hist-detail-summary .sum-hero .sh-art { min-height: 0; flex: none; aspect-ratio: 3 / 4; }
+/* 历史详情里的战报缩略：卡面比例由卡框素材决定（242:350），不再另设 3:4 拉变形 */
 .hist-detail-summary .hist-actions {
   display: flex;
   gap: 8px;

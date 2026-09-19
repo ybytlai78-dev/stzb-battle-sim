@@ -57,16 +57,26 @@
   /* 卡槽压缩：三槽均分，不再滚动；圆角/绯红底边继承 styles.css 套2 */
   .slot { padding: 4px; border-radius: var(--radius); }
   .slot-inner { gap: 6px; }
-  .slot-art { width: 40px; }
-  .slot .hero-name { font-size: 12px; }
+  /* 卡面（242:350）随槽高缩小，字号同步压一档 */
+  .slot-card .fac { font-size: 6.5px; top: 1px; }
+  .slot-card .hero-name { font-size: 9px; letter-spacing: 0; }
+  .slot-card .hero-stars { font-size: 5.5px; }
+  .slot-card .card-bar { font-size: 6.5px; gap: 3px; }
+  .slot-card .sp-badge { font-size: 5.5px; }
   .slot .hero-meta { font-size: 9.5px; }
   .slot .hero-skills { --sslot-size: 28px; margin-top: 1px; gap: 2px; }
   .slot-skill { gap: 1px; }
   .slot-skill-name { font-size: 8.5px; padding: 0 3px; }
+  .slot-skill-name.has-plate { padding: 0 5px; }
   .slot .hint, .slot .tip { font-size: 9px; margin-top: 0; }
   /* 空槽加号素材：矮视口缩小，避免撑高槽位 */
   .slot-add-icon { width: 24px; height: 24px; }
   .slot.empty { gap: 4px; letter-spacing: 1px; }
+  /* 简略战报卡面：矮视口下字号压一档 */
+  .sum-hero .fac { font-size: 9px; }
+  .sum-hero .sh-name { font-size: 11px; letter-spacing: 0; }
+  .sum-hero .sh-stars { font-size: 7px; }
+  .sum-hero .card-bar { font-size: 9px; }
 
   /* 武将池：卡片缩小，一屏看更多 */
   .hero-pool { padding: 8px; }
@@ -74,13 +84,13 @@
   .hero-pool input[type="text"] { padding: 4px 8px; font-size: 12px; }
   .hero-filter { padding: 4px 7px; margin-bottom: 5px; }
   .filter-tag { font-size: 11px; padding: 1px 10px; }
-  .hero-grid { gap: 5px; }
-  .hero-card .art { height: 82px; }
-  .hero-card .plate { padding: 3px 5px 4px; }
-  .hero-card .n { font-size: 11.5px; }
-  .hero-card .f { font-size: 9.5px; }
-  .hero-card .s { font-size: 9px; margin-top: 0; }
-  .hero-card .stars { font-size: 8px; }
+  /* 武将池：卡框版卡片缩小（比例由 aspect-ratio 保持，只压字号） */
+  .hero-grid { gap: 5px; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); }
+  .hero-card .fac { font-size: 8px; top: 2px; }
+  .hero-card .n { font-size: 9px; letter-spacing: 0; }
+  .hero-card .stars { font-size: 6.5px; letter-spacing: 0; }
+  .hero-card .bar { font-size: 7px; gap: 3px; }
+  .hero-card .sp-badge { font-size: 6px; padding: 0 1px; }
 
   /* 底栏：紧凑（扁平表面 + 绯红主钮由 styles.css 提供） */
   .control-bar {

@@ -8,7 +8,7 @@
 import type { BattleReport, General, UnitState } from '../src/engine/types';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import { computeDetailedStats, computeContributionShares, type UnitDetailedStats } from '../src/engine/stats';
-import { avatarSrc, portraitSrc, getHeroById, rednessStars, skillGrade } from './heroes';
+import { avatarSrc, portraitSrc, getHeroById, rednessStars, skillGrade, TROOP_CHAR, FACTION_CLASS, cardFrameSrc } from './heroes';
 import { RESULT_GLYPH } from './resultGlyph';
 
 /** 统计视图用的占位单位（只取 general / side，兵力与状态不参与汇总） */
@@ -78,20 +78,32 @@ function resultStamp(result: BattleReport['result'], opts: SummaryOpts): string 
     </div>`;
 }
 
-/** 单个武将卡（画像 + 星级红度 + 站位等级 + 兵力条），兵力 0 → 灰底阵亡。 */
+/** 单个武将卡：上＝官方卡面（画像铺满 + 卡框 + 左上势力字 / 竖排名 / 右上红度 / 底部 Lv·兵种），
+ *  下＝该将兵力条与剩余兵力（战报核心数据，放在卡面外）。兵力 0 → 整卡灰暗阵亡。
+ *  卡面结构/类名与武将池卡、配将槽位卡一致（.frame / .plate / .fac / .card-bar）。 */
 function heroCard(g: General, troops: number, color: 'red' | 'blue'): string {
   const pct = g.maxTroops > 0 ? (troops / g.maxTroops) * 100 : 0;
   const dead = troops <= 0;
   const r = g.redness ?? 0;
   const lv = g.level ?? 40;
+  const hero = getHeroById(g.id);
+  const facCls = FACTION_CLASS[hero?.faction ?? ''] ?? 'qun';
   return `
     <div class="sum-hero ${dead ? 'dead' : ''}">
-      <div class="sh-art">
-        <img src="${portraitSrc(g.id)}" alt="${g.name}" onerror="this.style.display='none'" />
-        <div class="sh-stars" title="红度 ${r}/5">${rednessStars(r)}</div>
+      <div class="sh-card">
+        <img class="sh-art" src="${portraitSrc(g.id)}" alt="${g.name}" onerror="this.style.display='none'" />
+        <div class="frame" style="background-image:url('${cardFrameSrc()}')"></div>
+        <div class="plate">
+          <div class="fac ${facCls}">${hero?.faction ?? ''}</div>
+          <div class="sh-name">${g.name}</div>
+          <div class="sh-stars" title="红度 ${r}/5">${rednessStars(r)}</div>
+          <div class="card-bar">
+            <span class="lv"><i>Lv.</i>${lv}</span>
+            <span class="troop" title="兵种">${TROOP_CHAR[g.troopType] ?? '?'}</span>
+          </div>
+        </div>
       </div>
-      <div class="sh-name">${g.name}</div>
-      <div class="sh-meta">${g.position} · ${lv}级</div>
+      <div class="sh-meta">${g.position}</div>
       ${troopBar(pct, dead ? 'bar-dead' : color === 'red' ? 'bar-red' : 'bar-blue')}
       <div class="sh-troops">${troops.toLocaleString()}${dead ? ' · 阵亡' : ''}</div>
     </div>`;
