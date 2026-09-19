@@ -156,6 +156,9 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
     case 'skill_target':
       lines.push(`  → 目标：${ev.targetIds.join('、')}`);
       break;
+    case 'seal_settle':
+      lines.push(`  ✦ 【${ev.unitId}】【${ev.skillName}】玉玺结转：上一回合承担 ${fmt(ev.carried)}，按 ${Math.round(ev.ratio * 100)}% 使其损失 ${fmt(ev.damage)} 兵力（剩余 ${fmt(ev.afterTroops)}）`);
+      break;
     case 'damage':
       if (ev.delayedEffect && ev.afterTroops !== undefined) {
         lines.push(`  ✦ 【${ev.sourceId}】【${ev.skillName}】的效果使【${ev.targetId}】损失了${ev.damage}兵力(${ev.afterTroops})`);

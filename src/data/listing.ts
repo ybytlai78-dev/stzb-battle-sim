@@ -45,6 +45,7 @@ export const OFFLINE_MAIN_SKILLS: Record<string, string> = {
   lv_er_fang_ya: '增伤 22% / 策略 180% 受谋略成长未确认（按基值不缩放；10% 攻击伤害与 180% 攻击段固定）',
   luanfeng_heming: '恢复 85% 受谋略成长未确认（按基值不缩放；控制 +1 目标段无数值）',
   cijian_changqu: '再次发动几率 40% 受谋略成长未确认（按基值不缩放；50% 伤害/恢复与自身犹豫/怯战固定）',
+  jianhao_tianzi: '玉玺转移比例 32% 受防御成长未确认（按基值不缩放；结转比例 50% 起每回合 +10% 封顶 100%）',
 };
 
 /**

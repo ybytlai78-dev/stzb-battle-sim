@@ -525,7 +525,7 @@
     "growthDefense": 2.12,
     "growthStrategy": 0.67,
     "growthSpeed": 0.88,
-    "mainSkillId": "",
+    "mainSkillId": "jianhao_tianzi",
     "mainSkillName": "僭号天子",
     "skillDesc": "战斗开始后获得玉玺：我军全体受到的所有伤害的32.0%（受防御属性影响）由玉玺承担；第二回合起，每回合开始时玉玺对袁术造成其上一回合承担所有伤害，袁术仅受到来自玉玺伤害的50%，该比例每回合上升10%"
   },

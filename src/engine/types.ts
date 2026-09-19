@@ -682,6 +682,13 @@ export interface CommandSkill extends BaseSkill {
   /** 二类指挥动态发动率：初始 base，未生效每回合 +increment，生效后重置（奇兵拒北 30% 起始，未生效+5%） */
   dynamicTriggerRate?: { base: number; increment: number };
   /**
+   * 玉玺·伤害转移（僭号天子）：我军全体受到伤害的 `rate`%（受施法者**生效防御**缩放）由玉玺承担，
+   * 计入账本本回合不从受击者扣兵；第二回合起每回合开始时，玉玺对施法者造成
+   * 「上一回合承担量 × 本回合承担比例」的兵力损失（比例 50% 起、每回合 +10%，封顶 100%）。
+   * `growthRate` 缺省 = 不缩放（按基值，待反解）。
+   */
+  sealTransfer?: { rate: number; growthRate?: number };
+  /**
    * 友军「再次发动」监听（赐剑长驱）：令友军全体**每回合首次成功释放主动战法后**，有 `rate`% 几率
    * 再次发动同一战法（**跳过所有准备回合**），但只造成原战法 `factor` 倍的伤害与恢复效果。
    * 逐「友军 × 每回合首次成功主动」判定一次（同回合内每名友军最多 1 次）；`rate` 为谋略 80 时的
@@ -1323,6 +1330,24 @@ export type BattleEvent =
       unitId: string;
       targetId: string;
       skillId?: string;
+    }
+  /**
+   * 玉玺结转（僭号天子）：每回合开始时玉玺对持有者造成「上一回合承担量 × 本回合承担比例」的兵力损失。
+   * 独立事件（不走 damage / 杀伤统计）：这是玉玺对自己人的结转，不是施法者的杀伤。
+   */
+  | {
+      type: 'seal_settle';
+      /** 玉玺持有者（袁术） */
+      unitId: string;
+      skillId: string;
+      skillName: string;
+      /** 上一回合玉玺承担量 */
+      carried: number;
+      /** 本回合承担比例（0.5 起每回合 +0.1，封顶 1） */
+      ratio: number;
+      /** 实际扣减兵力 */
+      damage: number;
+      afterTroops: number;
     }
   | {
       type: 'skill_cast';

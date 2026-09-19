@@ -202,6 +202,13 @@ export interface CombatContext {
    */
   allyRecastOnceKeys?: Set<string>;
   /**
+   * 玉玺伤害转移账本（僭号天子）：每侧至多一份（准备阶段注册）。`carried` = 本回合玉玺承担量累积，
+   * 回合开始时结算给持有者并清零。可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
+   */
+  sealLedgers?: Array<{ skillId: string; casterId: string; carried: number }>;
+  /** 正在结算玉玺结转（防止玉玺 → 持有者的伤害又被玉玺自己转移，形成自循环） */
+  sealResolving?: boolean;
+  /**
    * 受击触发整场次数上限（持玺兴兵）：key `${casterId}:${skillId}` → 已触发次数（整场累计，不随回合重置）。
    * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
    */
@@ -354,6 +361,14 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
       ctx.stackBuffs.push({ skillId: skill.id, casterId: unit.general.id, config: skill.stackBuff });
     }
 
+    // 玉玺账本（僭号天子）：准备阶段注册；之后我军受击按比例转入，回合开始时结转给持有者
+    if (skill.sealTransfer) {
+      ctx.sealLedgers ??= [];
+      if (!ctx.sealLedgers.some((l) => l.skillId === skill.id && l.casterId === unit.general.id)) {
+        ctx.sealLedgers.push({ skillId: skill.id, casterId: unit.general.id, carried: 0 });
+      }
+    }
+
     // 准备阶段一次性效果（其疾如风前3回合速度+41）：无条件施加，不参与 roundRepeat 每回合判定
     if (skill.initialOutput) {
       executeSkillOutputs(ctx, unit, skill, targets, skill.initialOutput);
@@ -368,7 +383,8 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
       !skill.delayedOutputs &&
       !skill.onHurt &&
       !skill.onAttrChange &&
-      !skill.strategyAdjacentBonus
+      !skill.strategyAdjacentBonus &&
+      !skill.sealTransfer
     ) {
       executeSkillOutputs(ctx, unit, skill, targets);
     }
@@ -2770,6 +2786,36 @@ export function tickStatuses(ctx: CombatContext, units: UnitState[]): void {
 export function tickRoundStartStatuses(ctx: CombatContext): void {
   const decayEighthsNow = ctx.currentRound !== 1; // 第 1 回合不衰减（保 8/8）
   const units = [...ctx.myTeam, ...ctx.enemyTeam];
+  // 玉玺结转（僭号天子）：第二回合起，每回合开始时对持有者结算「上一回合承担量 × 本回合承担比例」；
+  // 本回合承担比例 = 50% 起、每回合 +10%，封顶 100%。账本结算后清零。
+  for (const seal of ctx.sealLedgers ?? []) {
+    // 第 1 回合不结算（本回合的承担量留给第 2 回合开始结转）——账本只在结算时清零
+    if (ctx.currentRound < 2) continue;
+    const carried = seal.carried;
+    seal.carried = 0;
+    if (carried <= 0) continue;
+    const caster = castUnit(ctx, seal.casterId);
+    if (!caster?.alive) continue;
+    const ratio = Math.min(1, 0.5 + 0.1 * (ctx.currentRound - 2));
+    const skill = resolveSkill(ctx, seal.skillId);
+    const before = caster.troops;
+    const ev: Extract<BattleEvent, { type: 'seal_settle' }> = {
+      type: 'seal_settle',
+      unitId: caster.general.id,
+      skillId: seal.skillId,
+      skillName: skill?.name ?? seal.skillId,
+      carried,
+      ratio,
+      damage: Math.round(carried * ratio),
+      afterTroops: before,
+    };
+    ctx.events.push(ev);
+    ctx.sealResolving = true; // 玉玺 → 持有者的伤害不再被玉玺自己转移（防自循环）
+    applyDamage(ctx, caster, ev.damage, undefined, 'strategy', 'skill');
+    ctx.sealResolving = false;
+    ev.damage = before - caster.troops;
+    ev.afterTroops = caster.troops;
+  }
   for (const unit of units) {
     if (!unit.alive || !decayEighthsNow) continue;
     for (const s of [...unit.statuses]) {
@@ -3362,6 +3408,19 @@ function runChainSkills(ctx: CombatContext, caster: UnitState, skill: Skill, tar
     executeSkillOutputs(ctx, caster, ref, pool, ref.output, false);
     if (!caster.alive) break;
   }
+}
+
+/**
+ * 玉玺账本（僭号天子）：取受击者一侧、持有者存活的账本（我方全体受击都走这一份；持有者阵亡则不再转移）。
+ */
+function findSealLedger(
+  ctx: CombatContext,
+  target: UnitState
+): { skillId: string; casterId: string; carried: number } | undefined {
+  return ctx.sealLedgers?.find((l) => {
+    const holder = castUnit(ctx, l.casterId);
+    return holder?.alive === true && holder.side === target.side;
+  });
 }
 
 /**
@@ -5489,7 +5548,24 @@ export function applyDamage(
     reduceRate = before.thisHitReduce;
   }
   const incoming = Math.round(Math.max(0, damage) * (1 - reduceRate));
-  const actual = Math.min(incoming, target.troops);
+  let actual = Math.min(incoming, target.troops);
+  // 玉玺（僭号天子）：我方受到的伤害按比例转入玉玺账本，本回合不从受击者扣兵（回合开始结转给持有者）。
+  // 结转结算自身置 ctx.sealResolving → 不再被玉玺转移（防自循环）。
+  if (!ctx.sealResolving && ctx.sealLedgers && ctx.sealLedgers.length > 0) {
+    const seal = findSealLedger(ctx, target);
+    const holder = seal ? castUnit(ctx, seal.casterId) : undefined;
+    const cfg = seal ? resolveSkill(ctx, seal.skillId) : undefined;
+    const transfer = cfg?.type === 'command' ? cfg.sealTransfer : undefined;
+    if (seal && holder && transfer && actual > 0) {
+      const rate =
+        roundRate(scaledValue(transfer.rate, transfer.growthRate ?? 0, effectiveStat(holder, 'defense'))) / 100;
+      const diverted = Math.min(actual, Math.round(actual * rate));
+      if (diverted > 0) {
+        seal.carried += diverted;
+        actual -= diverted;
+      }
+    }
+  }
   target.troops -= actual;
   if (target.troops <= 0) target.troops = 0;
   const lethal = target.troops <= 0;
