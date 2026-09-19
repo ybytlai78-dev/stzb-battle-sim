@@ -94,8 +94,15 @@ describe('Web 战斗模拟器冒烟', () => {
 
   it('初始化渲染头部 + 两队槽位 + 武将池', async () => {
     await boot();
-    expect(document.querySelector('header.app h1')!.textContent).toContain('战斗模拟器');
+    // 品牌标题（率土之滨 · 战斗模拟器）已按要求删除，顶栏位置让给武将池搜索框
+    expect(document.querySelector('header.app h1')).toBeNull();
     expect(document.querySelector('header.app .sub')).toBeNull();
+    const headerSearch = document.querySelector('header.app #pool-search-slot input') as HTMLInputElement;
+    expect(headerSearch).toBeTruthy();
+    expect(headerSearch.placeholder).toContain('搜索武将名');
+    // 搜索框已搬出武将池；筛选行（势力/兵种）留在池内接替它的位置
+    expect(document.querySelector('.hero-pool .toolbar')).toBeNull();
+    expect(document.querySelector('.hero-pool .filter-tag')).toBeTruthy();
     expect(document.querySelector('.team-panel.red h2')!.textContent).toBe('红队');
     expect(document.querySelector('.team-panel.blue h2')!.textContent).toBe('蓝队');
     expect(document.querySelectorAll('.nav-link').length).toBe(3); // 战报 / 战法 / 伤害测试
@@ -201,34 +208,73 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(document.querySelector('.hero-pool .hero-card')).toBeTruthy();
   });
 
-  it('武将详情页：画像 + 四维属性(含成长) + 加点预算 + 兵种转换占位 + 三战法栏', async () => {
+  it('武将详情页：三板块（详情 / 配点 / 兵种）+ 四维成长 + 战法栏', async () => {
     await boot();
     // 男性武将：40 点自由属性（孙权）
     let modal = clickPoolCard('孙权');
     expect(modal.querySelector('.hd-portrait img')).toBeTruthy();           // 画像
+    // 三板块切换条，默认停在「详情」
+    expect(modal.querySelectorAll('.hd-tab').length).toBe(3);
+    expect(modal.querySelector('.hd-tab.on')!.textContent).toBe('详情');
+    // 板块 1 应有四样：兵种 / 攻击距离 / 四维与成长 / 战法栏
+    const meta = modal.querySelector('.hd-meta-row')!.textContent!;
+    expect(meta).toContain('兵种');
+    expect(meta).toContain('攻击距离');
     expect(modal.querySelectorAll('.stat-row').length).toBe(4);             // 四维
     expect(modal.textContent).toContain('（+1.62）');                       // 谋略成长 1.62
-    expect(modal.textContent).toContain('自由属性剩余');                    // 加点栏
+    expect(modal.textContent).toContain('自由属性剩余');                    // 加点预算
     expect(modal.textContent).toContain('40');                              // 男性预算 40
-    expect(modal.textContent).toContain('未开放');                          // 兵种转换占位
     expect(modal.querySelectorAll('.skill-slot-row').length).toBe(3);       // 三战法栏
     expect(modal.querySelector('.skill-slot-row.main .sslot-name')!.textContent).toContain('九锡黄龙'); // 主战法固定
-    // 两个装配槽「未装配」：加号走素材 slot-add.png（原为虚线圆 + 文字＋）
+    // 两个未携带槽：素材加号 slot-add.png + 「可学习」
     const addRows = Array.from(modal.querySelectorAll('.skill-slot-row.add')) as HTMLElement[];
     expect(addRows.length).toBe(2);
     for (const row of addRows) {
       const img = row.querySelector('img.sslot-add') as HTMLImageElement;
-      expect(img, '未装配应渲染素材加号').toBeTruthy();
+      expect(img, '未携带战法应渲染素材加号').toBeTruthy();
       expect(img.src).toMatch(/\/skills\/slot-add\.png$/);
-      expect(row.textContent).toContain('未装配');
+      expect(row.textContent).toContain('可学习');
       expect(row.textContent).not.toContain('＋');
     }
+    // 板块 2「配点」：四项 ×（− / ＋ / 最大）+ 重置（未放入阵容 → 全禁用）
+    (modal.querySelector('.hd-tab[data-tab="points"]') as HTMLElement).click();
+    expect(modal.querySelectorAll('.pt-row').length).toBe(4);
+    expect(modal.querySelectorAll('.pt-btn[data-max]').length).toBe(4);
+    expect(modal.querySelector('.pt-reset')).toBeTruthy();
+    expect((modal.querySelector('.pt-btn[data-max]') as HTMLButtonElement).disabled).toBe(true);
+    // 板块 3「兵种」：转换还没做 → 灰色占位
+    (modal.querySelector('.hd-tab[data-tab="troop"]') as HTMLElement).click();
+    expect(modal.textContent).toContain('未开放');
     closeModal();
 
     // 女性武将：60 点自由属性（马云禄）
     modal = clickPoolCard('马云禄');
     expect(modal.textContent).toContain('60');
     closeModal();
+  });
+
+  it('武将详情 · 配点：「最大」把剩余点数全加进该项，「重置」全部返还', async () => {
+    await boot();
+    pickHeroIntoSlot('red', 0, '孙权');
+    (document.querySelector('.team-panel.red .slots .slot') as HTMLElement).click();
+    const modal = document.querySelector('.modal') as HTMLElement;
+    (modal.querySelector('.hd-tab[data-tab="points"]') as HTMLElement).click();
+
+    const remain = () => (modal.querySelector('.pt-remain b') as HTMLElement).textContent;
+    const attackAdd = () => (modal.querySelector('.pt-row .pt-d') as HTMLElement).textContent!;
+    expect(remain()).toBe('40');                 // 男性 40 级：40 点自由属性
+    expect(attackAdd()).toContain('+0');
+
+    // 「最大」→ 剩余 40 点一次性全加到攻击
+    (modal.querySelector('.pt-btn[data-max="attack"]') as HTMLElement).click();
+    expect(remain()).toBe('0');
+    expect(attackAdd()).toContain('+40');
+    expect((modal.querySelector('.pt-btn[data-max="attack"]') as HTMLButtonElement).disabled).toBe(true);
+
+    // 「重置」→ 四项归零、点数全部返还
+    (modal.querySelector('.pt-reset') as HTMLElement).click();
+    expect(remain()).toBe('40');
+    expect(attackAdd()).toContain('+0');
   });
 
   it('选将 → 开始模拟 → 默认简略战报，可切换统计/战报详情', async () => {

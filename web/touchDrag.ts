@@ -19,9 +19,9 @@
  */
 import type { EditorHandlers } from './teamEditor';
 
-const LONG_PRESS_MS = 260; // 触摸/触控笔：长按激活时长
+const LONG_PRESS_MS = 90; // 触摸/触控笔：长按激活时长（260 → 130 → 90ms，一降再降：手感要"按下即持起"）
 const MOUSE_MOVE_PX = 6; // 鼠标：位移超过此值即激活
-const CANCEL_DIST = 12; // 触摸：未激活前位移超过此值 = 想滚动，取消
+const CANCEL_DIST = 18; // 触摸：未激活前位移超过此值 = 想滚动，取消（12 → 16 → 18，随长按时间一起放宽）
 
 interface DragState {
   /** pick = 源是武将池卡；slot = 源是已入队槽卡 */
@@ -38,6 +38,12 @@ interface DragState {
   startY: number;
   lastX: number;
   lastY: number;
+  /**
+   * 激活之后手指/鼠标是否真的移动过。
+   * 用来区分「真拖拽」与「按久了一点的点击」：长按激活后原地松手（位移≈0）不能吞掉 click，
+   * 否则缩短长按时间后，点武将卡会打不开详情（长按 130ms 太容易被触发）。
+   */
+  moved: boolean;
   /** 鼠标路径：激活时临时关掉原生 DnD 用，记原值以便恢复 */
   origDraggable: boolean | null;
 }
@@ -85,6 +91,7 @@ function beginDrag(card: HTMLElement, x: number, y: number, path: 'touch' | 'mou
     startY: y,
     lastX: x,
     lastY: y,
+    moved: false,
     origDraggable: null,
   };
   drag = state;
@@ -93,6 +100,9 @@ function beginDrag(card: HTMLElement, x: number, y: number, path: 'touch' | 'mou
 
 function activateDrag(): void {
   if (!drag) return;
+  // 「武装」而不是直接显形：浮层等第一次真实移动才出现。
+  // 好处：点一下（按到 90ms 但没动）不会在松手前闪出一张跟着手指的卡；
+  // 而一旦手指移动，卡片瞬间跟手 —— 既没有停顿感也没有闪烁。
   drag.active = true;
   if (drag.timer !== null) {
     clearTimeout(drag.timer);
@@ -104,7 +114,6 @@ function activateDrag(): void {
     drag.origDraggable = drag.orig.draggable;
     drag.orig.draggable = false;
   }
-  drag.ghost.style.display = '';
   moveTo(drag.lastX, drag.lastY);
 }
 
@@ -112,6 +121,12 @@ function moveTo(x: number, y: number): void {
   if (!drag) return;
   drag.lastX = x;
   drag.lastY = y;
+  // 位移超过 4px 才算"真的在拖"，而不是按久了 —
+  // 第一次真实移动时才把浮层显出来（见 activateDrag 注释）
+  if (drag.active && !drag.moved && Math.hypot(x - drag.startX, y - drag.startY) > 4) {
+    drag.moved = true;
+    drag.ghost.style.display = '';
+  }
   positionGhost(x, y);
   highlightAt(x, y);
 }
@@ -119,12 +134,14 @@ function moveTo(x: number, y: number): void {
 function cleanup(restoreClick: boolean): void {
   if (!drag) return;
   const wasActive = drag.active;
+  const wasMoved = drag.moved;
   if (drag.timer !== null) clearTimeout(drag.timer);
   drag.orig.classList.remove('dragging');
   if (drag.origDraggable !== null) drag.orig.draggable = drag.origDraggable;
   drag.ghost.remove();
   document.querySelectorAll('.drag-over').forEach((el) => el.classList.remove('drag-over'));
-  if (restoreClick && wasActive) swallowNextClick();
+  // 只有"真的拖动过"才吞 click；原地按久了松手仍按普通点击处理
+  if (restoreClick && wasActive && wasMoved) swallowNextClick();
   drag = null;
 }
 

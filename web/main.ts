@@ -24,6 +24,7 @@ import {
 import { showNotice } from './notice';
 import { asset } from './assets';
 import { setupTouchDrag } from './touchDrag';
+import { setupBackButton } from './backButton';
 import { createBattleView } from './battleView';
 import { createBattleSummary, createStatsView } from './battleSummary';
 import { mountDamageLab } from './damageLab';
@@ -37,6 +38,14 @@ let seed = Math.floor(Math.random() * 1000000);
 /** 双方士气（影响战法发动率，120 → 系数 1.12），默认 120 */
 let redMorale = 120;
 let blueMorale = 120;
+
+/**
+ * 构建标记（显示在底栏，用来一眼确认手机上装的是哪一版）。
+ * ⚠️ 改 android/app/build.gradle 的 versionName 时，这里同步改 —— 两边保持一致。
+ * 起因：测试包 versionCode/versionName 长期不动，装机后分不清装的是新版还是旧版，
+ * 只能靠肉眼猜 UI 有没有变。
+ */
+export const BUILD_TAG = 'v2.0测试r2';
 
 const errBox = document.createElement('div');
 errBox.className = 'err-msg';
@@ -191,6 +200,15 @@ const handlers: EditorHandlers = {
 
 // 触屏拖拽（长按武将卡拖动到槽位；HTML5 drag 在触屏不可用，仅触屏设备生效）
 setupTouchDrag(handlers);
+
+// 安卓返回键 / 返回手势（仅原生壳生效）：最上层覆盖层 → 实验室 → 战报页 → 都没有才退出应用。
+// 这些面板是 DOM 覆盖层而不是真页面，不接管的话在"页面"里按返回会直接退到桌面。
+setupBackButton({
+  isLabOpen: () => labVisible,
+  closeLab: () => exitLab(),
+  isReportOpen: () => app.classList.contains('report-open'),
+  closeReport: () => closeReportView(),
+});
 
 // ─── 渲染 ───
 
@@ -370,13 +388,13 @@ export function initApp(root?: HTMLElement): void {
   app.className = 'app-shell';
 
   // ── 顶栏 ──
+  // 品牌标题（率土之滨 · 战斗模拟器）已按要求删除：率 logo 已足够表明身份，
+  // 腾出来的横向空间放武将池搜索框（见 #pool-search-slot）。
   const header = document.createElement('header');
   header.className = 'app';
   header.innerHTML = `
     <img class="rate-logo" src="${asset('/rate-logo.png')}" alt="率" title="率土之滨" />
-    <div class="brand">
-      <h1>率土之滨 · 战斗模拟器</h1>
-    </div>
+    <div class="pool-search" id="pool-search-slot"></div>
     <nav class="app-nav" aria-label="功能">
       <button type="button" class="nav-link" data-nav="history">战报</button>
       <button type="button" class="nav-link" data-nav="skills">战法</button>
@@ -405,6 +423,7 @@ export function initApp(root?: HTMLElement): void {
     <label title="最大回合固定为 8，不可调整">最大回合 <span class="fixed">8（固定）</span></label>
     <label>我方士气 <input type="number" id="morale-red" value="${redMorale}" min="80" max="140" title="影响战法发动率：120 → 系数 1.12" /></label>
     <label>敌方士气 <input type="number" id="morale-blue" value="${blueMorale}" min="80" max="140" title="影响战法发动率：120 → 系数 1.12" /></label>
+    <span class="build-tag" title="构建标记：与 android/app/build.gradle 的 versionName 同步，用来确认装的是哪一版">${BUILD_TAG}</span>
     <span class="spacer"></span>
     <button id="start" class="btn">开始模拟</button>
   `;

@@ -121,15 +121,24 @@ header.app .rate-logo {
   border-radius: 3px;
   box-shadow: inset 0 0 0 1px rgba(201, 164, 92, .18);
 }
-header.app .brand { display: flex; flex-direction: column; flex: 1; min-width: 0; }
-header.app h1 {
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 3px;
-  color: var(--gold-bright);
-  font-family: var(--font-kai);
-  text-shadow: 0 1px 8px rgba(201, 164, 92, .35);
+/* 顶栏搜索框：占了原品牌标题（已删除）的位置 ——
+   把武将池搜索搬到固定栏，池子里就省下一整行，能在同一屏多放一行武将 */
+header.app .pool-search {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
 }
+header.app .pool-search .toolbar { margin: 0; width: 100%; max-width: 460px; }
+header.app .pool-search input[type="text"] {
+  width: 100%;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 6px 10px;
+  font-size: 12.5px;
+}
+header.app .pool-search input[type="text"]:focus { outline: none; border-color: var(--gold); }
 .app-nav {
   display: flex;
   align-items: center;
@@ -803,6 +812,15 @@ main {
 .control-bar .spacer { flex: 1; }
 .control-bar label { font-size: 12px; color: var(--color-text-muted); display: flex; align-items: center; gap: 6px; }
 .control-bar .fixed { color: var(--color-text); font-weight: 600; font-size: 12.5px; font-variant-numeric: tabular-nums; }
+/* 构建标记（web/main.ts 的 BUILD_TAG）：小而弱，只为装机后一眼确认装的是哪一版 */
+.control-bar .build-tag {
+  font-size: 10.5px;
+  color: var(--color-text-muted);
+  letter-spacing: 1px;
+  padding: 1px 6px;
+  border: 1px solid var(--color-line);
+  border-radius: 4px;
+}
 .control-bar input[type="number"], .control-bar select {
   background: var(--color-surface-2);
   border: 1px solid var(--color-line);
@@ -863,6 +881,25 @@ main {
   outline-offset: 2px;
 }
 
+/**
+ * 项目按键标准：米黄实心按钮（与顶栏导航 / 部队加成 / 清空本队同一套）。
+ * 用户口径：「凡是我说做成按键的，都要按照项目按键标准来」——
+ * 即"看得出是个按钮"：有底色、有描边、与深褐背景强区分，不要裸文字。
+ * 用法：class="btn beige"（不要与 .btn.ghost / .btn.done 同时用在需要实心的地方）。
+ */
+.btn.beige {
+  background: var(--beige);
+  color: var(--beige-ink);
+  border: 1px solid var(--beige-line);
+  font-weight: 700;
+}
+.btn.beige:hover {
+  background: var(--beige-hi);
+  border-color: var(--beige-hi);
+  color: var(--beige-ink);
+}
+.btn.beige:disabled { background: var(--beige); color: var(--beige-ink); }
+
 /* 页内提示（替代系统 alert） */
 .app-notice {
   position: fixed;
@@ -916,6 +953,9 @@ main {
   align-items: center;
   background: var(--color-surface-2);
 }
+/* 搜索框放进页面顶部固定栏时（选择武将）占满标题与关闭键之间的空间 */
+.modal .m-head .pick-toolbar { flex: 1; margin: 0; min-width: 0; }
+.modal .m-head .pick-toolbar input[type="text"] { width: 100%; }
 .modal .m-head h3 {
   font-size: 15px;
   font-weight: 600;
@@ -935,8 +975,32 @@ main {
   margin-right: 9px;
   flex-shrink: 0;
 }
-.modal .m-close { cursor: pointer; color: var(--text-weak); font-size: 16px; padding: 0 4px; }
-.modal .m-close:hover { color: var(--gold-bright); }
+/* 关闭 / 退出键：原来是裸露的小 ×（16px、无明显边界），手机上又小又不显眼 ——
+   改成与顶栏导航同款的米黄实心按钮，和背景强区分；所有弹窗统一受益 */
+.modal .m-close {
+  cursor: pointer;
+  background: var(--beige);
+  color: var(--beige-ink);
+  border: 1px solid var(--beige-line);
+  border-radius: 6px;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
+  min-width: 34px;
+  height: 32px;
+  padding: 0 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.modal .m-close:hover,
+.modal .m-close:focus-visible {
+  background: var(--beige-hi);
+  border-color: var(--beige-hi);
+  color: var(--beige-ink);
+  outline: none;
+}
 .modal .m-body { padding: 14px 18px; overflow-y: auto; }
 .modal .m-foot { padding: 10px 18px; border-top: 1px solid var(--line); text-align: right; }
 
@@ -1580,7 +1644,8 @@ main {
 
 /* ── 统计视图（图二骨架：左轨 + 行）── */
 .stats-view {
-  padding: 6px 4px;
+  /* 顶部不留白：首位武将直接贴顶（原来 6px 顶部内边距 + 行高撑破，一行会被挤出可视区） */
+  padding: 2px 4px 0;
   flex: 1;
   min-height: 0;
   min-width: 0;
@@ -1636,9 +1701,15 @@ main {
   position: relative;
   z-index: 1;
 }
+/* 两队之间加一道分隔线：否则红方前锋与蓝方前锋贴在一起，看着像"重叠" */
+.st-team + .st-team {
+  border-top: 1px solid var(--color-line);
+  padding-top: 3px;
+}
 .st-row {
+  /* min-height 归 0：6 行按可用高度均分，小屏也不会撑破容器被挤出滚动条（撑破会让行溢出到下一队 → 视觉重叠） */
   flex: 1 1 auto;
-  min-height: 50px;
+  min-height: 0;
   min-width: 0;
   display: grid;
   grid-template-columns: 14px 44px minmax(0, 1fr);
@@ -1660,7 +1731,7 @@ main {
 .hcard {
   position: relative;
   min-width: 0;
-  min-height: 50px;
+  min-height: 0; /* 同 .st-row：跟着行高走，别用固定 min-height 把行撑破 */
   height: 100%;
   border-radius: 4px;
   overflow: hidden;
@@ -2124,9 +2195,40 @@ main {
   padding: 12px 18px 10px;
 }
 .hd-body { padding: 16px 20px; }
-.hd-layout { display: flex; gap: 16px; align-items: flex-start; }
 
-.hd-left { flex-shrink: 0; }
+/* 详情页左右布局（仿参考图）：左侧「阵营 + 名字 + 画像 + 星级」三个板块共用、固定不变，
+   右侧是详情 / 配点 / 兵种 三个板块的切换区。 */
+.hd-split { display: flex; gap: 14px; align-items: flex-start; min-height: 0; }
+.hd-side { flex-shrink: 0; display: flex; gap: 8px; align-items: flex-start; }
+.hd-side-labels {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.hd-side-name {
+  /* 竖排，仿参考图左侧那一列阵营 / 名字 */
+  writing-mode: vertical-rl;
+  font-family: var(--font-kai);
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--gold-bright);
+  letter-spacing: 3px;
+  text-shadow: 0 1px 10px rgba(201, 164, 92, .35);
+}
+.hd-side-name .sp-tag,
+.hd-side-name .hd-female { writing-mode: horizontal-tb; margin: 4px 0 0; }
+.hd-female {
+  display: inline-block;
+  font-size: 9px;
+  border: 1px solid #b06a86;
+  color: #e0a8bd;
+  background: rgba(176, 106, 134, .16);
+  padding: 0 3px;
+  border-radius: 2px;
+}
+.hd-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+
 .hd-portrait {
   position: relative;
   width: 156px;
@@ -2145,16 +2247,6 @@ main {
   padding: 20px 0 4px;
 }
 
-.hd-right { flex: 1; min-width: 0; }
-.hd-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
-.hd-name {
-  font-family: var(--font-kai);
-  font-size: 21px;
-  font-weight: 700;
-  color: var(--gold-bright);
-  letter-spacing: 2px;
-  text-shadow: 0 1px 10px rgba(201, 164, 92, .35);
-}
 .faction-badge, .type-badge {
   display: inline-block;
   font-size: 11px;
@@ -2170,7 +2262,6 @@ main {
 .faction-badge.fc-qun { color: #b3a0cf; border-color: #6a548f; background: rgba(106, 84, 143, .2); }
 .faction-badge.fc-jin { color: #7fd0c4; border-color: #2f7d74; background: rgba(47, 125, 116, .2); }
 .type-badge { color: var(--text-dim); border-color: var(--line-strong); }
-.hd-level { font-size: 12px; color: var(--text-dim); margin-left: 4px; }
 
 /* 等级行：等级输入 + 携带兵力（公式自动计算，不可手动调整） */
 .hd-level-row {
@@ -2343,6 +2434,91 @@ main {
   max-width: 100%;
 }
 .sslot-type { font-size: 10.5px; color: var(--text-dim); }
+
+/* ── 武将详情 · 三板块（详情 / 配点 / 兵种）──
+   按用户给的参考图划分骨架：详情=兵种+攻击距离+四维成长+战法栏，
+   配点=每项 −/＋/最大 + 重置，兵种=转换未做 → 灰色占位。 */
+/* 三板块切换条：放顶栏里（标题与关闭键之间，中间偏右） */
+.hd-tabs-slot { margin-left: auto; margin-right: auto; display: flex; align-items: center; }
+.hd-tabs {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.hd-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-kai);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  padding: 5px 16px;
+  cursor: pointer;
+}
+.hd-tab:hover { color: var(--gold-bright); }
+.hd-tab.on { color: var(--gold-bright); border-bottom-color: var(--gold); }
+
+/* 板块 1 · 详情：兵种 / 攻击距离 */
+.hd-meta-row { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 2px 0 6px; }
+.hd-meta { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
+.hd-meta i { font-style: normal; font-size: 11px; color: var(--text-weak); letter-spacing: 1px; }
+
+/* 板块 2 · 配点（紧凑版：用户反馈原版字体与占用太大显得臃肿） */
+.pt-wrap { display: flex; flex-direction: column; gap: 6px; }
+.pt-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.pt-title { font-size: 12.5px; color: var(--ink); font-family: var(--font-kai); letter-spacing: 1px; }
+.pt-remain { font-size: 11.5px; color: var(--color-text-muted); }
+.pt-remain b { color: var(--gold-bright); font-size: 13px; font-variant-numeric: tabular-nums; }
+.pt-remain .tip { font-style: normal; color: var(--text-weak); }
+.pt-reset { margin-left: auto; padding: 4px 14px; font-size: 12.5px; }
+.pt-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 6px; }
+.pt-row {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  padding: 5px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.pt-head { display: flex; align-items: center; justify-content: space-between; }
+.pt-k { font-size: 12px; color: var(--ink); font-family: var(--font-kai); }
+.pt-d { font-size: 11px; color: var(--gold-bright); font-variant-numeric: tabular-nums; }
+.pt-line { display: flex; align-items: center; gap: 6px; }
+.pt-before { font-size: 12px; color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
+.pt-arrow { color: var(--text-weak); font-size: 11px; }
+.pt-after { font-size: 13px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; min-width: 36px; }
+.pt-actions { margin-left: auto; display: flex; gap: 5px; }
+.pt-btn {
+  min-width: 28px;
+  height: 22px;
+  padding: 0 6px;
+  background: var(--panel-3);
+  color: var(--ink);
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color .12s, color .12s;
+}
+.pt-btn.pt-max { font-size: 11px; color: var(--gold); letter-spacing: 1px; }
+.pt-btn:disabled { opacity: .35; cursor: not-allowed; }
+.pt-btn:not(:disabled):hover { border-color: var(--gold); color: var(--gold-bright); }
+
+/* 板块 3 · 兵种：转换未做 → 灰色占位 */
+.hd-troop-ph {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 22px 18px;
+  border: 1px dashed var(--line-strong);
+  opacity: .55;
+}
+.hd-troop-ph .ph-title { font-size: 14px; color: var(--color-text-muted); font-family: var(--font-kai); letter-spacing: 3px; }
+.hd-troop-ph .troop-boxes { filter: grayscale(1); }
+.hd-troop-ph .ph-tip { font-size: 12px; color: var(--text-weak); text-align: center; }
 
 /* 战法品级角标（S 粉 / A 蓝 / B 绿；套2 token） */
 .grade {

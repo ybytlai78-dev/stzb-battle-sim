@@ -311,7 +311,9 @@ export function renderTeamEditor(root: HTMLElement, state: EditorState, h: Edito
   root.className = 'team-editor';
 
   root.appendChild(renderTeamPanel('red', '红队', state.red, RED_SLOTS, h, 'my'));
-  root.appendChild(renderHeroPool(state, h));
+  // 搜索框挂到顶栏固定栏（#pool-search-slot）：从武将池里挪出去，给池子多留一行高度
+  const searchSlot = root.ownerDocument.getElementById('pool-search-slot') ?? undefined;
+  root.appendChild(renderHeroPool(state, h, searchSlot));
   root.appendChild(renderTeamPanel('blue', '蓝队', state.blue, BLUE_SLOTS, h, 'enemy'));
 }
 
@@ -579,7 +581,11 @@ export function renderSlot(team: 'red' | 'blue', i: number, slot: SlotState, lab
 
 /** 武将池（含搜索/筛选/详情弹窗），供主站与伤害测试实验室复用。
  *  池内卡可拖入槽位；已入队卡可拖回本池卸下（onRemoveHero）。 */
-export function renderHeroPool(state: EditorState, h: EditorHandlers): HTMLElement {
+/**
+ * 武将池。`searchSlot` 传了（首页）就把搜索框搬到那个固定栏里；
+ * 不传（伤害测试实验室 .lab-pool）则搜索框留在池内，行为与改动前一致。
+ */
+export function renderHeroPool(state: EditorState, h: EditorHandlers, searchSlot?: HTMLElement): HTMLElement {
   const pool = document.createElement('div');
   pool.className = 'hero-pool';
   pool.innerHTML = `
@@ -589,8 +595,14 @@ export function renderHeroPool(state: EditorState, h: EditorHandlers): HTMLEleme
     ${heroFilterHtml()}
     <div class="hero-grid"></div>
   `;
-  const input = pool.querySelector('input') as HTMLInputElement;
+  const toolbar = pool.querySelector('.toolbar') as HTMLElement;
+  // 先把引用取好再搬节点：搬走之后 pool.querySelector('input') 就找不到了
+  const input = toolbar.querySelector('input') as HTMLInputElement;
   const grid = pool.querySelector('.hero-grid') as HTMLElement;
+  if (searchSlot) {
+    // 整个 .toolbar 节点搬过去（不是复制）：已绑定的监听与输入内容都保留
+    searchSlot.replaceChildren(toolbar);
+  }
   const selected: HeroFilter = { faction: new Set(), type: new Set() };
 
   const picked = new Set<string>();
@@ -661,11 +673,11 @@ const STAT_NAMES: Array<[keyof SlotState['freePoints'], string]> = [
 export function openHeroDetail(heroId: string, opts: DetailOpts): void {
   const hero = getHeroById(heroId)!;
   const mask = document.createElement('div');
-  mask.className = 'modal-mask';
+  mask.className = 'modal-mask page-mask';
   const modal = document.createElement('div');
-  modal.className = 'modal hero-detail-modal';
+  modal.className = 'modal page-modal hero-detail-modal';
   modal.innerHTML = `
-    <div class="m-head"><h3><img class="modal-avatar" src="${avatarSrc(heroId)}" alt="" onerror="this.style.display='none'" />武将详情 · ${hero.name}</h3><span class="m-close">×</span></div>
+    <div class="m-head"><h3><img class="modal-avatar" src="${avatarSrc(heroId)}" alt="" onerror="this.style.display='none'" />武将详情 · ${hero.name}</h3><div class="hd-tabs-slot"></div><span class="m-close">×</span></div>
     <div class="m-body hd-body"></div>
     <div class="m-foot hd-foot"></div>
   `;
@@ -683,25 +695,35 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
   const slot = placed?.slot ?? emptySlot();
   const h = opts.handlers;
 
+  /** 详情页三个板块（按参考图骨架划分，不照抄）：详情 / 配点 / 兵种 */
+  let activeTab: 'detail' | 'points' | 'troop' = 'detail';
+
   const redraw = () => {
-    body.innerHTML = heroDetailBody(hero, slot, { editable, placeTarget: opts.target ? slotLabel(opts.target.team, opts.target.idx) : null });
+    // 左右布局（按参考图）：左边「阵营 + 名字 + 画像 + 星级」三个板块共用、切换时不重建内容；
+    // 右边是详情 / 配点 / 兵种 三个板块之一；切换条放在顶栏（中间偏右）。
+    body.innerHTML = `
+      <div class="hd-split">
+        <aside class="hd-side">${hdSideHtml()}</aside>
+        <div class="hd-main">${hdPanelHtml()}</div>
+      </div>`;
+    const tabsSlot = modal.querySelector('.hd-tabs-slot');
+    if (tabsSlot) tabsSlot.innerHTML = hdTabsHtml();
     foot.innerHTML = '';
     bindBodyEvents();
     bindFooter();
   };
 
-  /** 详情主体：左画像 + 右数据 + 三战法栏（说明文案已去掉，避免弹窗出现滚动条）。 */
-  const heroDetailBody = (hero: HeroJson, s: SlotState, cfg: { editable: boolean; placeTarget: string | null }): string => {
-    const { base, grow } = statsAt(hero, s.level);
-    const r = s.redness;
-    const budget = freePointBudget(heroId, r, s.level);
-    const used = STAT_NAMES.reduce((a, [k]) => a + (s.freePoints[k] ?? 0), 0);
+  /** 板块 1 · 详情：兵种 / 攻击距离 / 四维属性与成长 / 战法栏 */
+  const hdDetailHtml = (): string => {
+    const { base, grow } = statsAt(hero, slot.level);
+    const r = slot.redness;
+    const budget = freePointBudget(heroId, r, slot.level);
+    const used = STAT_NAMES.reduce((a, [k]) => a + (slot.freePoints[k] ?? 0), 0);
     const remain = Math.max(0, budget - used);
-    const sp = hero.tags.includes('sp');
-    const troops = troopCapacity(s.level, r);
+    const troops = troopCapacity(slot.level, r);
 
     const statRows = STAT_NAMES.map(([k, name]) => {
-      const v = base[k] + (s.freePoints[k] ?? 0);
+      const v = base[k] + (slot.freePoints[k] ?? 0);
       return `
         <div class="stat-row">
           <span class="k">${name}</span>
@@ -710,23 +732,19 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
         </div>`;
     }).join('');
 
-    const pointsInputs = STAT_NAMES.map(([k, name]) => `
-      <label>${name} <input type="number" min="0" max="${budget}" value="${s.freePoints[k] ?? 0}" data-k="${k}" ${cfg.editable ? '' : 'disabled'}></label>
-    `).join('');
-
     const mainSkill = hero.mainSkillId && SKILL_REGISTRY[hero.mainSkillId] ? hero.mainSkillId : null;
     const mainSkillEl = mainSkill
       ? skillSlotHtml(mainSkill, true, `${SKILL_REGISTRY[mainSkill].name}（主战法）`)
       : `<div class="skill-slot-row main disabled"><span class="tip">主战法未实现</span></div>`;
 
     const equips = [0, 1].map((i) => {
-      const sid = s.extraSkillIds[i];
+      const sid = slot.extraSkillIds[i];
       if (!sid) {
-        const canAdd = s.extraSkillIds.length < 2;
+        const canAdd = slot.extraSkillIds.length < 2;
         return `
-          <div class="skill-slot-row add ${cfg.editable && canAdd ? '' : 'disabled'}" data-slot="${i}" title="${cfg.editable ? '装配战法' : '放入阵容后可装配'}">
+          <div class="skill-slot-row add ${editable && canAdd ? '' : 'disabled'}" data-slot="${i}" title="${editable ? '点击装配战法' : '放入阵容后可装配'}">
             <img class="sslot-add" src="${asset('/skills/slot-add.png')}" alt="" />
-            <span class="sslot-empty-tip">未装配</span>
+            <span class="sslot-empty-tip">可学习</span>
           </div>`;
       }
       const sk = SKILL_REGISTRY[sid];
@@ -739,54 +757,114 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
         </div>`;
     }).join('');
 
-    const troopBoxes = ['骑', '步', '弓'].map((c) => {
-      const cur = c === TYPE_CHAR[hero.troopType];
-      return `<span class="troop-box ${cur ? 'cur' : ''}" title="${c === '骑' ? '骑兵' : c === '步' ? '步兵' : '弓兵'}">${c}</span>`;
-    }).join('');
-
     return `
-      <div class="hd-layout">
-        <div class="hd-left">
-          <div class="hd-portrait">
-            <img src="${portraitSrc(heroId)}" alt="${hero.name}" onerror="this.style.display='none'" />
-            <div class="hd-stars" title="红度 ${r}/5（每红 +10 自由属性点）">${rednessStars(r)}</div>
-          </div>
-        </div>
-        <div class="hd-right">
-          <div class="hd-head">
-            <span class="hd-name">${hero.name}${sp ? ' <span class="sp-tag">SP</span>' : ''}</span>
-            <span class="faction-badge ${FACTION_CLS[hero.faction] ?? ''}">${hero.faction}</span>
-            <span class="type-badge">${TYPE_CHAR[hero.troopType] ?? '?'}</span>
-            <span class="hd-level">${s.level}级${isFemale(heroId) ? ' · 女性' : ''}</span>
-          </div>
-          <div class="hd-level-row" title="等级 40~50，属性随成长率更新；携带兵力 = 等级×100 + 5000 + 红度×200">
-            <span class="lbl">等级</span>
-            <input type="number" min="40" max="50" value="${s.level}" data-level="1" ${cfg.editable ? '' : 'disabled'}>
-            <span class="hd-troops">携带兵力 <b>${troops}</b><i class="tip">${s.level}×100+5000+${r}×200</i></span>
-          </div>
-          <div class="hd-redness">
-            <span class="lbl">红度</span>
-            <span class="redness-pick" title="点击设置红度（每红 +10 自由属性点 +200 携带兵力，满红 +50 点 +1000 兵）">
-              ${[1, 2, 3, 4, 5].map((i) => `<i class="rstars ${i <= r ? 'on' : ''}" data-r="${i}">★</i>`).join('')}
-            </span>
-            <span class="hd-budget">自由属性剩余 <b>${remain}</b> / ${budget} 点${r > 0 ? ` <i class="red-extra">（含红度 +${r * 10}）</i>` : ''}</span>
-          </div>
-          <div class="hd-stats">${statRows}</div>
-          <div class="hd-points">
-            <div class="points-title">自由属性分配 ${cfg.editable ? '' : '<span class="tip">（放入阵容后可分配）</span>'}</div>
-            <div class="points-inputs">${pointsInputs}</div>
-          </div>
-          <div class="hd-troop">
-            <div class="points-title">兵种转换 <span class="tip">（未开放）</span></div>
-            <div class="troop-boxes">${troopBoxes}</div>
-          </div>
-        </div>
+      <div class="hd-meta-row">
+        <span class="hd-meta"><i>兵种</i>${TYPE_NAME[hero.troopType] ?? TYPE_CHAR[hero.troopType] ?? '?'}</span>
+        <span class="hd-meta"><i>攻击距离</i>${hero.attackRange}</span>
       </div>
+      <div class="hd-level-row" title="等级 40~50，属性随成长率更新；携带兵力 = 等级×100 + 5000 + 红度×200">
+        <span class="lbl">等级</span>
+        <input type="number" min="40" max="50" value="${slot.level}" data-level="1" ${editable ? '' : 'disabled'}>
+        <span class="hd-troops">携带兵力 <b>${troops}</b><i class="tip">${slot.level}×100+5000+${r}×200</i></span>
+      </div>
+      <div class="hd-redness">
+        <span class="lbl">红度</span>
+        <span class="redness-pick" title="点击设置红度（每红 +10 自由属性点 +200 携带兵力，满红 +50 点 +1000 兵）">
+          ${[1, 2, 3, 4, 5].map((i) => `<i class="rstars ${i <= r ? 'on' : ''}" data-r="${i}">★</i>`).join('')}
+        </span>
+        <span class="hd-budget">自由属性剩余 <b>${remain}</b> / ${budget} 点${r > 0 ? ` <i class="red-extra">（含红度 +${r * 10}）</i>` : ''}</span>
+      </div>
+      <div class="hd-stats">${statRows}</div>
       <div class="hd-skills">
         <div class="skills-title">战法</div>
         <div class="skills-row">${mainSkillEl}${equips}</div>
       </div>
     `;
+  };
+
+  /** 左侧固定栏：阵营 + 名字（竖排，仿参考图）+ 画像 + 星级 —— 三个板块共用 */
+  const hdSideHtml = (): string => {
+    const sp = hero.tags.includes('sp');
+    return `
+      <div class="hd-side-labels">
+        <span class="faction-badge ${FACTION_CLS[hero.faction] ?? ''}">${hero.faction}</span>
+        <span class="hd-side-name">${hero.name}${sp ? '<span class="sp-tag">SP</span>' : ''}${isFemale(heroId) ? '<span class="hd-female">女</span>' : ''}</span>
+      </div>
+      <div class="hd-portrait">
+        <img src="${portraitSrc(heroId)}" alt="${hero.name}" onerror="this.style.display='none'" />
+        <div class="hd-stars" title="红度 ${slot.redness}/5（每红 +10 自由属性点）">${rednessStars(slot.redness)}</div>
+      </div>`;
+  };
+
+  /** 板块切换条（详情 / 配点 / 兵种） */
+  const hdTabsHtml = (): string => {
+    const tabs: Array<['detail' | 'points' | 'troop', string]> = [
+      ['detail', '详情'], ['points', '配点'], ['troop', '兵种'],
+    ];
+    return `<nav class="hd-tabs" aria-label="武将详情板块">${tabs
+      .map(([id, label]) => `<button type="button" class="hd-tab${id === activeTab ? ' on' : ''}" data-tab="${id}">${label}</button>`)
+      .join('')}</nav>`;
+  };
+
+  const hdPanelHtml = (): string =>
+    activeTab === 'detail' ? hdDetailHtml() : activeTab === 'points' ? hdPointsHtml() : hdTroopHtml();
+
+  /**
+   * 板块 2 · 配点：每项 − / + / 最大（把剩余点数全加进该项），外加「重置」返还全部点数。
+   * 「进阶」按用户要求不做。
+   */
+  const hdPointsHtml = (): string => {
+    const { base } = statsAt(hero, slot.level);
+    const budget = freePointBudget(heroId, slot.redness, slot.level);
+    const used = STAT_NAMES.reduce((a, [k]) => a + (slot.freePoints[k] ?? 0), 0);
+    const remain = Math.max(0, budget - used);
+    const dis = (on: boolean): string => (editable && on ? '' : 'disabled');
+
+    const rows = STAT_NAMES.map(([k, name]) => {
+      const cur = slot.freePoints[k] ?? 0;
+      return `
+        <div class="pt-row">
+          <div class="pt-head">
+            <span class="pt-k">${name}</span>
+            <span class="pt-d">+${cur}</span>
+          </div>
+          <div class="pt-line">
+            <span class="pt-before">${base[k]}</span>
+            <span class="pt-arrow">»</span>
+            <span class="pt-after">${base[k] + cur}</span>
+            <span class="pt-actions">
+              <button type="button" class="pt-btn" data-dec="${k}" ${dis(cur > 0)}>−</button>
+              <button type="button" class="pt-btn" data-inc="${k}" ${dis(remain > 0)}>＋</button>
+              <button type="button" class="pt-btn pt-max" data-max="${k}" ${dis(remain > 0)}>最大</button>
+            </span>
+          </div>
+        </div>`;
+    }).join('');
+
+    return `
+      <div class="pt-wrap">
+        <div class="pt-bar">
+          <span class="pt-title">自由属性分配</span>
+          <span class="pt-remain">剩余 <b>${remain}</b> / ${budget} 点${editable ? '' : ' <i class="tip">（放入阵容后可分配）</i>'}</span>
+          <button type="button" class="btn beige pt-reset" ${dis(used > 0)}>重置</button>
+        </div>
+        <div class="pt-list">${rows}</div>
+      </div>`;
+  };
+
+  /** 板块 3 · 兵种：兵种转换还没建模，灰色占位 */
+  const hdTroopHtml = (): string => {
+    const boxes = ['骑', '步', '弓'].map((c) => {
+      const cur = c === TYPE_CHAR[hero.troopType];
+      const full = c === '骑' ? '骑兵' : c === '步' ? '步兵' : '弓兵';
+      return `<span class="troop-box ${cur ? 'cur' : ''}" title="${full}">${c}</span>`;
+    }).join('');
+    return `
+      <div class="hd-troop-ph">
+        <div class="ph-title">兵种转换</div>
+        <div class="troop-boxes">${boxes}</div>
+        <div class="ph-tip">未开放 —— 转换后的兵种与专属效果尚未建模</div>
+      </div>`;
   };
 
   const skillSlotHtml = (sid: string, main: boolean, tip: string): string => {
@@ -823,15 +901,46 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
       h.onSetLevel(placed!.team, placed!.idx, v);
       redraw();
     });
-    // 加点
-    body.querySelectorAll('.points-inputs input').forEach((inp) => {
-      (inp as HTMLInputElement).addEventListener('change', () => {
-        if (!editable) return;
-        const k = (inp as HTMLElement).dataset.k as keyof SlotState['freePoints'];
-        const v = Math.max(0, Math.min(freePointBudget(heroId, slot.redness, slot.level), Number((inp as HTMLInputElement).value) || 0));
-        h.onSetFreePoints(placed!.team, placed!.idx, k, v);
+    // 板块切换（详情 / 配点 / 兵种）——切换条在顶栏里，所以从 modal 上取而不是 body
+    modal.querySelectorAll('.hd-tab').forEach((el) => {
+      (el as HTMLElement).onclick = () => {
+        activeTab = (el as HTMLElement).dataset.tab as typeof activeTab;
         redraw();
-      });
+      };
+    });
+    // 配点：− / ＋ / 最大（剩余点数全加进该项）/ 重置（四项归零，返还全部点数）
+    const remainPoints = (): number => {
+      const budget = freePointBudget(heroId, slot.redness, slot.level);
+      const used = STAT_NAMES.reduce((a, [k]) => a + (slot.freePoints[k] ?? 0), 0);
+      return Math.max(0, budget - used);
+    };
+    const applyFree = (k: keyof SlotState['freePoints'], value: number): void => {
+      if (!editable) { showNotice('放入阵容后可分配属性点'); return; }
+      h.onSetFreePoints(placed!.team, placed!.idx, k, Math.max(0, value));
+      redraw();
+    };
+    body.querySelectorAll('.pt-btn[data-inc]').forEach((el) => {
+      (el as HTMLElement).onclick = () => {
+        const k = (el as HTMLElement).dataset.inc as keyof SlotState['freePoints'];
+        applyFree(k, (slot.freePoints[k] ?? 0) + 1);
+      };
+    });
+    body.querySelectorAll('.pt-btn[data-dec]').forEach((el) => {
+      (el as HTMLElement).onclick = () => {
+        const k = (el as HTMLElement).dataset.dec as keyof SlotState['freePoints'];
+        applyFree(k, (slot.freePoints[k] ?? 0) - 1);
+      };
+    });
+    body.querySelectorAll('.pt-btn[data-max]').forEach((el) => {
+      (el as HTMLElement).onclick = () => {
+        const k = (el as HTMLElement).dataset.max as keyof SlotState['freePoints'];
+        applyFree(k, (slot.freePoints[k] ?? 0) + remainPoints());
+      };
+    });
+    body.querySelector('.pt-reset')?.addEventListener('click', () => {
+      if (!editable) { showNotice('放入阵容后可分配属性点'); return; }
+      for (const [k] of STAT_NAMES) h.onSetFreePoints(placed!.team, placed!.idx, k, 0);
+      redraw();
     });
     // 主战法 / 已装战法 → 点击查看战法详情
     body.querySelectorAll('.skill-slot-row.main:not(.disabled), .skill-slot-row.equipped').forEach((el) => {
@@ -876,14 +985,14 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
     }
     if (placed) {
       const rm = document.createElement('button');
-      rm.className = 'btn ghost rm-hero';
+      rm.className = 'btn beige rm-hero';
       rm.style.marginRight = '10px';
       rm.textContent = '移除武将';
       rm.onclick = () => { h.onRemoveHero(placed!.team, placed!.idx); close(); };
       foot.appendChild(rm);
     }
     const done = document.createElement('button');
-    done.className = 'btn ghost done';
+    done.className = 'btn done beige';
     done.textContent = '完成';
     done.onclick = close;
     foot.appendChild(done);
@@ -899,9 +1008,9 @@ export function openSkillDetail(skillId: string): void {
   const grade = skillGrade(skillId);
   const info = SKILL_DESCS[skillId];
   const mask = document.createElement('div');
-  mask.className = 'modal-mask';
+  mask.className = 'modal-mask page-mask';
   const modal = document.createElement('div');
-  modal.className = 'modal skill-detail-modal';
+  modal.className = 'modal page-modal skill-detail-modal';
   modal.innerHTML = `
     <div class="m-head"><h3>战法详情</h3><span class="m-close">×</span></div>
     <div class="m-body">
@@ -973,15 +1082,19 @@ function openPlacePicker(heroId: string, onPlace: (team: 'red' | 'blue', idx: nu
 /** 战法库弹窗：搜索 + 品级/类别筛选 + 已装配置灰 */
 function openSkillPicker(team: 'red' | 'blue', slotIndex: number, slot: SlotState, onPick: (skillId: string) => void): void {
   const mask = document.createElement('div');
-  mask.className = 'modal-mask';
+  mask.className = 'modal-mask page-mask';
   const modal = document.createElement('div');
-  modal.className = 'modal';
+  // 手机端与武将选择/背包一致：整屏页面（搜索在固定顶栏、筛选固定、列表内部滚）
+  modal.className = 'modal page-modal skill-pick-modal';
   modal.innerHTML = `
-    <div class="m-head"><h3>装配战法（${getHeroById(slot.heroId!)!.name}）</h3><span class="m-close">×</span></div>
-    <div class="m-body">
+    <div class="m-head">
+      <h3>装配战法（${getHeroById(slot.heroId!)!.name}）</h3>
       <div class="pick-toolbar">
         <input type="text" placeholder="搜索战法名…" />
       </div>
+      <span class="m-close">×</span>
+    </div>
+    <div class="m-body">
       ${skillFilterHtml()}
       <div class="skill-pick-list"></div>
     </div>
@@ -1036,13 +1149,19 @@ function openSkillPicker(team: 'red' | 'blue', slotIndex: number, slot: SlotStat
 /** 武将选择弹窗（槽位点击时打开）：搜索 + 列表；点击武将 → 详情页 → 放入。供主站与伤害测试实验室复用 */
 export function openHeroPicker(team: 'red' | 'blue', slotIndex: number, h: EditorHandlers): void {
   const mask = document.createElement('div');
-  mask.className = 'modal-mask';
+  mask.className = 'modal-mask page-mask';
   const modal = document.createElement('div');
-  modal.className = 'modal';
+  // 专属类名：手机端要靠它把这个弹窗（以及战法详情、背包、历史、武将详情）改成页面级视图，
+  // 而 openPlacePicker / openSkillPicker 那两个裸 .modal 保持居中弹窗
+  modal.className = 'modal page-modal hero-pick-modal';
+  // 搜索框放在页面顶部固定栏里（.m-head）——它不随武将网格滚动，翻到第 N 屏也能直接改搜索词
   modal.innerHTML = `
-    <div class="m-head"><h3>选择武将</h3><span class="m-close">×</span></div>
-    <div class="m-body">
+    <div class="m-head">
+      <h3>选择武将</h3>
       <div class="pick-toolbar"><input type="text" placeholder="搜索武将名 / 势力 / SP…" /></div>
+      <span class="m-close">×</span>
+    </div>
+    <div class="m-body">
       ${heroFilterHtml()}
       <div class="pick-grid"></div>
     </div>
@@ -1077,9 +1196,9 @@ export function openHeroPicker(team: 'red' | 'blue', slotIndex: number, h: Edito
 export function openSkillBag(): void {
   const bagSkills = Object.entries(SKILL_REGISTRY).filter(([id]) => !isMainSkill(id) && isLearnableSkillListed(id));
   const mask = document.createElement('div');
-  mask.className = 'modal-mask';
+  mask.className = 'modal-mask page-mask';
   const modal = document.createElement('div');
-  modal.className = 'modal bag-modal';
+  modal.className = 'modal page-modal bag-modal';
   modal.innerHTML = `
     <div class="m-head"><h3>战法背包</h3><span class="m-close">×</span></div>
     <div class="m-body">
@@ -1147,9 +1266,9 @@ const RESULT_LABEL: Record<string, string> = { win: '红胜', loss: '蓝胜', dr
 
 export function openHistoryPanel(records: BattleRecord[], onClear?: () => void, onReuse?: (report: BattleReport) => void): void {
   const mask = document.createElement('div');
-  mask.className = 'modal-mask';
+  mask.className = 'modal-mask page-mask';
   const modal = document.createElement('div');
-  modal.className = 'modal history-modal';
+  modal.className = 'modal page-modal history-modal';
   modal.innerHTML = `
     <div class="m-head"><h3>战报</h3><span class="m-close">×</span></div>
     <div class="m-body history-body">
