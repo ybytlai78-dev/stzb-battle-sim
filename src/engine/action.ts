@@ -5234,6 +5234,7 @@ function executeSkillOutputs(
             const counterReduce = out.ignoresTroopCounter ? 0 : troopCounterReduceOf(source, t);
             const reduce = sumReduce(t, hit) + counterReduce;
             // 每次发动后伤害率递增（及锋而试）：加在输出段 rate 上（不封顶、整场累计）
+            // 每次 repeats 逐次递增伤害率（银龙孤胆）：第 i 次（i 从 0 起）额外 +i×ratePerRepeat 个百分点
             // 自身兵力比例替换伤害率（亡命一搏）：低于初始 25% → 460%
             const baseRate =
               out.rateBySelfTroopRatio && troopRatioMatches(source, out.rateBySelfTroopRatio.cond)
@@ -5241,7 +5242,8 @@ function executeSkillOutputs(
                 : out.rate;
             const rate =
               (Array.isArray(baseRate) ? ctx.rng.intInclusive(baseRate[0], baseRate[1]) : baseRate) +
-              damageRatePerCastBonus(ctx, caster, skill);
+              damageRatePerCastBonus(ctx, caster, skill) +
+              hitI * (out.ratePerRepeat ?? 0);
             const { damage, breakdown } = calcDamage(
               {
                 damageType: 'physical',

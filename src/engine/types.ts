@@ -191,6 +191,8 @@ export type SkillOutput =
        * 每次独立重选目标（若带 targetMode）。
        */
       repeats?: number | [number, number];
+      /** 每次 repeats 递增的伤害率（百分点）：第 i 次（i 从 0 起）= rate + i × ratePerRepeat（银龙孤胆 7 次 80→87→…→122）。缺省 0 = 不递增 */
+      ratePerRepeat?: number;
       /** 独立发动率（先声夺人第三段 60%）；士气修正后判定，与 inflict_status.chance 同口径 */
       chance?: number;
       /**

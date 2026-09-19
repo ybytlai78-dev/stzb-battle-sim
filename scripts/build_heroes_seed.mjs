@@ -172,6 +172,7 @@ const SKILL_ID_BY_NAME = {
   万军取首: 'wanjun_qushou',
   兵行巧变: 'bingxing_qiaobian',
   竭忠尽智: 'jiezhong_jinzhi',
+  银龙孤胆: 'yinlong_gudan',
 };
 
 /** 现有 8 个武将固定拼音 id（测试直接引用 HERO_REGISTRY.<id>） */
@@ -270,6 +271,8 @@ const rows = heroes
   });
 
 // 3) 附加现有 SP 赵云（JSON 无数据，保持测试引用的 sp_zhaoyun + 互斥组 zhaoyun_group）
+//    兵种按官方口径 = 步（_official_hero.json hero_id 102001 hero_type=2；skill_extra.json 200704 soldierType=步），
+//    旧值 cavalry 为本地旧数据（策略 A①：官方现页 > 本地旧数据）。主战法银龙孤胆已实现。
 rows.push({
   id: 'sp_zhaoyun',
   name: 'SP赵云',
@@ -278,7 +281,7 @@ rows.push({
   faction: '蜀',
   tags: 'sp',
   mutualExclusionGroup: '赵云',
-  troopType: 'cavalry',
+  troopType: 'infantry',
   attackRange: 3,
   baseAttack: 101,
   baseDefense: 92,
@@ -288,9 +291,9 @@ rows.push({
   growthDefense: 2.23,
   growthStrategy: 1.12,
   growthSpeed: 1.14,
-  mainSkillId: '',
-  mainSkillName: 'SP赵云主战法',
-  skillDesc: '（示例占位）SP赵云主战法描述',
+  mainSkillId: 'yinlong_gudan',
+  mainSkillName: '银龙孤胆',
+  skillDesc: '1回合准备，对随机敌军单体发动7次攻击（首次伤害率80.0%），每次目标独立判定，每次伤害率都递增7%',
 });
 
 // 赵云主战法银龙冲阵已实现（SKILL_ID_BY_NAME 自动装配 main_skill_id）；

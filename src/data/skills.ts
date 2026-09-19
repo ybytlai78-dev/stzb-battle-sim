@@ -8078,4 +8078,37 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'inflict_status', targetSide: 'ally', targetMode: 'group', groupCount: [2, 3], status: { type: 'damage_boost', rate: 0.3, duration: 999, direction: 'caused', damageType: 'strategy', charges: 2, strategyScaled: true } },
     ],
   },
+  /**
+   * 银龙孤胆（SP赵云·蜀步 h102001/sp_zhaoyun 主战法）：主动 A（1 回合准备），距离 5，发动率 40%。
+   * 满级：1 回合准备，对随机敌军单体发动 7 次攻击（首次伤害率 80.0%），每次目标独立判定，
+   *   每次伤害率都递增 7%。
+   * 1 级：首次伤害率 40.0%（递增仍写 7%，官方未给递增公式）。
+   * 官方：scripts/skill_extra.json id 200704（主动 / 距离 5 / 敌军单体 / 兵种步；
+   *   effect 标签 攻击伤害）。
+   *   来源 https://stzb.163.com/m/skilllist/200704.html
+   * 口径（策略 A，2026-09-20；推定处已标注）：
+   *   ① 「每次伤害率都递增 7%」= 每次 **+7 个百分点**（80 / 87 / 94 / 101 / 108 / 115 / 122）；
+   *      1 级 40% 与之差半 → 支持绝对递增而非乘算（**推定**，官方未给递增公式）。
+   *   ② 「对随机敌军单体…每次目标独立判定」= `repeats: 7` + `targetMode:'random_single'`
+   *      （既有 repeats 语义：每次独立重选目标）。
+   *   ③ 无「受属性影响」段、无数值缺口 → **上架**（不登记 OFFLINE_MAIN_SKILLS）。
+   *   ④ 兵种按官方口径 = 步（官方 skill soldierType / _official_hero hero_type=2 / 社区三路均步；
+   *      web/data/heroes.json 旧值 cavalry 为本地旧数据）→ 数据源头 scripts/build_heroes_seed.mjs 同步 infantry。
+   *   ⑤ 小头像 sp_zhaoyun_s.jpg 缺失（官方 card_small 404）→ 本次不做（登记待补）。
+   * 引擎配套：`physical_damage.ratePerRepeat`（逐次递增伤害率，百分点；第 i 次 = rate + i×ratePerRepeat）。
+   */
+  yinlong_gudan: {
+    id: 'yinlong_gudan',
+    name: '银龙孤胆',
+    type: 'active',
+    prepare: true,
+    range: 5,
+    triggerRate: 0.4,
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['damage'],
+    output: [
+      { kind: 'physical_damage', rate: 80, repeats: 7, targetMode: 'random_single', ratePerRepeat: 7 },
+    ],
+  },
 };

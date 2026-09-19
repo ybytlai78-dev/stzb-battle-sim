@@ -75,7 +75,7 @@
       "sp"
     ],
     "mutualExclusionGroup": "赵云",
-    "troopType": "cavalry",
+    "troopType": "infantry",
     "attackRange": 3,
     "baseAttack": 101,
     "baseDefense": 92,
@@ -85,9 +85,9 @@
     "growthDefense": 2.23,
     "growthStrategy": 1.12,
     "growthSpeed": 1.14,
-    "mainSkillId": "",
-    "mainSkillName": "SP赵云主战法",
-    "skillDesc": "（示例占位）SP赵云主战法描述"
+    "mainSkillId": "yinlong_gudan",
+    "mainSkillName": "银龙孤胆",
+    "skillDesc": "1回合准备，对随机敌军单体发动7次攻击（首次伤害率80.0%），每次目标独立判定，每次伤害率都递增7%"
   },
   {
     "id": "h784",
