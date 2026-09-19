@@ -171,6 +171,7 @@ const SKILL_ID_BY_NAME = {
   破阵强袭: 'pozhen_qiangxi',
   万军取首: 'wanjun_qushou',
   兵行巧变: 'bingxing_qiaobian',
+  竭忠尽智: 'jiezhong_jinzhi',
 };
 
 /** 现有 8 个武将固定拼音 id（测试直接引用 HERO_REGISTRY.<id>） */

@@ -8034,4 +8034,48 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+  /**
+   * 竭忠尽智（张昭·吴弓 h648 主战法）：主动 B，距离 2，发动率 45%，目标我军群体（有效距离内 2-3 个目标）。
+   * 满级：以自身与友军攻击属性最低的武将下一次行动时进入怯战状态为代价，使我军群体受到的攻击伤害
+   *   降低 20.0%（受谋略属性影响），该效果可以叠加 1 次，持续 2 回合；并使我军群体下 2 次造成的
+   *   策略伤害提高 30.0%（受谋略属性影响）。
+   * 1 级：减伤 10.0% / 增伤 15.0%（同为可叠加 1 次 / 下 2 次）。
+   * 官方：scripts/skill_extra.json id 200928（主动 / 距离 2 / 我军群体（有效距离内 2-3 个目标）/ 兵种弓；
+   *   effect 标签 怯战(预备);受到攻击伤害降低;策略攻击伤害提高）。
+   *   来源 https://stzb.163.com/m/skilllist/200928.html
+   * 口径（策略 A，2026-09-20；推定处已标注）：
+   *   ① 「自身与友军攻击属性最低的武将」= **自身 + 友军全体**里攻击最低者（可能选中张昭自己）→
+   *      `inflict_status.targetPick:'lowest_attack_ally'`（举抑臧否既有 targetPick 先例；**推定**）。
+   *   ② 「该效果可以叠加 1 次」= 最多 **2 层**（20% → 40%）——最可辩护的字面解读（**推定**）。
+   *   ③ 「下 2 次造成的策略伤害提高 30%」的 2 次按**每个目标各自 2 次**（`charges: 2`）——**推定**。
+   *   ④ 「持续 2 回合」作用于减伤段 → `duration: 2`；策略增伤段按次数计（`duration: 999` + `charges: 2`）。
+   *   ⑤ 「我军群体（有效距离内 2-3 个目标）」= `targetMode:'group'` + `groupCount: [2,3]`
+   *      （辕门射戟先例：每次随机 2~3 目标）。
+   *   ⑥ 减伤 20% / 增伤 30% 均「受谋略属性影响」而官方未给成长系数 → `strategyScaled: true` + `growthRate` 缺
+   *      （按基值不缩放）→ 登记 `src/data/listing.ts` 的 `OFFLINE_MAIN_SKILLS` → **武将下架**（上架池保持 80）。
+   *   ⑦ 「怯战(预备)」= 官方 effect 标签即为**预备型** → 用 `pendingNextAct`（引擎件②）。
+   * 引擎配套（本次两件，见 action.ts）：
+   *   - ① `damage_reduce.maxStacks`：同战法同过滤维叠层上限（「叠加 1 次」= 2 层，达到后不再加 rate）；
+   *   - ② `cowardice.pendingNextAct`：下一次行动时才生效的怯战（避免当次行动即被封普攻）。
+   */
+  jiezhong_jinzhi: {
+    id: 'jiezhong_jinzhi',
+    name: '竭忠尽智',
+    type: 'active',
+    prepare: false,
+    range: 2,
+    triggerRate: 0.45,
+    targetMode: 'group',
+    groupCount: [2, 3],
+    targetSide: 'ally',
+    tags: ['damage_reduce', 'damage_boost', 'cowardice'],
+    output: [
+      // 代价：自身+友军攻击最低者 下一次行动时进入怯战（pendingNextAct）
+      { kind: 'inflict_status', targetSide: 'ally', targetPick: 'lowest_attack_ally', status: { type: 'cowardice', duration: 1, pendingNextAct: true } },
+      // 我军群体受到攻击伤害 −20%（受谋略）可叠 1 次（2 层），持续 2 回合
+      { kind: 'inflict_status', targetSide: 'ally', targetMode: 'group', groupCount: [2, 3], status: { type: 'damage_reduce', rate: 0.2, duration: 2, damageType: 'physical', strategyScaled: true, stack: true, maxStacks: 2 } },
+      // 我军群体下 2 次造成策略伤害 +30%（受谋略）
+      { kind: 'inflict_status', targetSide: 'ally', targetMode: 'group', groupCount: [2, 3], status: { type: 'damage_boost', rate: 0.3, duration: 999, direction: 'caused', damageType: 'strategy', charges: 2, strategyScaled: true } },
+    ],
+  },
 };

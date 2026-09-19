@@ -1587,7 +1587,7 @@
     "growthDefense": 1.83,
     "growthStrategy": 2.18,
     "growthSpeed": 0.95,
-    "mainSkillId": "",
+    "mainSkillId": "jiezhong_jinzhi",
     "mainSkillName": "竭忠尽智",
     "skillDesc": "以自身与友军攻击属性最低的武将下一次行动时进入怯战状态为代价，使我军群体受到的攻击伤害降低20.0%（受谋略属性影响），该效果可以叠加1次，持续2回合；并使我军群体下2次造成的策略伤害提高30.0%（受谋略属性影响）"
   },

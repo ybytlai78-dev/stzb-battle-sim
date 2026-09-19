@@ -1908,9 +1908,9 @@ function markStatusesOnActStart(ctx: CombatContext, unit: UnitState): ActEndCoun
     if (s.type === 'damage_boost' && 'charges' in s && s.charges != null) continue;
     // 次数型分兵：不按回合递减，打出后由 consumeSplitCharges 移除
     if (s.type === 'split' && 'charges' in s && s.charges != null) continue;
-    // 待下次行动再生效的暴走（青丘媚祸）：本行动开始时激活，**并继续走下面的第 2 组递减**
-    // （激活当次生效，下一次行动开始前移除 = 官方「下次行动生效，持续到再下一次行动开始前」）
-    if (s.type === 'rampage' && s.pendingNextAct) {
+    // 待下次行动再生效的暴走 / 怯战（青丘媚祸 / 张昭 竭忠尽智）：本行动开始时激活，
+    // **并继续走下面的第 2 组递减**（激活当次生效，下一次行动开始前移除）
+    if ((s.type === 'rampage' || s.type === 'cowardice') && s.pendingNextAct) {
       s.pendingNextAct = false;
       s.appliedRound = ctx.currentRound;
     }
@@ -1959,8 +1959,8 @@ function tickStatusesOnActEnd(
   for (const s of [...unit.statuses]) {
     if (statusesAtActStart.has(s)) continue; // 行动开始时已在身：已在行动开始处递减过
     if (!isNextActTickStatus(s)) continue;
-    // 待下次行动再生效的暴走（青丘媚祸）：生效时点由 markStatusesOnActStart 的激活分支单独控制
-    if (s.type === 'rampage' && s.pendingNextAct) continue;
+    // 待下次行动再生效的暴走 / 怯战：生效时点由 markStatusesOnActStart 的激活分支单独控制
+    if ((s.type === 'rampage' || s.type === 'cowardice') && s.pendingNextAct) continue;
     s.remaining -= 1;
   }
 }
@@ -2086,8 +2086,10 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
     return;
   }
 
-  // 4. 怯战检查：怯战期间无法普攻（但可放主动战法）
-  const canNormalAttack = !hasStatus(unit, 'cowardice');
+  // 4. 怯战检查：怯战期间无法普攻（但可放主动战法）。
+  //    待下次行动才生效的怯战（张昭 竭忠尽智「下一次行动时进入怯战」）本次行动不封普攻——
+  //    其 pendingNextAct 由 markStatusesOnActStart 在下次行动开始时清掉后生效。
+  const canNormalAttack = !unit.statuses.some((s) => s.type === 'cowardice' && !s.pendingNextAct);
 
   // 暴走：攻击与战法目标不分敌我（可打友军/敌军，不打自己）
   const rampage = hasStatus(unit, 'rampage');
@@ -2421,11 +2423,15 @@ export function inflictStatus(
       });
       return;
     }
-    // 次数型下一次增减伤 / 待生效暴走：已有则不刷新，避免叠加或永控
+    // 次数型下一次增减伤 / 待生效暴走 / 待生效怯战：已有则不刷新，避免叠加或永控
     if (type === 'damage_boost' && create.type === 'damage_boost' && create.charges != null && !create.chargesStack) return;
-    if (type === 'rampage' && create.type === 'rampage' && create.pendingNextAct) return;
-    // 同战法同过滤维叠层达到 maxStacks 后不再加 rate（文德椒房 3）
+    if ((type === 'rampage' || type === 'cowardice') && create.type === type && create.pendingNextAct) return;
+    // 同战法同过滤维叠层达到 maxStacks 后不再加 rate（文德椒房 3 / 张昭 竭忠尽智 2）
     if (type === 'damage_boost' && create.type === 'damage_boost' && create.maxStacks != null) {
+      const stacks = (sameSource as { stacks?: number }).stacks ?? 1;
+      if (stacks >= create.maxStacks) return;
+    }
+    if (type === 'damage_reduce' && create.type === 'damage_reduce' && create.maxStacks != null) {
       const stacks = (sameSource as { stacks?: number }).stacks ?? 1;
       if (stacks >= create.maxStacks) return;
     }
@@ -2450,8 +2456,8 @@ export function inflictStatus(
         }
       } else if ('rate' in sameSource && 'rate' in create) {
         sameSource.rate += create.rate;
-        // 叠层计数（银龙冲阵）：带上限的增减伤每层 +1
-        if (type === 'damage_boost' && 'stacks' in sameSource) {
+        // 叠层计数（银龙冲阵 / 张昭 竭忠尽智）：带上限的增减伤每层 +1
+        if ((type === 'damage_boost' || type === 'damage_reduce') && 'stacks' in sameSource) {
           (sameSource as { stacks?: number }).stacks = (sameSource.stacks ?? 1) + ('stacks' in create ? (create.stacks ?? 1) : 1);
         }
       }
@@ -2931,8 +2937,14 @@ function pushStatus(
     else (push as { rate: number }).rate = create.rate;
     // 增减伤方向（damage_boost 才有）：缺省 'taken'（受到侧）
     if (type === 'damage_boost') (push as { direction: 'caused' | 'taken' }).direction = create.direction ?? 'taken';
-    // 叠层计数（带上限的增减伤，银龙冲阵最多 3 层）：首层记 1，同战法累加时 +1
-    if (type === 'damage_boost' && 'stacks' in create) (push as { stacks?: number }).stacks = create.stacks ?? 1;
+    // 叠层计数（带上限的增减伤，银龙冲阵最多 3 层 / 张昭 竭忠尽智减伤最多 2 层）：首层记 1，同战法累加时 +1
+    if ((type === 'damage_boost' || type === 'damage_reduce') && 'stacks' in create) (push as { stacks?: number }).stacks = create.stacks ?? 1;
+    // 叠层上限：damage_reduce 也纳入（拷贝 maxStacks；未显式给 stacks 初值时按「首层」初始化 stacks = 1，
+    // 否则层计数不递增、同源守卫读到的永远是 1、封顶失效——破阵强袭同款坑）
+    if ((type === 'damage_boost' || type === 'damage_reduce') && 'maxStacks' in create && create.maxStacks != null) {
+      (push as { maxStacks?: number }).maxStacks = create.maxStacks;
+      if ((push as { stacks?: number }).stacks == null) (push as { stacks?: number }).stacks = 1;
+    }
     if (type === 'damage_boost' && 'charges' in create && create.charges != null) {
       (push as { charges?: number }).charges = create.charges;
     }
@@ -3193,6 +3205,27 @@ function pushStatus(
       detail: create.type === 'rampage' && create.pendingNextAct
         ? '暴走 下次行动时生效，持续到下回合行动前'
         : `暴走 ${create.duration} 回合`,
+    });
+    return;
+  }
+  if (type === 'cowardice' && create.type === 'cowardice' && create.pendingNextAct) {
+    // 待生效怯战（张昭 竭忠尽智「以…下一次行动时进入怯战状态为代价」）：拷 pendingNextAct，
+    // 由 markStatusesOnActStart 在携带者**下一次行动开始时**激活；无 pending 的普通怯战仍走
+    // 下方通用分支（保持「怯战 N 回合」文案不变）。
+    target.statuses.push({
+      type: 'cowardice',
+      remaining: remaining ?? 1,
+      appliedRound,
+      sourceSkillType,
+      sourceSkillId,
+      pendingNextAct: true,
+    });
+    const durText = create.duration >= 999 ? '持续至战斗结束' : `持续 ${create.duration} 回合`;
+    ctx.events.push({
+      type: 'status_inflicted',
+      unitId: target.general.id,
+      statusType: type,
+      detail: `下一次行动时进入怯战状态 ${durText}`,
     });
     return;
   }
