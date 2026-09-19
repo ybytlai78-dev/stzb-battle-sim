@@ -1,0 +1,455 @@
+{
+  "batch": 5,
+  "generatedAt": "2026-09-19",
+  "sources": [
+    "https://stzb.163.com/m/skilllist/200707.html",
+    "https://stzb.163.com/m/skilllist/200706.html",
+    "https://stzb.163.com/m/skilllist/200004.html",
+    "https://stzb.163.com/m/skilllist/200270.html",
+    "https://stzb.163.com/m/skilllist/200934.html",
+    "https://stzb.163.com/m/skilllist/200265.html",
+    "https://stzb.163.com/m/skilllist/200286.html",
+    "https://stzb.163.com/m/skilllist/200857.html",
+    "https://stzb.163.com/m/skilllist/200738.html",
+    "https://stzb.163.com/jinenglist/200270.html",
+    "https://news.17173.com/content/01022025/132403077.shtml",
+    "https://stzb.res.netease.com/pc/qt/20170323200251/data/watermark/card_102004.jpg",
+    "https://stzb.res.netease.com/pc/qt/20170323200251/data/watermark/card_102003.jpg",
+    "https://stzb.res.netease.com/pc/qt/20170323200251/data/watermark/card_102011.jpg",
+    "https://stzb.res.netease.com/pc/qt/20170323200251/data/watermark/card_100652.jpg",
+    "https://stzb.res.netease.com/pc/qt/20170323200251/data/watermark/card_100604.jpg",
+    "https://stzb.res.netease.com/pc/qt/20170323200251/data/watermark/card_100497.jpg",
+    "https://g0.gph.netease.com/ngsocial/community/stzb/cn/cards/cut/card_medium_100795.jpg?gameid=g10",
+    "https://g0.gph.netease.com/ngsocial/community/stzb/cn/cards/cut/card_medium_100792.jpg?gameid=g10",
+    "https://g0.gph.netease.com/ngsocial/community/stzb/cn/cards/cut/card_medium_100803.jpg?gameid=g10"
+  ],
+  "toolNotes": "通道说明：① 官方技能正文用『直连移动版』curl -s -A <iPhone UA> https://stzb.163.com/m/skilllist/{skillId}.html —— 移动版是服务端渲染，正文可直接抓到；任务约定的 r.jina.ai 代理本次被官方风控拦截（返回 401 AuthenticationRequiredError: blocked from anonymous queries due to bad network reputation / AS30058），故改用等价且更干净的直连移动版。② 桌面版 https://stzb.163.com/jinenglist/200270.html 实测为 JS 渲染（拉下 16367 字节但正文只有 1099 字节、无战法描述），按要求弃用。③ 立绘 URL 用 curl 直连校验 HTTP 状态码与字节数（并逐张与 public/portraits 本地文件字节数比对）。④ 1 级描述官方移动版页面不提供（页面只有满级描述），取自本地官方技能库抓取缓存 scripts/skill_extra.json 的 desc(level1) 字段；同一文件的 effect / soldierType / targetShow / probability / zfQuality / distance 也已与移动版页面逐项比对一致。⑤ 社区兜底：天子诏令阈值版本歧义用 web 搜索 + 17173 文章（https://news.17173.com/content/01022025/132403077.shtml，2025-01）交叉核对。⑥ 未用 exa：mcporter call 'exa.web_search_exa(...)' 在本机 PowerShell 下因中文+嵌套引号被转义破坏（[mcporter] Unable to load tool metadata; name positional arguments explicitly），改用等价 web 搜索工具。⑦ 面板三方交叉核对：web/data/heroes.json + scripts/hero_extra.json + dateyuan/hero_growth_verified.json，另与官方 scripts/_official_hero.json（hero_id/quality/cost/hit_range/hero_type/icon_hero_id/skill_init/season）对齐。",
+  "heroes": [
+    {
+      "ourHeroName": "SP卢植",
+      "ourHeroId": "h102004",
+      "officialName": "卢植",
+      "faction": "汉",
+      "troop": "骑",
+      "rarity": "5星",
+      "cost": 2.5,
+      "attackRange": 1,
+      "gender": "男",
+      "base": { "attack": 108, "defense": 132, "strategy": 123, "speed": 89 },
+      "growth": { "attack": 0.75, "defense": 1.32, "strategy": 0.82, "speed": 1.53 },
+      "portrait": {
+        "iconId": 102004,
+        "url": "https://stzb.res.netease.com/pc/qt/20170323200251/data/watermark/card_102004.jpg",
+        "alreadyInRepo": true,
+        "localFileName": "h102004.jpg（缩略图 h102004_s.jpg 缺失）",
+        "officialTag": "卢植-汉-骑"
+      },
+      "mainSkill": {
+        "name": "中郎尽瘁",
+        "officialId": 200707,
+        "type": "主动（无准备）",
+        "quality": "B",
+        "probability": "35%",
+        "distance": 2,
+        "targetShow": "自己",
+        "soldierTypes": "骑",
+        "effect": "攻击伤害降低;受到主动战法伤害降低;受到追击战法伤害降低;休整;援护",
+        "descMax": "使自身进行攻击造成的伤害大幅度降低，受到主动、追击战法的伤害降低46.0%（受防御属性影响），并援护友军全体为其抵挡攻击，若自身处于士气高昂时，使自身进入休整状态，恢复一定兵力（恢复率152.0%，受防御属性影响）持续2回合",
+        "descLevel1": "使自身进行攻击造成的伤害大幅度降低，受到主动、追击战法的伤害降低23.0%（受防御属性影响），并援护友军全体为其抵挡攻击，若自身处于士气高昂时，使自身进入休整状态，恢复一定兵力（恢复率76.0%，受防御属性影响）持续2回合",
+        "numbers": [
+          "自身进行攻击造成的伤害『大幅度降低』（官方未给具体百分比）",
+          "受到主动、追击战法的伤害降低 46.0%（受防御属性影响；1 级 23.0%）；限定语：仅限主动战法与追击战法造成的伤害",
+          "援护友军全体，为其抵挡攻击（官方未给抵挡比例/次数）",
+          "若自身处于『士气高昂』时：自身进入休整状态，恢复一定兵力，恢复率 152.0%（受防御属性影响；1 级 76.0%）；限定语：休整为条件触发（仅在士气高昂时）",
+          "持续 2 回合",
+          "发动率 35%（官方战法详情『发动几率』栏）"
+        ],
+        "sourceUrl": "https://stzb.163.com/m/skilllist/200707.html"
+      },
+      "localCrossCheck": "一致：web/data/heroes.json h102004（汉/骑/2.5/攻击距离1/基础108-132-123-89/成长0.75-1.32-0.82-1.53）与 scripts/hero_extra.json（id 102004）及 dateyuan/hero_growth_verified.json（name=SP卢植, hero_id=102004）三方逐项完全一致，无差异点。",
+      "confidence": "high",
+      "missing": [
+        "mainSkill.numbers：『自身进行攻击造成的伤害大幅度降低』官方未给具体百分比",
+        "mainSkill.numbers：『援护友军全体为其抵挡攻击』官方未给抵挡比例/次数上限"
+      ],
+      "notes": "官方 scripts/_official_hero.json：name=『卢植』、hero_id=102004、season=SP、is_sp_card=1、quality=5、cost=25(即2.5)、hit_range=1、hero_type=3(骑)、icon_hero_id=100007、skill_init=200707。⚠ iconId 口径冲突：仓库 web/data/portrait_map.json 对 SP 卡取 SP 专属 hero_id（102004），而官方 icon_hero_id=100007（基础卡头像）；本文件按任务要求『对齐 portrait_map.json 口径』填 102004，需用户拍板。⚠ scripts/hero_extra.json 的 quality 字段写作『4-SR』，与官方 quality=5 冲突——该字段对全部 5 星卡都写 4-SR，判定为脏字段，以官方 5 星为准。立绘 public/portraits/h102004.jpg 已存在（100673 字节，与官方 CDN card_102004.jpg 字节数完全一致）；无 h102004_s.jpg 头像，web/data/portraits.json 记 avatar:null；public/icons/ 目录只有 PWA 图标（icon-192/icon-512/apple-touch-icon），无武将图标。机制涉及『援护』『士气高昂分支』，属仓库 AGENTS.md 列出的待补机制。"
+    },
+    {
+      "ourHeroName": "SP太史慈",
+      "ourHeroId": "h102003",
+      "officialName": "太史慈",
+      "faction": "吴",
+      "troop": "弓",
+      "rarity": "5星",
+      "cost": 2.5,
+      "attackRange": 5,
+      "gender": "男",
+      "base": { "attack": 98, "defense": 89, "strategy": 67, "speed": 65 },
+      "growth": { "attack": 1.98, "defense": 1.8, "strategy": 0.62, "speed": 1.05 },
+      "portrait": {
+        "iconId": 102003,
+        "url": "https://stzb.res.netease.com/pc/qt/20170323200251/data/watermark/card_102003.jpg",
+        "alreadyInRepo": true,
+        "localFileName": "h102003.jpg（缩略图 h102003_s.jpg 缺失）",
+        "officialTag": "太史慈-吴-弓"
+      },
+      "mainSkill": {
+        "name": "方阵掩杀",
+        "officialId": 200706,
+        "type": "追击（普通攻击后发动，无准备）",
+        "quality": "A",
+        "probability": "40%",
+        "distance": null,
+        "targetShow": "攻击目标",
+        "soldierTypes": "弓",
+        "effect": "攻击伤害;攻击伤害降低",
+        "descMax": "普通攻击后，对攻击目标再次发动猛攻（伤害率235.0%），并使其进行下一次攻击的伤害大幅度降低",
+        "descLevel1": "普通攻击后，对攻击目标再次发动猛攻（伤害率117.5%），并使其进行下一次攻击的伤害大幅度降低",
+        "numbers": [
+          "触发时点：普通攻击后；目标＝本次普通攻击的攻击目标",
+          "再次发动猛攻，伤害率 235.0%（1 级 117.5%）；官方未标受属性影响",
+          "并使目标进行『下一次』攻击的伤害大幅度降低（官方未给具体百分比）；限定语：仅『下一次』攻击，非持续状态",
+          "发动率 40%（官方战法详情『发动几率』栏）"
+        ],
+        "sourceUrl": "https://stzb.163.com/m/skilllist/200706.html"
+      },
+      "localCrossCheck": "一致：web/data/heroes.json h102003（吴/弓/2.5/攻击距离5/基础98-89-67-65/成长1.98-1.8-0.62-1.05）与 scripts/hero_extra.json（id 102003）及 dateyuan/hero_growth_verified.json（name=SP太史慈, hero_id=102003）三方逐项完全一致，无差异点。",
+      "confidence": "high",
+      "missing": [
+        "mainSkill.numbers：『使目标进行下一次攻击的伤害大幅度降低』官方未给具体百分比",
+        "mainSkill.distance：官方『有效距离』栏为『--』（追击战法不适用），本文件按兄弟批次（heroes-batch-2 徐庶）约定填 null，非官方数值"
+      ],
+      "notes": "官方 scripts/_official_hero.json：name=『太史慈』、hero_id=102003、season=SP、is_sp_card=1、quality=5、cost=25、hit_range=5、hero_type=1(弓)、icon_hero_id=100090、skill_init=200706。⚠ iconId 口径冲突同 SP卢植：仓库 portrait_map 填 102003，官方 icon_hero_id=100090，需用户拍板。基础卡『太史慈-吴-弓』(hero_id 100090) 主战法为方阵突击(200088)，本批 SP 卡为方阵掩杀(200706)，两者不同，勿混。立绘 public/portraits/h102003.jpg 已存在（148142 字节，与官方 CDN card_102003.jpg 一致）；无 h102003_s.jpg 头像（web/data/portraits.json avatar:null）。技能需『下一次攻击的伤害降低』（一次性 debuff）机制。"
+    },
+    {
+      "ourHeroName": "SP蔡文姬",
+      "ourHeroId": "h102011",
+      "officialName": "蔡文姬",
+      "faction": "汉",
+      "troop": "步",
+      "rarity": "5星",
+      "cost": 2.5,
+      "attackRange": 2,
+      "gender": "女",
+      "base": { "attack": 61, "defense": 82, "strategy": 90, "speed": 45 },
+      "growth": { "attack": 0.89, "defense": 0.99, "strategy": 1.53, "speed": 0.54 },
+      "portrait": {
+        "iconId": 102011,
+        "url": "https://stzb.res.netease.com/pc/qt/20170323200251/data/watermark/card_102011.jpg",
+        "alreadyInRepo": true,
+        "localFileName": "h102011.jpg（缩略图 h102011_s.jpg 缺失）",
+        "officialTag": "蔡文姬-汉-步"
+      },
+      "mainSkill": {
+        "name": "胡笳离愁",
+        "officialId": 200004,
+        "type": "主动（无准备）",
+        "quality": "B",
+        "probability": "40%",
+        "distance": 2,
+        "targetShow": "我军群体（有效距离内2个目标）",
+        "soldierTypes": "步骑",
+        "effect": "急救;休整",
+        "descMax": "恢复我军群体较多兵力（恢复率157.0%，受谋略属性影响），并使其进入休整状态，每回合再度恢复大量兵力（恢复率206.0%，受谋略属性影响），持续1回合",
+        "descLevel1": "恢复我军群体较多兵力（恢复率78.5%，受谋略属性影响），并使其进入休整状态，每回合再度恢复大量兵力（恢复率103.0%，受谋略属性影响），持续1回合",
+        "numbers": [
+          "目标：我军群体（有效距离内 2 个目标）",
+          "立即恢复较多兵力，恢复率 157.0%（受谋略属性影响；1 级 78.5%）",
+          "并使其进入休整状态，每回合再度恢复大量兵力，恢复率 206.0%（受谋略属性影响；1 级 103.0%）",
+          "持续 1 回合（休整状态持续 1 回合，即最多再触发 1 次回合恢复）",
+          "发动率 40%（官方战法详情『发动几率』栏）"
+        ],
+        "sourceUrl": "https://stzb.163.com/m/skilllist/200004.html"
+      },
+      "localCrossCheck": "一致：web/data/heroes.json h102011（汉/步/2.5/攻击距离2/基础61-82-90-45/成长0.89-0.99-1.53-0.54）与 scripts/hero_extra.json（id 102011）及 dateyuan/hero_growth_verified.json（name=SP蔡文姬, hero_id=102011）三方逐项完全一致，无差异点。",
+      "confidence": "high",
+      "missing": [],
+      "notes": "官方 scripts/_official_hero.json：name=『蔡文姬』、hero_id=102011、season=SP、is_sp_card=1、quality=5、cost=25、hit_range=2、hero_type=2(步)、icon_hero_id=100004、skill_init=200004。⚠ iconId 口径冲突同 SP卢植：仓库 portrait_map 填 102011，官方 icon_hero_id=100004，需用户拍板。⚠ 该主战法为『共用战法』：基础卡『蔡文姬-汉-骑』(hero_id 100004，主战法也是胡笳离愁 200004) 与本 SP 步卡同用 200004；但基础骑卡不在 web/data/heroes.json（161 位五星）里，本批只录 SP 步卡。官方 soldierType=『步骑』（步 01 + 骑 02 两个图标），而本卡兵种为步。立绘 public/portraits/h102011.jpg 已存在（149294 字节，与官方 CDN card_102011.jpg 一致）；无 h102011_s.jpg 头像（avatar:null）。effect 官方标签为『急救;休整』，需『持续型急救/休整』机制（仓库已有 first_aid 先例）。"
+    },
+    {
+      "ourHeroName": "XP献帝",
+      "ourHeroId": "h795",
+      "officialName": "献帝",
+      "faction": "汉",
+      "troop": "骑",
+      "rarity": "5星",
+      "cost": 2.5,
+      "attackRange": 2,
+      "gender": "男",
+      "base": { "attack": 38, "defense": 88, "strategy": 80, "speed": 77 },
+      "growth": { "attack": 0.48, "defense": 1.37, "strategy": 1.33, "speed": 1.27 },
+      "portrait": {
+        "iconId": 100795,
+        "url": "https://g0.gph.netease.com/ngsocial/community/stzb/cn/cards/cut/card_medium_100795.jpg?gameid=g10",
+        "alreadyInRepo": true,
+        "localFileName": "h795.jpg（缩略图 h795_s.jpg 已在库）",
+        "officialTag": "献帝-汉-骑"
+      },
+      "mainSkill": {
+        "name": "天子诏令",
+        "officialId": 200270,
+        "type": "指挥（无准备，每回合开始时生效）",
+        "quality": "S",
+        "probability": "--",
+        "distance": 5,
+        "targetShow": "敌军单体",
+        "soldierTypes": "骑",
+        "effect": "受到攻击伤害提高;受到策略攻击伤害提高;防御属性降低;攻击属性降低;谋略属性降低;速度属性降低",
+        "descMax": "每回合开始时，随机选择一名敌军单体，使其受到所有伤害提升16.0%（受谋略属性影响），可叠加，持续至战斗结束，同时使友军全体本回合内主动战法的首次伤害或首次普通攻击，有100.0%几率选中该目标，无视距离；若回合结束前该敌军单体受到3次或以上伤害，则使其受到伤害提升效果额外叠加一次，并使其全属性下降12.0（受谋略属性影响），可叠加，持续至战斗结束",
+        "descLevel1": "每回合开始时，随机选择一名敌军单体，使其受到所有伤害提升8.0%（受谋略属性影响），可叠加，持续至战斗结束，同时使友军全体本回合内主动战法的首次伤害或首次普通攻击，有50.0%几率选中该目标，无视距离；若回合结束前该敌军单体受到3次或以上伤害，则使其受到伤害提升效果额外叠加一次，并使其全属性下降6.0（受谋略属性影响），可叠加，持续至战斗结束",
+        "numbers": [
+          "每回合开始时，随机选择一名敌军单体，使其受到所有伤害提升 16.0%（受谋略属性影响；1 级 8.0%）；限定语：可叠加、持续至战斗结束",
+          "同时使友军全体本回合内主动战法的首次伤害或首次普通攻击，有 100.0% 几率选中该目标（1 级 50.0%）；限定语：『本回合内』『首次』『无视距离』",
+          "触发阈值：若回合结束前该敌军单体受到 3 次或以上伤害（官方原文同段另拼接了写作『2 次或以上』的第二版，见 missing/notes）",
+          "达标后：使其受到伤害提升效果额外叠加一次，并使其全属性下降 12.0（受谋略属性影响；1 级 6.0）；限定语：可叠加、持续至战斗结束",
+          "无发动率（指挥战法，官方『发动几率』栏为 --）"
+        ],
+        "sourceUrl": "https://stzb.163.com/m/skilllist/200270.html"
+      },
+      "localCrossCheck": "一致：web/data/heroes.json h795（汉/骑/2.5/攻击距离2/基础38-88-80-77/成长0.48-1.37-1.33-1.27）与 scripts/hero_extra.json（id 100795）及 dateyuan/hero_growth_verified.json（name=XP献帝, hero_id=795）三方逐项完全一致，无差异点。",
+      "confidence": "medium",
+      "missing": [
+        "mainSkill.descMax/descLevel1 触发阈值版本：官方移动版同一段描述内拼接了『受到3次或以上伤害』与『受到2次或以上伤害』两版（其余文字相同），需用户指定取哪版；本文件按仓库 clean_hero_descs 口径取前半『3次』"
+      ],
+      "notes": "官方 scripts/_official_hero.json：name=『献帝』、hero_id=100795、season=XP、is_sp_card=0、quality=5、cost=25、hit_range=2、hero_type=3(骑)、icon_hero_id=100795、skill_init=200270。iconId 无冲突（100795）。⚠ 官方原文为『两版本拼接』：https://stzb.163.com/m/skilllist/200270.html 的 desc 与 descLevel1 都把『3次』版与『2次』版首尾相连（前半止于『…持续至战斗结束』后紧接后半『每回合开始时…』），本文件按仓库既有清洗规则（后半非前半超集则取前半）取『3次』版全文；社区 17173 文章（2025-01，https://news.17173.com/content/01022025/132403077.shtml）写『如果对方本回合遭受3次以上伤害时』，支持取 3 次版，但官方原文仍在，需用户最终拍板。立绘：官方 watermark CDN 无 card_100795.jpg（HTTP 404），故 url 填 fallback 的 card_medium_100795.jpg；public/portraits/h795.jpg（37347 字节，与 medium 图字节数一致）+ h795_s.jpg（6618 字节）均已存在。技能含『随机锁定目标 + 无视距离指定选靶』『每回合随机』机制，引擎缺失。"
+    },
+    {
+      "ourHeroName": "XP王朗",
+      "ourHeroId": "h652",
+      "officialName": "王朗",
+      "faction": "魏",
+      "troop": "弓",
+      "rarity": "5星",
+      "cost": 2.5,
+      "attackRange": 3,
+      "gender": "男",
+      "base": { "attack": 80, "defense": 80, "strategy": 96, "speed": 60 },
+      "growth": { "attack": 1.07, "defense": 1.29, "strategy": 2.07, "speed": 1.05 },
+      "portrait": {
+        "iconId": 100652,
+        "url": "https://stzb.res.netease.com/pc/qt/20170323200251/data/watermark/card_100652.jpg",
+        "alreadyInRepo": true,
+        "localFileName": "h652.jpg（缩略图 h652_s.jpg 已在库）",
+        "officialTag": "王朗-魏-弓"
+      },
+      "mainSkill": {
+        "name": "言出必克",
+        "officialId": 200934,
+        "type": "指挥（无准备，一类：正式回合开始后生效；另每回合行动时判定）",
+        "quality": "B",
+        "probability": "--",
+        "distance": 2,
+        "targetShow": "我军全体",
+        "soldierTypes": "弓",
+        "effect": "受到策略攻击伤害降低;伤害分摊",
+        "descMax": "正式回合开始后，使我军全体受到的策略攻击伤害降低40.0%（受谋略属性影响），每次受到策略攻击伤害后，减伤效果降低1/8。同时，每回合行动时，有60.0%的概率为友军全体分摊一次50%受到的策略伤害",
+        "descLevel1": "正式回合开始后，使我军全体受到的策略攻击伤害降低20.0%（受谋略属性影响），每次受到策略攻击伤害后，减伤效果降低1/8。同时，每回合行动时，有30.0%的概率为友军全体分摊一次50%受到的策略伤害",
+        "numbers": [
+          "正式回合开始后生效；我军全体『受到的策略攻击伤害』降低 40.0%（受谋略属性影响；1 级 20.0%）；限定语：仅对策略攻击伤害",
+          "每次受到策略攻击伤害后，该减伤效果降低 1/8（可被逐步削掉）",
+          "每回合行动时，有 60.0% 的概率为友军全体分摊一次 50% 受到的策略伤害（1 级 30.0%）",
+          "分摊比例：50%（官方未给分摊次数上限）",
+          "无发动率（指挥战法，官方『发动几率』栏为 --；60% 写在描述中）"
+        ],
+        "sourceUrl": "https://stzb.163.com/m/skilllist/200934.html"
+      },
+      "localCrossCheck": "一致：web/data/heroes.json h652（魏/弓/2.5/攻击距离3/基础80-80-96-60/成长1.07-1.29-2.07-1.05）与 scripts/hero_extra.json（id 100652）及 dateyuan/hero_growth_verified.json（name=XP王朗, hero_id=652）三方逐项完全一致，无差异点。",
+      "confidence": "high",
+      "missing": [
+        "mainSkill.numbers：『减伤效果降低1/8』的基准（按当前值还是初始值递减）官方未明",
+        "mainSkill.numbers：分摊后受击主体是否仍承担剩余 50% 伤害（官方未明写，按字面理解为『分摊』）"
+      ],
+      "notes": "官方 scripts/_official_hero.json：name=『王朗』、hero_id=100652、season=XP、is_sp_card=0、quality=5、cost=25、hit_range=3、hero_type=1(弓)、icon_hero_id=100652、skill_init=200934。iconId 无冲突（100652）。注意另有 2 星王朗 hero_id=100286（has_release=0）。立绘 public/portraits/h652.jpg（102634 字节，与官方 CDN card_100652.jpg 一致）+ h652_s.jpg（5977 字节）均已存在。技能涉及『减伤随受击递减』『伤害分摊』两条引擎缺失机制。"
+    },
+    {
+      "ourHeroName": "XP马良",
+      "ourHeroId": "h792",
+      "officialName": "马良",
+      "faction": "蜀",
+      "troop": "步",
+      "rarity": "5星",
+      "cost": 2.5,
+      "attackRange": 2,
+      "gender": "男",
+      "base": { "attack": 46, "defense": 80, "strategy": 87, "speed": 40 },
+      "growth": { "attack": 0.76, "defense": 1.7, "strategy": 1.71, "speed": 0.57 },
+      "portrait": {
+        "iconId": 100792,
+        "url": "https://g0.gph.netease.com/ngsocial/community/stzb/cn/cards/cut/card_medium_100792.jpg?gameid=g10",
+        "alreadyInRepo": true,
+        "localFileName": "h792.jpg（缩略图 h792_s.jpg 已在库）",
+        "officialTag": "马良-蜀-步"
+      },
+      "mainSkill": {
+        "name": "雅虑适时",
+        "officialId": 200265,
+        "type": "指挥（无准备，II 类：第3/5/7回合开始时生效）",
+        "quality": "A",
+        "probability": "--",
+        "distance": 5,
+        "targetShow": "自己",
+        "soldierTypes": "步",
+        "effect": "受到策略攻击伤害降低;受到攻击伤害降低",
+        "descMax": "第3、5、7回合开始时，令我军全体受到所有伤害降低24.0%（受谋略属性影响）并进入同心状态，同心状态下任一武将受到伤害时，其余处于同心状态下武将为其分摊15%受到的伤害，持续1回合",
+        "descLevel1": "第3、5、7回合开始时，令我军全体受到所有伤害降低12.0%（受谋略属性影响）并进入同心状态，同心状态下任一武将受到伤害时，其余处于同心状态下武将为其分摊15%受到的伤害，持续1回合",
+        "numbers": [
+          "生效时点：第 3、5、7 回合开始时（限定语：仅这 3 个回合各触发一次）",
+          "我军全体受到所有伤害降低 24.0%（受谋略属性影响；1 级 12.0%）",
+          "并进入『同心状态』：任一武将受到伤害时，其余处于同心状态下的武将为其分摊 15% 受到的伤害",
+          "分摊比例：15%",
+          "持续 1 回合",
+          "无发动率（指挥战法，官方『发动几率』栏为 --）"
+        ],
+        "sourceUrl": "https://stzb.163.com/m/skilllist/200265.html"
+      },
+      "localCrossCheck": "一致：web/data/heroes.json h792（蜀/步/2.5/攻击距离2/基础46-80-87-40/成长0.76-1.7-1.71-0.57）与 scripts/hero_extra.json（id 100792）及 dateyuan/hero_growth_verified.json（name=XP马良, hero_id=792）三方逐项完全一致，无差异点。",
+      "confidence": "high",
+      "missing": [
+        "mainSkill.targetShow：官方页面『目标』栏写『自己』，但描述为『我军全体』，两处口径不一致（已按官方原文照录，未改写）",
+        "mainSkill.numbers：分摊后受击主体是否仍承担剩余 85% 伤害官方未明写"
+      ],
+      "notes": "官方 scripts/_official_hero.json：name=『马良』、hero_id=100792、season=XP、is_sp_card=0、quality=5、cost=25、hit_range=2、hero_type=2(步)、icon_hero_id=100792、skill_init=200265。iconId 无冲突（100792）。另有 3 星马良 hero_id=100132（has_release=0）。⚠ targetShow 官方栏位写『自己』但描述为我军全体——官方数据自身口径不一致，本文件两处都按原文照录。立绘：官方 watermark CDN 无 card_100792.jpg（404），故 url 填 fallback 的 card_medium_100792.jpg；public/portraits/h792.jpg（36525 字节，与 medium 图一致）+ h792_s.jpg（6521 字节）均已存在。技能涉及『特定回合开始触发』『伤害分摊（同心）』两条引擎缺失机制。"
+    },
+    {
+      "ourHeroName": "刘备",
+      "ourHeroId": "h803",
+      "officialName": "刘备",
+      "faction": "汉",
+      "troop": "步",
+      "rarity": "5星",
+      "cost": 2.5,
+      "attackRange": 2,
+      "gender": "男",
+      "base": { "attack": 73, "defense": 76, "strategy": 70, "speed": 36 },
+      "growth": { "attack": 1.32, "defense": 1.52, "strategy": 1.18, "speed": 0.83 },
+      "portrait": {
+        "iconId": 100803,
+        "url": "https://g0.gph.netease.com/ngsocial/community/stzb/cn/cards/cut/card_medium_100803.jpg?gameid=g10",
+        "alreadyInRepo": true,
+        "localFileName": "h803.jpg（缩略图 h803_s.jpg 已在库）",
+        "officialTag": "刘备-汉-步"
+      },
+      "mainSkill": {
+        "name": "知人待士",
+        "officialId": 200286,
+        "type": "指挥（无准备，II 类：每回合行动时判定）",
+        "quality": "A",
+        "probability": "--",
+        "distance": 5,
+        "targetShow": "我军单体",
+        "soldierTypes": "弓步骑",
+        "effect": "急救;受到攻击伤害降低;受到策略攻击伤害降低;策略攻击伤害;攻击伤害",
+        "descMax": "每回合行动时，有45.0%几率触发以下两种效果，两者独立判断：可使我军兵力最低单体恢复一定兵力（恢复率120.0%，受谋略属性影响）并使其受到所有伤害减少15.0%（受谋略属性影响），持续1回合；可使自身对敌军兵力最低单体发动一次策略攻击（伤害率120.0%，受谋略属性影响），并使我军攻击属性最高单体对敌军单体发动一次攻击（伤害率100.0%）",
+        "descLevel1": "每回合行动时，有45.0%几率触发以下两种效果，两者独立判断：可使我军兵力最低单体恢复一定兵力（恢复率60.0%，受谋略属性影响）并使其受到所有伤害减少7.5%（受谋略属性影响），持续1回合；可使自身对敌军兵力最低单体发动一次策略攻击（伤害率60.0%，受谋略属性影响），并使我军攻击属性最高单体对敌军单体发动一次攻击（伤害率50.0%）",
+        "numbers": [
+          "每回合行动时，有 45.0% 几率触发（1 级同为 45.0%，不随等级成长）；限定语：『两者独立判断』（两种效果各自独立判定）",
+          "效果①：我军兵力最低单体恢复一定兵力，恢复率 120.0%（受谋略属性影响；1 级 60.0%）",
+          "效果①附加：该目标受到所有伤害减少 15.0%（受谋略属性影响；1 级 7.5%）；限定语：仅该目标、持续 1 回合",
+          "效果②：自身对敌军兵力最低单体发动一次策略攻击，伤害率 120.0%（受谋略属性影响；1 级 60.0%）",
+          "效果②附加：我军攻击属性最高单体对敌军单体发动一次攻击，伤害率 100.0%（未标受属性影响；1 级 50.0%）",
+          "无发动率栏（指挥战法，官方『发动几率』栏为 --；45% 写在描述中）"
+        ],
+        "sourceUrl": "https://stzb.163.com/m/skilllist/200286.html"
+      },
+      "localCrossCheck": "一致：web/data/heroes.json h803（汉/步/2.5/攻击距离2/基础73-76-70-36/成长1.32-1.52-1.18-0.83）与 scripts/hero_extra.json（id 100803）及 dateyuan/hero_growth_verified.json（name=刘备, faction=汉, hero_id=803）三方逐项完全一致，无差异点。",
+      "confidence": "high",
+      "missing": [],
+      "notes": "官方 scripts/_official_hero.json：name=『刘备』、hero_id=100803、season=N（非 SP/XP）、is_sp_card=0、quality=5、cost=25、hit_range=2、hero_type=2(步)、icon_hero_id=100803、skill_init=200286。⚠ 仓库另有蜀·刘备 h16（主战法皇裔流离 huangyi_liuli，已实现），本批『知人待士』为汉·刘备 h803，两者不是同一张卡，勿混（h803 的 mainSkillId 目前为空、未录入）。另有 4 星汉刘备 hero_id=100044（season=N）。立绘：官方 watermark CDN 无 card_100803.jpg（404），故 url 填 fallback 的 card_medium_100803.jpg；public/portraits/h803.jpg（40165 字节，与 medium 图一致）+ h803_s.jpg（6411 字节）均已存在。『可使…』= 45% 触发后两种效果各自独立再判定；描述含『让我军攻击属性最高单体代打』机制（类似仓库陆抗西陵克晋的 attacker 选择先例）。"
+    },
+    {
+      "ourHeroName": "李儒",
+      "ourHeroId": "h604",
+      "officialName": "李儒",
+      "faction": "群",
+      "troop": "弓",
+      "rarity": "5星",
+      "cost": 2.5,
+      "attackRange": 3,
+      "gender": "男",
+      "base": { "attack": 42, "defense": 82, "strategy": 94, "speed": 59 },
+      "growth": { "attack": 0.45, "defense": 1.52, "strategy": 2.19, "speed": 0.91 },
+      "portrait": {
+        "iconId": 100604,
+        "url": "https://stzb.res.netease.com/pc/qt/20170323200251/data/watermark/card_100604.jpg",
+        "alreadyInRepo": true,
+        "localFileName": "h604.jpg（缩略图 h604_s.jpg 已在库）",
+        "officialTag": "李儒-群-弓"
+      },
+      "mainSkill": {
+        "name": "计谕废立",
+        "officialId": 200857,
+        "type": "主动（无准备）",
+        "quality": "A",
+        "probability": "30%",
+        "distance": 5,
+        "targetShow": "敌军单体",
+        "soldierTypes": "弓",
+        "effect": "策略攻击伤害;恐慌;燃烧",
+        "descMax": "对敌方单体发动2次策略攻击（伤害率140.0%，受谋略属性影响），并使其分别陷入恐慌和燃烧状态（伤害率156.0%，受谋略属性影响），持续2回合，2次目标独立判定",
+        "descLevel1": "对敌方单体发动2次策略攻击（伤害率70.0%，受谋略属性影响），并使其分别陷入恐慌和燃烧状态（伤害率78.0%，受谋略属性影响），持续2回合，2次目标独立判定",
+        "numbers": [
+          "对敌方单体发动 2 次策略攻击，每次伤害率 140.0%（受谋略属性影响；1 级 70.0%）",
+          "并使其分别陷入『恐慌』与『燃烧』状态，伤害率 156.0%（受谋略属性影响；1 级 78.0%）",
+          "恐慌/燃烧持续 2 回合",
+          "限定语：2 次目标独立判定（每次攻击可命中不同目标）",
+          "发动率 30%（官方战法详情『发动几率』栏）"
+        ],
+        "sourceUrl": "https://stzb.163.com/m/skilllist/200857.html"
+      },
+      "localCrossCheck": "一致：web/data/heroes.json h604（群/弓/2.5/攻击距离3/基础42-82-94-59/成长0.45-1.52-2.19-0.91）与 scripts/hero_extra.json（id 100604）及 dateyuan/hero_growth_verified.json（name=李儒, hero_id=604）三方逐项完全一致，无差异点。",
+      "confidence": "high",
+      "missing": [
+        "mainSkill.numbers：恐慌/燃烧的 156% 是『每次跳伤率』还是『2 回合合计率』官方未明",
+        "mainSkill.numbers：『分别陷入恐慌和燃烧』是否表示两种状态各自绑定独立判定的那一次攻击（官方未明）"
+      ],
+      "notes": "官方 scripts/_official_hero.json：name=『李儒』、hero_id=100604、season=N（非 SP/XP）、is_sp_card=0、quality=5、cost=25、hit_range=3、hero_type=1(弓)、icon_hero_id=100604、skill_init=200857。另有 4 星李儒 hero_id=100110（主战法逆反毒杀 200610）。立绘 public/portraits/h604.jpg（77608 字节，与官方 CDN card_100604.jpg 一致）+ h604_s.jpg（4635 字节）均已存在。技能为『同一战法 2 段策略攻击 + 恐慌 + 燃烧』，恐慌/燃烧属仓库已有 DoT 机制（sorcery/panic/burn），但『2 次目标独立判定』需逐段选靶。"
+    },
+    {
+      "ourHeroName": "步皇后",
+      "ourHeroId": "h497",
+      "officialName": "步皇后",
+      "faction": "吴",
+      "troop": "步",
+      "rarity": "5星",
+      "cost": 2.5,
+      "attackRange": 2,
+      "gender": "女",
+      "base": { "attack": 70, "defense": 78, "strategy": 88, "speed": 36 },
+      "growth": { "attack": 1.22, "defense": 1.26, "strategy": 1.54, "speed": 0.43 },
+      "portrait": {
+        "iconId": 100497,
+        "url": "https://stzb.res.netease.com/pc/qt/20170323200251/data/watermark/card_100497.jpg",
+        "alreadyInRepo": true,
+        "localFileName": "h497.jpg（缩略图 h497_s.jpg 已在库）",
+        "officialTag": "步皇后-吴-步"
+      },
+      "mainSkill": {
+        "name": "中宫追玺",
+        "officialId": 200738,
+        "type": "指挥（无准备，一类：战斗开始后生效）",
+        "quality": "C",
+        "probability": "--",
+        "distance": 2,
+        "targetShow": "我军群体（有效距离内3个目标）",
+        "soldierTypes": "步",
+        "effect": "受到攻击伤害降低;受到策略攻击伤害降低",
+        "descMax": "战斗开始后，使我军全体受到的所有伤害降低60.0%，每当受到攻击或策略攻击的伤害后，其对此类型伤害的减伤效果将降低1/5",
+        "descLevel1": "战斗开始后，使我军全体受到的所有伤害降低30.0%，每当受到攻击或策略攻击的伤害后，其对此类型伤害的减伤效果将降低1/5",
+        "numbers": [
+          "战斗开始后生效（一类指挥，准备阶段；官方未标受属性影响）",
+          "使我军全体受到的所有伤害降低 60.0%（1 级 30.0%）",
+          "每当受到攻击或策略攻击的伤害后，其对此类型伤害的减伤效果将降低 1/5（限定语：按攻击/策略两种伤害类型分别递减）",
+          "无发动率（指挥战法，官方『发动几率』栏为 --）"
+        ],
+        "sourceUrl": "https://stzb.163.com/m/skilllist/200738.html"
+      },
+      "localCrossCheck": "一致：web/data/heroes.json h497（吴/步/2.5/攻击距离2/基础70-78-88-36/成长1.22-1.26-1.54-0.43）与 scripts/hero_extra.json（id 100497）及 dateyuan/hero_growth_verified.json（name=步皇后, hero_id=497）三方逐项完全一致，无差异点。",
+      "confidence": "medium",
+      "missing": [
+        "mainSkill.targetShow：官方页面『目标』栏写『我军群体（有效距离内3个目标）』，但描述为『我军全体』，两处口径不一致（已按官方原文照录，未改写）",
+        "mainSkill.numbers：『减伤效果降低1/5』的基准（按当前值还是初始值递减）及是否可降到 0 官方未明"
+      ],
+      "notes": "官方 scripts/_official_hero.json：name=『步皇后』、hero_id=100497、season=S3（赛季卡，非 SP/XP）、is_sp_card=0、quality=5、cost=25、hit_range=2、hero_type=2(步)、icon_hero_id=100497、skill_init=200738。iconId 无冲突（100497）。⚠ 官方 targetShow 栏『我军群体（有效距离内3个目标）』与描述『我军全体』不一致——官方数据自身口径冲突，本文件两处均按原文照录，需用户拍板按哪个口径录入。⚠ 品质 C 但为五星武将主战法（官方 zfQuality=C）。立绘 public/portraits/h497.jpg（120576 字节，与官方 CDN card_100497.jpg 一致）+ h497_s.jpg（5791 字节）均已存在。技能为『一类指挥开局减伤 + 受击后按伤害类型递减』，与仓库 AGENTS.md 中一类指挥（phase:'prep'）语义吻合；递减机制为待补。"
+    }
+  ]
+}
