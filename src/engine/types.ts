@@ -679,6 +679,18 @@ interface BaseSkill {
    */
   dapingCastBuff?: { actorPositions: Position[]; targetPositions: Position[]; status: CreateStatus };
   /**
+   * 「发动**需要准备的主战法**时」钩子（谋定后动「每当发动需要准备的主战法时…进入洞察状态，持续 2 回合」）：
+   * **进入准备时**判定（用户 2026-09-19 确认：时点为进入准备，洞察在准备期间即生效以防被打断）；
+   * `mainSkillOnly` = 仅携带者主战法生效（缺省 false = 任意准备战法）。
+   */
+  onPrepareStart?: { mainSkillOnly?: boolean; rate?: number; output: SkillOutput[] };
+  /**
+   * 「任意友军成功发动主动战法后」给携带者自身叠层（胜兵求战「任意友军发动主动战法后，自身下一个主动战法
+   * 造成的伤害提高 15%，此效果最多叠加 3 次」）：每次任意友军（含自己）成功发动主动战法后，
+   * 把 `status` 同源施加到携带者自身一次（叠层与消耗由状态自身 `maxStacks` / `charges` 控制）。
+   */
+  allyActiveCastStack?: { status: CreateStatus };
+  /**
    * 战法链（连环计「依次发动下列战法…每个战法的效果与原战法在同等级下效果相同」）：
    * 最外层发动时按顺序把**其他已注册战法**（`SKILL_REGISTRY`）的 `output` 当作本战法效果执行，
    * 事件 / 统计归属**被引用战法**（战报显示「发动了一次伐谋」）。

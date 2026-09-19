@@ -3997,9 +3997,42 @@ function gainStacksReduceOnDeal(ctx: CombatContext, source?: UnitState): void {
 }
 
 /**
- * 「成功发动主动 / 追击战法后」钩子（乘间击隙 / 勠力同心）：
+ * 「发动需要准备的主战法时」钩子（谋定后动）：**进入准备**时对携带者执行 output（用户确认时点）。
+ */
+function triggerPrepareStartHooks(ctx: CombatContext, unit: UnitState, castSkill: Skill): void {
+  if (!unit.alive) return;
+  for (const id of unit.general.passiveSkillIds) {
+    const skill = resolveSkill(ctx, id);
+    const cfg = skill?.onPrepareStart;
+    if (!skill || !cfg) continue;
+    if (!passesCasterPosition(skill, unit)) continue;
+    if (cfg.mainSkillOnly && castSkill.id !== unit.general.mainSkillId) continue;
+    if (cfg.rate != null) {
+      const morale = effectiveMorale(unit);
+      const rate = moraleTriggerRate(morale, cfg.rate);
+      const success = ctx.rng.chance(rate);
+      ctx.events.push({
+        type: 'skill_trigger',
+        unitId: unit.general.id,
+        skillId: skill.id,
+        skillName: skill.name,
+        success,
+        rate: Math.round(rate * 100),
+        baseRate: Math.round(cfg.rate * 100),
+        morale,
+      });
+      if (!success) continue;
+    }
+    executeSkillOutputs(ctx, unit, skill, [unit], cfg.output);
+    if (!unit.alive) return;
+  }
+}
+
+/**
+ * 「成功发动主动 / 追击战法后」钩子（乘间击隙 / 勠力同心 / 胜兵求战）：
  * - `afterMainActiveStacks`：携带者**主动主战法**发动后同源叠层，满层触发一次 `triggerOutput` 并清空状态；
- * - `dapingCastBuff`：**大营**发动主动/追击后，给指定站位友军（前锋/中军）同源叠层。
+ * - `dapingCastBuff`：**大营**发动主动/追击后，给指定站位友军（前锋/中军）同源叠层；
+ * - `allyActiveCastStack`：任意友军（含自己）成功发动**主动**战法后，给携带者自身同源叠层。
  * `castSkill` 为本次实际发动（释放）的战法（准备战法在释放时算发动）。
  */
 function triggerCastKindHooks(
@@ -4034,18 +4067,22 @@ function triggerCastKindHooks(
       ctx.events.push({ type: 'status_expired', unitId: actor.general.id, statusType: 'damage_boost' });
     }
   }
-  // ② 勠力同心（大营发动 → 前锋/中军叠层）
+  // ② 勠力同心（大营发动 → 前锋/中军叠层）+ 胜兵求战（任意友军主动 → 自身叠层）
   const allies = actor.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
   for (const holder of allies) {
     if (!holder.alive) continue;
     for (const id of holder.general.commandSkillIds) {
       const skill = resolveSkill(ctx, id);
-      const cfg = skill?.dapingCastBuff;
-      if (!skill || !cfg) continue;
-      if (!cfg.actorPositions.includes(actor.general.position)) continue;
-      for (const t of allies) {
-        if (!t.alive || !cfg.targetPositions.includes(t.general.position)) continue;
-        inflictStatus(ctx, t, cfg.status, skill.type, skill.id, holder.general.id);
+      if (!skill) continue;
+      const cfg = skill.dapingCastBuff;
+      if (cfg && cfg.actorPositions.includes(actor.general.position)) {
+        for (const t of allies) {
+          if (!t.alive || !cfg.targetPositions.includes(t.general.position)) continue;
+          inflictStatus(ctx, t, cfg.status, skill.type, skill.id, holder.general.id);
+        }
+      }
+      if (kind === 'active' && skill.allyActiveCastStack) {
+        inflictStatus(ctx, holder, skill.allyActiveCastStack.status, skill.type, skill.id, holder.general.id);
       }
     }
   }
@@ -5233,6 +5270,8 @@ export function triggerActiveSkill(
         skillId: skill.id,
         skillName: skill.name,
       });
+      // 「发动需要准备的主战法时」钩子（谋定后动）：进入准备时判定/生效（用户确认时点）
+      triggerPrepareStartHooks(ctx, unit, skill);
       return;
     }
   }

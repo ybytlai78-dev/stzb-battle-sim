@@ -411,9 +411,9 @@
     "targetDesc": "自己",
     "effectDesc": "战斗中，每当自身发动需要准备的主战法时，有80.0%的几率跳过1回合的准备时间。同时，任意友军发动主动战法后，自身下一次主动战法造成的伤害提高15.0%，此效果最多叠加3次",
     "sources": "【蜀·诸葛亮·弓】【吴·步皇后·步】",
-    "status": "skipped",
-    "missingMechanics": "准备时间跳过",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "prepare-timing p13"
   },
   {
     "name": "衡轭",
@@ -2205,9 +2205,9 @@
     "targetDesc": "自己",
     "effectDesc": "战斗中，每当发动需要准备的主战法时，有100.0%的几率使自身进入洞察状态，免疫混乱、犹豫、怯战、暴走和挑衅效果，持续2回合；当自身发动主动战法后，有100.0%的几率使我军群体攻击属性、防御属…",
     "sources": "【魏·夏侯惇·骑】【吴·孙策·骑】【蜀·关羽·骑】",
-    "status": "skipped",
-    "missingMechanics": "准备跳过+发动后增益",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "prepare-timing p13"
   },
   {
     "name": "青囊秘要",

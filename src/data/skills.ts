@@ -5658,6 +5658,80 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     },
   },
 
+  // ─── 拆解通用 B+ 第十三阶段：准备战法时机（B 级 2 个）───
+
+  /**
+   * 谋定后动（B 被动·距离 2·目标自己）：
+   * ① 每当发动**需要准备的主战法**时，100% 使自身进入洞察状态（免疫混乱/犹豫/怯战/暴走/挑衅），持续 2 回合；
+   * ② 当自身发动主动战法后，100% 使我军群体攻击、防御、谋略属性提高 55，持续 2 回合。
+   * 官方：scripts/skill_extra.json id 200767（1 级 50% / +27.5）。
+   * 引擎配套：① **新增 `BaseSkill.onPrepareStart`**（进入准备时判定/生效——用户 2026-09-19 确认时点；
+   *   `mainSkillOnly` 只对主战法生效）；② 「发动主动战法后」部分复用既有 `PassiveSkill.afterActive`
+   *   （每次成功发动主动战法后触发，准备战法释放也算；输出段 `targetSide:'ally'` 覆盖我军群体）。
+   * 无「受属性影响」→ 洞察 2 回合 / +55 固定，不缩放。
+   */
+  mouding_houdong: {
+    id: 'mouding_houdong',
+    name: '谋定后动',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 2,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['insight', 'buff_attack', 'buff_defense', 'buff_strategy'],
+    output: [],
+    onPrepareStart: {
+      mainSkillOnly: true,
+      output: [
+        { kind: 'inflict_status', target: 'self', status: { type: 'insight', duration: 2 } },
+      ],
+    },
+    afterActive: {
+      output: [
+        { kind: 'inflict_status', targetSide: 'ally', targetMode: 'all', status: { type: 'attack_buff', amount: 55, duration: 2 } },
+        { kind: 'inflict_status', targetSide: 'ally', targetMode: 'all', status: { type: 'defense_buff', amount: 55, duration: 2 } },
+        { kind: 'inflict_status', targetSide: 'ally', targetMode: 'all', status: { type: 'strategy_buff', amount: 55, duration: 2 } },
+      ],
+    },
+  },
+  /**
+   * 胜兵求战（B 一类指挥·距离 2·目标自己）：
+   * ① 战斗中每当自身发动**需要准备的主战法**时，有 80% 几率跳过 1 回合准备时间；
+   * ② 任意友军发动主动战法后，自身下一个主动战法造成的伤害提高 15%，此效果最多叠加 3 次。
+   * 官方 id 200754（1 级 40% / 7.5%）。
+   * 引擎配套：① 准备阶段给自身挂 `jump_prep`（准备跳过；`triggerActiveSkill` 每次发动准备战法时按 rate 掷骰，
+   *   与「每当」语义一致；注：该状态对所有准备战法生效，不区分主战法）；
+   *   ② **新增 `BaseSkill.allyActiveCastStack`**（任意友军成功发动主动战法后给携带者自身同源叠层；
+   *   「任意友军」按仓库口径**含自己**——自己发动主动时先消耗旧层、随后本次发动又叠 1 层）。
+   * ② 的「下一个主动战法」为消耗制：`charges:1` + `chargesStack:true` + `maxStacks:3`（同势无虚动的追击版）。
+   */
+  shengbing_qiuzhan: {
+    id: 'shengbing_qiuzhan',
+    name: '胜兵求战',
+    type: 'command',
+    phase: 'prep',
+    range: 2,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['damage_boost'],
+    output: [
+      { kind: 'inflict_status', target: 'self', status: { type: 'jump_prep', duration: 999, rate: 0.8 } },
+    ],
+    allyActiveCastStack: {
+      status: {
+        type: 'damage_boost',
+        rate: 0.15,
+        duration: 999,
+        direction: 'caused',
+        skillTypes: ['active'],
+        stacks: 1,
+        maxStacks: 3,
+        charges: 1,
+        chargesStack: true,
+      },
+    },
+  },
+
   // ─── 批量31：下架武将清单 §1.2「补 1 个机制」逐个实现 ───
 
   /**
