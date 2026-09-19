@@ -102,6 +102,14 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(document.querySelectorAll('.team-panel.red .slot').length).toBe(3);
     expect(document.querySelectorAll('.team-panel.blue .slot').length).toBe(3);
     expect(document.querySelectorAll('.hero-card').length).toBeGreaterThan(20);
+    // 空槽「点击选择」用素材加号（public/skills/slot-add.png），不再是文字 +
+    const emptySlot = document.querySelector('.slot.empty') as HTMLElement;
+    expect(emptySlot.textContent).toContain('点击选择');
+    expect(emptySlot.textContent).not.toContain('+');
+    const addIcon = emptySlot.querySelector('.slot-add-icon') as HTMLImageElement;
+    expect(addIcon).toBeTruthy();
+    expect(addIcon.src).toMatch(/\/skills\/slot-add\.png$/);
+    expect(addIcon.alt).toBe('');
   });
 
   it('顶栏「伤害测试」导航：进入 lab 视图 / 再点返回配将', async () => {
@@ -205,6 +213,16 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(modal.textContent).toContain('未开放');                          // 兵种转换占位
     expect(modal.querySelectorAll('.skill-slot-row').length).toBe(3);       // 三战法栏
     expect(modal.querySelector('.skill-slot-row.main .sslot-name')!.textContent).toContain('九锡黄龙'); // 主战法固定
+    // 两个装配槽「未装配」：加号走素材 slot-add.png（原为虚线圆 + 文字＋）
+    const addRows = Array.from(modal.querySelectorAll('.skill-slot-row.add')) as HTMLElement[];
+    expect(addRows.length).toBe(2);
+    for (const row of addRows) {
+      const img = row.querySelector('img.sslot-add') as HTMLImageElement;
+      expect(img, '未装配应渲染素材加号').toBeTruthy();
+      expect(img.src).toMatch(/\/skills\/slot-add\.png$/);
+      expect(row.textContent).toContain('未装配');
+      expect(row.textContent).not.toContain('＋');
+    }
     closeModal();
 
     // 女性武将：60 点自由属性（马云禄）
@@ -463,10 +481,10 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(slotSkills[0].querySelector('.sslot-icon .ti')).toBeTruthy();
     expect(slotSkills[0].querySelector('.sslot-icon .kf')).toBeTruthy();
     expect(slotSkills[0].querySelector('.sslot-icon .rb')).toBeTruthy();
-    // 三战法均为追击 → tactics_04；品级框走 kuang-*
-    expect((slotSkills[0].querySelector('.ti') as HTMLImageElement).getAttribute('src')).toContain('tactics_04');
-    expect((slotSkills[0].querySelector('.kf') as HTMLImageElement).getAttribute('src')).toContain('kuang-a');
-    expect((slotSkills[2].querySelector('.kf') as HTMLImageElement).getAttribute('src')).toContain('kuang-d');
+    // 三战法均为追击 → skill-type-pursuit；品级圆环走 grade-ring-*
+    expect((slotSkills[0].querySelector('.ti') as HTMLImageElement).getAttribute('src')).toContain('skill-type-pursuit');
+    expect((slotSkills[0].querySelector('.kf') as HTMLImageElement).getAttribute('src')).toContain('grade-ring-a');
+    expect((slotSkills[2].querySelector('.kf') as HTMLImageElement).getAttribute('src')).toContain('grade-ring-d');
   });
 
   it('模拟 → 返回配将 → 再次模拟：第二次战报正常渲染', async () => {

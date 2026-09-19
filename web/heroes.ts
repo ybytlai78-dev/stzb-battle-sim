@@ -101,22 +101,29 @@ export function skillGrade(skillId: string): string {
   return SKILL_GRADES[skillId] ?? 'B';
 }
 
-/** 战法类型 → 官方类型图标（指挥=01 主动=02 被动=03 追击=04） */
+/** 战法类型 → 类型图标文件名（直写类型名，不再用序号下标猜映射） */
+const SKILL_TYPE_ICON: Record<string, string> = {
+  command: 'skill-type-command.png',
+  active: 'skill-type-active.png',
+  passive: 'skill-type-passive.png',
+  pursuit: 'skill-type-pursuit.png',
+};
+
+/** 战法类型图标（官方剪影）：指挥 / 主动 / 被动 / 追击 */
 export function skillTypeIcon(skillId: string): string {
-  const s = SKILL_REGISTRY[skillId];
-  const t = s?.type ?? 'active';
-  const n = t === 'command' ? 1 : t === 'active' ? 2 : t === 'passive' ? 3 : 4;
-  return asset(`/skills/tactics_0${n}.png`);
+  const t = SKILL_REGISTRY[skillId]?.type ?? 'active';
+  return asset(`/skills/${SKILL_TYPE_ICON[t] ?? SKILL_TYPE_ICON.active}`);
 }
 
-/** 品级框图标（率土原版 kuang-*） */
+/** 品级圆环（外框）：grade-ring-{s|a|b|c|d}.png
+ *  S/A/B 已是官方粗环；C/D 暂用旧细环占位（待素材补齐后替换同名文件即可，无需改代码） */
 export function gradeFrame(grade: string): string {
-  return asset(`/skills/kuang-${grade.toLowerCase()}.png`);
+  return asset(`/skills/grade-ring-${grade.toLowerCase()}.png`);
 }
 
-/** 品级角标图标（率土原版 icon-*） */
+/** 品级字母角标：grade-badge-{s|a|b|c|d}.png */
 export function gradeRibbon(grade: string): string {
-  return asset(`/skills/icon-${grade.toLowerCase()}.png`);
+  return asset(`/skills/grade-badge-${grade.toLowerCase()}.png`);
 }
 
 /** 任意等级基础面板（不含加点/红度）：属性 = 初始 + (L-1)×成长（四舍五入） */

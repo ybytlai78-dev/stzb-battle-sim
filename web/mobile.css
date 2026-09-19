@@ -117,10 +117,11 @@
   .slot .hero-skills .slot-skill:not(.main) { display: none; }
   .slot .hero-skills .tip { display: none; }
   .slot-skill-name { display: none; }
-  /* 空槽：84px 窄列放不下「+ 点击选择 前锋」（会折成四行），只留一个「＋」。
+  /* 空槽：84px 窄列放不下「点击选择 前锋」（会折成四行），只留素材加号 slot-add.png；
      文字本身保留在 DOM 里（font-size:0 只是看不见），读屏仍能读到。 */
-  .slot.empty { font-size: 0; letter-spacing: 0; }
-  .slot.empty > span::before { content: '＋'; font-size: 20px; }
+  .slot.empty { font-size: 0; letter-spacing: 0; gap: 4px; }
+  /* 加号素材矮视口缩小，避免撑高槽位（基础 34px 见 styles.css） */
+  .slot-add-icon { width: 24px; height: 24px; }
   .slot .hint { font-size: 9px; margin-top: 0; }
 
   /* 武将池：卡片缩小，一屏看更多 */
