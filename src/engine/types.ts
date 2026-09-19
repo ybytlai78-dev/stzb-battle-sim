@@ -183,6 +183,11 @@ export type SkillOutput =
       /** 独立发动率（先声夺人第三段 60%）；士气修正后判定，与 inflict_status.chance 同口径 */
       chance?: number;
       /**
+       * 按**施法者自身兵力比例**替换本段伤害率（亡命一搏「当自身兵力低于初始兵力 25% 时，伤害率变为 460%」）：
+       * 施法者当前兵力 / 初始兵力满足 `cond` 时用 `rate`，否则用本段 `rate`。
+       */
+      rateBySelfTroopRatio?: { cond: TroopRatioCond; rate: number };
+      /**
        * 本段打出后连锁：当前概率 `p = chance`；`p > 0` 时按施法者士气 `moraleTriggerRate(p)`，
        * 成功则在战法距离内独立 `random_single` 再打同一段（循环驱动，递归调用时去掉 chain），然后 `p -= decay`。
        */

@@ -4361,8 +4361,13 @@ function executeSkillOutputs(
             const counterReduce = out.ignoresTroopCounter ? 0 : troopCounterReduceOf(source, t);
             const reduce = sumReduce(t, hit) + counterReduce;
             // 每次发动后伤害率递增（及锋而试）：加在输出段 rate 上（不封顶、整场累计）
+            // 自身兵力比例替换伤害率（亡命一搏）：低于初始 25% → 460%
+            const baseRate =
+              out.rateBySelfTroopRatio && troopRatioMatches(source, out.rateBySelfTroopRatio.cond)
+                ? out.rateBySelfTroopRatio.rate
+                : out.rate;
             const rate =
-              (Array.isArray(out.rate) ? ctx.rng.intInclusive(out.rate[0], out.rate[1]) : out.rate) +
+              (Array.isArray(baseRate) ? ctx.rng.intInclusive(baseRate[0], baseRate[1]) : baseRate) +
               damageRatePerCastBonus(ctx, caster, skill);
             const { damage, breakdown } = calcDamage(
               {

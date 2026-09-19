@@ -504,7 +504,7 @@
     "sources": "【魏·李通·骑】【汉·少帝·步】",
     "status": "skipped",
     "missingMechanics": "第5回合起每回合heal",
-    "note": "pending_strategy_scale"
+    "note": "C/D 级：用户 2026-09-19 口径不实现（跳过）"
   },
   {
     "name": "远攻之策",
@@ -530,7 +530,7 @@
     "sources": "【汉·朱儁·弓】【吴·甘宁·弓】",
     "status": "skipped",
     "missingMechanics": "群体先手+概率",
-    "note": ""
+    "note": "C/D 级：用户 2026-09-19 口径不实现（跳过）"
   },
   {
     "name": "云梯",
@@ -543,7 +543,7 @@
     "sources": "【群·祢衡·步】",
     "status": "skipped",
     "missingMechanics": "攻城属性",
-    "note": ""
+    "note": "C/D 级：用户 2026-09-19 口径不实现（跳过）"
   },
   {
     "name": "先驱",
@@ -556,7 +556,7 @@
     "sources": "【群·高览·步】【晋·成济·步】",
     "status": "skipped",
     "missingMechanics": "70%概率先手(priorityRounds无条件)",
-    "note": ""
+    "note": "C/D 级：用户 2026-09-19 口径不实现（跳过）"
   },
   {
     "name": "投石轰击",
@@ -569,7 +569,7 @@
     "sources": "【晋·田续·骑】【汉·曹豹·弓】【吴·贺齐·步】【汉·侍卫·弓】【汉·侍卫·步】【汉·侍卫·骑】【魏·侍卫·弓】【…",
     "status": "skipped",
     "missingMechanics": "攻城属性",
-    "note": ""
+    "note": "C/D 级：用户 2026-09-19 口径不实现（跳过）"
   },
   {
     "name": "毁墙",
@@ -582,7 +582,7 @@
     "sources": "【吴·宋谦·步】",
     "status": "skipped",
     "missingMechanics": "攻城属性",
-    "note": ""
+    "note": "C/D 级：用户 2026-09-19 口径不实现（跳过）"
   },
   {
     "name": "一骑当千",
@@ -944,9 +944,9 @@
     "targetDesc": "敌军群体（有效距离内2个目标）",
     "effectDesc": "对敌军群体发动一次猛击（伤害率160.0%），当自身兵力低于初始兵力25%时，伤害率变为460.0%",
     "sources": "【晋·司马攸·弓】【晋·文虎·弓】【魏·曹爽·骑】",
-    "status": "skipped",
-    "missingMechanics": "兵力比例",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "troop-ratio p8"
   },
   {
     "name": "养精蓄锐",
@@ -1191,9 +1191,9 @@
     "targetDesc": "敌军群体（有效距离内2个目标）",
     "effectDesc": "对敌军群体发动一次攻击（伤害率50.0%），并使敌军单体进行下一次攻击的伤害大幅度降低",
     "sources": "【蜀·魏延·步】【蜀·赵统＆赵广·骑】",
-    "status": "skipped",
-    "missingMechanics": "下一次攻击伤害降低",
-    "note": ""
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "troop-ratio p8"
   },
   {
     "name": "飒沓如星",
@@ -1219,7 +1219,7 @@
     "sources": "【群·孟优·骑】【群·金环三结·步】",
     "status": "skipped",
     "missingMechanics": "兵力代价",
-    "note": ""
+    "note": "C/D 级：用户 2026-09-19 口径不实现（跳过）"
   },
   {
     "name": "了如指掌",
@@ -1362,7 +1362,7 @@
     "sources": "【群·程银·骑】",
     "status": "skipped",
     "missingMechanics": "主动先手(priorityRounds仅指挥)",
-    "note": ""
+    "note": "C/D 级：用户 2026-09-19 口径不实现（跳过）"
   },
   {
     "name": "拒盾",
@@ -1388,7 +1388,7 @@
     "sources": "【魏·夏侯惇·骑】【吴·孙策·骑】",
     "status": "skipped",
     "missingMechanics": "兵力代价",
-    "note": ""
+    "note": "C/D 级：用户 2026-09-19 口径不实现（跳过）"
   },
   {
     "name": "毒泉",
@@ -1570,7 +1570,7 @@
     "sources": "【群·审配·步】【吴·潘璋·步】",
     "status": "skipped",
     "missingMechanics": "50%概率额外段",
-    "note": ""
+    "note": "C/D 级：用户 2026-09-19 口径不实现（跳过）"
   },
   {
     "name": "设伏",

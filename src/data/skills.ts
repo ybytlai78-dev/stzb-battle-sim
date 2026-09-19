@@ -5281,6 +5281,73 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     ],
   },
 
+  // ─── 拆解通用 B+ 第八阶段：兵力比例 / 闪击（B 级 2 个）───
+
+  /**
+   * 亡命一搏（B 主动·距离 3·25%·敌军群体 2 目标）：
+   * 对敌军群体发动一次猛击（伤害率 160%）；当**自身兵力低于初始兵力 25%** 时，伤害率变为 460%。
+   * 官方：scripts/skill_extra.json id 200996（1 级 80% / 230%）。
+   * 引擎配套：**新增 `physical_damage.rateBySelfTroopRatio`**（按施法者当前兵力比例替换本段伤害率；
+   *   `troopRatioMatches` 口径：`below` = 比例**低于**该值才满足）。
+   * 无「受属性影响」→ 两档伤害率均固定，不缩放。
+   */
+  wangming_yibo: {
+    id: 'wangming_yibo',
+    name: '亡命一搏',
+    type: 'active',
+    prepare: false,
+    range: 3,
+    triggerRate: 0.25,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage'],
+    output: [
+      {
+        kind: 'physical_damage',
+        rate: 160,
+        rateBySelfTroopRatio: { cond: { below: 25 }, rate: 460 },
+      },
+    ],
+  },
+  /**
+   * 闪击（B 主动·距离 4·50%·敌军群体 2 目标）：
+   * 对敌军群体发动一次攻击（伤害率 50%），并使**敌军单体**进行下一次攻击的伤害大幅度降低。
+   * 官方 id 200690（1 级 25%）；「大幅度降低」官方未给数值 → 用户 2026-09-19 口径：
+   *   按辕门射戟同款「伤害降至引擎下限 10%」建模（`damage_boost caused -99.99` → buffMult 下限 10%）。
+   * 引擎配套：**无需新机制** —— 既有 `damage_boost` + `attackOnly`（仅「进行攻击」：普攻/物理主动/追击）
+   *   + `charges: 1`（下次攻击打出后消耗）；debuff 目标为敌军单体（`targetSide:'enemy'` + `random_single`，
+   *   独立于本次攻击的 2 个目标）。
+   */
+  shanji: {
+    id: 'shanji',
+    name: '闪击',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.5,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage', 'damage_boost'],
+    output: [
+      { kind: 'physical_damage', rate: 50 },
+      {
+        kind: 'inflict_status',
+        targetSide: 'enemy',
+        targetMode: 'random_single',
+        status: {
+          type: 'damage_boost',
+          rate: -99.99,
+          duration: 999,
+          direction: 'caused',
+          attackOnly: true,
+          charges: 1,
+        },
+      },
+    ],
+  },
+
   // ─── 批量31：下架武将清单 §1.2「补 1 个机制」逐个实现 ───
 
   /**
