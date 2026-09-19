@@ -8312,4 +8312,41 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'inflict_status', sameTargetsAsLastDamage: true, status: { type: 'burning', duration: 2, rate: 156, growthRate: 0 } },
     ],
   },
+
+  /**
+   * 中宫追玺（步皇后·吴步 h497 主战法）：指挥 C（一类指挥 prep），距离 2，我军全体，发动率 --。
+   * 满级「战斗开始后，使我军全体受到的所有伤害降低 60.0%，每当受到攻击或策略攻击的伤害后，
+   *   其对此类型伤害的减伤效果将降低 1/5」；1 级：减伤 30.0%（衰减同为 1/5）。
+   * 官方：scripts/skill_extra.json id 200738（指挥 / 距离 2 / 我军群体（有效距离内 3 个目标）；
+   *   effect 受到攻击伤害降低;受到策略攻击伤害降低；zfQuality=C）。
+   *   来源 https://stzb.163.com/m/skilllist/200738.html
+   *
+   * 口径（策略 A，2026-09-20；推定处已标注；**零引擎改动**）：
+   *   ① 目标口径：官方「目标」栏写「我军群体（有效距离内 3 个目标）」而描述写「我军全体」——
+   *      策略 A ③（冲突以描述为准）→ 战法整体 `targetMode:'all' + targetSide:'ally'`（三人队即全体）；
+   *   ② 「减少 60%」无「受…属性影响」标注 → 固定值，**无成长率缺口 → 上架**；
+   *   ③ 「攻击 / 策略攻击」两类型各自独立衰减 → 两条 `damage_reduce` 轨（`damageType:'physical'` /
+   *      `'strategy'`），同源同过滤维判定，互不干扰（疮痍累身双轨先例）；
+   *   ④ 「减伤效果降低 1/5」= 既有 `decayFifths: 5` 口径：每次**匹配类型**受击且实际扣兵后 −1 份，
+   *      `rate = baseRate × 剩余份数 / 5`（**按初始值线性**递减 60→48→36→24→12→0，与疮痍累身 /
+   *      恃强淬锋同口径；官方未写基准，此为按仓库先例的推定）；
+   *   ⑤ duration 999 = 持续至战斗结束（减伤轨只在受击时衰减）。
+   */
+  zhonggong_zhuixi: {
+    id: 'zhonggong_zhuixi',
+    name: '中宫追玺',
+    type: 'command',
+    phase: 'prep',
+    range: 2,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['damage_reduce'],
+    output: [
+      // ③ 物理伤害减伤轨（60%，受击 −1/5）
+      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.6, duration: 999, damageType: 'physical', decayFifths: 5 } },
+      // ③ 策略伤害减伤轨（60%，受击 −1/5）
+      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.6, duration: 999, damageType: 'strategy', decayFifths: 5 } },
+    ],
+  },
 };

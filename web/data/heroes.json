@@ -3205,7 +3205,7 @@
     "growthDefense": 1.26,
     "growthStrategy": 1.54,
     "growthSpeed": 0.43,
-    "mainSkillId": "",
+    "mainSkillId": "zhonggong_zhuixi",
     "mainSkillName": "中宫追玺",
     "skillDesc": "战斗开始后，使我军全体受到的所有伤害降低60.0%，每当受到攻击或策略攻击的伤害后，其对此类型伤害的减伤效果将降低1/5"
   },

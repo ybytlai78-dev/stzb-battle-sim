@@ -177,6 +177,7 @@ const SKILL_ID_BY_NAME = {
   守静却敌: 'shoujing_quedi',
   持刀从武: 'chidao_congwu',
   计谕废立: 'jiyu_fuili',
+  中宫追玺: 'zhonggong_zhuixi',
 };
 
 /** 现有 8 个武将固定拼音 id（测试直接引用 HERO_REGISTRY.<id>） */
