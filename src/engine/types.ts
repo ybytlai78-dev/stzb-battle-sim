@@ -515,6 +515,14 @@ export interface CommandSkill extends BaseSkill {
    * targetSide 沿用战法自身（其疾如风为 'ally' 全体）。
    */
   initialOutput?: SkillOutput[];
+  /**
+   * 一类指挥·首回合开始结算（虎豹督军 / 谋议宏图）：
+   * 官方口径为「战斗开始后**首回合**」——`output` 不在准备阶段结算，
+   * 改在第 1 回合 `round_start` 之后、单位行动之前，对准备阶段锁定的目标结算一次。
+   * 效果自第 1 回合起算：第 1 回合满额 8/8，第 2 回合起每回合回合前 −1/8（见 tickRoundStartStatuses）。
+   * 数值按第 1 回合的生效属性缩放（准备阶段只释放/锁目标，不生效）。
+   */
+  settleOnFirstRound?: boolean;
   /** 一类指挥：施法者兵力为 0 后持续效果仍生效（白衣/先驱/战必），默认 false */
   retainAfterDeath?: boolean;
   /** 每回合重复判定：战必断金（1-3回合 90%）、措手不及（4+回合 80%）。预备负面效果：准备阶段锁目标，目标行动时按概率判定生效 */

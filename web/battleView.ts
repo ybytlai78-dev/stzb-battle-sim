@@ -578,7 +578,8 @@ function renderEvents(
         add('good', `${nm(ev.unitId)} 跳过准备，直接发动「${ev.skillName}」`);
         break;
       case 'prepare_end':
-        add('status', `${nm(ev.unitId)} 准备完成，发动「${ev.skillName}」`);
+        // 只标「准备完成」：紧接着的 skill_cast 才是「发动」那一次，避免同一回合两行「发动」被读成两次发动
+        add('status', `${nm(ev.unitId)} 准备完成「${ev.skillName}」`);
         break;
       case 'unit_dead':
         add('dead', `${nm(ev.unitId)} 阵亡`);
