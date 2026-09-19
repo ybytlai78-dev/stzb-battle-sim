@@ -73,14 +73,15 @@ describe('批量补入 · 普通卡（按官网面板）', () => {
 });
 
 describe('批量补入 · SP 卡（102xxx 段）', () => {
-  it('SP徐庶 h534：SP 前缀命名 + sp 标签 + 空槽', () => {
+  it('SP徐庶 h534：主战法破阵强袭已实现（策略伤害受谋略成长未确认 → 暂下架，不再空槽）', () => {
     const r = HERO_RECORDS['h534'];
     expect(r.name).toBe('SP徐庶');
     expect(r.faction).toBe('蜀');
     expect(r.troopType).toBe('cavalry');
     expect(r.attackRange).toBe(1);
     expect(r.mainSkillName).toBe('破阵强袭');
-    expect(r.mainSkillId).toBe('');
+    expect(r.mainSkillId).toBe('pozhen_qiangxi');
+    expect(isHeroListed(r)).toBe(false); // OFFLINE_MAIN_SKILLS 命中
   });
 
   it('SP蔡文姬 h102011：与普通蔡文姬（未入库 · cost 2.0）区分', () => {

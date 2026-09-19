@@ -663,7 +663,7 @@
     "growthDefense": 1.58,
     "growthStrategy": 2.13,
     "growthSpeed": 1.28,
-    "mainSkillId": "",
+    "mainSkillId": "pozhen_qiangxi",
     "mainSkillName": "破阵强袭",
     "skillDesc": "普通攻击后，对攻击目标再次发动策略攻击（伤害率130.0%，受谋略属性影响），并有50.0%的几率使距离3以内随机敌军单体陷入暴走状态，持续1回合，此战法首次发动后，每次造成伤害时都使自身策略攻击的伤害提高5.0%，可叠加6次"
   },

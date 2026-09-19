@@ -7852,4 +7852,53 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['damage'],
     output: [{ kind: 'physical_damage', rate: 140 }],
   },
+  /**
+   * 破阵强袭（SP徐庶·蜀骑 h534 主战法）：追击 A，官方有效距离栏「--」（追击战法不适用），官方发动几率栏 120%。
+   * 满级：普通攻击后，对攻击目标再次发动策略攻击（伤害率 130.0%，受谋略属性影响），并有 50.0% 的几率
+   *   使距离 3 以内随机敌军单体陷入暴走状态，持续 1 回合；此战法首次发动后，每次造成伤害时都使自身
+   *   策略攻击的伤害提高 5.0%，可叠加 6 次。
+   * 1 级：策略伤害 65.0% / 暴走 50.0% / 增伤 2.5%（同为可叠 6 次）。
+   *   （注：`scripts/skill_extra.json` 的 `desc(level1)` 该处记 25%，与官方现页「1 级同为 50%」不一致 →
+   *    生成的 skill_desc.json desc1 仍随本地官方快照写 25%；本战法按**满级值**实装，数值不受影响，待复核。）
+   * 官方：scripts/skill_extra.json id 200785（追击 A / 距离 -- / 攻击目标 / 兵种骑；
+   *   effect 标签 策略攻击伤害;策略攻击伤害提高;暴走）。来源 https://stzb.163.com/m/skilllist/200785.html
+   *
+   * 口径（策略 A，2026-09-20，照仓库既有先例；推定处已标注）：
+   *   ① 官方有效距离「--」（追击战法不适用）→ 不适用普攻距离语义；但本战法需要「距离 3 以内随机敌军单体」
+   *      选池 → 用**战法级 `range: 3`**（inflict_status 段只认 `skill.range`；追击主段目标仍是普攻目标，
+   *      不受影响——`triggerPursuitSkill` 以 `[hitTarget]` 为战法整体目标）。
+   *   ② 官方发动几率栏 120%（>100%）→ 照**虎步关右 / 定军绝战（83fc972）**先例按 `triggerRate: 1.2`；
+   *      判定走 `moraleTriggerRate` 封顶 100%（实际必定发动），`skill_trigger` 事件仍带 baseRate 120。
+   *   ③ 策略伤害 130%「受谋略属性影响」而官方未给成长系数 → `strategyScaled: true`、`growthRate` 缺
+   *      （按基值不缩放）→ 登记 `src/data/listing.ts` 的 OFFLINE_MAIN_SKILLS → **武将下架**。
+   *   ④ 暴走段：段级 `chance: 0.5` + `targetSide:'enemy'` + `targetMode:'random_single'`（距离 3 内随机
+   *      敌军，`skill.range: 3` 生效）；`status:{type:'rampage', duration:1}` 按**行动中施加通用口径**
+   *      （第 2 组：目标下一次行动期内生效，行动开始前递减）；**不加** `pendingNextAct`——那是
+   *      「待下次行动才生效」的青丘媚祸口径。
+   *   ⑤ 增伤段（本战法 output 的**最后一段**）：「此战法首次发动后，每次造成伤害时都使自身策略攻击的
+   *      伤害提高 5.0%，可叠加 6 次」→ 每次追击发动即再施加一次 `damage_boost`
+   *      （`direction:'caused'` + `damageType:'strategy'` + `stack:true` + `maxStacks:6` + `duration:999`），
+   *      同源显式叠层累加 +5%、到 6 层停止（`maxStacks` 语义见 wende_jiaofang 先例）。段序保证
+   *      **首次发动那一击不吃加成**（伤害段在前、增伤段在后），后续每次发动吃已累计层数——与官方
+   *      「首次发动后…每次造成伤害时提高」一致（推定）。
+   *      ⚠️ 引擎坑（已实测）：`maxStacks` 封顶读 `sameSource.stacks`，只写 `stack: true` 而不给 `stacks`
+   *      时该层数计数不会被初始化/递增（每层都当第 1 层 → rate 无限累加、封顶失效：实测第 7 次发动
+   *      rate = 0.35 > 0.30）→ 必须同时给 `stacks: 1`（文德椒房同款层数计数字段）才真正封顶 6 层。
+   */
+  pozhen_qiangxi: {
+    id: 'pozhen_qiangxi',
+    name: '破阵强袭',
+    type: 'pursuit',
+    range: 3, // 官方「--」（追击战法不适用）：追击主段不受影响，仅用于暴走段「距离 3 以内」选池
+    triggerRate: 1.2, // 官方 120%（>100%，同虎步关右 / 定军绝战先例；判定封顶 100% 必定发动）
+    tags: ['damage', 'rampage', 'damage_boost'],
+    output: [
+      // ① 追击主段：对普攻目标再次发动策略攻击 130%（受谋略属性影响，成长率官方未给 → 按基值不缩放）
+      { kind: 'strategy_damage', rate: 130, strategyScaled: true },
+      // ② 50% 使距离 3 以内随机敌军单体暴走 1 回合（战法级 range 生效）
+      { kind: 'inflict_status', chance: 0.5, targetSide: 'enemy', targetMode: 'random_single', status: { type: 'rampage', duration: 1 } },
+      // ③ 每次发动后自身策略伤害 +5%（同源显式叠层累加，满 6 层封顶；首次那一击在段②之前结算故不吃加成）
+      { kind: 'inflict_status', target: 'self', status: { type: 'damage_boost', rate: 0.05, duration: 999, direction: 'caused', damageType: 'strategy', stack: true, stacks: 1, maxStacks: 6 } },
+    ],
+  },
 };
