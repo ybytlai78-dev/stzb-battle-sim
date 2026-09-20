@@ -7,7 +7,7 @@
  *  再战：第 5 回合 50% 获得连击
  */
 import { describe, it, expect } from 'vitest';
-import { inflictStatus, getStatus, hasStatus, consumeEvasion, recoverTroops, sumReduce, markFirstHitReduceUsed, tickRoundStartStatuses, updateTreasureOnHurt, applyTreasureBasicHit, applyTreasureAfterActive } from '../src/engine/action';
+import { inflictStatus, getStatus, hasStatus, consumeEvasion, recoverTroops, sumReduce, markFirstHitReduceUsed, dealDotDamage, tickRoundStartStatuses, updateTreasureOnHurt, applyTreasureBasicHit, applyTreasureAfterActive } from '../src/engine/action';
 import type { General } from '../src/engine/types';
 import type { CombatContext } from '../src/engine/action';
 import type { CreateStatus, UnitState } from '../src/engine/types';
@@ -372,6 +372,42 @@ describe('宝物 · 控制延时 / 免疫 / 反击 / 回合钩子', () => {
       .map((x) => x.create);
     expect(qixi).toMatchObject({ type: 'damage_boost', direction: 'caused', damageType: 'physical', perDistance: true });
     expect((qixi as { rate: number }).rate).toBeCloseTo(0.03, 6);
+  });
+
+  it('燮理（位至三公）：燃烧每回合首次跳伤后按恢复率 120% 恢复一次', () => {
+    const ctx = makeCtx();
+    const owner = makeUnit('o');
+    const victim = makeUnit('v', 'enemy');
+    owner.troops = 5000;
+    owner.wounded = 3000;
+    victim.troops = 9000;
+    ctx.myTeam = [owner];
+    ctx.enemyTeam = [victim];
+    inflictStatus(ctx, owner, { type: 'dot_tick_heal', rate: 120, dotTypes: ['burning', 'ignite'], duration: 999 }, 'passive', 'treasure:1114:3', 'o');
+    // 直接构造一条由 owner 施加、带「挂上时冻结」stored 的燃烧（走 dealDotDamage 滞后分支）
+    victim.statuses.push({
+      type: 'burning',
+      remaining: 3,
+      rate: 1,
+      sourceStrategy: 100,
+      appliedRound: 1,
+      sourceSkillType: 'active',
+      sourceSkillId: 'huoshi_fengwei',
+      sourceUnitId: 'o',
+      stored: { damage: 500, breakdown: { troopBase: 0, statBase: 0, main: 500 } },
+    } as never);
+    const burning = victim.statuses.find((s) => s.type === 'burning')!;
+    dealDotDamage(ctx, victim, burning as never);
+    const heals = ctx.events.filter((e) => e.type === 'heal');
+    expect(heals).toHaveLength(1);
+    expect(owner.troops).toBeGreaterThan(5000);
+    // 同回合第二次跳伤不再恢复
+    dealDotDamage(ctx, victim, burning as never);
+    expect(ctx.events.filter((e) => e.type === 'heal')).toHaveLength(1);
+    // 下回合恢复
+    ctx.currentRound = 2;
+    dealDotDamage(ctx, victim, burning as never);
+    expect(ctx.events.filter((e) => e.type === 'heal')).toHaveLength(2);
   });
 
   it('再战（少府）：仅第 5 回合判定，50% 几率获得连击', () => {    const results: boolean[] = [];

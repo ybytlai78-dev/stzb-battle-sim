@@ -520,6 +520,8 @@ export interface CombatContext {
   treasureActiveCounters?: Map<string, number>;
   /** 宝物「强固」：「每回合首次受伤减伤」已用标记（key `${回合}:${unitId}:${sourceSkillId}`） */
   firstHitReduceKeys?: Set<string>;
+  /** 宝物「燮理」：DoT 每回合首次跳伤恢复去重（key `${回合}:${unitId}:${sourceSkillId}`） */
+  dotTickHealKeys?: Set<string>;
   /**
    * 「造成伤害后再受一次策略伤害」标记（翕处还张）：按持有者记录，命中其**下一次造成伤害**时结算并消耗。
    */
@@ -2026,7 +2028,7 @@ function computeDotTickDamage(
  *  滞后触发：有挂上时冻结的 stored（引擎施加路径）时直接打出冻结伤害（仅按目标当前兵力截断）；
  *  否则（直接 inflictStatus 且施法者不可解析的单元测试）回退为触发时实时结算：
  *  冻结 rate + sourceStrategy，目标当前生效防御/谋略减免，mult=1 不吃增伤。 */
-function dealDotDamage(
+export function dealDotDamage(
   ctx: CombatContext,
   unit: UnitState,
   dot: Extract<Status, { type: 'sorcery' | 'burning' | 'panic' | 'curse' | 'ignite' }>
@@ -2054,6 +2056,8 @@ function dealDotDamage(
     applyDamage(ctx, unit, capped, src, 'strategy', 'skill');
     // 敌军每回合首次受到持续性伤害（衔命建功）
     triggerOnDotReceived(ctx, unit);
+    // 宝物「燮理」：自身施加的燃烧每回合首次跳伤后，自身恢复一次兵力
+    applyTreasureDotTickHeal(ctx, dot);
     return;
   }
   // 回退：实时结算（无挂上时冻结上下文）
@@ -2090,6 +2094,42 @@ function dealDotDamage(
   applyDamage(ctx, unit, capped, src, 'strategy', 'skill');
   // 敌军每回合首次受到持续性伤害（衔命建功）
   triggerOnDotReceived(ctx, unit);
+  // 宝物「燮理」：自身施加的燃烧每回合首次跳伤后，自身恢复一次兵力
+  applyTreasureDotTickHeal(ctx, dot);
+}
+
+/**
+ * 宝物「燮理」（位至三公）：携带者**施加的燃烧/引燃**每回合首次造成伤害后，携带者恢复一次兵力
+ * （恢复率 rate%，走 `calcHealAmount` + `recoverTroops` 统一入口）。
+ */
+function applyTreasureDotTickHeal(
+  ctx: CombatContext,
+  dot: Extract<Status, { type: 'sorcery' | 'burning' | 'panic' | 'curse' | 'ignite' }>,
+): void {
+  const owner = dot.sourceUnitId ? castUnit(ctx, dot.sourceUnitId) : undefined;
+  if (!owner?.alive) return;
+  for (const s of owner.statuses) {
+    if (s.type !== 'dot_tick_heal') continue;
+    if (s.dotTypes && !s.dotTypes.includes(dot.type)) continue;
+    ctx.dotTickHealKeys ??= new Set();
+    const key = `${ctx.currentRound}:${owner.general.id}:${s.sourceSkillId}`;
+    if (ctx.dotTickHealKeys.has(key)) continue;
+    ctx.dotTickHealKeys.add(key);
+    const before = owner.troops;
+    const healed = recoverTroops(ctx, owner, calcHealAmount(owner.troops, s.rate), owner);
+    if (healed > 0) {
+      ctx.events.push({
+        type: 'heal',
+        sourceId: owner.general.id,
+        targetId: owner.general.id,
+        skillId: s.sourceSkillId,
+        skillName: statusName('dot_tick_heal') ?? s.sourceSkillId,
+        amount: healed,
+        before,
+        after: owner.troops,
+      });
+    }
+  }
 }
 
 /** 休整每次恢复值：挂上时按施法者兵力/谋略冻结。无施法者时回退目标满兵 + 基础率。 */
@@ -4110,6 +4150,9 @@ function pushStatus(
     ...(create.type === 'treasure_control_amplify'
       ? { rate: create.rate, ...(create.mainSkillOnly ? { mainSkillOnly: true } : {}) }
       : {}),
+    ...(create.type === 'dot_tick_heal'
+      ? { rate: create.rate, ...(create.dotTypes ? { dotTypes: create.dotTypes } : {}) }
+      : {}),
   } as Status);
   ctx.events.push({
     type: 'status_inflicted',
@@ -4399,6 +4442,8 @@ export function isBeneficialStatus(s: Status): boolean {
     case 'treasure_after_main':
     case 'treasure_ally_active_heal':
     case 'treasure_control_amplify':
+    // 宝物：DoT 跳伤后恢复
+    case 'dot_tick_heal':
       return true;
     default:
       return false;
@@ -4811,6 +4856,7 @@ function statusName(type: StatusType): string {
     case 'treasure_after_main': return '主战法后增伤';
     case 'treasure_ally_active_heal': return '全体主动计数恢复';
     case 'treasure_control_amplify': return '控制目标易伤';
+    case 'dot_tick_heal': return 'DoT 跳伤恢复';
     case 'siege': return '围困';
     case 'sorcery': return '妖术';
     case 'burning': return '燃烧';
