@@ -522,6 +522,14 @@ function renderEvents(
       case 'heal':
         add('heal', `「${nm(ev.targetId)}」恢复兵力 <b>${ev.amount.toLocaleString()}</b>（${ev.before.toLocaleString()} → ${ev.after.toLocaleString()}）`);
         break;
+      case 'share_damage': {
+        // 伤害分摊（言出必克 / 雅虑适时）：unitId = 分摊者（自己扣兵），targetId = 被分摊的原受击者。
+        // 引擎分摊时不另发 damage 事件 —— 只有这一条 → 不渲染就完全看不出「谁替谁挨了多少」。
+        const shareSkill = SKILL_REGISTRY[ev.skillId];
+        add('share',
+          `【${nm(ev.unitId)}】为【${nm(ev.targetId)}】分摊伤害 <b>${ev.amount.toLocaleString()}</b>${shareSkill ? `（${shareSkill.name}）` : ''}`);
+        break;
+      }
       case 'status_inflicted':
         if (isAttrReportDetail(ev.detail) || /】使【/.test(ev.detail)) {
           // 属性增减 / 持节镇西：官方两行，不再套「获得：」
@@ -555,6 +563,25 @@ function renderEvents(
         break;
       case 'insight_blocked':
         add('good', `洞察：「${nm(ev.unitId)}」免疫了${statusName(ev.statusType)}`);
+        break;
+      case 'command_immune_blocked': {
+        // 免疫负面（临时定策 / XP程昱）：整次施加被免疫；statusType 缺省时只写「负面」
+        const s = SKILL_REGISTRY[ev.skillId];
+        add('good', `【${nm(ev.unitId)}】免疫了${ev.statusType ? statusName(ev.statusType) : '负面'}效果${s ? `（${s.name}）` : ''}`);
+        break;
+      }
+      case 'cowardice_immune_blocked':
+        add('good', `【${nm(ev.unitId)}】免疫了${statusName(ev.statusType)}效果`);
+        break;
+      case 'status_resisted': {
+        // 抵御负面（暂时定策，XP程昱）：该次施加被取消
+        const s = SKILL_REGISTRY[ev.skillId];
+        add('good', `【${nm(ev.unitId)}】抵御了${statusName(ev.statusType)}效果${s ? `（${s.name}）` : ''}`);
+        break;
+      }
+      case 'seal_settle':
+        // 玉玺结转（僭号天子）：口径与 src/engine/report.ts 一致
+        add('status', `【${nm(ev.unitId)}】【${ev.skillName}】玉玺结转：上一回合承担 ${ev.carried.toLocaleString()}，按 ${Math.round(ev.ratio * 100)}% 使其损失 ${ev.damage.toLocaleString()} 兵力（剩余 ${ev.afterTroops.toLocaleString()}）`);
         break;
       case 'siege_blocked':
         add('conflict', `✘ 「${nm(ev.unitId)}」受围困影响，无法回复兵力`);

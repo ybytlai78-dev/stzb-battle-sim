@@ -2292,6 +2292,8 @@ main {
 .ev.dmg-phy { color: var(--orange); }
 .ev.dmg-stg { color: var(--purple); }
 .ev.heal { color: var(--green); }
+/* 伤害分摊（言出必克 / 雅虑适时）：暖金一行，与 红(冲突)/橙(攻击伤害)/紫(谋略伤害)/绿(恢复) 都区分开 */
+.ev.share { color: var(--gold); }
 .ev.status { color: var(--blue); }
 .ev.conflict { color: var(--red); }
 .ev.bad { color: var(--red); }

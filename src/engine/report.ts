@@ -198,11 +198,26 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
     case 'heal':
       lines.push(`  ✚ ${ev.targetId} 恢复兵力 ${fmt(ev.amount)}（${fmt(ev.before)} → ${fmt(ev.after)}）`);
       break;
+    case 'share_damage':
+      // 伤害分摊（言出必克 / 雅虑适时）：unitId 替 targetId 承担 amount；引擎分摊时不另发 damage 事件
+      lines.push(`  ⇄ ${ev.unitId} 为 ${ev.targetId} 分摊伤害 ${fmt(ev.amount)}（${SKILL_REGISTRY[ev.skillId]?.name ?? ev.skillId}）`);
+      break;
     case 'prepare_start':
       lines.push(`  ⏳ ${ev.unitId} 开始准备「${ev.skillName}」`);
       break;
     case 'prepare_end':
       lines.push(`  ⏳ ${ev.unitId} 准备完成「${ev.skillName}」`);
+      break;
+    case 'prepare_skip':
+      lines.push(`  ✦ ${ev.unitId} 跳过准备，直接发动「${ev.skillName}」`);
+      break;
+    case 'skill_exec':
+      // 战法效果执行行（疮痍累身）：detail 本身已是「【周泰】执行来自【周泰】的【疮痍累身】效果！」
+      lines.push(`  ${ev.detail}`);
+      break;
+    case 'status_changed':
+      // 受击递减（疮痍累身每受该类型伤 −1/12）：detail 可能是完整句，也可能只是前半段
+      lines.push(`  ${/^【/.test(ev.detail) ? ev.detail : `${ev.unitId} 的${ev.detail}`}`);
       break;
     case 'unit_dead':
       lines.push(`  ☠ ${ev.name}（${ev.side === 'my' ? '我方' : '敌方'}）阵亡`);
@@ -218,6 +233,12 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
       break;
     case 'cowardice_immune_blocked':
       lines.push(`  ✦ ${ev.unitId} 免疫了${statusName(ev.statusType)}效果`);
+      break;
+    case 'command_immune_blocked':
+      lines.push(`  ✦ ${ev.unitId} 免疫了${ev.statusType ? statusName(ev.statusType) : '负面'}效果（${SKILL_REGISTRY[ev.skillId]?.name ?? ev.skillId}）`);
+      break;
+    case 'status_resisted':
+      lines.push(`  ✦ ${ev.unitId} 抵御了${statusName(ev.statusType)}效果（${SKILL_REGISTRY[ev.skillId]?.name ?? ev.skillId}）`);
       break;
     case 'split_damage':
       lines.push(`  → 分兵溅射「${ev.targetId}」造成 ${fmt(ev.damage)}（${renderBreakdown(ev.breakdown)}）`);

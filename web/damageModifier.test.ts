@@ -423,4 +423,48 @@ describe('白衣渡江详情战报文案', () => {
     expect(text).toContain('【太史慈】的来自【吕蒙】【白衣渡江】的策略攻击伤害效果消失了');
     expect(text).not.toContain('对「太史慈」造成');
   });
+
+  it('伤害分摊（share_damage）必须渲染「谁替谁分摊了多少」+ 战法名，且排在触发出来的恢复行之前', () => {
+    // 复刻用户现场：XP马良 挨 2093 → 刘备（同心/雅虑适时）替他分摊 280 → 分摊扣血触发刘备的持续型急救恢复 280
+    const report: BattleReport = {
+      schemaVersion: '1.0',
+      seed: 1,
+      maxRounds: 1,
+      result: 'win',
+      rounds: 1,
+      myTeam: [mkGeneral('maliang', 'XP马良', '前锋'), mkGeneral('liubei', '刘备', '中军')],
+      enemyTeam: [mkGeneral('e1', '敌军前锋', '前锋')],
+      finalMyTroops: [9000, 9000],
+      finalEnemyTroops: [8900],
+      finalMyWounded: [0, 0],
+      finalEnemyWounded: [0],
+      finalMyDead: [0, 0],
+      finalEnemyDead: [0],
+      stats: [],
+      events: [
+        { type: 'battle_start', turnOrder: ['maliang', 'liubei', 'e1'], seed: 1 },
+        { type: 'preparation_end' },
+        { type: 'round_start', round: 1 },
+        { type: 'unit_act_start', unitId: 'e1', name: '敌军前锋', position: '前锋', phase: 'normal_attack' },
+        { type: 'attack_hit', sourceId: 'e1', targetId: 'maliang', distance: 1, damage: 2093, breakdown: { troopBase: 0, base: 0, main: 2093 } },
+        { type: 'share_damage', unitId: 'liubei', targetId: 'maliang', skillId: 'yalv_shishi', amount: 280 },
+        { type: 'heal', sourceId: 'liubei', targetId: 'liubei', skillId: 'huangyi_liuli', skillName: '皇裔流离', amount: 280, before: 6964, after: 7244 },
+        { type: 'round_end', round: 1, myTroops: [9000, 9000], enemyTroops: [8900], myWounded: [0, 0], enemyWounded: [0], myDead: [0, 0], enemyDead: [0] },
+        { type: 'battle_end', result: 'win', rounds: 1, myTroops: [9000, 9000], enemyTroops: [8900] },
+      ],
+    };
+    const view = createBattleView(report);
+    view.setRound(1);
+    document.body.appendChild(view.el);
+    const row = view.el.querySelector('.ev.share') as HTMLElement;
+    expect(row, '分摊必须有独立一行（否则看不出到底分摊了没）').toBeTruthy();
+    expect(row.textContent).toContain('刘备');       // 分摊者
+    expect(row.textContent).toContain('XP马良');     // 被分摊的受击者
+    expect(row.textContent).toContain('280');        // 承担量
+    expect(row.textContent).toContain('雅虑适时');   // 战法名（SKILL_REGISTRY 反查）
+    // 事件顺序：先分摊、后（分摊扣血触发的）恢复 —— 行序必须一致
+    const evs = Array.from(view.el.querySelectorAll('.ev')) as HTMLElement[];
+    expect(evs.findIndex((e) => e.classList.contains('share')))
+      .toBeLessThan(evs.findIndex((e) => e.classList.contains('heal')));
+  });
 });
