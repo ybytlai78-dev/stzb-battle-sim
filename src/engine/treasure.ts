@@ -163,6 +163,12 @@ const MECHANICS: Record<string, Mechanic> = {
   破浪: () => [{ type: 'hurt_stack', mode: 'boost', perStack: 0.1, maxStacks: 10, duration: FOREVER } as CreateStatus],
   // 避险（大橹）：战斗中首次受到伤害后进入规避，免疫下 1 次伤害
   避险: () => [{ type: 'hurt_evade_once', duration: FOREVER } as CreateStatus],
+  // 蓄锐：每 2 次普通攻击后，自身造成追击战法伤害增加（可叠加，上限 5 层）
+  蓄锐: (v) => [{ type: 'treasure_basic_count', every: 2, perStack: v / 100, skillTypes: ['pursuit'], maxStacks: 5, duration: FOREVER } as CreateStatus],
+  // 选锋：普通攻击后，自身下一次造成策略伤害提高（一次性）
+  选锋: (v) => [{ type: 'treasure_basic_next', rate: v / 100, duration: FOREVER } as CreateStatus],
+  // 破障：普通攻击后，移除攻击目标由主动/追击战法带来的 1 种增益
+  破障: () => [{ type: 'treasure_basic_purge', duration: FOREVER } as CreateStatus],
 };
 
 /** 同名词条但语义随宝物变化：key = `${treasureId}:${slot}` */
@@ -194,16 +200,11 @@ export const PENDING: Record<string, string> = {
   矜节: '女性携带：主战法恢复效果提高',
   燮理: '燃烧伤害后恢复（恢复率）',
   归心: '我军每 2 次主动战法 → 自身恢复',
-  破障: '普攻后移除目标 1 种增益',
   鸠佑: '主动主战法发动后叠层增伤',
   奇袭: '按距离增伤（条件）',
-  机敏_: '—',
   济世: '恢复触发 → 目标下次受伤降低',
   仁心: '造成的恢复效果提高',
-  蓄锐: '每 2 次普攻后追击增伤（计数叠层）',
-  选锋: '普攻后下次策略伤害提高（一次性标记）',
   击虚: '按目标身上的 DoT/控制种类数增伤（C 档）',
-  驱火_: '—',
 };
 
 /** 取某条特效的机制（先查覆盖表，再查同名表） */

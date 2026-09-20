@@ -7,7 +7,7 @@
  *  再战：第 5 回合 50% 获得连击
  */
 import { describe, it, expect } from 'vitest';
-import { inflictStatus, getStatus, hasStatus, consumeEvasion, tickRoundStartStatuses, updateTreasureOnHurt } from '../src/engine/action';
+import { inflictStatus, getStatus, hasStatus, consumeEvasion, tickRoundStartStatuses, updateTreasureOnHurt, applyTreasureBasicHit } from '../src/engine/action';
 import type { CombatContext } from '../src/engine/action';
 import type { CreateStatus, UnitState } from '../src/engine/types';
 import { Rng } from '../src/engine/rng';
@@ -232,6 +232,41 @@ describe('宝物 · 控制延时 / 免疫 / 反击 / 回合钩子', () => {
       expect(st!.attackSkillsOnly).toBe(true);
       expect(st!.mainSkillOnly).toBe(true);
     }
+  });
+
+  it('蓄锐 / 选锋 / 破障：普攻命中后钩子', () => {
+    const ctx = makeCtx();
+    const a = makeUnit('a');
+    const t = makeUnit('t', 'enemy');
+    ctx.myTeam = [a];
+    ctx.enemyTeam = [t];
+
+    // 蓄锐：每 2 次普攻叠 1 层（追击增伤）
+    inflictStatus(ctx, a, { type: 'treasure_basic_count', every: 2, perStack: 0.1, skillTypes: ['pursuit'], maxStacks: 5, duration: 999 }, 'passive', 'treasure:affix:蓄锐', 'a');
+    applyTreasureBasicHit(ctx, a, t);
+    expect(getStatus(a, 'treasure_basic_count')!.stacks).toBe(0);
+    applyTreasureBasicHit(ctx, a, t);
+    expect(getStatus(a, 'treasure_basic_count')!.stacks).toBe(1);
+    const boost = a.statuses.find((s) => s.type === 'damage_boost');
+    expect(boost).toMatchObject({ rate: 0.1, direction: 'caused', skillTypes: ['pursuit'] });
+
+    // 选锋：每次普攻后给一条一次性策略增伤（charges=1）
+    inflictStatus(ctx, a, { type: 'treasure_basic_next', rate: 0.2, duration: 999 }, 'passive', 'treasure:affix:选锋', 'a');
+    applyTreasureBasicHit(ctx, a, t);
+    const one = a.statuses.filter((s) => s.type === 'damage_boost' && s.damageType === 'strategy');
+    expect(one).toHaveLength(1);
+    expect(one[0]).toMatchObject({ rate: 0.2, charges: 1 });
+
+    // 破障：移除目标身上「主动战法带来的 1 种增益」
+    inflictStatus(ctx, t, { type: 'attack_buff', amount: 10, duration: 999 }, 'active', 'some_active', 'e');
+    inflictStatus(ctx, t, { type: 'attack_buff', amount: 10, duration: 999 }, 'passive', 'some_passive', 'e');
+    expect(t.statuses.filter((s) => s.type === 'attack_buff')).toHaveLength(2);
+    inflictStatus(ctx, a, { type: 'treasure_basic_purge', duration: 999 }, 'passive', 'treasure:1081:3', 'a');
+    applyTreasureBasicHit(ctx, a, t);
+    const left = t.statuses.filter((s) => s.type === 'attack_buff');
+    expect(left).toHaveLength(1);
+    expect(left[0].sourceSkillType).toBe('passive'); // 只移除主动/追击带来的增益
+    expect(ctx.events.some((e) => e.type === 'status_changed' && e.detail.includes('破障'))).toBe(true);
   });
 
   it('再战（少府）：仅第 5 回合判定，50% 几率获得连击', () => {    const results: boolean[] = [];

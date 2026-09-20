@@ -680,6 +680,12 @@ export type CreateStatus =
   | { type: 'hurt_stack'; mode: 'reduce' | 'boost'; perStack: number; maxStacks: number; duration: number }
   /** 首次受击后进入规避（宝物「避险」）：战斗中第一次实际扣兵后获得 1 层 evasion，标记随即移除 */
   | { type: 'hurt_evade_once'; duration: number }
+  /** 宝物「蓄锐」：每 every 次普攻后，自身造成（限定战法类型的）伤害增加 perStack，可叠加至 maxStacks */
+  | { type: 'treasure_basic_count'; every: number; perStack: number; skillTypes?: SkillType[]; maxStacks: number; duration: number }
+  /** 宝物「选锋」：普攻后，自身**下一次**造成策略伤害提高 rate（一次性 charges=1） */
+  | { type: 'treasure_basic_next'; rate: number; duration: number }
+  /** 宝物「破障」：普攻后，移除攻击目标由主动/追击战法带来的 1 种增益 */
+  | { type: 'treasure_basic_purge'; duration: number }
   /** 免疫怯战（魏武之泽）：持续期间无法被施加怯战 */
   | { type: 'cowardice_immune'; duration: number }
   | { type: 'siege'; duration: number }
@@ -1807,6 +1813,10 @@ export type StatusType =
   | 'hurt_stack'
   /** 宝物「避险」：首次受击后进入规避 */
   | 'hurt_evade_once'
+  /** 宝物「蓄锐」/「选锋」/「破障」：普攻命中后钩子 */
+  | 'treasure_basic_count'
+  | 'treasure_basic_next'
+  | 'treasure_basic_purge'
   | 'cowardice_immune'
   | 'siege'
   | 'sorcery'
@@ -1893,6 +1903,9 @@ export type Status =
   | { type: 'no_retaliate'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'hurt_stack'; mode: 'reduce' | 'boost'; perStack: number; maxStacks: number; stacks: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'hurt_evade_once'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'treasure_basic_count'; every: number; perStack: number; skillTypes?: SkillType[]; maxStacks: number; stacks: number; counter: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'treasure_basic_next'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'treasure_basic_purge'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'cowardice_immune'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'siege'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   /**

@@ -4066,6 +4066,12 @@ function pushStatus(
     ...(create.type === 'hurt_stack'
       ? { mode: create.mode, perStack: create.perStack, maxStacks: create.maxStacks, stacks: 0 }
       : {}),
+    // 宝物「蓄锐」：普攻计数叠层（counter 累计普攻次数、stacks 累计已触发层数）
+    ...(create.type === 'treasure_basic_count'
+      ? { every: create.every, perStack: create.perStack, maxStacks: create.maxStacks, stacks: 0, counter: 0, ...(create.skillTypes ? { skillTypes: create.skillTypes } : {}) }
+      : {}),
+    // 宝物「选锋」：普攻后的一次性策略增伤
+    ...(create.type === 'treasure_basic_next' ? { rate: create.rate } : {}),
   } as Status);
   ctx.events.push({
     type: 'status_inflicted',
@@ -4344,6 +4350,10 @@ export function isBeneficialStatus(s: Status): boolean {
     // 宝物：受击叠层 / 首次受击规避
     case 'hurt_stack':
     case 'hurt_evade_once':
+    // 宝物：普攻命中后钩子（蓄锐 / 选锋 / 破障）
+    case 'treasure_basic_count':
+    case 'treasure_basic_next':
+    case 'treasure_basic_purge':
       return true;
     default:
       return false;
@@ -4721,6 +4731,9 @@ function statusName(type: StatusType): string {
     case 'no_retaliate': return '不触发反击';
     case 'hurt_stack': return '受击叠层';
     case 'hurt_evade_once': return '首次受击规避';
+    case 'treasure_basic_count': return '普攻计数叠层';
+    case 'treasure_basic_next': return '下次策略增伤';
+    case 'treasure_basic_purge': return '普攻移除增益';
     case 'siege': return '围困';
     case 'sorcery': return '妖术';
     case 'burning': return '燃烧';
@@ -5364,6 +5377,62 @@ function triggerBasicHitHooks(ctx: CombatContext, attacker: UnitState, hitTarget
     // 结算来源 = 战法携带者（战报归因），属性/兵力读取 = 实际普攻者（监听类通例）
     const owner = castUnit(ctx, eff.casterId) ?? attacker;
     executeSkillOutputs(ctx, owner, skill, [hitTarget], eff.output, false, attacker);
+  }
+
+  // 宝物·普攻命中后（蓄锐 / 选锋 / 破障）：无宝物时零开销
+  applyTreasureBasicHit(ctx, attacker, hitTarget);
+}
+
+/**
+ * 宝物·普攻命中后钩子：
+ *  - `treasure_basic_count`（蓄锐）：每 every 次普攻 → 叠 1 层「造成追击战法伤害提高」（同源 stack 合并）
+ *  - `treasure_basic_next`（选锋）：每次普攻后 → 挂一条一次性「下一次策略伤害提高」（charges=1）
+ *  - `treasure_basic_purge`（破障）：每次普攻后 → 移除目标由主动/追击战法带来的 1 种**增益**
+ */
+export function applyTreasureBasicHit(ctx: CombatContext, attacker: UnitState, target: UnitState): void {
+  for (const s of [...attacker.statuses]) {
+    if (s.type === 'treasure_basic_count') {
+      s.counter += 1;
+      if (s.counter % s.every !== 0 || s.stacks >= s.maxStacks) continue;
+      s.stacks += 1;
+      inflictStatus(
+        ctx,
+        attacker,
+        {
+          type: 'damage_boost',
+          rate: s.perStack,
+          duration: 999,
+          direction: 'caused',
+          stack: true,
+          ...(s.skillTypes ? { skillTypes: s.skillTypes } : {}),
+        },
+        s.sourceSkillType,
+        s.sourceSkillId,
+        attacker.general.id,
+      );
+    } else if (s.type === 'treasure_basic_next') {
+      inflictStatus(
+        ctx,
+        attacker,
+        { type: 'damage_boost', rate: s.rate, duration: 999, direction: 'caused', damageType: 'strategy', charges: 1 },
+        s.sourceSkillType,
+        s.sourceSkillId,
+        attacker.general.id,
+      );
+    } else if (s.type === 'treasure_basic_purge') {
+      const idx = target.statuses.findIndex(
+        (t) => isBeneficialStatus(t) && (t.sourceSkillType === 'active' || t.sourceSkillType === 'pursuit'),
+      );
+      if (idx < 0) continue;
+      const removed = target.statuses[idx];
+      target.statuses = target.statuses.filter((_, i) => i !== idx);
+      ctx.events.push({
+        type: 'status_changed',
+        unitId: target.general.id,
+        statusType: removed.type,
+        detail: '宝物【破障】移除 1 种由主动/追击战法带来的增益',
+      });
+    }
   }
 }
 
