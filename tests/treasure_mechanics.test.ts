@@ -7,7 +7,7 @@
  *  再战：第 5 回合 50% 获得连击
  */
 import { describe, it, expect } from 'vitest';
-import { inflictStatus, getStatus, hasStatus } from '../src/engine/action';
+import { inflictStatus, getStatus, hasStatus, tickRoundStartStatuses, updateTreasureOnHurt } from '../src/engine/action';
 import type { CombatContext } from '../src/engine/action';
 import type { CreateStatus, UnitState } from '../src/engine/types';
 import { Rng } from '../src/engine/rng';
@@ -137,8 +137,36 @@ describe('宝物 · 控制延时 / 免疫 / 反击 / 回合钩子', () => {
     expect(hasStatus(u, 'insight')).toBe(true);
   });
 
-  it('再战（少府）：仅第 5 回合判定，50% 几率获得连击', () => {
-    const results: boolean[] = [];
+  it('不屈 / 破浪 / 避险：受击叠层与首次受击规避', () => {
+    const ctx = makeCtx();
+    const u = makeUnit('u');
+    const ally = makeUnit('a', 'enemy');
+    ctx.myTeam = [u];
+    ctx.enemyTeam = [ally];
+    // 不屈：受击叠层减伤（3%/层，上限 10），回合开始清零
+    inflictStatus(ctx, u, { type: 'hurt_stack', mode: 'reduce', perStack: 0.03, maxStacks: 10, duration: 999 }, 'passive', 'treasure:affix:不屈', 'u');
+    updateTreasureOnHurt(ctx, u);
+    updateTreasureOnHurt(ctx, u);
+    expect(getStatus(u, 'hurt_stack')!.stacks).toBe(2);
+    // 回合开始清零（tickRoundStartStatuses）
+    ctx.currentRound = 2;
+    tickRoundStartStatuses(ctx);
+    expect(getStatus(u, 'hurt_stack')!.stacks).toBe(0);
+
+    // 避险：首次受击 → 获得 1 层规避，标记移除并记事件
+    const v = makeUnit('v');
+    ctx.myTeam.push(v);
+    inflictStatus(ctx, v, { type: 'hurt_evade_once', duration: 999 }, 'passive', 'treasure:1078:3', 'v');
+    updateTreasureOnHurt(ctx, v);
+    expect(getStatus(v, 'hurt_evade_once')).toBeUndefined();
+    expect(getStatus(v, 'evasion')!.stacks).toBe(1);
+    expect(ctx.events.some((e) => e.type === 'treasure_evade_triggered')).toBe(true);
+    // 再次受击不再触发（一次性）
+    updateTreasureOnHurt(ctx, v);
+    expect(getStatus(v, 'evasion')!.stacks).toBe(1);
+  });
+
+  it('再战（少府）：仅第 5 回合判定，50% 几率获得连击', () => {    const results: boolean[] = [];
     for (let seed = 1; seed <= 20; seed++) {
       const u = makeUnit('u');
       u.general.treasure = { treasureId: 1060 /* 少府 */ };

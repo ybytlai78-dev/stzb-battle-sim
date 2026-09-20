@@ -4027,6 +4027,10 @@ function pushStatus(
       : {}),
     // 宝物「坚毅」：免疫的控制类型清单
     ...(create.type === 'control_immune' ? { types: create.types } : {}),
+    // 宝物「不屈」/「破浪」：受击叠层（stacks 每回合开始清零）
+    ...(create.type === 'hurt_stack'
+      ? { mode: create.mode, perStack: create.perStack, maxStacks: create.maxStacks, stacks: 0 }
+      : {}),
   } as Status);
   ctx.events.push({
     type: 'status_inflicted',
@@ -4111,6 +4115,10 @@ export function tickStatuses(ctx: CombatContext, units: UnitState[]): void {
 export function tickRoundStartStatuses(ctx: CombatContext): void {
   const decayEighthsNow = ctx.currentRound !== 1; // 第 1 回合不衰减（保 8/8）
   const units = [...ctx.myTeam, ...ctx.enemyTeam];
+  // 宝物「不屈」/「破浪」：受击叠层「本回合」语义 → 每回合开始清零（先于本回合任何伤害结算）
+  for (const u of units) {
+    for (const s of u.statuses) if (s.type === 'hurt_stack') s.stacks = 0;
+  }
   // 百战无怯：每回合开始失去 1 层并恢复（0 层不掉也不回血）——先于本回合任何伤害结算
   for (const u of units) loseStacksReduceOnEvent(ctx, u);
   // 玉玺结转（僭号天子）：第二回合起，每回合开始时对持有者结算「上一回合承担量 × 本回合承担比例」；
@@ -4298,6 +4306,9 @@ export function isBeneficialStatus(s: Status): boolean {
     case 'control_extend':
     case 'control_immune':
     case 'no_retaliate':
+    // 宝物：受击叠层 / 首次受击规避
+    case 'hurt_stack':
+    case 'hurt_evade_once':
       return true;
     default:
       return false;
@@ -4487,7 +4498,40 @@ function sumReduce(target: UnitState, hit?: DamageHitContext): number {
       statusMatchesHit(s, hit) &&
       (!('requireSelfStatus' in s) || !s.requireSelfStatus || hasRequiredSelfStatus(target, s.requireSelfStatus))
   );
-  return sumRates(list, 'damage_reduce') + pendingStacksReduceOf(target);
+  return sumRates(list, 'damage_reduce') + pendingStacksReduceOf(target) + hurtStackReduceOf(target);
+}
+
+/** 宝物「不屈」：受击叠层式减伤（值 = stacks × perStack；stacks 由受击钩子累加、回合开始清零） */
+function hurtStackReduceOf(target: UnitState): number {
+  return target.statuses
+    .filter((s): s is Extract<Status, { type: 'hurt_stack' }> => s.type === 'hurt_stack' && s.mode === 'reduce')
+    .reduce((a, s) => a + s.stacks * s.perStack, 0);
+}
+
+/** 宝物「破浪」：受击叠层式增伤（同上，进造成侧增伤池） */
+function hurtStackBoostOf(source: UnitState): number {
+  return source.statuses
+    .filter((s): s is Extract<Status, { type: 'hurt_stack' }> => s.type === 'hurt_stack' && s.mode === 'boost')
+    .reduce((a, s) => a + s.stacks * s.perStack, 0);
+}
+
+/** 宝物·受击钩子（不屈 / 破浪 叠层，避险 首次受击触发规避）；实际扣兵 > 0 后调用，无宝物时零开销 */
+export function updateTreasureOnHurt(ctx: CombatContext, target: UnitState): void {
+  for (const s of [...target.statuses]) {
+    if (s.type === 'hurt_stack') {
+      if (s.stacks < s.maxStacks) s.stacks += 1;
+    } else if (s.type === 'hurt_evade_once') {
+      target.statuses.push({
+        type: 'evasion',
+        stacks: 1,
+        appliedRound: ctx.currentRound,
+        sourceSkillType: s.sourceSkillType,
+        sourceSkillId: s.sourceSkillId,
+      });
+      target.statuses = target.statuses.filter((x) => x !== s);
+      ctx.events.push({ type: 'treasure_evade_triggered', unitId: target.general.id, skillId: s.sourceSkillId });
+    }
+  }
 }
 
 /**
@@ -4550,7 +4594,7 @@ function damageBoosts(
   // 被动概率增伤（侵掠如火）：命中则并入造成侧合计（数值体现在伤害本身，不进战报增减伤明细）
   // 叠层待发·下次普攻增伤（奉令护蜀）：同属「进行攻击」的一次性造成侧增伤
   return {
-    causedMult: 1 + causedBoost + attackProcBoostOf(ctx, source, hit) + pendingStacksBoostOf(source, hit),
+    causedMult: 1 + causedBoost + attackProcBoostOf(ctx, source, hit) + pendingStacksBoostOf(source, hit) + hurtStackBoostOf(source),
     takenMult: 1 + takenBoost,
   };
 }
@@ -4634,6 +4678,8 @@ function statusName(type: StatusType): string {
     case 'control_extend': return '控制延时';
     case 'control_immune': return '免疫控制';
     case 'no_retaliate': return '不触发反击';
+    case 'hurt_stack': return '受击叠层';
+    case 'hurt_evade_once': return '首次受击规避';
     case 'siege': return '围困';
     case 'sorcery': return '妖术';
     case 'burning': return '燃烧';
@@ -8570,6 +8616,8 @@ export function applyDamage(
   }
   // 受击触发战法（盲侯/陷储/同仇/缓师）：在阵亡标记前判定，致死一击仍可反击
   if (actual > 0) triggerOnHurt(ctx, target, source, damageType, damageSource);
+  // 宝物·受击叠层（不屈/破浪）与首次受击规避（避险）——纯状态变更，不产生二次伤害
+  if (actual > 0) updateTreasureOnHurt(ctx, target);
   // 每受到 N 次伤害触发（蛮王御众）：包一层 resolvingHurtHooks，触发段的伤害不再回灌计数/受击钩子
   if (!ctx.resolvingHurtHooks && actual > 0) {
     ctx.resolvingHurtHooks = true;

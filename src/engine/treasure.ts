@@ -152,6 +152,12 @@ const MECHANICS: Record<string, Mechanic> = {
   坚毅: (v) => [{ type: 'control_immune', types: ['confusion', 'rampage'], duration: v } as CreateStatus],
   // 强击（锻造词条）：前 N 回合普通攻击不会触发反击
   强击: (v) => [{ type: 'no_retaliate', duration: v } as CreateStatus],
+  // 不屈（锻造词条）：每次受伤后本回合受到伤害降低（可叠加；本回合语义 → 回合开始清零，上限 10 层）
+  不屈: (v) => [{ type: 'hurt_stack', mode: 'reduce', perStack: v / 100, maxStacks: 10, duration: FOREVER } as CreateStatus],
+  // 破浪（沧海）：每受到 1 次伤害，本回合造成所有伤害提升 10%（最多 10 层）
+  破浪: () => [{ type: 'hurt_stack', mode: 'boost', perStack: 0.1, maxStacks: 10, duration: FOREVER } as CreateStatus],
+  // 避险（大橹）：战斗中首次受到伤害后进入规避，免疫下 1 次伤害
+  避险: () => [{ type: 'hurt_evade_once', duration: FOREVER } as CreateStatus],
 };
 
 /** 同名词条但语义随宝物变化：key = `${treasureId}:${slot}` */
@@ -176,7 +182,6 @@ const OVERRIDES: Record<string, Mechanic> = {
 /** 尚未落地的词条（分档见方案 §3.2）；键 = 词条名，值 = 需要的机制 */
 export const PENDING: Record<string, string> = {
   强固: '每回合首次受伤减伤（回合窗口）',
-  避险: '首次受击后进入规避',
   迸发: '首次追击额外选 1 个目标',
   劲弩: '首回合禁普攻 + 次回合全体普攻',
   谋断: '第 2 次准备战法跳过 1 个准备回合',
@@ -184,7 +189,6 @@ export const PENDING: Record<string, string> = {
   矜节: '女性携带：主战法恢复效果提高',
   燮理: '燃烧伤害后恢复（恢复率）',
   归心: '我军每 2 次主动战法 → 自身恢复',
-  破浪: '受伤叠层增伤（上限 10 层）',
   破障: '普攻后移除目标 1 种增益',
   鸠佑: '主动主战法发动后叠层增伤',
   奇袭: '按距离增伤（条件）',

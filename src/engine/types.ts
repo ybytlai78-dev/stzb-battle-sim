@@ -672,6 +672,14 @@ export type CreateStatus =
   | { type: 'control_immune'; types: StatusType[]; duration: number }
   /** 普通攻击不触发反击（宝物「强击」：前 N 回合）：持有者作为**攻击方**时，受击方的 counter 不结算 */
   | { type: 'no_retaliate'; duration: number }
+  /**
+   * 受击叠层（宝物「不屈」= 本回合受到伤害降低 / 「破浪」= 本回合造成伤害提升）：
+   * 每次**实际扣兵**后 +1 层（上限 maxStacks），**每回合开始清零**；
+   * 生效值 = stacks × perStack（reduce 进受击方减伤池、boost 进造成方增伤池）。
+   */
+  | { type: 'hurt_stack'; mode: 'reduce' | 'boost'; perStack: number; maxStacks: number; duration: number }
+  /** 首次受击后进入规避（宝物「避险」）：战斗中第一次实际扣兵后获得 1 层 evasion，标记随即移除 */
+  | { type: 'hurt_evade_once'; duration: number }
   /** 免疫怯战（魏武之泽）：持续期间无法被施加怯战 */
   | { type: 'cowardice_immune'; duration: number }
   | { type: 'siege'; duration: number }
@@ -1795,6 +1803,10 @@ export type StatusType =
   | 'control_immune'
   /** 宝物「强击」：普攻不触发反击 */
   | 'no_retaliate'
+  /** 宝物「不屈」/「破浪」：受击叠层（每回合清零） */
+  | 'hurt_stack'
+  /** 宝物「避险」：首次受击后进入规避 */
+  | 'hurt_evade_once'
   | 'cowardice_immune'
   | 'siege'
   | 'sorcery'
@@ -1879,6 +1891,8 @@ export type Status =
   | { type: 'control_extend'; charges: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; mainSkillOnly?: boolean; skillTypes?: SkillType[] }
   | { type: 'control_immune'; types: StatusType[]; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'no_retaliate'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'hurt_stack'; mode: 'reduce' | 'boost'; perStack: number; maxStacks: number; stacks: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'hurt_evade_once'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'cowardice_immune'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'siege'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   /**
@@ -2203,6 +2217,8 @@ export type BattleEvent =
   | { type: 'cowardice_immune_blocked'; unitId: string; statusType: StatusType }
   /** 宝物「坚毅」：携带者免疫的控制被拦截 */
   | { type: 'control_immune_blocked'; unitId: string; statusType: StatusType }
+  /** 宝物「避险」：首次受击触发规避 */
+  | { type: 'treasure_evade_triggered'; unitId: string; skillId: string }
   | {
       type: 'split_damage';
       sourceId: string;
