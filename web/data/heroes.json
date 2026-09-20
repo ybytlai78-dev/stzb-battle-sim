@@ -1103,7 +1103,7 @@
     "growthDefense": 1.46,
     "growthStrategy": 1.72,
     "growthSpeed": 1.52,
-    "mainSkillId": "",
+    "mainSkillId": "jinche_chijie",
     "mainSkillName": "锦车持节",
     "skillDesc": "每回合开始前有50.0%几率（受谋略属性影响）使敌军单体本回合内陷入以下两种状态之一：造成所有伤害大幅降低；陷入暴走状态，且攻击距离与主动战法距离-2。以上效果触发后，在回合结束时额外恢复我军兵力最低单体一定兵力（恢复率150.0%，受谋略属性影响）"
   },

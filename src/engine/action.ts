@@ -625,6 +625,8 @@ export interface CombatContext {
   decreeConsumed?: Set<string>;
   /** 友军兵力阈值去重（鏖兵卫主）：key `${skillId}:${casterId}:${threshold}` */
   allyTroopThresholdKeys?: Set<string>;
+  /** 一类指挥「每回合开始前几率判定」已触发（锦车持节）：key `${round}:${skillId}` */
+  roundStartChanceFired?: Set<string>;
 }
 
 /** 持续型急救战法级计数器（皇裔流离/金匮要略）：一个战法一个实例，全队共享。
@@ -5480,6 +5482,62 @@ function triggerTroopThresholdBuff(ctx: CombatContext, target: UnitState): void 
       : cfg.output;
     if (output.length === 0) continue;
     executeSkillOutputs(ctx, target, skill, [target], output);
+  }
+}
+
+/**
+ * 一类指挥·每回合开始前按几率判定（锦车持节）：命中执行 `roundStartChance.output`（段级可重选目标），
+ * 登记本回合已触发（`ctx.roundStartChanceFired`，供回合末 `roundEndOutput` 结算）；未命中不发任何状态。
+ * 由 combat.ts 回合开始时调用（`triggerImperialDecrees` 之后、单位行动之前）。
+ */
+export function triggerRoundStartChance(ctx: CombatContext): void {
+  for (const l of ctx.lockedCommands) {
+    const skill = l.skill;
+    const cfg = skill.type === 'command' ? skill.roundStartChance : undefined;
+    if (!skill || !cfg) continue;
+    const caster = ctx.myTeam.concat(ctx.enemyTeam).find((u) => u.general.id === l.casterId);
+    if (!caster) continue;
+    if (!caster.alive && !skill.retainAfterDeath) continue;
+    const morale = effectiveMorale(caster);
+    const base =
+      cfg.strategyScaled && cfg.growthRate !== undefined
+        ? roundRate(scaledValue(cfg.chance, cfg.growthRate, effectiveStat(caster, 'strategy')))
+        : cfg.chance;
+    const rate = moraleTriggerRate(morale, Math.min(1, base / 100));
+    const success = ctx.rng.chance(rate);
+    ctx.events.push({
+      type: 'skill_trigger',
+      unitId: caster.general.id,
+      skillId: skill.id,
+      skillName: skill.name,
+      success,
+      rate: Math.round(rate * 100),
+      baseRate: Math.round(Math.min(1, base / 100) * 100),
+      morale,
+    });
+    if (!success) continue;
+    ctx.roundStartChanceFired ??= new Set();
+    ctx.roundStartChanceFired.add(`${ctx.currentRound}:${skill.id}`);
+    executeSkillOutputs(ctx, caster, skill, l.targets, cfg.output);
+  }
+}
+
+/**
+ * 回合结束：对本回合开始时判定**已触发**的 `roundStartChance` 执行 `roundEndOutput`
+ * （锦车持节「以上效果触发后，在回合结束时额外恢复我军兵力最低单体一定兵力」）。
+ * 由 combat.ts 回合结束时调用（状态 tick 之前）。
+ */
+export function triggerRoundEndChanceOutputs(ctx: CombatContext): void {
+  if (!ctx.roundStartChanceFired || ctx.roundStartChanceFired.size === 0) return;
+  for (const l of ctx.lockedCommands) {
+    const skill = l.skill;
+    const cfg = skill.type === 'command' ? skill.roundStartChance : undefined;
+    if (!skill || !cfg?.roundEndOutput) continue;
+    if (!ctx.roundStartChanceFired.has(`${ctx.currentRound}:${skill.id}`)) continue;
+    const caster = ctx.myTeam.concat(ctx.enemyTeam).find((u) => u.general.id === l.casterId);
+    if (!caster) continue;
+    if (!caster.alive && !skill.retainAfterDeath) continue;
+    executeSkillOutputs(ctx, caster, skill, l.targets, cfg.roundEndOutput);
   }
 }
 

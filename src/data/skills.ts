@@ -9226,4 +9226,81 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       ],
     },
   },
+
+  /**
+   * 锦车持节（冯嫽·汉骑 h812 主战法）：指挥 S（一类指挥 prep，效果按「每回合开始前」逐回合判定），
+   * 距离 5，敌军单体，发动率 --。
+   * 满级「每回合开始前有 50.0% 几率（受谋略属性影响）使敌军单体本回合内陷入以下两种状态之一：
+   *   造成所有伤害大幅降低；陷入暴走状态，且攻击距离与主动战法距离 −2。以上效果触发后，
+   *   在回合结束时额外恢复我军兵力最低单体一定兵力（恢复率 150.0%，受谋略属性影响）」；
+   * 1 级：几率 25.0% / 恢复率 75.0%。
+   * 官方：scripts/skill_extra.json id 200295（指挥 / S / 距离 5 / 敌军单体 / 兵种弓步骑；
+   *   effect 标签 攻击伤害降低;策略攻击伤害降低;暴走;攻击距离降低;战法有效距离降低;急救）。
+   *   来源 https://stzb.163.com/m/skilllist/200295.html
+   *
+   * 口径（策略 A + 用户 2026-09-20 口径；推定处已标注）：
+   *   ① 「每回合开始前 50% 几率（受谋略）」→ 新引擎件 `CommandSkill.roundStartChance`
+   *      （回合开始掷一次、走士气修正、逐回合发 `skill_trigger`；命中执行 output 并登记 → 回合末执行 roundEndOutput）；
+   *   ② 「两种状态之一」→ `random_pick(count:1)` **50/50 等概率**（三军夺帅「或」先例；官方未写概率，**推定**）；
+   *   ③ 状态一「造成所有伤害大幅降低」→ 用户口径「大幅度」= **极大值** → `damage_boost` direction **caused**
+   *      rate **−99.99（−9999%）**、`duration: 1`（「本回合内」）；
+   *   ④ 状态二「暴走 + 攻击距离与主动战法距离 −2」→ **同一目标三段状态**（`rampage` / `range_buff −2` /
+   *      `skill_range_buff −2`，`applyAll: true` 保证同目标、非随机二选一）；暴走段官方未写持续 →
+   *      按「本回合内」取 `duration: 1`（**推定**）；
+   *   ⑤ 「以上效果触发后，回合结束时额外恢复我军兵力最低单体」→ 回合末 `heal` + `targetPick:'lowest_troops_ally'`
+   *      （佐命晋武既有件），恢复率 150% 受谋略；
+   *   ⑥ 两处「受谋略属性影响」官方均未给成长系数 → 基值不缩放（`strategyScaled` 标记在、`growthRate` 留空 /
+   *      恢复段给 0）→ 登记 OFFLINE_MAIN_SKILLS → **武将下架**。
+   */
+  jinche_chijie: {
+    id: 'jinche_chijie',
+    name: '锦车持节',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['damage_boost', 'rampage', 'range_buff', 'skill_range_buff', 'heal'],
+    output: [],
+    roundStartChance: {
+      chance: 50, // 50%（1 级 25%；受谋略未确认 → 基值不缩放）
+      strategyScaled: true,
+      output: [
+        {
+          kind: 'random_pick',
+          count: 1, // 两种状态之一（50/50）
+          options: [
+            // 状态一：造成所有伤害大幅降低（极大值 −9999%），本回合内
+            [
+              {
+                kind: 'inflict_status',
+                targetSide: 'enemy',
+                targetMode: 'random_single',
+                status: { type: 'damage_boost', rate: -99.99, duration: 1, direction: 'caused' },
+              },
+            ],
+            // 状态二：暴走 + 攻击距离 −2 + 主动战法距离 −2（同一目标三段，applyAll）
+            [
+              {
+                kind: 'inflict_status',
+                targetSide: 'enemy',
+                targetMode: 'random_single',
+                applyAll: true,
+                status: [
+                  { type: 'rampage', duration: 1 },
+                  { type: 'range_buff', amount: -2, duration: 1 },
+                  { type: 'skill_range_buff', amount: -2, duration: 1 },
+                ],
+              },
+            ],
+          ],
+        },
+      ],
+      // 以上效果触发后：回合结束时额外恢复我军兵力最低单体 150%（受谋略未确认 → 基值）
+      roundEndOutput: [
+        { kind: 'heal', rate: 150, strategyScaled: true, growthRate: 0, targetPick: 'lowest_troops_ally' },
+      ],
+    },
+  },
 };

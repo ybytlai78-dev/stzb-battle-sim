@@ -1129,6 +1129,22 @@ export interface CommandSkill extends BaseSkill {
     output: SkillOutput[];
   };
   /**
+   * 一类指挥·每回合**开始前**按几率判定（锦车持节「每回合开始前有 50.0% 几率（受谋略属性影响）使敌军单体
+   * 本回合内陷入以下两种状态之一」）：掷一次（`chance` 百分点，`strategyScaled` + `growthRate` 时按施法者谋略
+   * 缩放、缺省按基值；士气修正、逐回合发 `skill_trigger`）→ 命中则执行 `output`（段级可重选目标），
+   * 并登记本回合已触发（`ctx.roundStartChanceFired`）→ 回合结束（`triggerRoundEndChanceOutputs`）追加执行
+   * `roundEndOutput`（锦车持节「以上效果触发后，在回合结束时额外恢复我军兵力最低单体一定兵力」）。
+   */
+  roundStartChance?: {
+    /** 基础几率（百分点，50 = 50%） */
+    chance: number;
+    /** 受谋略缩放（「受谋略属性影响」）；`growthRate` 缺省时不缩放、用基值 */
+    strategyScaled?: boolean;
+    growthRate?: number;
+    output: SkillOutput[];
+    roundEndOutput?: SkillOutput[];
+  };
+  /**
    * 「天子诏令」（XP献帝）：① 每回合开始随机点名一名**敌军单体**，使其「受到所有伤害提升」按份叠加
    * （`takenBoostRate`%，受谋略缩放，持续至战斗结束）；② 本侧每个单位**本回合首次伤害/首次普攻**
    * 按 `forceTargetRate` 判定，命中则强制选中点名目标（无视距离）；③ 回合内该目标累计受到 `threshold` 次

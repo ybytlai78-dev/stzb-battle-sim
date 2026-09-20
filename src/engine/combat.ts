@@ -7,7 +7,7 @@
  */
 import type { BattleConfig, BattleEvent, BattleReport, General, Skill, UnitState } from './types';
 import { Rng } from './rng';
-import { actUnit, triggerCommandSkills, triggerPassiveSkills, triggerDelayedOutputs, triggerRangeDecayPassives, triggerRoundEndCommands, triggerImperialDecrees, tickStatuses, tickRoundStartStatuses, effectiveStat, type CombatContext } from './action';
+import { actUnit, triggerCommandSkills, triggerPassiveSkills, triggerDelayedOutputs, triggerRangeDecayPassives, triggerRoundEndCommands, triggerImperialDecrees, triggerRoundStartChance, triggerRoundEndChanceOutputs, tickStatuses, tickRoundStartStatuses, effectiveStat, type CombatContext } from './action';
 import { computeStats } from './stats';
 import { SKILL_REGISTRY } from '../data/skills';
 import { validateMutualExclusion } from '../data/hero-utils';
@@ -106,6 +106,8 @@ export function runBattle(config: BattleConfig): BattleReport {
     // 一类指挥回合前准备阶段（谋议宏图）：减伤按 1/8 衰减 + 士气叠层，再进入 delayedOutput / 单位行动
     tickRoundStartStatuses(ctx);
     triggerImperialDecrees(ctx);
+    // 一类指挥·每回合开始前几率判定（锦车持节）：命中则挂本回合状态，并登记待回合末的附加恢复
+    triggerRoundStartChance(ctx);
 
     // 一类指挥 delayedOutput：白衣渡江第 3 回合自动结算（无视规避，预先结算的伤害）
     triggerDelayedOutputs(ctx, round);
@@ -125,6 +127,8 @@ export function runBattle(config: BattleConfig): BattleReport {
     // 回合结束：被动攻击距离递减（雪奋短兵「每回合结束时使自身攻击距离 −1」）→ 一类指挥回合末结算
     // （佐命晋武「每回合结束时为我军兵力最低单体恢复 2 次」）→ 状态结算
     triggerRangeDecayPassives(ctx);
+    // 回合末「已触发」的几率判定附加段（锦车持节：恢复我军兵力最低单体）→ 再走一类指挥回合末结算
+    triggerRoundEndChanceOutputs(ctx);
     triggerRoundEndCommands(ctx);
     tickStatuses(ctx, [...myTeam, ...enemyTeam]);
 
