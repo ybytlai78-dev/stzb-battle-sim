@@ -17,9 +17,10 @@ interface RenderEvCtx {
 }
 
 /** 准备阶段三段标题：阵容 / 兵种 / 战法 */
-const PHASE_LABEL: Record<'formation' | 'troop' | 'skill', string> = {
+const PHASE_LABEL: Record<'formation' | 'troop' | 'treasure' | 'skill', string> = {
   formation: '阵容',
   troop: '兵种',
+  treasure: '宝物',
   skill: '战法',
 };
 
@@ -398,6 +399,12 @@ function renderPrepEvents(
   empty.className = 'ev dim';
   empty.textContent = '暂无效果';
   container.appendChild(empty);
+
+  // 宝物（佩戴才发 prep_phase: 'treasure'）：展示准备阶段挂载的宝物效果
+  if (sections.treasure.length > 0) {
+    addHead(PHASE_LABEL.treasure);
+    renderEvents(container, sections.treasure, nm, popupApi, ctx);
+  }
 
   addHead(PHASE_LABEL.skill);
   const skillEvs = sections.skill;

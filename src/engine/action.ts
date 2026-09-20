@@ -30,7 +30,7 @@ import type {
 } from './types';
 import type { Rng } from './rng';
 import { calcDamage, applyTroopCap, scaledValue, roundRate, sumRates, buffMult, calcHealAmount, moraleRate, applyIgnoreDef, troopCounterReduce } from './formulas';
-import { isTreasureSource } from './treasure-source';
+import { isTreasureSource, treasureLabel } from './treasure-source';
 import { nearestEnemy, skillTargets, distanceBetween, adjacentUnits, sameSideDistance, attackRangeOf, POSITION_INDEX, unitsInSkillRange } from './target';
 
 /**
@@ -4181,7 +4181,7 @@ function pushStatus(
     type: 'status_inflicted',
     unitId: target.general.id,
     statusType: type,
-    detail: `${statusName(type)} ${remaining} 回合`,
+    detail: `${isTreasureSource(sourceSkillId) ? `宝物【${treasureLabel(sourceSkillId)}】` : ''}${statusName(type)} ${remaining} 回合`,
   });
 }
 

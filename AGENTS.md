@@ -660,3 +660,33 @@ npx tsc --noEmit                    # 类型检查（strict）
   用「相对起始值的差值」断言（本批 b53 踩过）。
 - PowerShell 传中文 + 嵌套引号的 `node -e` 脚本会被转义破坏（本批踩了两次）——改用 edit 工具或按行号精确改写。
 
+---
+
+## 会话交接（宝物系统 P1–P5，2026-09-21）
+
+> 口径与调研：`dateyuan/宝物系统方案.md` §0（用户已确认 5 条）、`dateyuan/宝物系统调研.md` §8（官方公告 + 档位表 + 强化增量证据）。
+
+### 已完成（本轮 12 个提交，均 tsc clean + 全量 vitest 全绿）
+
+| 阶段 | 产物 |
+|------|------|
+| P1 数据 | `src/data/treasures.ts`（36 件战斗稀世 + 36 条锻造词条，`scripts/gen_treasure_data.mjs` 生成）、`dateyuan/宝物数据.json`（114 件全量快照）、`public/gears/`（38 件稀世立绘+图标）、`tests/treasure_data.test.ts` |
+| P2/P3 引擎 | `src/engine/treasure.ts`（`MECHANICS`/`OVERRIDES`/`ROUND_START_HOOKS`/`PENDING`）、`src/engine/treasure-source.ts`（宝物来源标识 + 战报名）、`action.ts` 内 `inflictStatus` 宝物来源**跳过全部冲突判定**（纯提升可叠加） |
+| P4 UI | `SlotState.treasure`、`EditorHandlers.onSetTreasure`、`openTreasurePicker`（三步：选宝物 36 件网格 → 选词条 6~7 条 → 滑杆选数值 + 蓝粉红刻度）、`buildGeneral(..., treasure)` 透传、`.hd-treasure`/`.tp-*` 样式 |
+| P5 展示 | 战报 `prep_phase:'treasure'` 阶段（**只佩戴时发出 → golden 字节不变**）、状态明细前缀「宝物【名称】」 |
+
+### 关键规则（勿重复踩坑）
+
+1. **宝物效果不与任何来源冲突**（用户口径）：`inflictStatusCore` 见到 `treasure:` 前缀 → 直接 `pushStatus` 返回，
+   不走同源刷新 / 同类型取高。想改「取高」要回 `dateyuan/宝物系统方案.md` §0-3 确认。
+2. **官方数值 = 每次强化增量**：默认 10 级 → 一阶/二阶 = 官方值 ×5、三阶固定；换算在 `scripts/gen_treasure_data.mjs`
+   （`treasureEffectValue` / `treasureEffectScale`）。
+3. **改宝物机制后必须跑** `tests/treasure_effects.test.ts` 的回归守护用例（每件宝物每条已实现特效都必须产出状态）——
+   本会话曾因 `PENDING` 重写误删 `亢厉/威势/不懈/艮止`，导致 7 件宝物的特效静默丢失。
+4. `PENDING` 现为空；新增未实现词条请登记进去（守护测试会跳过它们）。
+5. PowerShell 里用 `node -e` 写中文/引号代码会被转义破坏 —— 改文件用 `edit` 工具，或把脚本写成 `.cjs` 再 `node 文件`（本会话踩过两次）。
+
+### 下一步（未开始）
+
+- 宝物系统在 Web 端已可佩戴并参与模拟；若要做**宝物锻造/进阶/淬火**等养成过程（材料经济），属新玩法，需另行立项。
+- 强化等级目前固定 10 级（UI 未开放调节）：如需可调，扩 `SlotState.treasure.level` + 滑杆即可（引擎已支持任意等级）。
