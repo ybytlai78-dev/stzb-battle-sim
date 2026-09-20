@@ -1627,6 +1627,22 @@ export interface TroopBonusResult {
 
 // ─── 武将 ───
 
+/**
+ * 武将佩戴的宝物（率土「宝物系统」；数据见 `src/data/treasures.ts`）。
+ * 口径（用户 2026-09-21，见 dateyuan/宝物系统方案.md §0）：
+ *  - 宝物效果**与任何来源都不冲突**，纯提升、可叠加；
+ *  - 默认 10 级：一阶/二阶特效 = 官方值 × 5（官方值即每次强化增量），三阶固定；
+ *  - 锻造词条（`affix`）数值由玩家在官方区间内自选。
+ */
+export interface TreasureLoadout {
+  /** 宝物 id（`TREASURES_BY_ID`） */
+  treasureId: number;
+  /** 宝物等级（缺省 10） */
+  level?: number;
+  /** 锻造出的词条；未锻造则不填。`value` = 玩家选定数值（官方区间内） */
+  affix?: { name: string; value: number };
+}
+
 export interface General {
   id: string;
   name: string;
@@ -1648,6 +1664,11 @@ export interface General {
    * null = 无限制，可任意共存。
    */
   mutualExclusionGroup: string | null;
+  /**
+   * 佩戴的宝物（缺省不佩戴）。引擎在准备阶段最先结算（`prep_phase: 'treasure'`，
+   * 早于 battle_start 被动与一类指挥，保证属性类特效被后续结算读到）。
+   */
+  treasure?: TreasureLoadout;
   troopType: TroopType;
   position: Position;
   attack: number;
@@ -1946,7 +1967,7 @@ export interface UnitState {
 
 export type BattleEvent =
   | { type: 'battle_start'; turnOrder: string[]; seed: number }
-  | { type: 'prep_phase'; phase: 'formation' | 'troop' | 'skill' }
+  | { type: 'prep_phase'; phase: 'formation' | 'troop' | 'treasure' | 'skill' }
   | {
       type: 'formation_bonus';
       unitId: string;

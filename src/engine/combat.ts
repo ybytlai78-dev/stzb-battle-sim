@@ -12,6 +12,7 @@ import { computeStats } from './stats';
 import { SKILL_REGISTRY } from '../data/skills';
 import { validateMutualExclusion } from '../data/hero-utils';
 import { computeTroopBonuses } from './troopBonus';
+import { applyTreasureEffects } from './treasure';
 
 const POSITION_PRIORITY: Record<string, number> = { 前锋: 0, 中军: 1, 大营: 2 };
 
@@ -80,6 +81,12 @@ export function runBattle(config: BattleConfig): BattleReport {
   emitLines(enemyTeam, enemyBonus.lines);
 
   events.push({ type: 'prep_phase', phase: 'troop' });
+  // 【宝物】佩戴宝物的单位先在宝物阶段结算（纯提升、与其他来源不冲突），再走 battle_start 被动 / 一类指挥
+  const treasureUnits = turnOrder.filter((u) => u.general.treasure);
+  if (treasureUnits.length > 0) {
+    events.push({ type: 'prep_phase', phase: 'treasure' });
+    for (const unit of treasureUnits) applyTreasureEffects(ctx, unit);
+  }
   events.push({ type: 'prep_phase', phase: 'skill' });
   // 【战法】先判定全部 battle_start 被动（百战精兵等加属性），再判定一类指挥（持节镇西等读生效属性）
   for (const unit of turnOrder) {

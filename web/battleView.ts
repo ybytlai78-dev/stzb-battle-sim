@@ -343,12 +343,13 @@ function renderPrepEvents(
   ctx?: RenderEvCtx
 ): void {
   const start = evs.find((e) => e.type === 'battle_start');
-  const sections: Record<'formation' | 'troop' | 'skill', BattleEvent[]> = {
+  const sections: Record<'formation' | 'troop' | 'treasure' | 'skill', BattleEvent[]> = {
     formation: [],
     troop: [],
+    treasure: [],
     skill: [],
   };
-  let cur: 'formation' | 'troop' | 'skill' | null = null;
+  let cur: 'formation' | 'troop' | 'treasure' | 'skill' | null = null;
   for (const ev of evs) {
     if (ev.type === 'prep_phase') {
       cur = ev.phase;

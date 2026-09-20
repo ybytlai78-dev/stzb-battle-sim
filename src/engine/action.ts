@@ -30,6 +30,7 @@ import type {
 } from './types';
 import type { Rng } from './rng';
 import { calcDamage, applyTroopCap, scaledValue, roundRate, sumRates, buffMult, calcHealAmount, moraleRate, applyIgnoreDef, troopCounterReduce } from './formulas';
+import { isTreasureSource } from './treasure-source';
 import { nearestEnemy, skillTargets, distanceBetween, adjacentUnits, sameSideDistance, attackRangeOf, POSITION_INDEX, unitsInSkillRange } from './target';
 
 /**
@@ -2626,6 +2627,12 @@ function inflictStatusCore(
   triggerSpecialDebuffBefore(ctx, target, type);
   // 审时定计②：我军被施加挑衅/围困/控制时 → 按 rate 抵御（命中则该次施加整段取消）
   if (triggerDebuffResist(ctx, target, type)) return;
+
+  // 宝物（用户口径 2026-09-21）：**与任何来源都不冲突**，纯提升、可叠加 → 跳过后续全部冲突判定，直接入栈
+  if (isTreasureSource(sourceSkillId)) {
+    pushStatus(ctx, target, create, sourceSkillType, sourceSkillId, casterId);
+    return;
+  }
 
   // 不受敌方指挥战法影响（藤甲突击）：敌方指挥战法施加的状态整段拦截（友方指挥不受影响）
   if (sourceSkillType === 'command') {
