@@ -5082,12 +5082,42 @@ function consumeControlSpread(ctx: CombatContext, holder: UnitState, status: Sta
 }
 
 /**
+ * 段级「每次发动后伤害率递增」探测（自擅江表：只有「此策略攻击」段递增；计数仍按整次发动 +1）：
+ * 递归穿透 chance_group / random_pick / morale_branch 等元输出。
+ */
+function hasRatePerCastSegment(outputs: SkillOutput[] | undefined): boolean {
+  if (!outputs) return false;
+  for (const o of outputs) {
+    if (o.kind === 'random_pick') {
+      if (o.options.some((opts) => hasRatePerCastSegment(opts))) return true;
+      continue;
+    }
+    if (o.kind === 'chance_group') {
+      if (hasRatePerCastSegment(o.outputs)) return true;
+      continue;
+    }
+    if (o.kind === 'morale_branch') {
+      if (hasRatePerCastSegment(o.high) || hasRatePerCastSegment(o.low)) return true;
+      continue;
+    }
+    if ('ratePerCast' in o && o.ratePerCast != null) return true;
+  }
+  return false;
+}
+
+/**
  * 每次发动后伤害率递增（及锋而试「每次发动后伤害率增加 40.0%」）：
  * 本次结算的加算值 = `skill.damageRatePerCast` × **此前**发动次数。
  * 计数在 `executeSkillWithTargets` 结算完成后 +1，故这里读到的是「此前发动次数」；不封顶、整场累计。
  */
-function damageRatePerCastBonus(ctx: CombatContext, caster: UnitState, skill: Skill): number {
-  const step = skill.damageRatePerCast;
+function damageRatePerCastBonus(
+  ctx: CombatContext,
+  caster: UnitState,
+  skill: Skill,
+  /** 段级覆盖（自擅江表：只有「此策略攻击」段递增，友军伤害段不涨） */
+  stepOverride?: number
+): number {
+  const step = stepOverride ?? skill.damageRatePerCast;
   if (step == null) return 0;
   const prior = ctx.skillCastCounters?.get(`${caster.general.id}:${skill.id}`) ?? 0;
   return step * prior;
@@ -5747,10 +5777,14 @@ function executeSkillOutputs(
         ? out.range
         : undefined;
     const outRange = outIgnoreRange ? Number.POSITIVE_INFINITY : (outExplicitRange ?? skill.range);
-    // 属性吸取（黄天余音）/ 分流治疗（合流、三军之众、利兵谋胜）：
-    // inflict_status / heal 可带 targetSide/targetMode 单输出目标池覆盖
-    const outSide = out.kind === 'inflict_status' || out.kind === 'heal' ? out.targetSide : undefined;
+    // 属性吸取（黄天余音）/ 分流治疗（合流、三军之众、利兵谋胜）/ 段级阵营伤害（自擅江表：友军段 + 敌军段）：
+    // inflict_status / heal / physical_damage / strategy_damage 可带 targetSide/targetMode 单输出目标池覆盖
+    const isDamageOut = out.kind === 'physical_damage' || out.kind === 'strategy_damage';
+    const outSide = out.kind === 'inflict_status' || out.kind === 'heal' || isDamageOut ? out.targetSide : undefined;
     const outSideMode = out.kind === 'inflict_status' || out.kind === 'heal' ? out.targetMode : undefined;
+    // 伤害段的「段级阵营」用伤害段自己的 range/targetMode（outRange / outMode）
+    const sideRange = isDamageOut ? outRange : skill.range;
+    const sideMode = outSideMode ?? (isDamageOut ? outMode : undefined) ?? 'random_single';
     const allyPool =
       (out.kind === 'heal' || out.kind === 'inflict_status') && out.excludeSelf
         ? allies.filter((u) => u.general.id !== caster.general.id)
@@ -5766,21 +5800,28 @@ function executeSkillOutputs(
     let pool =
       outTarget === 'self'
         ? [caster]
-        : outMode
-          ? skillTargets(ctx, caster, enemies, outRange, outMode, 'groupCount' in out ? out.groupCount : undefined)
-          : outSide === 'self'
-            ? [caster]
-            : outSide === 'enemy'
-              ? skillTargets(ctx, caster, enemyPickPool, skill.range, outSideMode ?? 'random_single')
-              : outSide === 'ally'
-                ? skillTargets(
-                    ctx,
-                    caster,
-                    allyPickPool,
-                    skill.range,
-                    outSideMode ?? 'random_single',
-                    'groupCount' in out ? out.groupCount : undefined
-                  )
+        : outSide === 'self'
+          ? [caster]
+          : outSide === 'enemy'
+            ? skillTargets(
+                ctx,
+                caster,
+                enemyPickPool,
+                sideRange,
+                sideMode,
+                'groupCount' in out ? out.groupCount : undefined
+              )
+            : outSide === 'ally'
+              ? skillTargets(
+                  ctx,
+                  caster,
+                  allyPickPool,
+                  sideRange,
+                  sideMode,
+                  'groupCount' in out ? out.groupCount : undefined
+                )
+              : outMode
+                ? skillTargets(ctx, caster, enemies, outRange, outMode, 'groupCount' in out ? out.groupCount : undefined)
                 : targets;
     // 伤害段选敌覆盖（兼弱攻昧：有效距离内生效防御/谋略最低者；四世三公走代打路径自理）
     // 注：代打路径（attacker:'recipient'）稍后会把自己的池重置为战法目标，不受此处影响。
@@ -6133,7 +6174,7 @@ function executeSkillOutputs(
                 : out.rate;
             const rate =
               (Array.isArray(baseRate) ? ctx.rng.intInclusive(baseRate[0], baseRate[1]) : baseRate) +
-              damageRatePerCastBonus(ctx, caster, skill) +
+              damageRatePerCastBonus(ctx, caster, skill, 'ratePerCast' in out ? out.ratePerCast : undefined) +
               hitI * (out.ratePerRepeat ?? 0);
             const { damage, breakdown } = calcDamage(
               {
@@ -6271,7 +6312,7 @@ function executeSkillOutputs(
             // 群体逐目标叠层，每段伤害吃到截至本目标的全部层）
             const effStrategy = effectiveStat(stratSrc, 'strategy');
             // 每次发动后伤害率递增（及锋而试）：先加算再走受谋略缩放
-            let rate = out.rate + damageRatePerCastBonus(ctx, caster, skill);
+            let rate = out.rate + damageRatePerCastBonus(ctx, caster, skill, 'ratePerCast' in out ? out.ratePerCast : undefined);
             if (out.strategyScaled && out.growthRate !== undefined) {
               rate = roundRate(scaledValue(rate, out.growthRate, effStrategy));
             }
@@ -7306,8 +7347,8 @@ function executeSkillWithTargets(
     skillName: skill.name,
   });
   executeSkillOutputs(ctx, unit, skill, targets);
-  // 每次成功发动后计数 +1（及锋而试伤害率递增；结算中读到的即此前发动次数）
-  if (skill.damageRatePerCast != null) {
+  // 每次成功发动后计数 +1（及锋而试 / 自擅江表**段级**递增；结算中读到的即此前发动次数）
+  if (skill.damageRatePerCast != null || hasRatePerCastSegment(skill.output)) {
     ctx.skillCastCounters ??= new Map();
     const key = `${unit.general.id}:${skill.id}`;
     ctx.skillCastCounters.set(key, (ctx.skillCastCounters.get(key) ?? 0) + 1);

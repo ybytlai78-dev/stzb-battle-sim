@@ -9303,4 +9303,54 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       ],
     },
   },
+
+  /**
+   * 自擅江表（XP孙权·吴弓 h808 主战法）：主动 S（无准备），距离 5，敌我群体，发动率 50%。
+   * 满级「对友军群体发动一次攻击（伤害率 60.0%）并恢复自身一定兵力（恢复率 120.0%，受谋略属性影响），
+   *   随后对敌军群体发动一次猛烈的策略攻击（伤害率 160.0%，受谋略属性影响），每次发动后，
+   *   此策略攻击的伤害率增加 30.0%（受谋略属性影响），可叠加，持续至战斗结束」；
+   * 1 级：60.0% → 30.0% / 120.0% → 60.0% / 160.0% → 80.0% / 增加 30.0% → 15.0%。
+   * 官方：scripts/skill_extra.json id 200283（主动 / S / 距离 5 / 敌我群体 / 兵种弓步骑；
+   *   effect 标签 攻击伤害;急救;策略攻击伤害）。来源 https://stzb.163.com/m/skilllist/200283.html
+   *
+   * 口径（策略 A + 用户 2026-09-20 口径；推定处已标注）：
+   *   ① **「对友军群体发动一次攻击」为官方原文、非笔误**（用户 2026-09-20 确认：确为对友军群体发动一次
+   *      低伤害的攻击，后续还有效果）→ 段级 `targetSide:'ally'` + `targetMode:'group'`（2 目标，
+   *      按仓库 `allies` 口径**含施法者自身**，**推定**：官方同句用「自身」指代恢复目标，可能暗示友军段不含自身）；
+   *   ② 「恢复自身一定兵力（120%，受谋略）」→ `heal` + `target:'self'`，成长率官方未给 → `growthRate: 0`（基值）；
+   *   ③ 「随后对敌军群体发动一次猛烈的策略攻击（160%，受谋略）」→ 段级 `targetSide:'enemy'` + `targetMode:'group'`（2 目标）；
+   *   ④ 「每次发动后，**此策略攻击**的伤害率增加 30.0%（受谋略），可叠加，持续至战斗结束」→ **段级**
+   *      `ratePerCast: 30`（新增：段级「每次发动后递增」，只作用于策略攻击段；友军伤害段不涨）；
+   *      计数为「此前发动次数 × 30」（及锋而试同口径），受谋略成长率未给 → 基值 30 不缩放；
+   *   ⑤ 三处受谋略段（恢复 120% / 策略 160% / 递增 30%）成长系数均未确认 → 基值不缩放
+   *      → 登记 OFFLINE_MAIN_SKILLS → **武将下架**。
+   */
+  zishan_jiangbiao: {
+    id: 'zishan_jiangbiao',
+    name: '自擅江表',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.5, // 官方 50%
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage', 'heal', 'damage_boost'],
+    output: [
+      // ① 对友军群体（2 目标）发动一次低伤害攻击 60%（官方原文即为「友军」）
+      { kind: 'physical_damage', rate: 60, targetSide: 'ally', targetMode: 'group', groupCount: 2 },
+      // ② 恢复自身一定兵力 120%（受谋略未确认 → 基值）
+      { kind: 'heal', target: 'self', rate: 120, strategyScaled: true, growthRate: 0 },
+      // ③ 对敌军群体（2 目标）策略攻击 160%（受谋略未确认 → 基值），④ 每次发动后本段伤害率 +30%
+      {
+        kind: 'strategy_damage',
+        rate: 160,
+        strategyScaled: true,
+        targetSide: 'enemy',
+        targetMode: 'group',
+        groupCount: 2,
+        ratePerCast: 30,
+      },
+    ],
+  },
 };

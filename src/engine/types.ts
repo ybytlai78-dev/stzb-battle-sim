@@ -109,6 +109,10 @@ export type SkillOutput =
       targetMode?: 'single' | 'random_single' | 'group' | 'all';
       /** 输出级 group 目标数（仅 targetMode:'group'，缺省沿用战法 groupCount 或 2）；`[2,3]` 50/50 随机（辕门射戟） */
       groupCount?: number | [number, number];
+      /** 单输出阵营覆盖（自擅江表：对**友军群体**发动一次攻击）→ 从该阵营按 targetMode/groupCount 重选目标 */
+      targetSide?: 'enemy' | 'ally' | 'self';
+      /** 段级「每次发动后伤害率递增」（自擅江表：只有策略攻击段递增）；缺省沿用战法级 damageRatePerCast */
+      ratePerCast?: number;
       /**
        * 段级按阵营过滤**本战法整体（锁定）目标**（率尔方雅）：
        * 只结算锁定目标中与施法者**同侧**（'ally'）/ **对侧**（'enemy'）/ **自身**（'self'）者，
@@ -241,6 +245,10 @@ export type SkillOutput =
       target?: 'self';
       targetMode?: 'single' | 'random_single' | 'group' | 'all';
       groupCount?: number | [number, number];
+      /** 单输出阵营覆盖（自擅江表：对**敌军群体**发动一次策略攻击）→ 从该阵营按 targetMode/groupCount 重选目标 */
+      targetSide?: 'enemy' | 'ally' | 'self';
+      /** 段级「每次发动后伤害率递增」（自擅江表：只有此策略攻击段递增，友军伤害段不涨）；缺省沿用战法级 damageRatePerCast */
+      ratePerCast?: number;
       /**
        * 独立发动率（运筹决胜策略攻击 50%），缺省必中。
        * 支持：被动 / 主动 / 指挥（非 `before_active`）在输出执行处逐段判定（士气修正，失败跳过本段）；

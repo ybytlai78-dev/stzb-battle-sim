@@ -129,7 +129,7 @@
     "growthDefense": 1.78,
     "growthStrategy": 2.26,
     "growthSpeed": 0.87,
-    "mainSkillId": "",
+    "mainSkillId": "zishan_jiangbiao",
     "mainSkillName": "自擅江表",
     "skillDesc": "对友军群体发动一次攻击（伤害率60.0%）并恢复自身一定兵力（恢复率120.0%，受谋略属性影响），随后对敌军群体发动一次猛烈的策略攻击（伤害率160.0%，受谋略属性影响），每次发动后，此策略攻击的伤害率增加30.0%（受谋略属性影响），可叠加，持续至战斗结束"
   },

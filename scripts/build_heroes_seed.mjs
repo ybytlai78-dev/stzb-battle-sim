@@ -196,6 +196,7 @@ const SKILL_ID_BY_NAME = {
   迟智难酬: 'chizhi_nanchou',
   鏖兵卫主: 'aobing_weizhu',
   锦车持节: 'jinche_chijie',
+  自擅江表: 'zishan_jiangbiao',
 };
 
 /** 现有 8 个武将固定拼音 id（测试直接引用 HERO_REGISTRY.<id>） */

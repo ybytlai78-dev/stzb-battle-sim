@@ -128,7 +128,7 @@ describe('批量补入 · XP 卡（season=XP，100xxx 段）', () => {
     expect(HERO_RECORDS['h791'].mainSkillName).toBe('疲兵沮意');
   });
 
-  it('XP 卡一律空槽下架（主战法未实现）', () => {
+  it('XP 卡空槽表已清空：XP 主战法全部实现（h808 收尾）', () => {
     // h653（XP关兴＆张苞·将门有将）已实现并上架（2026-09-19 武将 29）→ 从本表移出
     // h788（XP丁奉·雪奋短兵）已实现（因动摇成长率未确认暂下架，2026-09-19 武将 31）→ 从本表移出
     // h815（XP孟获·蛮王御众）已实现（因减伤受防御成长未确认暂下架，2026-09-19 武将 32）→ 从本表移出
@@ -144,13 +144,20 @@ describe('批量补入 · XP 卡（season=XP，100xxx 段）', () => {
     // h792（XP马良·雅虑适时）已实现（因减伤受谋略成长率未确认暂下架，2026-09-20 武将 61）→ 从本表移出
     // h795（XP献帝·天子诏令）已实现（因两处受谋略成长率未确认暂下架，2026-09-20 武将 62）→ 从本表移出
     // h684（XP程普·鏖兵卫主）已实现（因防御点数受防御成长未确认暂下架，2026-09-20 武将 65）→ 从本表移出
-    for (const id of ['h808']) {
-      const r = HERO_RECORDS[id];
-      expect(r, `${id} 应已入库`).toBeTruthy();
-      expect(r.name.startsWith('XP'), `${id} 应以 XP 前缀命名`).toBe(true);
-      expect(r.mainSkillId, `${id} 应为空槽`).toBe('');
-      expect(isHeroListed(r), `${id} 应下架`).toBe(false);
-    }
+    // h808（XP孙权·自擅江表）已实现（因三处受谋略成长率未确认暂下架，2026-09-20 武将 67）→ 从本表移出
+    const xpIds = Object.values(HERO_RECORDS)
+      .filter((r) => r.name.startsWith('XP'))
+      .map((r) => r.id);
+    expect(xpIds.length).toBeGreaterThan(0);
+    expect(xpIds.filter((id) => HERO_RECORDS[id].mainSkillId === '')).toEqual([]);
+  });
+
+  it('XP孙权 h808：主战法自擅江表已实现（受谋略成长未确认 → 暂下架，不再空槽）', () => {
+    const r = HERO_RECORDS['h808'];
+    expect(r.name).toBe('XP孙权');
+    expect(r.mainSkillName).toBe('自擅江表');
+    expect(r.mainSkillId).toBe('zishan_jiangbiao');
+    expect(isHeroListed(r)).toBe(false);
   });
 
   it('XP关兴＆张苞 h653：主战法将门有将已实现 → 上架（不再空槽）', () => {
