@@ -8,9 +8,9 @@
  * 成长率：「受谋略属性影响」两处未确认 → 留空（heal 的 growthRate 必填 → 0；策略伤害不给 growthRate）。
  */
 import { describe, it, expect, beforeAll } from 'vitest';
-import { inflictStatus, triggerCommandSkills, type CombatContext, type LockedCommand } from '../src/engine/action';
+import { applyDamage, inflictStatus, triggerCommandSkills, type CombatContext, type LockedCommand } from '../src/engine/action';
 import { calcHealAmount } from '../src/engine/formulas';
-import type { BattleEvent, CommandSkill, General, Position, Skill, UnitState } from '../src/engine/types';
+import { firstOnHurt, type BattleEvent, type CommandSkill, type General, type Position, type Skill, type UnitState } from '../src/engine/types';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import { initHeroDB, HERO_REGISTRY, withSkills, level40 } from '../src/data/heroes';
 import { Rng } from '../src/engine/rng';
@@ -107,6 +107,18 @@ function dmgEvents(ctx: CombatContext, skillId = 'juxian_jueji') {
   return ctx.events.filter(
     (e): e is Extract<BattleEvent, { type: 'damage' }> => e.type === 'damage' && e.skillId === skillId,
   );
+}
+
+/** 把受击触发的判定率改成 rate（确定性单测：缓师徐持 × 举贤决机联动） */
+function forceOnHurtRate(ctx: CombatContext, skillId: string, rate = 1): void {
+  const base = ctx.skills.get(skillId);
+  if (!base || (base.type !== 'command' && base.type !== 'passive') || !base.onHurt) {
+    throw new Error(`forceOnHurtRate：${skillId} 无 onHurt`);
+  }
+  ctx.skills.set(skillId, {
+    ...base,
+    onHurt: { ...firstOnHurt(base.onHurt)!, rate, rateStrategyScaled: false },
+  } as Skill);
 }
 
 function triggers(ctx: CombatContext, skillId = 'juxian_jueji') {
@@ -239,5 +251,28 @@ describe('举贤决机（荀彧 h794）', () => {
     };
     expect(healAt(80)).toBe(calcHealAmount(9000, 60));
     expect(healAt(300)).toBe(calcHealAmount(9000, 60));
+  });
+
+  it('联动缓师徐持（沮授）：每次属性下降各判一次 → 逐次策略伤害', () => {
+    const xunyu = heroUnit('h794', '中军', { commandSkillIds: ['juxian_jueji'] });
+    const ju = heroUnit('h771', '大营', { commandSkillIds: ['huanshi_xuchi'] });
+    const src = makeUnit(dummy('src', '前锋'));
+    const foe = makeUnit(dummy('foe', '前锋', { maxTroops: 100000 }), 'enemy');
+    foe.hasActedThisRound = true; // 缓师徐持：仅「已行动的敌军」受伤后触发
+    const ctx = makeCtx([xunyu, ju, src], [foe]);
+    lockJuxian(ctx, xunyu, 1);
+    forceOnHurtRate(ctx, 'huanshi_xuchi', 1);
+
+    applyDamage(ctx, foe, 80, src);
+
+    // 缓师徐持两次判定 ×「攻/防/谋/速」四维 = 8 次属性下降（同源叠加：每维 -40）
+    for (const type of ['attack_buff', 'defense_buff', 'strategy_buff', 'speed_buff'] as const) {
+      const st = foe.statuses.find((s) => s.type === type && s.sourceSkillId === 'huanshi_xuchi');
+      expect(st && 'amount' in st ? st.amount : 0).toBe(-40);
+    }
+    // 每次「被成功施加属性下降效果前」各判一次，rate 强制 100% → 8 次必中策略伤害
+    expect(triggers(ctx)).toHaveLength(8);
+    expect(dmgEvents(ctx)).toHaveLength(8);
+    expect(triggers(ctx).every((t) => t.targetId === 'foe' && t.success)).toBe(true);
   });
 });
