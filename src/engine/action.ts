@@ -30,6 +30,7 @@ import type {
 } from './types';
 import type { Rng } from './rng';
 import { calcDamage, applyTroopCap, scaledValue, roundRate, sumRates, buffMult, calcHealAmount, moraleRate, applyIgnoreDef, troopCounterReduce } from './formulas';
+import { troopCounterReduceOf as secondaryCounterReduceOf, traitCombatModifiers, traitStatBonus, type TraitCombatContext } from './secondaryTroop';
 import { nearestEnemy, skillTargets, distanceBetween, adjacentUnits, sameSideDistance, attackRangeOf, POSITION_INDEX, unitsInSkillRange } from './target';
 
 /**
@@ -303,9 +304,20 @@ function pickStatUnit(
   return [best];
 }
 
-/** 兵种克制减伤率（加算进增减伤单一总和）：被克制方攻击克制方 0.3，否则 0 */
+/**
+ * 兵种克制减伤率（加算进增减伤单一总和）——含**二级兵种改写**：
+ *  - 未转换 → 基础相克（被克制方 0.3 减伤）；
+ *  - 长枪兵 → 克骑（骑打枪 0.3）、对骑增伤（枪打骑 −0.3）、被弓克（弓打枪 −0.3、枪打弓 0.3）；
+ *  - 其余高级兵种 → 沿用基础兵系相克。
+ * 负数 = 该次伤害提高（负减伤），由 buffMult 单一总和模型自动抵消。
+ */
 function troopCounterReduceOf(source: UnitState, target: UnitState): number {
-  return troopCounterReduce(source.general.troopType, target.general.troopType);
+  return secondaryCounterReduceOf({
+    attackerTroop: source.general.troopType,
+    attackerSecondary: source.general.secondaryTroop,
+    targetTroop: target.general.troopType,
+    targetSecondary: target.general.secondaryTroop,
+  });
 }
 
 /** 四种控制状态（混乱/犹豫/暴走/怯战）：洞察免疫、控制冲突、鸾凤和鸣「控制 +1 目标」共用同一口径 */
@@ -489,6 +501,13 @@ export interface CombatContext {
   basicHitProcs?: BasicHitProcEffect[];
   /** 当前回合数（预备怯战/延迟结算判定用） */
   currentRound: number;
+  /**
+   * 防守方阵营（守备/以静制动 等「作为防守方」条件）：率土战斗无攻守之分，
+   * 缺省 undefined = 无防守方（相关特性不生效）；野地遭遇战/驻守战可由调用方指定。
+   */
+  defenderSide?: 'my' | 'enemy';
+  /** 是否野地作战（蛮兵：野地 +18% / 城池 −8%）；缺省 undefined = 城池作战 */
+  fieldBattle?: boolean;
   /** 二类指挥行动叠层计数器（奋疾先登）：key `${casterId}:${skillId}` → 当前增伤层数。
    *  可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化 */
   actLayerCounters?: Map<string, number>;
@@ -721,10 +740,10 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
     } else if (skill.targetSide === 'enemy') {
       // 对敌指挥（白楼独舞：前 3 回合敌军群体减伤）：按 targetMode 选敌军
       const enemyMode = resolveCombatTargetMode(skill.targetMode, 'all');
-      targets = skillTargets(ctx, unit, enemies, skill.range, enemyMode);
+      targets = filterCommandTargets(skillTargets(ctx, unit, enemies, skill.range, enemyMode), skill.type);
     } else {
       const lockMode = resolveCombatTargetMode(skill.roundRepeat?.targetMode ?? skill.targetMode, 'all');
-      targets = skillTargets(ctx, unit, enemies, skill.range, lockMode);
+      targets = filterCommandTargets(skillTargets(ctx, unit, enemies, skill.range, lockMode), skill.type);
     }
     if (targets.length === 0) continue;
     if (skill.teamTroopFilter && !teamPassesTroopFilter(
@@ -1024,7 +1043,7 @@ function triggerStrategyAdjacentBonus(
       triggerStackBuff(ctx, source, raw, 'strategy');
       const hit: DamageHitContext = { damageSource: 'skill', damageType: 'strategy', skillType: l.skill.type };
       const { causedMult, takenMult } = damageBoosts(ctx, source, raw, hit);
-      const reduce = sumReduce(raw, hit) + troopCounterReduceOf(source, raw);
+      const reduce = sumReduce(raw, hit, ctx, source) + troopCounterReduceOf(source, raw);
       const { damage, breakdown } = calcDamage(
         {
           damageType: 'strategy',
@@ -1544,8 +1563,10 @@ function executeRoundCommand(ctx: CombatContext, unit: UnitState, skill: Command
       executeSkillOutputs(ctx, unit, skill, targets);
       return;
     }
-    // 对指定位置的存活目标（大营/中军）
-      const positioned = targets.filter((t) => out.positions.includes(t.general.position) && t.alive);
+    // 对指定位置的存活目标（大营/中军）；象兵「野性」：不受指挥战法效果影响，直接从池中剔除
+    const positioned = targets.filter(
+      (t) => out.positions.includes(t.general.position) && t.alive && !elephantImmuneToCommand(skill.type, t)
+    );
     // 伤害源：施法者自己 或 速度最高的友军（不含自己）
     const source = out.source === 'self' ? unit : fastestAlly(allies, unit);
     if (!source) continue;
@@ -1564,7 +1585,7 @@ function executeRoundCommand(ctx: CombatContext, unit: UnitState, skill: Command
         const hit: DamageHitContext = { damageSource: 'skill', damageType: 'physical', skillType: 'command' };
         const { causedMult, takenMult } = damageBoosts(ctx, source, t, hit);
         const counterReduce = out.ignoresTroopCounter ? 0 : troopCounterReduceOf(source, t);
-        const reduce = sumReduce(t, hit) + counterReduce;
+        const reduce = sumReduce(t, hit, ctx, source) + counterReduce;
         const { damage, breakdown } = calcDamage(
           {
             damageType: 'physical',
@@ -1977,7 +1998,7 @@ function computeDotTickDamage(
     ...(dot.dotType ? { dotType: dot.dotType } : {}),
   };
   const { causedMult, takenMult } = damageBoosts(ctx, caster, target, hit);
-  const reduce = sumReduce(target, hit) + troopCounterReduceOf(caster, target);
+  const reduce = sumReduce(target, hit, ctx, caster) + troopCounterReduceOf(caster, target);
   const { damage, breakdown } = calcDamage(
     {
       damageType: 'strategy',
@@ -2172,7 +2193,7 @@ function executeSplitAttack(
     const def = physicalTargetDefense(unit, adjTarget);
     const hit: DamageHitContext = { damageSource: 'basic', damageType: 'physical', split: true };
     const { causedMult, takenMult } = damageBoosts(ctx, unit, adjTarget, hit);
-    const reduce = sumReduce(adjTarget, hit) + troopCounterReduceOf(unit, adjTarget);
+    const reduce = sumReduce(adjTarget, hit, ctx, unit) + troopCounterReduceOf(unit, adjTarget);
     const { damage, breakdown } = calcDamage(
       {
         damageType: 'physical',
@@ -4322,13 +4343,15 @@ export function effectiveStat(unit: UnitState, kind: 'attack' | 'defense' | 'str
   const g = unit.general;
   const base = kind === 'attack' ? g.attack : kind === 'defense' ? g.defense : kind === 'strategy' ? g.strategy : g.speed;
   const formation = unit.formationBonus?.[kind] ?? 0;
+  // 兵种特性点数加成（利刃：每个非主动战法 +22 攻击；地利：按站位加四维）
+  const traitFlat = traitStatBonus(g, kind);
   const buffs = unit.statuses.filter((s) =>
     kind === 'attack' ? s.type === 'attack_buff'
       : kind === 'defense' ? s.type === 'defense_buff'
         : kind === 'strategy' ? s.type === 'strategy_buff'
           : s.type === 'speed_buff'
   );
-  const flat = formation + buffs.reduce((acc, s) => acc + (('amount' in s && !('percent' in s && s.percent) ? s.amount : 0) as number), 0);
+  const flat = formation + traitFlat + buffs.reduce((acc, s) => acc + (('amount' in s && !('percent' in s && s.percent) ? s.amount : 0) as number), 0);
   const pct = buffs.reduce((acc, s) => acc + (('amount' in s && 'percent' in s && s.percent ? s.amount : 0) as number), 0);
   const eff = base + flat;
   if (pct === 0) return eff;
@@ -4421,14 +4444,71 @@ export function statusMatchesHit(
 
 /** 受击方减伤合计；hit 过滤后仍走 formulas.sumRates，不改其签名。
  *  条件减伤（人公将军）：`requireSelfStatus` 未满足时本减伤不生效（按**携带者当前**状态实时判定）。 */
-function sumReduce(target: UnitState, hit?: DamageHitContext): number {
+/**
+ * 通用特性/专属特性的战斗期上下文（每次伤害结算时构造）。
+ * `source` / `target` 缺省（无归属伤害）时返回零修正。
+ */
+function traitCtx(
+  ctx: CombatContext | undefined,
+  source: UnitState | undefined,
+  target: UnitState | undefined,
+  hit?: DamageHitContext
+): TraitCombatContext | null {
+  if (!source || !target) return null;
+  const has = (t: 'confusion' | 'rampage' | 'cowardice' | 'hesitation') =>
+    target.statuses.some((s) => s.type === t);
+  return {
+    attackerTraits: source.general.secondaryTraits,
+    attackerTroop: source.general.secondaryTroop,
+    targetTraits: target.general.secondaryTraits,
+    targetTroop: target.general.secondaryTroop,
+    targetHasStatus: has,
+    targetTroops: target.troops,
+    round: ctx?.currentRound ?? 1,
+    targetPosition: target.general.position,
+    distance: distanceBetween(ctx as CombatContext, source, target),
+    fieldBattle: ctx?.fieldBattle,
+    attackerIsDefender: ctx?.defenderSide != null && source.side === ctx.defenderSide,
+    targetIsDefender: ctx?.defenderSide != null && target.side === ctx.defenderSide,
+    damageType: hit?.damageType,
+    skillType: hit?.skillType,
+    isPursuit: hit?.skillType === 'pursuit',
+    isBurning: hit?.dotType === 'burning' || hit?.dotType === 'ignite',
+    isDot: hit?.dotType != null,
+    isBasicOrPursuit: hit?.damageSource === 'basic' || hit?.skillType === 'pursuit',
+    isActiveSkill: hit?.skillType === 'active',
+  };
+}
+
+function traitMods(
+  ctx: CombatContext | undefined,
+  source: UnitState | undefined,
+  target: UnitState | undefined,
+  hit?: DamageHitContext
+): { caused: number; takeBoost: number; reduce: number } {
+  const c = traitCtx(ctx, source, target, hit);
+  if (!c) return { caused: 0, takeBoost: 0, reduce: 0 };
+  try {
+    return traitCombatModifiers(c);
+  } catch {
+    // distanceBetween 需要完整 ctx（单元测试直接构造的 ctx 可能缺 team 字段）：回退为零修正
+    return { caused: 0, takeBoost: 0, reduce: 0 };
+  }
+}
+
+function sumReduce(
+  target: UnitState,
+  hit?: DamageHitContext,
+  ctx?: CombatContext,
+  source?: UnitState
+): number {
   const list = target.statuses.filter(
     (s) =>
       s.type === 'damage_reduce' &&
       statusMatchesHit(s, hit) &&
       (!('requireSelfStatus' in s) || !s.requireSelfStatus || hasStatus(target, s.requireSelfStatus))
   );
-  return sumRates(list, 'damage_reduce') + pendingStacksReduceOf(target);
+  return sumRates(list, 'damage_reduce') + pendingStacksReduceOf(target) + traitMods(ctx, source, target, hit).reduce;
 }
 
 /**
@@ -4485,9 +4565,11 @@ function damageBoosts(
   );
   // 被动概率增伤（侵掠如火）：命中则并入造成侧合计（数值体现在伤害本身，不进战报增减伤明细）
   // 叠层待发·下次普攻增伤（奉令护蜀）：同属「进行攻击」的一次性造成侧增伤
+  // 通用特性/二级兵种专属特性（列阵/齐射/弩兵/破甲…）：与上述可叠加、不受冲突规则约束
+  const traits = traitMods(ctx, source, target, hit);
   return {
-    causedMult: 1 + causedBoost + attackProcBoostOf(ctx, source, hit) + pendingStacksBoostOf(source, hit),
-    takenMult: 1 + takenBoost,
+    causedMult: 1 + causedBoost + attackProcBoostOf(ctx, source, hit) + pendingStacksBoostOf(source, hit) + traits.caused,
+    takenMult: 1 + takenBoost + traits.takeBoost,
   };
 }
 
@@ -4536,12 +4618,42 @@ function collectDamageModifiers(
     )
     .map((s) => toSrc(s, 'reduce'));
   const cr = troopCounterReduceOf(source, target);
-  if (cr > 0 && !opts?.ignoresTroopCounter) {
+  if (cr !== 0 && !opts?.ignoresTroopCounter) {
     reduce.push({
       unitId: target.general.id,
       skillId: 'troop_counter',
       skillName: '兵种克制',
       rate: cr,
+      direction: 'reduce',
+    });
+  }
+  // 兵种特性（专属 + 通用）：与战法效果不冲突、可叠加（官方 Q&A 第 14 条）。
+  // 造成侧单列、受击侧并入 reduce/taken；负 rate 表示该次伤害提高（如长枪兵对骑 +30%）。
+  const tm = traitMods(ctx, source, target, hit);
+  if (includeBoosts && tm.caused !== 0) {
+    caused.push({
+      unitId: source.general.id,
+      skillId: 'troop_trait',
+      skillName: '兵种特性',
+      rate: tm.caused,
+      direction: 'caused',
+    });
+  }
+  if (includeBoosts && tm.takeBoost !== 0) {
+    taken.push({
+      unitId: target.general.id,
+      skillId: 'troop_trait',
+      skillName: '兵种特性',
+      rate: tm.takeBoost,
+      direction: 'taken',
+    });
+  }
+  if (tm.reduce !== 0) {
+    reduce.push({
+      unitId: target.general.id,
+      skillId: 'troop_trait',
+      skillName: '兵种特性',
+      rate: tm.reduce,
       direction: 'reduce',
     });
   }
@@ -5428,7 +5540,7 @@ function triggerDealPunish(ctx: CombatContext, source: UnitState): void {
     if (!caster || !caster.alive || !skill) continue;
     const hit: DamageHitContext = { damageSource: 'skill', damageType: 'strategy', skillType: skill.type, skillId: skill.id };
     const { causedMult, takenMult } = damageBoosts(ctx, caster, source, hit);
-    const reduce = sumReduce(source, hit) + troopCounterReduceOf(caster, source);
+    const reduce = sumReduce(source, hit, ctx, caster) + troopCounterReduceOf(caster, source);
     const { damage, breakdown } = calcDamage(
       {
         damageType: 'strategy',
@@ -5744,6 +5856,21 @@ function triggerRecoverEachRound(ctx: CombatContext, unit: UnitState): void {
   }
 }
 
+/**
+ * 象兵「野性」：不受任何指挥战法产生的效果影响（用户 2026-09-20 口径）。
+ * 敌我双方一视同仁 —— 敌方指挥的伤害/控制吃不到，我方指挥的增益也吃不到。
+ * @param skillType 战法类型；仅 `command` 生效
+ */
+export function elephantImmuneToCommand(skillType: SkillType, target: UnitState): boolean {
+  return skillType === 'command' && target.general.secondaryTroop === '象兵';
+}
+
+/** 过滤掉受指挥免疫（象兵）的目标：用于指挥战法的选目标阶段 */
+function filterCommandTargets(targets: UnitState[], skillType: SkillType): UnitState[] {
+  if (skillType !== 'command') return targets;
+  return targets.filter((t) => !elephantImmuneToCommand(skillType, t));
+}
+
 function executeSkillOutputs(
   ctx: CombatContext,
   caster: UnitState,
@@ -5760,6 +5887,9 @@ function executeSkillOutputs(
    */
   statSource?: UnitState
 ): void {
+  // 象兵「野性」：指挥战法产生的任何效果都对它无效（敌我双方一视同仁）。
+  // 注意：targets 允许为空数组（监听类战法自行选目标，如七步释嫌），故这里**不能**因空数组提前 return。
+  if (skill.type === 'command' && targets.length > 0) targets = filterCommandTargets(targets, skill.type);
   // 重复施加奖励（诸葛锦囊「若发动时目标已有诸葛锦囊效果，则额外恢复目标一定兵力」）：
   // 发动时逐目标判定——目标身上已带本战法施加的状态则追加结算 repeatBonus.output。
   // skipRepeat 防自递归；在入口处按「每次发动」结算一次，不随 output 段数重复。
@@ -5771,6 +5901,15 @@ function executeSkillOutputs(
     }
   }
   const list = outputs ?? skill.output;
+  // 象兵「野性」：指挥战法产生的**任何**效果对它无效（含我方指挥增益、含选目标阶段未过滤干净的旁路）。
+  // 放在输出遍历前统一过滤一次，覆盖 inflict_status / heal / grant_* / 伤害段等所有 kind。
+  if (skill.type === 'command' && targets.length > 0) {
+    targets = targets.filter((t) => {
+      if (!elephantImmuneToCommand(skill.type, t)) return true;
+      ctx.events.push({ type: 'command_immune_blocked', unitId: t.general.id, skillId: skill.id });
+      return false;
+    });
+  }
   // 战法链（连环计）：仅最外层发动执行（nested 调用都带显式 outputs，故不会递归触发）
   if (!outputs) runChainSkills(ctx, caster, skill, targets);
   // 随机复制发动（奇门遁甲）：同样仅最外层执行；显式 outputs 传入被复制战法 → 其自身 chain/copy 不递归
@@ -5919,7 +6058,7 @@ function executeSkillOutputs(
     }
     // 站位定向伤害段（万军取首「对敌方大营」）：直接锁定该站位的存活敌军，不按 targetMode 重选
     if ((out.kind === 'physical_damage' || out.kind === 'strategy_damage') && out.positions && out.positions.length > 0) {
-      pool = enemies.filter((u) => u.alive && out.positions!.includes(u.general.position));
+      pool = enemies.filter((u) => u.alive && out.positions!.includes(u.general.position) && !elephantImmuneToCommand(skill.type, u));
     }
     // 恢复段选人覆盖（知人待士「我军兵力最低单体恢复一定兵力」）：按**当前兵力**取最低的存活友军
     // （含施法者自身；与 inflict_status.targetPick 的池无关，直接锁定 1 人）
@@ -6155,7 +6294,7 @@ function executeSkillOutputs(
               const hit: DamageHitContext = { damageSource: 'skill', damageType, skillType: skill.type, skillId: skill.id };
               const { causedMult, takenMult } = damageBoosts(ctx, rider, t, hit);
               const counterReduce = out.ignoresTroopCounter ? 0 : troopCounterReduceOf(rider, t);
-              const reduce = sumReduce(t, hit) + counterReduce;
+              const reduce = sumReduce(t, hit, ctx, rider) + counterReduce;
               const rate = byHigher
                 ? useStrategy
                   ? byHigher.strategyRate
@@ -6253,7 +6392,7 @@ function executeSkillOutputs(
             const hit: DamageHitContext = { damageSource: 'skill', damageType: 'physical', skillType: skill.type, skillId: skill.id };
             const { causedMult, takenMult } = damageBoosts(ctx, source, t, hit);
             const counterReduce = out.ignoresTroopCounter ? 0 : troopCounterReduceOf(source, t);
-            const reduce = sumReduce(t, hit) + counterReduce;
+            const reduce = sumReduce(t, hit, ctx, source) + counterReduce;
             // 每次发动后伤害率递增（及锋而试）：加在输出段 rate 上（不封顶、整场累计）
             // 每次 repeats 逐次递增伤害率（银龙孤胆）：第 i 次（i 从 0 起）额外 +i×ratePerRepeat 个百分点
             // 自身兵力比例替换伤害率（亡命一搏）：低于初始 25% → 460%
@@ -6422,7 +6561,7 @@ function executeSkillOutputs(
               ...(out.dotFormula ? { dotType: 'burning' as DotType } : {}),
             };
             const { causedMult, takenMult } = damageBoosts(ctx, stratSrc, t, hit);
-            const reduce = sumReduce(t, hit) + troopCounterReduceOf(stratSrc, t);
+            const reduce = sumReduce(t, hit, ctx, stratSrc) + troopCounterReduceOf(stratSrc, t);
             const { damage, breakdown } = calcDamage(
               {
                 damageType: 'strategy',
@@ -6869,7 +7008,7 @@ function executeSkillOutputs(
         break;
       }
       case 'positional_physical_damage': {
-        const positioned = enemies.filter((t) => out.positions.includes(t.general.position) && t.alive);
+        const positioned = enemies.filter((t) => out.positions.includes(t.general.position) && t.alive && !elephantImmuneToCommand(skill.type, t));
         const source = out.source === 'self' ? caster : fastestAlly(allies, caster);
         if (!source) {
           rememberDamageTargets([]);
@@ -6895,7 +7034,7 @@ function executeSkillOutputs(
           const hit: DamageHitContext = { damageSource: 'skill', damageType: 'physical', skillType: skill.type, skillId: skill.id };
           const { causedMult, takenMult } = damageBoosts(ctx, source, t, hit);
           const counterReduce = out.ignoresTroopCounter ? 0 : troopCounterReduceOf(source, t);
-          const reduce = sumReduce(t, hit) + counterReduce;
+          const reduce = sumReduce(t, hit, ctx, source) + counterReduce;
           const { damage, breakdown } = calcDamage(
             {
               damageType: 'physical',
@@ -7597,7 +7736,7 @@ function dealAttack(ctx: CombatContext, unit: UnitState, target: UnitState, dist
   const def = physicalTargetDefense(unit, hit);
   const hitCtx: DamageHitContext = { damageSource: 'basic', damageType: 'physical' };
   const { causedMult, takenMult } = damageBoosts(ctx, unit, hit, hitCtx);
-  const reduce = sumReduce(hit, hitCtx) + troopCounterReduceOf(unit, hit);
+  const reduce = sumReduce(hit, hitCtx, ctx, unit) + troopCounterReduceOf(unit, hit);
   const mult = buffMult(causedMult, takenMult, reduce);
   const { damage, breakdown } = calcDamage(
     {
@@ -8226,7 +8365,7 @@ function settleCounterOnHurt(ctx: CombatContext, holder: UnitState, attacker: Un
     const def = physicalTargetDefense(holder, attacker);
     const hit: DamageHitContext = { damageSource: 'skill', damageType: 'physical', skillType: 'command' };
     const { causedMult, takenMult } = damageBoosts(ctx, holder, attacker, hit);
-    const reduce = sumReduce(attacker, hit) + troopCounterReduceOf(holder, attacker);
+    const reduce = sumReduce(attacker, hit, ctx, holder) + troopCounterReduceOf(holder, attacker);
     const { damage, breakdown } = calcDamage(
       {
         damageType: 'physical',

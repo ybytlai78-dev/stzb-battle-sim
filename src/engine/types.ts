@@ -3,6 +3,7 @@
  * v0.2：Skill 联合类型（主动/准备/追击）+ 状态系统（混乱/怯战/规避）
  * 全部为纯数据，无任何 UI 依赖。
  */
+import type { GeneralTrait, SecondaryTroopType } from './secondaryTroop';
 
 export type TroopType = 'cavalry' | 'infantry' | 'archer';
 
@@ -1649,6 +1650,17 @@ export interface General {
    */
   mutualExclusionGroup: string | null;
   troopType: TroopType;
+  /**
+   * 二级兵种转换（高级兵种，可选）：由 `src/data/secondaryTroops.ts` 的转换方向提供。
+   * 缺省 undefined = 未转换（沿用基础兵种规则）。
+   * 转换后获得该兵种的**专属特性**，并可自选最多 2 个**兵系通用特性**（见 secondaryTraits）。
+   */
+  secondaryTroop?: SecondaryTroopType;
+  /**
+   * 已学习的兵系通用特性（0~2 个，需属于该二级兵种的兵系池；见 `TRAIT_SLOTS_MAX`）。
+   * 仅当 secondaryTroop 存在时有意义。
+   */
+  secondaryTraits?: GeneralTrait[];
   position: Position;
   attack: number;
   defense: number;
@@ -1731,6 +1743,13 @@ export interface BattleConfig {
   maxRounds: number;
   /** 伤兵死亡机制配置：缺省 { base: 5, perRound: 14 }（默认启用） */
   woundedMortality?: WoundedMortalityConfig;
+  /**
+   * 防守方阵营（二级兵种「作为防守方时」条件：长弓兵·先发、守备、重步兵·以静制动、重步兵/守备减伤）：
+   * 缺省 undefined = 无防守方（野战遭遇，相关特性不生效）。
+   */
+  defenderSide?: Side;
+  /** 是否野地作战（蛮兵：野地造成伤害 +18% / 城池 −8%）；缺省 undefined = 城池作战 */
+  fieldBattle?: boolean;
 }
 
 // ─── 战斗中的武将运行时状态 ───
