@@ -9,11 +9,12 @@
  * 本文件是「词条名 → 引擎机制」的映射表（`MECHANICS`），数据来自 `src/data/treasures.ts`。
  * 未实现的词条集中在 `PENDING`（分档见方案 §3.2），随 P3 逐批补齐。
  */
-import type { CreateStatus, General, SkillType, TreasureLoadout, UnitState } from './types';
+import type { CreateStatus, General, SkillType, StatusType, TreasureLoadout, UnitState } from './types';
 import type { CombatContext } from './action';
 import {
   AFFIXES,
   TREASURES_BY_ID,
+  treasureEffectScale,
   treasureEffectValue,
   type TreasureEffectDef,
 } from '../data/treasures';
@@ -27,8 +28,19 @@ export const TREASURE_SOURCE_TYPE: SkillType = 'passive';
 /** 持续至战斗结束 */
 const FOREVER = 999;
 
+/** 四类控制（宝物「安贞」= 控制状态下受伤害降低） */
+const CONTROL_TYPES: StatusType[] = ['confusion', 'rampage', 'cowardice', 'hesitation'];
+
+/** 构造期上下文：携带者 / 同侧友军 / 按阶缩放（= 强化次数） */
+export interface TreasureBuildCtx {
+  self: General;
+  allies: UnitState[];
+  /** 把「官方单次数值」换算成当前等级下的数值（slot1/2 = ×强化次数，slot3 = ×1） */
+  scale: (raw: number) => number;
+}
+
 /** 单个词条 → 状态模板（value 已按等级/自选数值算好） */
-type Mechanic = (value: number, effect: TreasureEffectDef, self: General) => CreateStatus[];
+type Mechanic = (value: number, effect: TreasureEffectDef, ctx: TreasureBuildCtx) => CreateStatus[];
 
 /** 攻击/防御/谋略/速度：数值型属性提升 */
 const attr = (type: 'attack_buff' | 'defense_buff' | 'strategy_buff' | 'speed_buff', percent = false) =>
@@ -75,6 +87,24 @@ const MECHANICS: Record<string, Mechanic> = {
   不移: reduce({ damageType: 'physical' }), // 受攻击伤害降低
   先知: reduce({ damageType: 'strategy' }), // 受策略伤害降低
   戒备: (v) => reduce({}, 2)(v), // 前 2 回合受到的所有伤害降低
+  // 安贞：控制状态下受伤害降低（混乱/暴走/怯战/犹豫任一）
+  安贞: (v) => [
+    { type: 'damage_reduce', rate: v / 100, duration: FOREVER, requireSelfStatus: CONTROL_TYPES } as CreateStatus,
+  ],
+  // 强固：正式回合后，每回合首次受到的伤害降低 20%（TODO：需「每回合首次」标记，暂列 PENDING）
+  // 明镜：谋略属性提高 + 初始统率 < 3 的武将额外防御（泰阿）
+  明镜: (v, effect, ctx) => [
+    { type: 'strategy_buff', amount: ctx.scale(effect.numbers[0] ?? v), duration: FOREVER } as CreateStatus,
+    ...(ctx.self.cost < 3
+      ? [{ type: 'defense_buff', amount: ctx.scale(effect.numbers[2] ?? 0), duration: FOREVER } as CreateStatus]
+      : []),
+  ],
+  // 护主：战斗开始后前 N 回合援护我军大营（cover 挂在携带者身上，protectId = 大营）
+  护主: (_v, effect, ctx) => {
+    const back = ctx.allies.find((a) => a.general.position === '大营');
+    if (!back) return [];
+    return [{ type: 'cover', duration: effect.numbers[0] ?? 2, protectId: back.general.id } as CreateStatus];
+  },
 
   // ── 增伤 ──
   陷阵: boost({ damageSource: 'basic' }), // 普通攻击伤害提高
@@ -132,9 +162,6 @@ const OVERRIDES: Record<string, Mechanic> = {
 /** 尚未落地的词条（分档见方案 §3.2）；键 = 词条名，值 = 需要的机制 */
 export const PENDING: Record<string, string> = {
   强固: '每回合首次受伤减伤（回合窗口）',
-  明镜: '初始统率 <3 的额外防御（属性条件）',
-  安贞: '「控制状态下」条件减伤（多控制类型）',
-  护主: '援护我军大营（cover + 指定保护对象）',
   避险: '首次受击后进入规避',
   再战: '第 5 回合几率获得连击（回合钩子）',
   迸发: '首次追击额外选 1 个目标',
@@ -177,6 +204,7 @@ function mechanicFor(treasureId: number, effect: TreasureEffectDef): Mechanic | 
 export function buildTreasureStatuses(
   loadout: TreasureLoadout,
   self: General,
+  allies: UnitState[] = [],
 ): { create: CreateStatus; sourceId: string; label: string }[] {
   const treasure = TREASURES_BY_ID[loadout.treasureId];
   if (!treasure) return [];
@@ -187,8 +215,10 @@ export function buildTreasureStatuses(
     const fn = mechanicFor(treasure.id, effect);
     if (!fn) continue; // 未实现（见 PENDING）
     const value = treasureEffectValue(effect, level);
-    if (!value && effect.slot !== 3) continue;
-    for (const create of fn(value, effect, self)) {
+    // 一阶/二阶在尚未强化时为 0（如二阶刚在 5 级解锁）→ 不产出空状态；三阶固定值始终产出
+    if (effect.slot !== 3 && value === 0) continue;
+    const ctx: TreasureBuildCtx = { self, allies, scale: (raw) => raw * treasureEffectScale(effect, level) };
+    for (const create of fn(value, effect, ctx)) {
       out.push({ create, sourceId: `${TREASURE_SOURCE_PREFIX}${treasure.id}:${effect.slot}`, label: effect.name });
     }
   }
@@ -197,7 +227,16 @@ export function buildTreasureStatuses(
     const affix = AFFIXES[loadout.affix.name];
     const fn = affix ? (OVERRIDES[`affix:${affix.name}`] ?? MECHANICS[affix.name]) : undefined;
     if (affix && fn) {
-      for (const create of fn(loadout.affix.value, { slot: 3, name: affix.name, desc: affix.desc, value: loadout.affix.value, unit: affix.unit === 'percent' ? 'percent' : 'point', numbers: [] }, self)) {
+      const ctx: TreasureBuildCtx = { self, allies, scale: (raw) => raw };
+      const synthetic: TreasureEffectDef = {
+        slot: 3,
+        name: affix.name,
+        desc: affix.desc,
+        value: loadout.affix.value,
+        unit: affix.unit === 'percent' ? 'percent' : 'point',
+        numbers: [],
+      };
+      for (const create of fn(loadout.affix.value, synthetic, ctx)) {
         out.push({ create, sourceId: `${TREASURE_SOURCE_PREFIX}affix:${affix.name}`, label: affix.name });
       }
     }
@@ -212,7 +251,8 @@ export function buildTreasureStatuses(
 export function applyTreasureEffects(ctx: CombatContext, unit: UnitState): void {
   const loadout = unit.general.treasure;
   if (!loadout) return;
-  for (const { create, sourceId } of buildTreasureStatuses(loadout, unit.general)) {
+  const allies = unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+  for (const { create, sourceId } of buildTreasureStatuses(loadout, unit.general, allies)) {
     inflictStatus(ctx, unit, create, TREASURE_SOURCE_TYPE, sourceId, unit.general.id);
   }
 }

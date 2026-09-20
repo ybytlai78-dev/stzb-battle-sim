@@ -2594,6 +2594,19 @@ export function hasStatus(unit: UnitState, type: StatusType): boolean {
   return unit.statuses.some((s) => s.type === type);
 }
 
+/**
+ * 条件减伤 `requireSelfStatus`（人公将军 / 宝物「安贞」等）：单个或**多个**状态，
+ * 数组时**任一命中**即满足（宝物安贞：控制状态下受伤害降低 = 混乱/暴走/怯战/犹豫任一）。
+ * 未设置 → 恒满足。
+ */
+export function hasRequiredSelfStatus(
+  unit: UnitState,
+  req: StatusType | StatusType[] | undefined,
+): boolean {
+  if (!req) return true;
+  return Array.isArray(req) ? req.some((t) => hasStatus(unit, t)) : hasStatus(unit, req);
+}
+
 export function getStatus<T extends StatusType>(
   unit: UnitState,
   type: T
@@ -3651,7 +3664,7 @@ function pushStatus(
     }
     // 条件减伤（人公将军）：仅当携带者自身带该状态时生效
     if (type === 'damage_reduce' && 'requireSelfStatus' in create && create.requireSelfStatus != null) {
-      (push as { requireSelfStatus?: StatusType }).requireSelfStatus = create.requireSelfStatus;
+      (push as { requireSelfStatus?: StatusType | StatusType[] }).requireSelfStatus = create.requireSelfStatus;
     }
     // 仅「进行攻击」的增减伤（缚父临危「下两次**攻击**造成的伤害提升 30%」）：普攻 / 物理主动 / 追击
     if (type === 'damage_boost' && 'attackOnly' in create && create.attackOnly) {
@@ -4433,7 +4446,7 @@ function sumReduce(target: UnitState, hit?: DamageHitContext): number {
     (s) =>
       s.type === 'damage_reduce' &&
       statusMatchesHit(s, hit) &&
-      (!('requireSelfStatus' in s) || !s.requireSelfStatus || hasStatus(target, s.requireSelfStatus))
+      (!('requireSelfStatus' in s) || !s.requireSelfStatus || hasRequiredSelfStatus(target, s.requireSelfStatus))
   );
   return sumRates(list, 'damage_reduce') + pendingStacksReduceOf(target);
 }
@@ -4539,7 +4552,7 @@ function collectDamageModifiers(
       (s): s is Extract<Status, { type: 'damage_reduce' }> =>
         s.type === 'damage_reduce' &&
         statusMatchesHit(s, hit) &&
-        (!s.requireSelfStatus || hasStatus(target, s.requireSelfStatus))
+        (!s.requireSelfStatus || hasRequiredSelfStatus(target, s.requireSelfStatus))
     )
     .map((s) => toSrc(s, 'reduce'));
   const cr = troopCounterReduceOf(source, target);

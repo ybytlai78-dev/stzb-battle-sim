@@ -230,11 +230,16 @@ export const AFFIXES: Record<string, AffixDef> = ${lit(Object.fromEntries(affixe
 /** 12 组词条池（组号 → 词条名） */
 export const AFFIX_GROUPS: Record<number, string[]> = ${lit(Object.fromEntries(groups.map((g) => [g.groupId, g.affixes])))};
 
+/** 该阶特效在当前等级下的**强化次数**（一阶 1→5 级各 1 次、二阶 5→10 级各 1 次、三阶恒 1） */
+export function treasureEffectScale(effect: TreasureEffectDef, level: number = TREASURE_LEVEL_DEFAULT): number {
+  if (effect.slot === 3) return 1;
+  const raw = effect.slot === 1 ? level : level - 5;
+  return Math.min(TREASURE_SLOT_STEPS[effect.slot], Math.max(0, raw));
+}
+
 /** 该宝物在当前等级下每条自带特效的最终数值（slot1/2 随强化次数线性增长，slot3 固定） */
 export function treasureEffectValue(effect: TreasureEffectDef, level: number = TREASURE_LEVEL_DEFAULT): number {
-  const step = Math.min(TREASURE_SLOT_STEPS[effect.slot], Math.max(0, level - (effect.slot === 1 ? 0 : 5)));
-  const n = effect.slot === 3 ? 1 : Math.min(step, TREASURE_SLOT_STEPS[effect.slot]);
-  return Number((effect.value * n).toFixed(4));
+  return Number((effect.value * treasureEffectScale(effect, level)).toFixed(4));
 }
 
 /** 按 id 取宝物（未知 id 返回 undefined） */

@@ -3,7 +3,7 @@
  * 覆盖：官方数值 → 状态数值的换算（默认 10 级：一阶/二阶 ×5、三阶固定）、词条过滤维、未实现词条不产出。
  */
 import { describe, it, expect } from 'vitest';
-import type { General, CreateStatus } from '../src/engine/types';
+import type { General, CreateStatus, UnitState } from '../src/engine/types';
 import { buildTreasureStatuses, PENDING } from '../src/engine/treasure';
 import { TREASURES_BY_ID } from '../src/data/treasures';
 
@@ -16,6 +16,10 @@ const labelled = (treasureId: number, label: string, level = 10) =>
   buildTreasureStatuses({ treasureId, level }, self)
     .filter((x) => x.label === label)
     .map((x) => x.create) as Record<string, unknown>[];
+
+/** 构造一个只带 position/id 的友军（护主 需要找大营） */
+const ally = (id: string, position: '大营' | '中军' | '前锋') =>
+  ({ general: { id, position } }) as unknown as UnitState;
 
 describe('宝物引擎 · 自带特效换算', () => {
   it('别鸣（1027）10 级：稳固 3×5=15 防御、不移 1×5=5% 攻击伤害减伤、英才 5% 谋略/速度', () => {
@@ -73,9 +77,37 @@ describe('宝物引擎 · 自带特效换算', () => {
 
   it('未实现词条（PENDING）不产出状态，但会被登记', () => {
     expect(Object.keys(PENDING).length).toBeGreaterThan(10);
-    const dangdai = TREASURES_BY_ID[1072]; // 大将
-    expect(dangdai.effects.map((e) => e.name)).toEqual(['稳固', '强韧', '护主']);
-    // 护主 未实现 → 只出 稳固/强韧 两条
-    expect(build(1072)).toHaveLength(2);
+    const tai = TREASURES_BY_ID[1075]; // 泰阿：骁锐/明镜/强固
+    expect(tai.effects.map((e) => e.name)).toEqual(['骁锐', '明镜', '强固']);
+    // 强固（每回合首次受伤减伤）未实现 → 只出 骁锐/明镜
+    expect(build(1075)).toHaveLength(2);
+    expect(PENDING['强固']).toBeTruthy();
+  });
+
+  it('明镜（泰阿）：谋略 ×5=10，仅当初始统率 < 3 时额外给 1.5×5=7.5 防御', () => {
+    const high = buildTreasureStatuses({ treasureId: 1075 }, { cost: 3 } as General).map((x) => x.create);
+    expect(byType(high, 'defense_buff')).toHaveLength(0);
+    const low = buildTreasureStatuses({ treasureId: 1075 }, { cost: 1 } as General).map((x) => x.create);
+    const def = byType(low, 'defense_buff');
+    expect(def).toHaveLength(1);
+    expect(def[0].amount).toBeCloseTo(7.5, 6);
+    // 泰阿 三阶「强固」仍未实现
+    expect(byType(low, 'strategy_buff')).toHaveLength(1);
+  });
+
+  it('护主（大将）：前 2 回合援护我军大营（cover + protectId）', () => {
+    const allies = [ally('me', '中军'), ally('back', '大营')];
+    const list = buildTreasureStatuses({ treasureId: 1072 }, self, allies).map((x) => x.create);
+    const cover = byType(list, 'cover');
+    expect(cover).toHaveLength(1);
+    expect(cover[0].protectId).toBe('back');
+    expect(cover[0].duration).toBe(2);
+  });
+
+  it('安贞（博浪）：控制状态下受伤害降低 = 1%×5，requireSelfStatus 覆盖四类控制', () => {
+    const [anzhen] = labelled(1048, '安贞');
+    expect(anzhen.type).toBe('damage_reduce');
+    expect(anzhen.rate).toBeCloseTo(0.05, 6);
+    expect(anzhen.requireSelfStatus).toEqual(['confusion', 'rampage', 'cowardice', 'hesitation']);
   });
 });
