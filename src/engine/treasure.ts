@@ -142,9 +142,14 @@ const MECHANICS: Record<string, Mechanic> = {
   机敏: (v) => [{ type: 'trigger_boost', rate: v / 100, duration: FOREVER, mainSkillOnly: true } as CreateStatus],
   英勇: (v) => [{ type: 'trigger_boost', rate: v / 100, duration: FOREVER, mainSkillOnly: true, attackSkillsOnly: true } as CreateStatus],
   奔袭: (v) => [{ type: 'trigger_boost', rate: v / 100, duration: FOREVER, skillTypes: ['pursuit'] } as CreateStatus],
+  // 筹算：造成策略伤害的武将主战法发动率提高
+  筹算: (v) => [{ type: 'trigger_boost', rate: v / 100, duration: FOREVER, mainSkillOnly: true, strategySkillsOnly: true } as CreateStatus],
+  // 熟虑：需要准备的主动武将主战法发动率提升
+  熟虑: (v) => [{ type: 'trigger_boost', rate: v / 100, duration: FOREVER, mainSkillOnly: true, preparedOnly: true } as CreateStatus],
+  // 识破：前 1~4 回合，主动及追击武将主战法造成的伤害无视规避（回合窗口，不消耗）
+  识破: (v) => [{ type: 'ignore_evasion', duration: FOREVER, throughRound: v } as CreateStatus],
 
-  // ── 控制相关 ──
-  // 惑言（锻造词条）：主战法施加的前 N 个控制 +1 回合
+  // ── 控制相关 ──  // 惑言（锻造词条）：主战法施加的前 N 个控制 +1 回合
   惑言: (v) => [{ type: 'control_extend', charges: v, duration: FOREVER, mainSkillOnly: true } as CreateStatus],
   // 慑心（龙鳞）：追击武将主战法施加的控制 +1 回合（不限次数）
   慑心: () => [{ type: 'control_extend', charges: 999, duration: FOREVER, mainSkillOnly: true, skillTypes: ['pursuit'] } as CreateStatus],
@@ -193,10 +198,6 @@ export const PENDING: Record<string, string> = {
   鸠佑: '主动主战法发动后叠层增伤',
   奇袭: '按距离增伤（条件）',
   机敏_: '—',
-  筹算: '策略伤害武将主战法发动率（条件发动率）',
-  熟虑: '需准备的主动战法发动率（准备限定）',
-  善谋: '第 4/6 回合发动率提高（回合窗口）',
-  识破: '前 N 回合战法伤害无视规避',
   济世: '恢复触发 → 目标下次受伤降低',
   仁心: '造成的恢复效果提高',
   蓄锐: '每 2 次普攻后追击增伤（计数叠层）',
@@ -281,6 +282,18 @@ const ROUND_START_HOOKS: Record<string, RoundStartHook> = {
   清毅: (ctx, unit, value, sourceId) => {
     if (ctx.currentRound !== value) return;
     inflictStatus(ctx, unit, { type: 'insight', duration: 1 }, TREASURE_SOURCE_TYPE, sourceId, unit.general.id);
+  },
+  // 善谋（锻造词条）：第 4、6 回合，造成攻击伤害的武将主战法发动率提高
+  善谋: (ctx, unit, value, sourceId) => {
+    if (ctx.currentRound !== 4 && ctx.currentRound !== 6) return;
+    inflictStatus(
+      ctx,
+      unit,
+      { type: 'trigger_boost', rate: value / 100, duration: 1, mainSkillOnly: true, attackSkillsOnly: true },
+      TREASURE_SOURCE_TYPE,
+      sourceId,
+      unit.general.id,
+    );
   },
 };
 

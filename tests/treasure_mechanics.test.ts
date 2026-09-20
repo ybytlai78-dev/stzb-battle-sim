@@ -7,7 +7,7 @@
  *  再战：第 5 回合 50% 获得连击
  */
 import { describe, it, expect } from 'vitest';
-import { inflictStatus, getStatus, hasStatus, tickRoundStartStatuses, updateTreasureOnHurt } from '../src/engine/action';
+import { inflictStatus, getStatus, hasStatus, consumeEvasion, tickRoundStartStatuses, updateTreasureOnHurt } from '../src/engine/action';
 import type { CombatContext } from '../src/engine/action';
 import type { CreateStatus, UnitState } from '../src/engine/types';
 import { Rng } from '../src/engine/rng';
@@ -164,6 +164,74 @@ describe('宝物 · 控制延时 / 免疫 / 反击 / 回合钩子', () => {
     // 再次受击不再触发（一次性）
     updateTreasureOnHurt(ctx, v);
     expect(getStatus(v, 'evasion')!.stacks).toBe(1);
+  });
+
+  it('筹算 / 熟虑 / 识破：发动率过滤维与回合窗口无视规避', () => {
+    const affixOnly = (name: string, value: number) =>
+      buildTreasureStatuses({ treasureId: 1009, affix: { name, value } }, makeUnit('x').general)
+        .filter((x) => x.label === name)
+        .map((x) => x.create);
+
+    expect(affixOnly('筹算', 9)[0]).toMatchObject({
+      type: 'trigger_boost',
+      rate: 0.09,
+      mainSkillOnly: true,
+      strategySkillsOnly: true,
+    });
+    expect(affixOnly('熟虑', 16)[0]).toMatchObject({
+      type: 'trigger_boost',
+      rate: 0.16,
+      mainSkillOnly: true,
+      preparedOnly: true,
+    });
+    expect(affixOnly('识破', 3)[0]).toMatchObject({ type: 'ignore_evasion', throughRound: 3 });
+  });
+
+  it('识破（前 N 回合无视规避）：窗口内不消耗、出窗口即失效', () => {
+    const ctx = makeCtx(2);
+    const attacker = makeUnit('a');
+    const victim = makeUnit('v', 'enemy');
+    ctx.myTeam = [attacker];
+    ctx.enemyTeam = [victim];
+    inflictStatus(ctx, attacker, { type: 'ignore_evasion', duration: 999, throughRound: 3 }, 'passive', 'treasure:affix:识破', 'a');
+    // 第 2 回合：规避被穿透且标记保留
+    expect(consumeEvasion(ctx, victim, 'a')).toBe(false);
+    expect(getStatus(attacker, 'ignore_evasion')).toBeTruthy();
+    // 第 4 回合：窗口外 → 标记不再生效（仍保留，但不再拦截规避）
+    ctx.currentRound = 4;
+    expect(consumeEvasion(ctx, victim, 'a')).toBe(false); // 目标本身无规避 → 三次都返回 false
+    const ev = getStatus(victim, 'evasion');
+    expect(ev).toBeUndefined();
+    // 对照：无规避层数时窗口内/外都返回 false，故直接断言状态是否被消耗
+    ctx.currentRound = 2;
+    consumeEvasion(ctx, victim, 'a');
+    expect(getStatus(attacker, 'ignore_evasion')).toBeTruthy();
+  });
+
+  it('善谋：仅第 4、6 回合给「攻击类主战法发动率」1 回合', () => {
+    const make = () => {
+      const u = makeUnit('u');
+      u.general.treasure = { treasureId: 1009, affix: { name: '善谋', value: 20 } };
+      const ctx = makeCtx();
+      ctx.myTeam = [u];
+      return { u, ctx };
+    };
+    for (const round of [3, 5, 7]) {
+      const { u, ctx } = make();
+      ctx.currentRound = round;
+      triggerTreasureRoundStart(ctx);
+      expect(hasStatus(u, 'trigger_boost'), `round ${round}`).toBe(false);
+    }
+    for (const round of [4, 6]) {
+      const { u, ctx } = make();
+      ctx.currentRound = round;
+      triggerTreasureRoundStart(ctx);
+      const st = getStatus(u, 'trigger_boost');
+      expect(st, `round ${round}`).toBeTruthy();
+      expect(st!.rate).toBeCloseTo(0.2, 6);
+      expect(st!.attackSkillsOnly).toBe(true);
+      expect(st!.mainSkillOnly).toBe(true);
+    }
   });
 
   it('再战（少府）：仅第 5 回合判定，50% 几率获得连击', () => {    const results: boolean[] = [];

@@ -660,7 +660,7 @@ export type CreateStatus =
    * 超过 100% 由发动率判定封顶为必定发动。
    * additive：仅 `false` 有意义——显式退回乘算 基础率 × (1+rate)。
    */
-  | { type: 'trigger_boost'; rate: number; duration: number; skillTypes?: SkillType[]; /** 仅 false 生效：退回乘算；缺省加法 */ additive?: boolean; /** 只对「攻击类」战法生效（输出段含物理伤害）——侵掠如火「攻击类主动战法发动率提升 20%」 */ attackSkillsOnly?: boolean; /** 显式「可叠加」：同源重复施加累加 rate；缺省刷新 */ stack?: true; /** 只对**携带者的主战法**生效（甚陷不惧「武将主战法发动率提高」） */ mainSkillOnly?: boolean; /** 只对「可造成攻击伤害或策略伤害的战法」生效（甚陷不惧；物理/策略输出段任一即可） */ damageSkillsOnly?: boolean; /** 消耗于携带者**本次行动结束**（甚陷不惧「下次行动时」）——行动末清除，不按回合递减 */ expireAfterOwnAct?: boolean }
+  | { type: 'trigger_boost'; rate: number; duration: number; skillTypes?: SkillType[]; /** 仅 false 生效：退回乘算；缺省加法 */ additive?: boolean; /** 只对「攻击类」战法生效（输出段含物理伤害）——侵掠如火「攻击类主动战法发动率提升 20%」 */ attackSkillsOnly?: boolean; /** 显式「可叠加」：同源重复施加累加 rate；缺省刷新 */ stack?: true; /** 只对**携带者的主战法**生效（甚陷不惧「武将主战法发动率提高」） */ mainSkillOnly?: boolean; /** 只对「可造成攻击伤害或策略伤害的战法」生效（甚陷不惧；物理/策略输出段任一即可） */ damageSkillsOnly?: boolean; /** 只对「会造成策略伤害的战法」生效（宝物「筹算」：造成策略伤害的武将主战法发动率提高） */ strategySkillsOnly?: boolean; /** 只对**需要准备的主动战法**生效（宝物「熟虑」） */ preparedOnly?: boolean; /** 消耗于携带者**本次行动结束**（甚陷不惧「下次行动时」）——行动末清除，不按回合递减 */ expireAfterOwnAct?: boolean }
   | { type: 'insight'; duration: number }
   /**
    * 控制时长 +1（宝物「惑言」/「慑心」）：携带者用匹配战法施加控制时，该次控制 duration +1，
@@ -696,7 +696,7 @@ export type CreateStatus =
   | { type: 'jump_prep'; duration: number; rate: number }
   /** 下一次造成伤害无视规避（缚父临危）：无 duration——消耗制，不按回合递减 */
   /** 下一次造成伤害无视规避（缚父临危）：duration 仅占位——消耗制，不按回合递减（两个 tick 函数显式跳过） */
-  | { type: 'ignore_evasion'; duration: number }
+  | { type: 'ignore_evasion'; duration: number; /** 宝物「识破」：只在前 N 回合有效（不消耗，到回合即失效）；缺省 = 消耗制（缚父临危） */ throughRound?: number }
   /**
    * 控制效果额外 +1 目标（鸾凤和鸣）：携带者「下一次造成的控制效果（混乱/犹豫/暴走/怯战）
    * 额外对一个目标生效」。消耗制（duration 仅占位，不按回合递减），由携带者打出控制时消耗并移除。
@@ -1886,7 +1886,7 @@ export type Status =
    */
   | { type: 'heal_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   | { type: 'damage_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; direction: 'caused' | 'taken'; sourceUnitId?: string; /** 消耗于携带者**本次行动结束**（尽言直谏）：行动末清除，不按回合递减 */ expireAfterOwnAct?: boolean; /** 叠层计数（带上限的增减伤，银龙冲阵最多 3 层）；无上限时不设置 */ stacks?: number; /** 次数型下一次攻击（青丘媚祸） */ charges?: number; /** 每回合结束剩余份数（敛微穷极 6→5→…）；无此字段则不按回合衰减 */ roundParts?: number; /** 每回合份数初始值（6），衰减公式分母 */ roundPartsBase?: number; /** 当前剩余份数（恃强淬锋 5→4→…）；无此字段则不按 1/5 衰减 */ fifths?: number; /** fifths 满额时的 rate，衰减时 rate = baseRate × fifths / 初始份数 */ baseRate?: number; /** decayFifths 挂上时的满额份数（恃强 5），衰减公式分母 */ fifthsBase?: number; /** 当前剩余份数（虎豹督军 8→7→…，每回合前 −1；与 fifths 互斥） */ eighths?: number; /** 只对**指定战法**造成的伤害生效（守静却敌「造成【守静却敌】的策略伤害时」）：按伤害事件的 skillId 过滤；缺省不限 */ skillIds?: string[]; /** 只对**非自身阵营**的伤害目标生效（合纵连横）：按携带者与受击者阵营比较 */ targetFactionNotSelf?: boolean; /** 伤害来源过滤：basic=普攻（分类键小类「普通」）/ skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效（分类键小类「主动/追击/指挥」）；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省攻击+策略都吃（分类键「大类」，见 action.ts damageClassKey） */ damageType?: 'physical' | 'strategy'; /** 只对这些 DoT 类型生效（全主诿异：被施加的燃烧/恐慌/妖术诅咒伤害提升 20%）；缺省不限（非 DoT 伤害也吃） */ dotTypes?: DotType[]; /** 仅「进行攻击」（普攻/物理主动/追击，口径见 action.isAttackHitForProc；不含分兵溅射/反击/指挥代打/DoT）——缚父临危「下两次攻击造成的伤害提升 30%」 */ attackOnly?: boolean; /** 条件增伤（宝物「迅猛」：处于连击状态时普通攻击伤害提高）：仅当**携带者自身**带该状态时才生效（可多值，任一命中） */ requireSelfStatus?: StatusType | StatusType[] }
-  | { type: 'trigger_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; skillTypes?: SkillType[]; additive?: boolean; attackSkillsOnly?: boolean; mainSkillOnly?: boolean; damageSkillsOnly?: boolean; expireAfterOwnAct?: boolean }
+  | { type: 'trigger_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; skillTypes?: SkillType[]; additive?: boolean; attackSkillsOnly?: boolean; mainSkillOnly?: boolean; damageSkillsOnly?: boolean; strategySkillsOnly?: boolean; preparedOnly?: boolean; expireAfterOwnAct?: boolean }
   | { type: 'insight'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'control_extend'; charges: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; mainSkillOnly?: boolean; skillTypes?: SkillType[] }
   | { type: 'control_immune'; types: StatusType[]; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
@@ -1963,7 +1963,7 @@ export type Status =
    * 覆盖**任意伤害类型**（攻击/策略），由携带者下一次造成伤害时消耗（consumeEvasion 内统一处理，
    * 携带者自己带此标记则跳过规避判定）；不按回合递减（两个 tick 函数显式跳过）。
    */
-  | { type: 'ignore_evasion'; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
+  | { type: 'ignore_evasion'; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; /** 宝物「识破」：只在前 N 回合有效（不消耗） */ throughRound?: number }
   /** 控制效果额外 +1 目标（鸾凤和鸣）：消耗制，不按回合递减（两个 tick 函数显式跳过） */
   | { type: 'control_spread'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string };
 

@@ -426,6 +426,19 @@ function isDamageClassSkill(skill: Skill): boolean {
   return walk(skill.output);
 }
 
+/** 「可造成策略伤害的战法」（宝物「筹算」strategySkillsOnly 过滤维） */
+function isStrategyClassSkill(skill: Skill): boolean {
+  const walk = (outs: SkillOutput[]): boolean =>
+    outs.some((o) => {
+      if (o.kind === 'strategy_damage') return true;
+      if (o.kind === 'chance_group') return walk(o.outputs);
+      if (o.kind === 'random_pick') return walk(o.options.flat());
+      if (o.kind === 'morale_branch') return walk(o.high) || walk(o.low);
+      return false;
+    });
+  return walk(skill.output);
+}
+
 function boostedBaseRate(unit: UnitState, skillType: SkillType, baseRate: number, skill?: Skill): number {
   let rate = baseRate;
   for (const s of unit.statuses) {
@@ -437,6 +450,10 @@ function boostedBaseRate(unit: UnitState, skillType: SkillType, baseRate: number
     if (s.mainSkillOnly && (!skill || skill.id !== unit.general.mainSkillId)) continue;
     // 仅「可造成攻击伤害或策略伤害的战法」（甚陷不惧）
     if (s.damageSkillsOnly && (!skill || !isDamageClassSkill(skill))) continue;
+    // 仅「可造成策略伤害的战法」（宝物「筹算」）
+    if (s.strategySkillsOnly && (!skill || !isStrategyClassSkill(skill))) continue;
+    // 仅「需要准备的主动战法」（宝物「熟虑」）
+    if (s.preparedOnly && (!skill || !('prepare' in skill) || skill.prepare !== true)) continue;
     if (s.additive === false) rate *= 1 + s.rate;
     else rate += s.rate;
   }
@@ -3415,15 +3432,26 @@ function pushStatus(
   }
   if (type === 'ignore_evasion') {
     // 缚父临危：下一次造成伤害无视规避（消耗制；同战法重复施加只刷新，不叠加）
-    const dup = target.statuses.some((s) => s.type === 'ignore_evasion' && s.sourceSkillId === sourceSkillId);
+    // 宝物「识破」：前 N 回合内一直无视规避（throughRound 给定时不消耗）
+    const throughRound = 'throughRound' in create ? create.throughRound : undefined;
+    const dup = target.statuses.some(
+      (s) => s.type === 'ignore_evasion' && s.sourceSkillId === sourceSkillId,
+    );
     if (!dup) {
-      target.statuses.push({ type: 'ignore_evasion', appliedRound, sourceSkillType, sourceSkillId, sourceUnitId: casterId });
+      target.statuses.push({
+        type: 'ignore_evasion',
+        appliedRound,
+        sourceSkillType,
+        sourceSkillId,
+        sourceUnitId: casterId,
+        ...(throughRound != null ? { throughRound } : {}),
+      });
     }
     ctx.events.push({
       type: 'status_inflicted',
       unitId: target.general.id,
       statusType: type,
-      detail: '下一次造成的伤害无视规避',
+      detail: throughRound != null ? `前 ${throughRound} 回合无视规避` : '下一次造成的伤害无视规避',
     });
     return;
   }
@@ -3746,6 +3774,13 @@ function pushStatus(
     }
     if (type === 'trigger_boost' && 'damageSkillsOnly' in create && create.damageSkillsOnly) {
       (push as { damageSkillsOnly?: boolean }).damageSkillsOnly = true;
+    }
+    // 策略类（宝物「筹算」）/ 需准备（宝物「熟虑」）过滤
+    if (type === 'trigger_boost' && 'strategySkillsOnly' in create && create.strategySkillsOnly) {
+      (push as { strategySkillsOnly?: boolean }).strategySkillsOnly = true;
+    }
+    if (type === 'trigger_boost' && 'preparedOnly' in create && create.preparedOnly) {
+      (push as { preparedOnly?: boolean }).preparedOnly = true;
     }
     if (
       (type === 'trigger_boost' || type === 'damage_boost') &&
@@ -4344,11 +4379,17 @@ export function consumeEvasion(ctx: CombatContext, target: UnitState, sourceId: 
   // （覆盖任意伤害类型；所有伤害路径统一经本入口，故只此一处接线）
   const attacker = sourceId ? castUnit(ctx, sourceId) : undefined;
   const ignore = attacker?.statuses.find(
-    (s): s is Extract<Status, { type: 'ignore_evasion' }> => s.type === 'ignore_evasion'
+    (s): s is Extract<Status, { type: 'ignore_evasion' }> =>
+      s.type === 'ignore_evasion' &&
+      // 宝物「识破」：限定前 N 回合（不消耗）；缺省 = 消耗制（缚父临危，见下）
+      (s.throughRound == null || ctx.currentRound <= s.throughRound)
   );
   if (attacker && ignore) {
-    attacker.statuses = attacker.statuses.filter((s) => s !== ignore);
-    ctx.events.push({ type: 'status_expired', unitId: attacker.general.id, statusType: 'ignore_evasion' });
+    // throughRound 型（识破）不消耗，仅当回合窗口内生效
+    if (ignore.throughRound == null) {
+      attacker.statuses = attacker.statuses.filter((s) => s !== ignore);
+      ctx.events.push({ type: 'status_expired', unitId: attacker.general.id, statusType: 'ignore_evasion' });
+    }
     return false;
   }
   const ev = getStatus(target, 'evasion');
