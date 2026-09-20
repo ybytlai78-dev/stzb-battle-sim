@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 战斗模拟器入口：选将 → 配战法 → 运行引擎 → 逐回合可视化战报
  * 布局：100% 固定单屏 —— 顶栏（战报/战法） / 中间配将区 / 底栏（开始模拟）
  */
@@ -23,6 +23,8 @@ import {
   type SlotState,
 } from './teamEditor';
 import { showNotice } from './notice';
+import { TRAIT_SLOTS_MAX, traitsFor } from '../src/engine/secondaryTroop';
+import { HERO_SECONDARY_TROOPS } from '../src/data/secondaryTroops';
 import { asset } from './assets';
 import { openTutorialPanel } from './tutorial';
 import { setupTouchDrag } from './touchDrag';
@@ -175,6 +177,29 @@ const handlers: EditorHandlers = {
     state[team][idx].redness = Math.max(0, Math.min(5, redness));
     refresh();
   },
+  onSetSecondaryTroop(team, idx, troop) {
+    const slot = state[team][idx];
+    if (!slot.heroId) return;
+    // 只允许该武将的两个转换方向；切换兵种会清空已学通用特性（学习状态与兵种绑定）
+    const allowed = HERO_SECONDARY_TROOPS[slot.heroId] ?? [];
+    if (troop && !allowed.includes(troop)) return;
+    slot.secondaryTroop = troop;
+    slot.secondaryTraits = troop ? [] : undefined;
+    refresh();
+  },
+  onSetSecondaryTrait(team, idx, slotIdx, trait) {
+    const slot = state[team][idx];
+    if (!slot.heroId || !slot.secondaryTroop) return;
+    const pool = traitsFor(slot.secondaryTroop);
+    if (trait && !pool.includes(trait)) return;
+    const learned = [...(slot.secondaryTraits ?? [])];
+    // 同一兵种不可学 2 个相同特性（官方 Q&A 第 4 条）
+    if (trait && learned.includes(trait)) return;
+    if (trait) learned[slotIdx] = trait;
+    else learned.splice(slotIdx, 1);
+    slot.secondaryTraits = learned.filter(Boolean).slice(0, TRAIT_SLOTS_MAX);
+    refresh();
+  },
   onSetLevel(team, idx, level) {
     const slot = state[team][idx];
     if (!slot.heroId) return;
@@ -228,7 +253,7 @@ function collectTeam(team: 'red' | 'blue'): General[] {
   return state[team]
     .map((s, i) =>
       s.heroId
-        ? buildGeneral(s.heroId!, s.extraSkillIds, s.freePoints, positions[i], s.redness, s.level, morale)
+        ? buildGeneral(s.heroId!, s.extraSkillIds, s.freePoints, positions[i], s.redness, s.level, morale, s.secondaryTroop, s.secondaryTraits)
         : null
     )
     .filter((g): g is General => g !== null);

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Web UI 冒烟测试（jsdom）：初始化 → 选将 → 详情页 → 开始模拟 → 战报渲染
  * 验证浏览器端主链路无运行时错误（引擎已在 Node 侧全量覆盖）。
  */
@@ -355,9 +355,11 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(modal.querySelectorAll('.pt-btn[data-max]').length).toBe(4);
     expect(modal.querySelector('.pt-reset')).toBeTruthy();
     expect((modal.querySelector('.pt-btn[data-max]') as HTMLButtonElement).disabled).toBe(true);
-    // 板块 3「兵种」：转换还没做 → 灰色占位
+    // 板块 3「兵种」：二级兵种转换已实现（两个方向；未选兵种时不显特性池）
     (modal.querySelector('.hd-tab[data-tab="troop"]') as HTMLElement).click();
-    expect(modal.textContent).toContain('未开放');
+    expect(modal.querySelectorAll('.troop-card').length).toBe(2);
+    expect(modal.querySelectorAll('.trait-option').length).toBe(0);
+    expect(modal.textContent).toContain('先选择二级兵种');
     closeModal();
 
     // 女性武将：60 点自由属性（马云禄）
@@ -396,7 +398,8 @@ describe('Web 战斗模拟器冒烟', () => {
     pickHeroIntoSlot('red', 2, '太史慈');
     pickHeroIntoSlot('red', 1, '周瑜');
     pickHeroIntoSlot('red', 0, '孙权');
-    pickHeroIntoSlot('blue', 2, '魏延');
+    // 蓝队用骑兵（太史慈弓兵不被克制 → 净增伤为正，伤害行会显示百分比）
+    pickHeroIntoSlot('blue', 2, '马云禄');
     // 槽位填充确认
     const redPanel = document.querySelector('.team-panel.red') as HTMLElement;
     expect(redPanel.querySelectorAll('.slot .hero-name')[2].textContent).toContain('太史慈');
@@ -930,5 +933,95 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(blueModal.textContent).toContain('未激活'); // 单将无阵营加成
     expect(blueModal.textContent).not.toContain('太史慈');
     expect(blueModal.querySelector('.bm-tag.global')).toBeTruthy();
+  });
+});
+
+describe('兵种转换（武将详情页「兵种」板块）', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    document.body.removeAttribute('data-nav');
+  });
+
+  it('太史慈：两个转换方向可选、专属特性可见、通用特性池可选 2 个且不可重复', async () => {
+    await boot();
+    // 太史慈（吴弓）→ 弩兵 / 弓骑兵
+    pickHeroIntoSlot('red', 2, '太史慈');
+    const slotEl = (document.querySelector('.team-panel.red') as HTMLElement).querySelectorAll('.slot')[2] as HTMLElement;
+    slotEl.click();
+    const modal = document.querySelector('.hero-detail-modal') as HTMLElement;
+    expect(modal).toBeTruthy();
+    (modal.querySelector('.hd-tab[data-tab="troop"]') as HTMLElement).click();
+
+    const cards = Array.from(modal.querySelectorAll('.troop-card')) as HTMLElement[];
+    expect(cards.length).toBe(2);
+    expect(cards.map((c) => c.dataset.troop)).toEqual(expect.arrayContaining(['弩兵', '弓骑兵']));
+    expect(modal.textContent).toContain('弩弓');   // 弩兵专属特性
+
+    // 选弩兵 → 弓兵系特性池出现（5 个：地利/齐射/直射/散射/迂回）
+    cards.find((c) => c.dataset.troop === '弩兵')!.click();
+    const opts = Array.from(modal.querySelectorAll('.trait-option')) as HTMLElement[];
+    expect(opts.map((o) => o.dataset.pick)).toEqual(expect.arrayContaining(['地利', '散射', '直射', '齐射', '迂回']));
+
+    // 学 2 个特性 → 两栏填满
+    opts.find((o) => o.dataset.pick === '齐射')!.click();
+    const opts2 = Array.from(modal.querySelectorAll('.trait-option')) as HTMLElement[];
+    opts2.find((o) => o.dataset.pick === '地利')!.click();
+    const chips = Array.from(modal.querySelectorAll('.trait-chip.picked')) as HTMLElement[];
+    expect(chips.length).toBe(2);
+    expect(chips.map((c) => c.textContent!.replace('×', ''))).toEqual(['齐射', '地利']);
+    // 已学特性在池中标 used（不可重复）
+    expect((modal.querySelector('.trait-option[data-pick="齐射"]') as HTMLButtonElement).disabled).toBe(true);
+
+    // 转回基础兵种 → 清空
+    (modal.querySelector('.troop-reset') as HTMLElement).click();
+    expect(modal.querySelectorAll('.trait-chip.picked').length).toBe(0);
+    expect(modal.querySelectorAll('.trait-option').length).toBe(0);
+
+    (modal.querySelector('.m-close') as HTMLElement).click();
+  });
+
+  it('转换 + 学特性后进入战斗：战报详情出现「兵种特性」来源（弩兵 +8% 造成伤害）', async () => {
+    await boot();
+    pickHeroIntoSlot('red', 2, '太史慈');
+    const slotEl = (document.querySelector('.team-panel.red') as HTMLElement).querySelectorAll('.slot')[2] as HTMLElement;
+    slotEl.click();
+    const modal = document.querySelector('.hero-detail-modal') as HTMLElement;
+    (modal.querySelector('.hd-tab[data-tab="troop"]') as HTMLElement).click();
+    (modal.querySelector('.troop-card[data-troop="弩兵"]') as HTMLElement).click();
+    (modal.querySelector('.trait-option[data-pick="齐射"]') as HTMLElement).click();
+    (modal.querySelector('.m-close') as HTMLElement).click();
+
+    // 槽位卡应显示转换后的兵种（refresh 重建 DOM → 重新取元素）
+    const slotFresh = (document.querySelector('.team-panel.red') as HTMLElement).querySelectorAll('.slot')[2] as HTMLElement;
+    expect(slotFresh.textContent).toContain('弩兵');
+
+    // 蓝队用骑兵（太史慈弓兵不被克制 → 净增伤为正，伤害行会显示百分比）
+    pickHeroIntoSlot('blue', 2, '马云禄');
+    (document.querySelector('#start') as HTMLButtonElement).click();
+
+    const navBtn = (label: string) =>
+      Array.from(document.querySelectorAll('.report-dock button, .dock button, .dock a')).find((b) =>
+        b.textContent!.includes(label)
+      ) as HTMLElement;
+    navBtn('详情').click();
+    // 普攻行应带「此次伤害共计提升 N%」（弩兵 +8% 计入增减伤净合计）
+    // 逐回合找「净提升」的伤害行（太史慈打骑兵不被克制 → 弩兵 +8% + 齐射 +15% = +23%）
+    let link: HTMLElement | null = null;
+    for (const rtab of Array.from(document.querySelectorAll('.dv-rail .rtab')) as HTMLElement[]) {
+      rtab.click();
+      const found = Array.from(document.querySelectorAll('.dmg-mod')).find((d) =>
+        (d.textContent || '').includes('提升')
+      );
+      if (found) {
+        link = found.querySelector('.dmg-link') as HTMLElement;
+        break;
+      }
+    }
+    expect(link, '应存在净增伤的伤害行').toBeTruthy();
+    // 点开弹窗 → 「伤害提升合计」里应出现兵种特性来源
+    link!.click();
+    const pop = document.querySelector('.dmg-popup') as HTMLElement;
+    expect(pop, '点击百分比应弹出增减伤明细').toBeTruthy();
+    expect(pop.textContent).toContain('兵种特性');
   });
 });

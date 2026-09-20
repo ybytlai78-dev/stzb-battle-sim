@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 战报详情：紧凑结果横幅 + 图三三栏（出手顺序 / 事件流 / 回合轨）。
  * 事件文案仍由 `renderEvents` / `renderPrepEvents` / `appendDamageModifierLine` 产出。
  */

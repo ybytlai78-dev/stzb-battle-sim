@@ -54,6 +54,16 @@ function makeHandlers(state: EditorState): EditorHandlers {
     onSetLevel(team, idx, level) {
       state[team][idx].level = level;
     },
+    onSetSecondaryTroop(team, idx, troop) {
+      state[team][idx].secondaryTroop = troop;
+      state[team][idx].secondaryTraits = troop ? [] : undefined;
+    },
+    onSetSecondaryTrait(team, idx, slot, trait) {
+      const learned = [...(state[team][idx].secondaryTraits ?? [])];
+      if (trait) learned[slot] = trait;
+      else learned.splice(slot, 1);
+      state[team][idx].secondaryTraits = learned.filter(Boolean).slice(0, 2);
+    },
     onRemoveHero(team, idx) {
       state[team][idx] = emptySlot();
     },
