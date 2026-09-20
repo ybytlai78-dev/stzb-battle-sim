@@ -31,6 +31,7 @@ function makeHandlers(state: EditorState): EditorHandlers {
     onSetFreePoints() {},
     onSetRedness() {},
     onSetLevel() {},
+    onSetTreasure() {},
     onRemoveHero(team, idx) {
       state[team][idx] = emptySlot();
     },

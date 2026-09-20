@@ -175,6 +175,13 @@ const handlers: EditorHandlers = {
     state[team][idx].redness = Math.max(0, Math.min(5, redness));
     refresh();
   },
+  onSetTreasure(team, idx, treasure) {
+    const slot = state[team][idx];
+    if (!slot.heroId) return;
+    // 就地改（与 onSetLevel/onSetRedness 同口径）：武将详情弹窗持有同一个 slot 引用，改完 redraw 才能看到
+    slot.treasure = treasure;
+    refresh();
+  },
   onSetLevel(team, idx, level) {
     const slot = state[team][idx];
     if (!slot.heroId) return;
@@ -228,7 +235,7 @@ function collectTeam(team: 'red' | 'blue'): General[] {
   return state[team]
     .map((s, i) =>
       s.heroId
-        ? buildGeneral(s.heroId!, s.extraSkillIds, s.freePoints, positions[i], s.redness, s.level, morale)
+        ? buildGeneral(s.heroId!, s.extraSkillIds, s.freePoints, positions[i], s.redness, s.level, morale, s.treasure)
         : null
     )
     .filter((g): g is General => g !== null);
@@ -362,7 +369,7 @@ function generalToSlot(g: General): SlotState {
     free.strategy = Math.max(0, g.strategy - Math.round(h.baseStrategy + (level - 1) * h.growthStrategy));
     free.speed = Math.max(0, g.speed - Math.round(h.baseSpeed + (level - 1) * h.growthSpeed));
   }
-  return { heroId: g.id, extraSkillIds: extra.slice(0, 2), freePoints: free, redness, level };
+  return { heroId: g.id, extraSkillIds: extra.slice(0, 2), freePoints: free, redness, level, treasure: g.treasure ?? null };
 }
 
 /** 复用战报队伍：把红/蓝双方（大营→中军→前锋）复制到配将区，返回配将界面 */

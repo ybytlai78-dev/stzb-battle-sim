@@ -51,6 +51,7 @@ function makeHandlers(state: EditorState): EditorHandlers {
     onSetRedness(team, idx, redness) {
       state[team][idx].redness = redness;
     },
+    onSetTreasure() {},
     onSetLevel(team, idx, level) {
       state[team][idx].level = level;
     },
@@ -102,6 +103,7 @@ function fillRedTeam(state: EditorState, count = 3): void {
       freePoints: { attack: 0, defense: 0, strategy: 0, speed: 0 },
       redness: 0,
       level: 40,
+      treasure: null,
     };
   }
 }

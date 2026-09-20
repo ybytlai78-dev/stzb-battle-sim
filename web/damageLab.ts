@@ -345,7 +345,7 @@ function collectMyTeam(): General[] {
   return state.red
     .map((s, i) =>
       s.heroId
-        ? buildGeneral(s.heroId, s.extraSkillIds, s.freePoints, RED_POSITIONS[i], s.redness, s.level, myMorale)
+        ? buildGeneral(s.heroId, s.extraSkillIds, s.freePoints, RED_POSITIONS[i], s.redness, s.level, myMorale, s.treasure)
         : null
     )
     .filter((g): g is General => g !== null);
