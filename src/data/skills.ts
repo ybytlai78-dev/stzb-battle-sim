@@ -9164,4 +9164,66 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+
+  /**
+   * 鏖兵卫主（XP程普·吴步 h684 主战法）：指挥 A（两段异时机：每回合行动判定的二类指挥 + 兵力阈值事件监听），
+   * 距离 3，我军群体（有效距离内 2 个目标），发动率 --。
+   * 满级「使我军群体每回合有 45.0% 几率增加 50.0 点防御属性（受防御属性影响），持续 1 回合。同时当自身位于
+   *   中军及前锋时，大营兵力首次低于初始兵力的 90%、70%、50% 时，自身必定援护友军群体 1 回合，
+   *   且自身下 2 次受到的伤害大幅度降低」；1 级：防御 +25.0 点（几率同为 45.0%、「大幅度降低」同）。
+   * 官方：scripts/skill_extra.json id 200958（指挥 / 距离 3 / 我军群体2 / 兵种步；
+   *   effect 标签 防御属性提高;受到攻击伤害降低;受到策略攻击伤害降低;援护）。来源 https://stzb.163.com/m/skilllist/200958.html
+   *
+   * 口径（策略 A，2026-09-20；推定处已标注）：
+   *   ① 段一（每回合 45% / 我军群体 2 目标 / 防御 +50 / 持续 1 回合）→ `phase:'round'` + `roundTrigger:'on_act'`
+   *      + 段级 `targetSide:'ally'`/`targetMode:'group'`（**每回合重选** 2 名友军，不吃准备阶段锁定）
+   *      + 段级 `chance: 0.45`（几率类走士气修正）；
+   *   ② 防御 +50「受防御属性影响」→ 新增 `defenseScaled`（属性类）标记在、`growthRate` 未确认 → **按基值不缩放**
+   *      （引擎本次为属性类补上 `defenseScaled` 接线，给系数即可生效）；
+   *   ③ 段二（大营兵力首次跌破 90%/70%/50%）→ 新引擎件 `CommandSkill.allyTroopThreshold`
+   *      （`watchPosition:'大营'` + `thresholds:[90,70,50]` + `casterPositions:['中军','前锋']`）：每档只触发 1 次，
+   *      同一次结算跨越多档只结算 1 次（与被动版 `troopThresholdBuff` 同口径，**推定**）；
+   *   ④ 触发效果「必定援护友军群体 1 回合」→ 自身挂 `cover`（duration 1，缺省援护友军全体）；
+   *      「自身下 2 次受到的伤害大幅度降低」→ 用户 2026-09-20 口径「大幅度」= **极大值** →
+   *      `damage_boost` direction **taken** rate **−99.99（−9999%）** + `charges: 2`（次数型，随后 2 次受击各扣 1）；
+   *   ⑤ 防御点数受防御成长系数未给 → 登记 OFFLINE_MAIN_SKILLS → **武将下架**。
+   */
+  aobing_weizhu: {
+    id: 'aobing_weizhu',
+    name: '鏖兵卫主',
+    type: 'command',
+    phase: 'round',
+    roundTrigger: 'on_act',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'ally',
+    tags: ['defense_buff', 'cover', 'damage_boost'],
+    output: [
+      // ① 每回合 45%：我军群体（2 目标）防御 +50，持续 1 回合（受防御未确认 → 基值）
+      {
+        kind: 'inflict_status',
+        targetSide: 'ally',
+        targetMode: 'group',
+        groupCount: 2,
+        chance: 0.45,
+        status: { type: 'defense_buff', amount: 50, duration: 1, defenseScaled: true },
+      },
+    ],
+    // ③ 大营兵力首发跌破 90%/70%/50% → ④ 援护 1 回合 + 下 2 次受到伤害大幅降低（极大值）
+    allyTroopThreshold: {
+      watchPosition: '大营',
+      thresholds: [90, 70, 50],
+      casterPositions: ['中军', '前锋'],
+      output: [
+        { kind: 'inflict_status', target: 'self', status: { type: 'cover', duration: 1 } },
+        {
+          kind: 'inflict_status',
+          target: 'self',
+          status: { type: 'damage_boost', rate: -99.99, duration: 999, direction: 'taken', charges: 2 },
+        },
+      ],
+    },
+  },
 };

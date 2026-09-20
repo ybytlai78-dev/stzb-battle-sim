@@ -623,6 +623,8 @@ export interface CombatContext {
   decreeCounters?: Map<string, number>;
   /** 天子诏令·本侧单位本回合「首击强制选靶」已判定：key `${round}:${unitId}` */
   decreeConsumed?: Set<string>;
+  /** 友军兵力阈值去重（鏖兵卫主）：key `${skillId}:${casterId}:${threshold}` */
+  allyTroopThresholdKeys?: Set<string>;
 }
 
 /** 持续型急救战法级计数器（皇裔流离/金匮要略）：一个战法一个实例，全队共享。
@@ -5482,6 +5484,47 @@ function triggerTroopThresholdBuff(ctx: CombatContext, target: UnitState): void 
 }
 
 /**
+ * 友军兵力阈值首次跨越·指挥版（鏖兵卫主「当自身位于中军及前锋时，大营兵力首次低于初始兵力的
+ * 90%、70%、50% 时，自身必定援护友军群体 1 回合，且自身下 2 次受到的伤害大幅度降低」）：
+ * 受击者（实际扣兵）若为某指挥战法 `allyTroopThreshold.watchPosition` 站位，则遍历**同侧**携带者，
+ * 逐档检查未触发过的阈值（`ctx.allyTroopThresholdKeys` 去重）→ 由携带者对自己结算 output。
+ * 同一次结算跨越多档只结算 1 次（不重复援护/叠加次数），与被动版 `triggerTroopThresholdBuff` 同口径。
+ */
+function triggerAllyTroopThreshold(ctx: CombatContext, watched: UnitState): void {
+  if (!watched.alive) return;
+  const mates = watched.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+  for (const holder of mates) {
+    if (!holder.alive) continue;
+    for (const id of holder.general.commandSkillIds) {
+      const skill = resolveSkill(ctx, id);
+      const cfg = skill?.type === 'command' ? skill.allyTroopThreshold : undefined;
+      if (!skill || !cfg) continue;
+      if (cfg.watchPosition !== watched.general.position) continue;
+      if (cfg.casterPositions && !cfg.casterPositions.includes(holder.general.position)) continue;
+      if (!passesCasterPosition(skill, holder)) continue;
+      const pct = (watched.troops / watched.general.maxTroops) * 100;
+      ctx.allyTroopThresholdKeys ??= new Set();
+      let fired = false;
+      for (const t of cfg.thresholds) {
+        if (!(pct < t)) continue;
+        const key = `${skill.id}:${holder.general.id}:${t}`;
+        if (ctx.allyTroopThresholdKeys.has(key)) continue;
+        ctx.allyTroopThresholdKeys.add(key);
+        fired = true;
+      }
+      if (!fired) continue;
+      ctx.events.push({
+        type: 'status_changed',
+        unitId: holder.general.id,
+        statusType: 'cover',
+        detail: `【${skill.name}】${watched.general.position}兵力首次跌破阈值 → 援护友军并降低自身受到的伤害`,
+      });
+      executeSkillOutputs(ctx, holder, skill, [holder], cfg.output);
+    }
+  }
+}
+
+/**
  * 被动「每回合自身行动时恢复 N 次」（胜敌益强）：按当前回合取 `tiers` 中 `startRound ≤ 回合` 的最后一项，
  * 逐次按恢复公式结算（围困拦截；恢复率受防御缩放，未确认成长率时按基值）。
  */
@@ -6458,13 +6501,19 @@ function executeSkillOutputs(
           } else if (
             (create.type === 'attack_buff' || create.type === 'defense_buff' || create.type === 'strategy_buff' || create.type === 'speed_buff') &&
             ((create.strategyScaled && create.growthRate !== undefined) ||
-              (create.attackScaled && create.growthRate !== undefined))
+              (create.attackScaled && create.growthRate !== undefined) ||
+              (create.defenseScaled && create.growthRate !== undefined))
           ) {
-            // 属性 buff 受谋略 / 受攻击影响（其疾如风速度+41 / 魏武之世四维-15% / 道行险阻防御 −50 受攻击）：
+            // 属性 buff 受谋略 / 受攻击 / 受防御影响（其疾如风速度+41 / 魏武之世四维-15% / 道行险阻防御 −50 受攻击 /
+            // 鏖兵卫主防御 +50 受防御）：
             // 实际数值 = 基础 + 成长率×(生效属性-80)；按绝对值缩放后恢复符号
             // （减益类基础值为负，效果幅度随属性增强：如 -15% 谋略216 → -35%）
             // 百分比类（percent）按 1% 粒度「八舍九入」取整；点数类四舍五入
-            const attr = create.attackScaled ? effectiveStat(caster, 'attack') : effectiveStat(caster, 'strategy');
+            const attr = create.attackScaled
+              ? effectiveStat(caster, 'attack')
+              : create.defenseScaled
+                ? effectiveStat(caster, 'defense')
+                : effectiveStat(caster, 'strategy');
             const scaled = scaledValue(Math.abs(create.amount), create.growthRate, attr);
             const amount = (create.percent ? roundRate(scaled) : Math.round(scaled)) * Math.sign(create.amount);
             inflictStatus(ctx, t, { ...create, amount }, skill.type, skill.id);
@@ -8212,6 +8261,8 @@ export function applyDamage(
     if (target.alive) loseStacksReduceOnEvent(ctx, target);
     // 兵力阈值首次跨越（甚陷不惧）：受击实际扣兵后逐档检查
     triggerTroopThresholdBuff(ctx, target);
+    // 友军兵力阈值首次跨越（鏖兵卫主）：大营兵力跌破 90%/70%/50% → 携带者援护 + 自身下 2 次受伤大幅降低
+    triggerAllyTroopThreshold(ctx, target);
     // 自身造成伤害后追加打击（京观垒冢）：对同一目标额外发动一次攻击或策略攻击（不递归回灌）
     if (source && source.alive && !ctx.resolvingDealStrike) {
       ctx.resolvingDealStrike = true;

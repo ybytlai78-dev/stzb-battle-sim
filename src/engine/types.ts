@@ -625,10 +625,10 @@ export type CreateStatus =
   /** amount 为谋略 80 时的基础值；strategyScaled=true 且给 growthRate 时，实际数值按 scaledValue 缩放。
    *  percent=true 时 amount 为百分比（如 15 = 15%），按目标当前生效属性（含点数增减后）结算。
    *  decayOnDeal：按 N 份「造成伤害」衰减（抚民励德 4）——携带者每次造成伤害（实际扣兵 > 0）后 −1 份。 */
-  | { type: 'attack_buff'; amount: number; duration: number; strategyScaled?: boolean; /** 受攻击缩放（道行险阻防御 −50）；growthRate 缺省时不缩放、用基值 */ attackScaled?: boolean; growthRate?: number; percent?: boolean; /** 按 N 份「造成伤害」衰减（抚民励德 4）：amount = baseAmount × 剩余份数 / N */ decayOnDeal?: number; /** 显式「可叠加」（官方文案写「可叠加」/「层数」）：同源重复施加时数值累加；缺省刷新 */ stack?: true }
-  | { type: 'defense_buff'; amount: number; duration: number; strategyScaled?: boolean; attackScaled?: boolean; growthRate?: number; percent?: boolean; /** 按 N 份「造成伤害」衰减（抚民励德 4） */ decayOnDeal?: number; /** 显式「可叠加」：同源重复施加时数值累加；缺省刷新 */ stack?: true }
-  | { type: 'strategy_buff'; amount: number; duration: number; strategyScaled?: boolean; attackScaled?: boolean; growthRate?: number; percent?: boolean; /** 按 N 份「造成伤害」衰减（抚民励德 4） */ decayOnDeal?: number; stack?: true }
-  | { type: 'speed_buff'; amount: number; duration: number; strategyScaled?: boolean; attackScaled?: boolean; growthRate?: number; percent?: boolean; /** 按 N 份「造成伤害」衰减（抚民励德 4） */ decayOnDeal?: number; stack?: true }
+  | { type: 'attack_buff'; amount: number; duration: number; strategyScaled?: boolean; /** 受攻击缩放（道行险阻防御 −50）；growthRate 缺省时不缩放、用基值 */ attackScaled?: boolean; /** 受**防御**缩放（鏖兵卫主「防御 +50 受防御属性影响」）；growthRate 缺省时不缩放、用基值 */ defenseScaled?: boolean; growthRate?: number; percent?: boolean; /** 按 N 份「造成伤害」衰减（抚民励德 4）：amount = baseAmount × 剩余份数 / N */ decayOnDeal?: number; /** 显式「可叠加」（官方文案写「可叠加」/「层数」）：同源重复施加时数值累加；缺省刷新 */ stack?: true }
+  | { type: 'defense_buff'; amount: number; duration: number; strategyScaled?: boolean; attackScaled?: boolean; /** 受**防御**缩放（鏖兵卫主）；growthRate 缺省时不缩放、用基值 */ defenseScaled?: boolean; growthRate?: number; percent?: boolean; /** 按 N 份「造成伤害」衰减（抚民励德 4） */ decayOnDeal?: number; /** 显式「可叠加」：同源重复施加时数值累加；缺省刷新 */ stack?: true }
+  | { type: 'strategy_buff'; amount: number; duration: number; strategyScaled?: boolean; attackScaled?: boolean; defenseScaled?: boolean; growthRate?: number; percent?: boolean; /** 按 N 份「造成伤害」衰减（抚民励德 4） */ decayOnDeal?: number; stack?: true }
+  | { type: 'speed_buff'; amount: number; duration: number; strategyScaled?: boolean; attackScaled?: boolean; defenseScaled?: boolean; growthRate?: number; percent?: boolean; /** 按 N 份「造成伤害」衰减（抚民励德 4） */ decayOnDeal?: number; stack?: true }
   /** 受到恢复效果提升（勇挚刚毅 / 守静却敌）：rate 为 80 属性基准值（0.05 = +5%）；
    *  strategyScaled / defenseScaled + growthRate 给定时按属性缩放（公式同 damage_reduce），growthRate 缺省用基值；
    *  `stack: true` = 显式可叠加（同源重复施加累加 rate）。 */
@@ -1115,6 +1115,19 @@ export interface CommandSkill extends BaseSkill {
    * 立即对该目标额外跳 1 次该 DoT（`dealDotDamage`，即原 DoT 的一次跳伤）。
    */
   extraTickOnDotApply?: { startRound: number };
+  /**
+   * 友军兵力阈值首次跨越（鏖兵卫主）：己方**指定站位**（`watchPosition`，如大营）的友军兵力首次低于
+   * 初始兵力 `thresholds`（%）中任一档时，由**携带者**结算 `output`（援护 + 自身下 2 次受伤大幅降低）。
+   * 每档每携带者只触发 1 次（`ctx.allyTroopThresholdKeys` 去重），同一次结算跨越多档只结算 1 次（**推定**）；
+   * 携带者须满足战法站位条件（`casterPositions`，如「自身位于中军及前锋」）。
+   */
+  allyTroopThreshold?: {
+    watchPosition: Position;
+    thresholds: number[];
+    /** 携带者站位条件（「当自身位于中军及前锋时」）；缺省不限 */
+    casterPositions?: Position[];
+    output: SkillOutput[];
+  };
   /**
    * 「天子诏令」（XP献帝）：① 每回合开始随机点名一名**敌军单体**，使其「受到所有伤害提升」按份叠加
    * （`takenBoostRate`%，受谋略缩放，持续至战斗结束）；② 本侧每个单位**本回合首次伤害/首次普攻**

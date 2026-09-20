@@ -194,6 +194,7 @@ const SKILL_ID_BY_NAME = {
   天子诏令: 'tianzi_zhaoling',
   方阵掩杀: 'fangzhen_yansha',
   迟智难酬: 'chizhi_nanchou',
+  鏖兵卫主: 'aobing_weizhu',
 };
 
 /** 现有 8 个武将固定拼音 id（测试直接引用 HERO_REGISTRY.<id>） */
