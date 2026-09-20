@@ -1,13 +1,13 @@
-/**
+﻿/**
  * 战斗主循环（v0.2）
  *   准备阶段：速度排序、battle_start 被动、一类指挥战法（一次）→ 8 回合逐个行动 → 胜负判定
  *   行动阶段（被动 → 指挥预备/二类 → 主动 → 普攻 → 追击）
  *   混乱：禁主动战法 + 普攻；被动/指挥仍正常判定
  *   胜利规则（斩首制）：一侧大营阵亡即失败（不再要求全灭）
  */
-import type { BattleConfig, BattleEvent, BattleReport, General, Skill, UnitState } from './types';
+import type { BattleConfig, BattleEvent, BattleReport, General, Side, Skill, UnitState } from './types';
 import { Rng } from './rng';
-import { actUnit, triggerCommandSkills, triggerPassiveSkills, triggerDelayedOutputs, triggerRangeDecayPassives, triggerRoundEndCommands, triggerImperialDecrees, triggerRoundStartChance, triggerRoundEndChanceOutputs, tickStatuses, tickRoundStartStatuses, effectiveStat, type CombatContext } from './action';
+import { actUnit, triggerCommandSkills, triggerPassiveSkills, triggerDelayedOutputs, triggerRangeDecayPassives, triggerRoundEndCommands, triggerImperialDecrees, triggerRoundStartChance, triggerRoundEndChanceOutputs, tickStatuses, tickRoundStartStatuses, effectiveStat, grantSecondaryTroopStatuses, type CombatContext } from './action';
 import { computeStats } from './stats';
 import { SKILL_REGISTRY } from '../data/skills';
 import { validateMutualExclusion } from '../data/hero-utils';
@@ -36,6 +36,7 @@ export function runBattle(config: BattleConfig): BattleReport {
     stackBuffs: [],
     basicHitProcs: [],
     currentRound: 0,
+    defenderSide: config.defenderSide,
     actLayerCounters: new Map(),
     // 伤兵死亡机制：默认启用（第 1 回合 5%，每回合 +14%，封顶 100%）
     woundedMortality: config.woundedMortality ?? { base: 5, perRound: 14 },
@@ -80,6 +81,9 @@ export function runBattle(config: BattleConfig): BattleReport {
   emitLines(enemyTeam, enemyBonus.lines);
 
   events.push({ type: 'prep_phase', phase: 'troop' });
+  // 二级兵种专属/通用特性的**状态类**效果：重骑兵「重骑冲阵」（前 2 回合反击 75%）、
+  // 通用特性「散射」（首次普攻附带分兵 40%）——准备阶段一次性授予，走状态冲突闸门
+  for (const unit of turnOrder) grantSecondaryTroopStatuses(ctx, unit);
   events.push({ type: 'prep_phase', phase: 'skill' });
   // 【战法】先判定全部 battle_start 被动（百战精兵等加属性），再判定一类指挥（持节镇西等读生效属性）
   for (const unit of turnOrder) {
@@ -113,7 +117,7 @@ export function runBattle(config: BattleConfig): BattleReport {
     triggerDelayedOutputs(ctx, round);
 
     // 每回合按当前生效速度重排（含加点、部队加成、速度增益/减益）；先手组（priorityRounds）仍优先
-    const roundOrder = buildPriorityOrder([...myTeam, ...enemyTeam], round, skills);
+    const roundOrder = buildPriorityOrder([...myTeam, ...enemyTeam], round, skills, config.defenderSide);
     roundStartEv.turnOrder = roundOrder.map((u) => u.general.id);
 
     for (const unit of roundOrder) {
@@ -209,17 +213,25 @@ export function buildTurnOrder(units: UnitState[]): UnitState[] {
 export function buildPriorityOrder(
   turnOrder: UnitState[],
   round: number,
-  skills: Map<string, Skill>
+  skills: Map<string, Skill>,
+  /** 防守方阵营（长弓兵「先发」等「作为防守方时」条件用）；缺省 undefined = 无防守方 */
+  defenderSide?: Side
 ): UnitState[] {
   const inPriority = (u: UnitState): boolean =>
-    // 三种先手：① 指挥战法常驻（先驱突击前 N 回合）
-    // ② 主动战法发动后授予的 priority 状态（诸葛锦囊：自身先手 2 回合）
-    // ③ 被动先手（侵掠如火「在战斗中可以优先行动」，priorityRounds 999 = 全程）
+    // ① 通用特性「疾行」：骑兵系高级兵种前 3 回合优先行动
+    (u.general.secondaryTraits?.includes('疾行') === true && round <= 3) ||
+    // ② 二级兵种专属「轻骑冲阵」：轻骑兵前 2 回合优先行动
+    (u.general.secondaryTroop === '轻骑兵' && round <= 2) ||
+    // ③ 二级兵种专属「先发」：长弓兵作为防守方时前 2 回合优先行动（需声明防守方）
+    (u.general.secondaryTroop === '长弓兵' && defenderSide !== undefined && u.side === defenderSide && round <= 2) ||
+    // ④ 主动战法发动后授予的 priority 状态（诸葛锦囊）
     u.statuses.some((st) => st.type === 'priority') ||
+    // ⑤ 指挥战法常驻（先驱突击前 N 回合）
     u.general.commandSkillIds.some((id) => {
       const s = skills.get(id);
       return s?.type === 'command' && s.priorityRounds !== undefined && round <= s.priorityRounds;
     }) ||
+    // ⑥ 被动先手（侵掠如火「在战斗中可以优先行动」，priorityRounds 999 = 全程）
     u.general.passiveSkillIds.some((id) => {
       const s = skills.get(id);
       return s?.type === 'passive' && s.priorityRounds !== undefined && round <= s.priorityRounds;

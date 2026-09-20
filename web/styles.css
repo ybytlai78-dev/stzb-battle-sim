@@ -2702,7 +2702,70 @@ main {
 .pt-btn:disabled { opacity: .35; cursor: not-allowed; }
 .pt-btn:not(:disabled):hover { border-color: var(--gold); color: var(--gold-bright); }
 
-/* 板块 3 · 兵种：转换未做 → 灰色占位 */
+/* 板块 3 · 兵种转换（二级兵种二选一 + 专属特性 + 通用特性 2 栏） */
+.hd-troop { display: flex; flex-direction: column; gap: 10px; padding: 4px 2px; }
+.hd-troop-title {
+  display: flex; align-items: baseline; gap: 8px;
+  font-size: 14px; color: var(--gold-bright); font-family: var(--font-kai); letter-spacing: 3px;
+  border-bottom: 1px solid var(--line-strong); padding-bottom: 4px;
+}
+.hd-troop-title .ht-hint { font-size: 11px; color: var(--text-weak); letter-spacing: 0; font-family: inherit; }
+.hd-troop-title .ht-hint b { color: var(--gold); }
+.hd-troop .ph-tip { font-size: 12px; color: var(--text-weak); }
+.troop-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.troop-card {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 10px; cursor: pointer;
+  border: 1px solid var(--line-strong);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .02), rgba(0, 0, 0, .18));
+}
+.troop-card:hover { border-color: var(--gold); }
+.troop-card.selected { border-color: var(--gold-bright); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 55%, transparent); }
+.tc-head { display: flex; align-items: center; gap: 6px; }
+.tc-check {
+  flex: 0 0 auto; width: 14px; height: 14px; line-height: 14px; text-align: center;
+  font-size: 11px; font-style: normal; color: #0d0a07;
+  background: var(--gold-bright);
+}
+.troop-card:not(.selected) .tc-check { background: transparent; }
+.tc-name { font-size: 15px; color: var(--ink); font-family: var(--font-kai); letter-spacing: 1px; }
+.tc-exclusive {
+  font-size: 10px; padding: 0 4px; color: var(--gold-bright);
+  border: 1px solid var(--gold); border-radius: 2px;
+}
+.tc-family { font-size: 11px; color: var(--text-weak); }
+.tc-traits { margin: 0; padding-left: 16px; display: flex; flex-direction: column; gap: 3px; }
+.tc-traits li { font-size: 11px; line-height: 1.45; color: var(--color-text-muted); }
+.tc-traits li.pending { color: var(--text-weak); font-style: italic; }
+.trait-slots { display: flex; flex-wrap: wrap; gap: 10px; }
+.trait-slot { display: flex; align-items: center; gap: 6px; }
+.ts-label { font-size: 12px; color: var(--text-weak); }
+.trait-chip {
+  font: inherit; font-size: 12px; padding: 3px 10px; cursor: pointer;
+  border: 1px solid var(--line-strong); border-radius: 2px;
+  background: rgba(0, 0, 0, .2); color: var(--ink);
+}
+.trait-chip.empty { color: var(--text-weak); border-style: dashed; }
+.trait-chip.picked { border-color: var(--gold); color: var(--gold-bright); }
+.trait-chip:hover { border-color: var(--gold-bright); }
+.trait-chip .chip-x { font-style: normal; margin-left: 6px; color: var(--text-weak); }
+.trait-pool { display: flex; flex-wrap: wrap; gap: 6px; }
+.trait-option {
+  font: inherit; font-size: 12px; padding: 3px 10px; cursor: pointer;
+  border: 1px solid var(--line-strong); border-radius: 2px;
+  background: transparent; color: var(--color-text-muted);
+}
+.trait-option:not(:disabled):hover { border-color: var(--gold); color: var(--gold-bright); }
+.trait-option.used { opacity: .35; cursor: not-allowed; text-decoration: line-through; }
+.ht-reset { display: flex; justify-content: flex-end; }
+.troop-reset {
+  font: inherit; font-size: 11px; padding: 3px 10px; cursor: pointer;
+  border: 1px solid var(--line-strong); border-radius: 2px;
+  background: transparent; color: var(--text-weak);
+}
+.troop-reset:hover { border-color: var(--gold); color: var(--gold-bright); }
+
+/* 板块 3 · 旧占位（保留：数据缺失武将用） */
 .hd-troop-ph {
   display: flex;
   flex-direction: column;

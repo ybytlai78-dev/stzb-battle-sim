@@ -261,7 +261,11 @@ export function buildGeneral(
   position: General['position'] = '前锋',
   redness = 0,
   level = 40,
-  morale = 120
+  morale = 120,
+  /** 二级兵种转换（可选）：见 docs/兵种转换调研.md */
+  secondaryTroop?: General['secondaryTroop'],
+  /** 已学兵系通用特性（0~2 个） */
+  secondaryTraits?: General['secondaryTraits']
 ): General {
   const rec = HERO_RECORDS[heroId];
   if (!rec) throw new Error(`武将不存在：${heroId}`);
@@ -270,6 +274,6 @@ export function buildGeneral(
   const troops = troopCapacity(lv, red);
   const g1 = recordToGeneral(rec); // level-1，主战法挂槽
   const leveled = leveledFromRecord(g1, rec, lv, freePoints, troops);
-  const placed = { ...leveled, position, morale, level: lv, redness: red };
+  const placed = { ...leveled, position, morale, level: lv, redness: red, secondaryTroop, secondaryTraits };
   return attachSkills(placed, extraSkillIds);
 }

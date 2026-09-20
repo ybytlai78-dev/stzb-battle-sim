@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 伤害测试实验室（并入主站版 v2，按用户反馈重构）
  *  - 布局：三栏分割（左：我方测试队伍配置，不分红蓝，竖排上中下画像卡 ｜ 中：可滚动武将池 ｜ 右：侍卫靶子面板）
  *  - 交互：底部「模拟一次/十次」→ 进入独立「伤害分析」页（与实验室分离），可返回继续调整
@@ -345,7 +345,7 @@ function collectMyTeam(): General[] {
   return state.red
     .map((s, i) =>
       s.heroId
-        ? buildGeneral(s.heroId, s.extraSkillIds, s.freePoints, RED_POSITIONS[i], s.redness, s.level, myMorale)
+        ? buildGeneral(s.heroId, s.extraSkillIds, s.freePoints, RED_POSITIONS[i], s.redness, s.level, myMorale, s.secondaryTroop, s.secondaryTraits)
         : null
     )
     .filter((g): g is General => g !== null);

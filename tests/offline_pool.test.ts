@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 配将池「显示下架武将」调试开关（jsdom）：
  * 下架 = 主战法已实现、但「受属性影响」的成长率未确认（`src/data/listing.ts` 的 `OFFLINE_MAIN_SKILLS`）
  * → 默认不进池（`web/heroes.ts` 的 `HEROES`）。勾选开关后并入下架武将（`SLOTTED_HEROES`），
@@ -31,6 +31,8 @@ function makeHandlers(state: EditorState): EditorHandlers {
     onSetFreePoints() {},
     onSetRedness() {},
     onSetLevel() {},
+  onSetSecondaryTroop() {},
+  onSetSecondaryTrait() {},
     onRemoveHero(team, idx) {
       state[team][idx] = emptySlot();
     },

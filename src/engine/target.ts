@@ -10,6 +10,7 @@
  * 相对位次查距离矩阵。例：双方只剩大营 → 双方大营都压到己方 0 位 → 距离 1。
  */
 import type { UnitState } from './types';
+import { rangeModOf } from './secondaryTroop';
 import type { CombatContext } from './action';
 
 const POSITION_INDEX: Record<string, number> = { 前锋: 0, 中军: 1, 大营: 2 };
@@ -63,15 +64,17 @@ function sortByPosition(a: UnitState, b: UnitState): number {
 }
 
 /**
- * 攻击距离（含 `range_buff` 状态加成）：面板 attackRange + Σ range_buff.amount。
+ * 攻击距离（含 `range_buff` 状态加成 + 二级兵种修正）：
+ *   面板 attackRange + Σ range_buff.amount + 二级兵种 rangeMod（长弓兵 +1 / 死士 −1）。
  * 帝临回光「使自身攻击距离 +1」用此口径——只影响普攻可达范围，不影响战法有效距离（skill.range）。
+ * 注意：面板值本身可以为 0（测试用「攻击距离 0」隔离普攻），故**下限为 0**，不做 max(1, …)。
  */
 export function attackRangeOf(unit: UnitState): number {
   let bonus = 0;
   for (const s of unit.statuses) {
     if (s.type === 'range_buff') bonus += s.amount;
   }
-  return unit.general.attackRange + bonus;
+  return Math.max(0, unit.general.attackRange + rangeModOf(unit.general.secondaryTroop) + bonus);
 }
 
 /**

@@ -11,6 +11,14 @@ import { SKILL_REGISTRY } from '../src/data/skills';
 import type { General, Skill, TroopType, FormationBonus } from '../src/engine/types';
 import type { BattleReport } from '../src/engine/types';
 import { computeTroopBonuses, ZERO_BONUS } from '../src/engine/troopBonus';
+import {
+  SECONDARY_TROOPS,
+  TRAIT_SLOTS_MAX,
+  traitsFor,
+  type GeneralTrait,
+  type SecondaryTroopType,
+} from '../src/engine/secondaryTroop';
+import { HERO_SECONDARY_TROOPS } from '../src/data/secondaryTroops';
 import { showNotice } from './notice';
 import { createBattleView } from './battleView';
 import { createBattleSummary, createStatsView } from './battleSummary';
@@ -25,6 +33,13 @@ export interface SlotState {
   redness: number;
   /** 等级 40~50（属性随成长率更新；携带兵力 = 等级×100+5000+红度×200） */
   level: number;
+  /**
+   * 二级兵种转换（高级兵种，可选）：只能取该武将的两个转换方向之一；
+   * undefined = 未转换（沿用基础兵种）。见 `docs/兵种转换调研.md`。
+   */
+  secondaryTroop?: SecondaryTroopType;
+  /** 已学兵系通用特性（0~2 个，须属于该二级兵种的兵系池；见 TRAIT_SLOTS_MAX） */
+  secondaryTraits?: GeneralTrait[];
 }
 
 export interface EditorState {
@@ -45,6 +60,10 @@ export interface EditorHandlers {
   onSetFreePoints: (team: 'red' | 'blue', slotIndex: number, key: keyof SlotState['freePoints'], value: number) => void;
   onSetRedness: (team: 'red' | 'blue', slotIndex: number, redness: number) => void;
   onSetLevel: (team: 'red' | 'blue', slotIndex: number, level: number) => void;
+  /** 设置/清除二级兵种转换（undefined = 转回基础兵种）；切换兵种会清空已学通用特性 */
+  onSetSecondaryTroop: (team: 'red' | 'blue', slotIndex: number, troop: SecondaryTroopType | undefined) => void;
+  /** 切换某个通用特性栏（slot: 0/1；trait = undefined 表示清空该栏） */
+  onSetSecondaryTrait: (team: 'red' | 'blue', slotIndex: number, slot: number, trait: GeneralTrait | undefined) => void;
   onRemoveHero: (team: 'red' | 'blue', slotIndex: number) => void;
   onClearTeam: (team: 'red' | 'blue') => void;
 }
@@ -411,7 +430,7 @@ export function openTroopBonusPanel(teamLabel: string, slots: SlotState[]): void
     const s = slots[i];
     if (!s.heroId) continue;
     generals.push(
-      buildGeneral(s.heroId, s.extraSkillIds, s.freePoints, POS[i], s.redness, s.level, 120)
+      buildGeneral(s.heroId, s.extraSkillIds, s.freePoints, POS[i], s.redness, s.level, 120, s.secondaryTroop, s.secondaryTraits)
     );
   }
   const result = computeTroopBonuses(generals);
@@ -573,7 +592,7 @@ export function renderSlot(team: 'red' | 'blue', i: number, slot: SlotState, lab
         <div class="hero-stars" title="红度 ${slot.redness}/5">${rednessStars(slot.redness)}</div>
         <div class="card-bar">
           <span class="lv"><i>Lv.</i>${slot.level}</span>
-          <span class="troop" title="${TYPE_NAME[hero.troopType] ?? '兵种'}">${TYPE_CHAR[hero.troopType] ?? '?'}</span>
+          <span class="troop" title="${slot.secondaryTroop ? `二级兵种：${slot.secondaryTroop}` : TYPE_NAME[hero.troopType] ?? '兵种'}">${slot.secondaryTroop ?? TYPE_CHAR[hero.troopType] ?? '?'}</span>
         </div>
       </div>
     </div>
@@ -938,18 +957,67 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
       </div>`;
   };
 
-  /** 板块 3 · 兵种：兵种转换还没建模，灰色占位 */
+  /**
+   * 板块 3 · 兵种：二级兵种转换（两个方向二选一）+ 专属特性 + 2 个通用特性栏。
+   * 数据源 `HERO_SECONDARY_TROOPS`（官方武将表解码，161/161 对齐）；未收录的武将显示未开放。
+   */
   const hdTroopHtml = (): string => {
-    const boxes = ['骑', '步', '弓'].map((c) => {
-      const cur = c === TYPE_CHAR[hero.troopType];
-      const full = c === '骑' ? '骑兵' : c === '步' ? '步兵' : '弓兵';
-      return `<span class="troop-box ${cur ? 'cur' : ''}" title="${full}">${c}</span>`;
+    const options: SecondaryTroopType[] = HERO_SECONDARY_TROOPS[heroId] ?? [];
+    if (options.length === 0) {
+      return `
+        <div class="hd-troop">
+          <div class="hd-troop-title">兵种转换</div>
+          <div class="ph-tip">该武将暂无二级兵种转换数据（官方武将表未收录）</div>
+        </div>`;
+    }
+    const cur = slot.secondaryTroop;
+    const cards = options
+      .map((t) => {
+        const def = SECONDARY_TROOPS[t];
+        const selected = t === cur;
+        const exclusive = def.exclusiveTrait.length
+          ? def.exclusiveTrait.map((s) => `<li>${s}</li>`).join('')
+          : '<li class="pending">专属特性待补（占位）</li>';
+        return `
+        <div class="troop-card ${selected ? 'selected' : ''}" data-troop="${t}" title="${selected ? '当前兵种' : '点击转换为' + t}">
+          <div class="tc-head">
+            <i class="tc-check">${selected ? '✓' : ''}</i>
+            <span class="tc-name">${t}</span>
+            ${def.exclusive ? '<span class="tc-exclusive">专属</span>' : ''}
+          </div>
+          <div class="tc-family">${def.family}</div>
+          <ul class="tc-traits">${exclusive}</ul>
+        </div>`;
+      })
+      .join('');
+
+    const pool: GeneralTrait[] = cur ? traitsFor(cur) : [];
+    const learned = slot.secondaryTraits ?? [];
+    const traitSlots = Array.from({ length: TRAIT_SLOTS_MAX }, (_, i) => {
+      const picked = learned[i];
+      const chosen = picked
+        ? `<button class="trait-chip picked" data-slot="${i}" title="点击更换/清空">${picked}<i class="chip-x">×</i></button>`
+        : `<button class="trait-chip empty" data-slot="${i}">+ 选择特性</button>`;
+      return `<div class="trait-slot"><span class="ts-label">特性 ${i + 1}</span>${chosen}</div>`;
     }).join('');
+
+    const poolHtml = !cur
+      ? '<div class="ph-tip">先选择二级兵种，再学习通用特性</div>'
+      : `<div class="trait-pool">${pool
+          .map((t) => {
+            const used = learned.includes(t);
+            return `<button class="trait-option ${used ? 'used' : ''}" data-pick="${t}" ${used ? 'disabled' : ''}>${t}</button>`;
+          })
+          .join('')}</div>`;
+
     return `
-      <div class="hd-troop-ph">
-        <div class="ph-title">兵种转换</div>
-        <div class="troop-boxes">${boxes}</div>
-        <div class="ph-tip">未开放 —— 转换后的兵种与专属效果尚未建模</div>
+      <div class="hd-troop">
+        <div class="hd-troop-title">兵种转换<span class="ht-hint">基础兵种 · ${TYPE_NAME[hero.troopType] ?? ''}${cur ? ` → <b>${cur}</b>` : ''}</span></div>
+        <div class="troop-cards">${cards}</div>
+        <div class="hd-troop-title">通用特性<span class="ht-hint">每个高级兵种 ${TRAIT_SLOTS_MAX} 栏，选自本兵系特性池</span></div>
+        <div class="trait-slots">${traitSlots}</div>
+        ${poolHtml}
+        ${cur ? `<div class="ht-reset"><button class="troop-reset" data-reset="1">转回基础兵种（${TYPE_NAME[hero.troopType] ?? ''}）</button></div>` : ''}
       </div>`;
   };
 
@@ -1051,6 +1119,53 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
           h.onAddSkill(placed!.team, placed!.idx, sid);
           redraw();
         });
+      };
+    });
+
+    // ── 兵种转换板块（兵种二选一 + 通用特性 2 栏）──
+    const requireEditable = (): { team: 'red' | 'blue'; idx: number } | null => {
+      if (!placed) {
+        showNotice('放入阵容后可转换兵种');
+        return null;
+      }
+      return { team: placed.team, idx: placed.idx };
+    };
+    body.querySelectorAll('.troop-card').forEach((el) => {
+      (el as HTMLElement).onclick = () => {
+        const at = requireEditable();
+        if (!at) return;
+        const t = (el as HTMLElement).dataset.troop as SecondaryTroopType;
+        // 再点当前兵种 = 取消（转回基础兵种）
+        h.onSetSecondaryTroop(at.team, at.idx, slot.secondaryTroop === t ? undefined : t);
+        redraw();
+      };
+    });
+    const resetBtn = body.querySelector('.troop-reset') as HTMLElement | null;
+    if (resetBtn) {
+      resetBtn.onclick = () => {
+        const at = requireEditable();
+        if (!at) return;
+        h.onSetSecondaryTroop(at.team, at.idx, undefined);
+        redraw();
+      };
+    }
+    body.querySelectorAll('.trait-chip.picked').forEach((el) => {
+      (el as HTMLElement).onclick = () => {
+        const at = requireEditable();
+        if (!at) return;
+        h.onSetSecondaryTrait(at.team, at.idx, Number((el as HTMLElement).dataset.slot), undefined);
+        redraw();
+      };
+    });
+    body.querySelectorAll('.trait-option:not(.used)').forEach((el) => {
+      (el as HTMLElement).onclick = () => {
+        const at = requireEditable();
+        if (!at) return;
+        // 填到第一个空栏；两栏都满时替换第 1 栏
+        const learned = slot.secondaryTraits ?? [];
+        const target = learned.length >= TRAIT_SLOTS_MAX ? 0 : learned.length;
+        h.onSetSecondaryTrait(at.team, at.idx, target, (el as HTMLElement).dataset.pick as GeneralTrait);
+        redraw();
       };
     });
   };
