@@ -145,7 +145,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9436
         },
         {
           "type": "unit_act_end",
@@ -173,7 +174,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9608
         },
         {
           "type": "unit_act_end",
@@ -201,7 +203,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9227
         },
         {
           "type": "unit_act_end",
@@ -284,7 +287,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9444
         },
         {
           "type": "unit_act_end",
@@ -312,7 +316,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8845
         },
         {
           "type": "unit_act_end",
@@ -340,7 +345,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8466
         },
         {
           "type": "unit_act_end",
@@ -423,7 +429,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8893
         },
         {
           "type": "unit_act_end",
@@ -451,7 +458,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8087
         },
         {
           "type": "unit_act_end",
@@ -479,7 +487,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7715
         },
         {
           "type": "unit_act_end",
@@ -562,7 +571,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8378
         },
         {
           "type": "unit_act_end",
@@ -590,7 +600,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7337
         },
         {
           "type": "unit_act_end",
@@ -618,7 +629,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6970
         },
         {
           "type": "unit_act_end",
@@ -701,7 +713,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7884
         },
         {
           "type": "unit_act_end",
@@ -729,7 +742,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6590
         },
         {
           "type": "unit_act_end",
@@ -757,7 +771,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6234
         },
         {
           "type": "unit_act_end",
@@ -840,7 +855,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7402
         },
         {
           "type": "unit_act_end",
@@ -868,7 +884,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 5852
         },
         {
           "type": "unit_act_end",
@@ -896,7 +913,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 5506
         },
         {
           "type": "unit_act_end",
@@ -979,7 +997,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6946
         },
         {
           "type": "unit_act_end",
@@ -1007,7 +1026,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 5124
         },
         {
           "type": "unit_act_end",
@@ -1035,7 +1055,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 4782
         },
         {
           "type": "unit_act_end",
@@ -1118,7 +1139,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9011
         },
         {
           "type": "unit_act_end",
@@ -1146,7 +1168,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 4407
         },
         {
           "type": "unit_act_end",
@@ -1174,7 +1197,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 4065
         },
         {
           "type": "unit_act_end",
@@ -1488,7 +1512,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9318
         },
         {
           "type": "unit_act_start",
@@ -1512,7 +1537,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8698
         },
         {
           "type": "unit_act_end",
@@ -1566,7 +1592,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7977
         },
         {
           "type": "unit_act_start",
@@ -1590,7 +1617,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7378
         },
         {
           "type": "unit_act_end",
@@ -1618,7 +1646,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6829
         },
         {
           "type": "unit_act_end",
@@ -1646,7 +1675,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9677
         },
         {
           "type": "unit_act_end",
@@ -1674,7 +1704,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9619
         },
         {
           "type": "unit_act_end",
@@ -1791,7 +1822,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6162
         },
         {
           "type": "unit_act_start",
@@ -1815,7 +1847,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 5551
         },
         {
           "type": "unit_act_end",
@@ -1860,7 +1893,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 4974
         },
         {
           "type": "unit_act_end",
@@ -1888,7 +1922,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 4417
         },
         {
           "type": "unit_act_end",
@@ -1916,7 +1951,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9415
         },
         {
           "type": "unit_act_end",
@@ -1944,7 +1980,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9239
         },
         {
           "type": "unit_act_end",
@@ -2052,7 +2089,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9399
         },
         {
           "type": "unit_act_end",
@@ -2097,7 +2135,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 3831
         },
         {
           "type": "unit_act_end",
@@ -2125,7 +2164,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 3278
         },
         {
           "type": "unit_act_end",
@@ -2153,7 +2193,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9193
         },
         {
           "type": "unit_act_end",
@@ -2181,7 +2222,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8865
         },
         {
           "type": "unit_act_end",
@@ -2289,7 +2331,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8799
         },
         {
           "type": "unit_act_end",
@@ -2343,7 +2386,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 2566
         },
         {
           "type": "unit_act_start",
@@ -2367,7 +2411,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 1996
         },
         {
           "type": "unit_act_end",
@@ -2395,7 +2440,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 1446
         },
         {
           "type": "unit_act_end",
@@ -2423,7 +2469,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8727
         },
         {
           "type": "unit_act_end",
@@ -2451,7 +2498,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8360
         },
         {
           "type": "unit_act_end",
@@ -2559,7 +2607,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8214
         },
         {
           "type": "unit_act_end",
@@ -2604,7 +2653,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 874
         },
         {
           "type": "unit_act_end",
@@ -2632,7 +2682,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 318
         },
         {
           "type": "unit_act_end",
@@ -2660,7 +2711,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8306
         },
         {
           "type": "unit_act_end",
@@ -2688,7 +2740,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7948
         },
         {
           "type": "unit_act_end",
@@ -2796,7 +2849,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7631
         },
         {
           "type": "unit_act_end",
@@ -2841,7 +2895,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 0
         },
         {
           "type": "unit_dead",
@@ -2875,7 +2930,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7077
         },
         {
           "type": "unit_act_end",
@@ -2903,7 +2959,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7610
         },
         {
           "type": "unit_act_end",
@@ -2931,7 +2988,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7226
         },
         {
           "type": "unit_act_end",
@@ -3030,7 +3088,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6461
         },
         {
           "type": "unit_act_start",
@@ -3054,7 +3113,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 5892
         },
         {
           "type": "unit_act_end",
@@ -3108,7 +3168,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 5182
         },
         {
           "type": "unit_act_start",
@@ -3132,7 +3193,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 4609
         },
         {
           "type": "unit_act_end",
@@ -3160,7 +3222,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 4052
         },
         {
           "type": "unit_act_end",
@@ -3188,7 +3251,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6966
         },
         {
           "type": "unit_act_end",
@@ -3216,7 +3280,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6582
         },
         {
           "type": "unit_act_end",
@@ -3315,7 +3380,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 3463
         },
         {
           "type": "unit_act_start",
@@ -3339,7 +3405,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9449
         },
         {
           "type": "unit_act_end",
@@ -3393,7 +3460,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 2760
         },
         {
           "type": "unit_act_start",
@@ -3417,7 +3485,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 2180
         },
         {
           "type": "unit_act_end",
@@ -3445,7 +3514,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 1628
         },
         {
           "type": "unit_act_end",
@@ -3473,7 +3543,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9046
         },
         {
           "type": "unit_act_end",
@@ -3501,7 +3572,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6208
         },
         {
           "type": "unit_act_end",
@@ -3797,7 +3869,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9395
         },
         {
           "type": "unit_act_end",
@@ -3842,7 +3915,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9582
         },
         {
           "type": "unit_act_end",
@@ -3887,7 +3961,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8820
         },
         {
           "type": "unit_act_end",
@@ -3915,7 +3990,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9643
         },
         {
           "type": "unit_act_end",
@@ -3943,7 +4019,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9277
         },
         {
           "type": "unit_act_end",
@@ -4051,7 +4128,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8209
         },
         {
           "type": "unit_act_end",
@@ -4096,7 +4174,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7805
         },
         {
           "type": "unit_act_end",
@@ -4141,7 +4220,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7230
         },
         {
           "type": "unit_act_end",
@@ -4169,7 +4249,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8949
         },
         {
           "type": "unit_act_end",
@@ -4197,7 +4278,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8586
         },
         {
           "type": "unit_act_end",
@@ -4305,7 +4387,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6619
         },
         {
           "type": "unit_act_end",
@@ -4350,7 +4433,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6225
         },
         {
           "type": "unit_act_end",
@@ -4395,7 +4479,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 5652
         },
         {
           "type": "unit_act_end",
@@ -4423,7 +4508,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8293
         },
         {
           "type": "unit_act_end",
@@ -4451,7 +4537,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7928
         },
         {
           "type": "unit_act_end",
@@ -4559,7 +4646,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 5047
         },
         {
           "type": "unit_act_end",
@@ -4614,7 +4702,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8993
         },
         {
           "type": "damage",
@@ -4633,7 +4722,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9411
         },
         {
           "type": "unit_act_start",
@@ -4657,7 +4747,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8608
         },
         {
           "type": "unit_act_end",
@@ -4702,7 +4793,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 4479
         },
         {
           "type": "unit_act_end",
@@ -4730,7 +4822,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9738
         },
         {
           "type": "unit_act_end",
@@ -4758,7 +4851,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7575
         },
         {
           "type": "unit_act_end",
@@ -4866,7 +4960,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 3875
         },
         {
           "type": "unit_act_end",
@@ -4921,7 +5016,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 3293
         },
         {
           "type": "damage",
@@ -4940,7 +5036,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8829
         },
         {
           "type": "unit_act_start",
@@ -4964,7 +5061,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 2920
         },
         {
           "type": "unit_act_end",
@@ -5015,7 +5113,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 2339
         },
         {
           "type": "unit_act_end",
@@ -5043,7 +5142,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7391
         },
         {
           "type": "unit_act_end",
@@ -5071,7 +5171,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7041
         },
         {
           "type": "unit_act_end",
@@ -5179,7 +5280,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 1746
         },
         {
           "type": "unit_act_end",
@@ -5224,7 +5326,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 1379
         },
         {
           "type": "unit_act_end",
@@ -5269,7 +5372,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 798
         },
         {
           "type": "unit_act_end",
@@ -5297,7 +5401,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6952
         },
         {
           "type": "unit_act_end",
@@ -5325,7 +5430,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6602
         },
         {
           "type": "unit_act_end",
@@ -5433,7 +5539,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 203
         },
         {
           "type": "unit_act_end",
@@ -5478,7 +5585,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8249
         },
         {
           "type": "unit_act_end",
@@ -5523,7 +5631,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 0
         },
         {
           "type": "unit_dead",
@@ -5557,7 +5666,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6254
         },
         {
           "type": "unit_act_end",
@@ -5585,7 +5695,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 5897
         },
         {
           "type": "unit_act_end",
@@ -5675,7 +5786,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7652
         },
         {
           "type": "unit_act_end",
@@ -5730,7 +5842,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7114
         },
         {
           "type": "damage",
@@ -5749,7 +5862,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8291
         },
         {
           "type": "unit_act_start",
@@ -5773,7 +5887,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7953
         },
         {
           "type": "unit_act_end",
@@ -5818,7 +5933,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6533
         },
         {
           "type": "unit_act_end",
@@ -5846,7 +5962,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 5581
         },
         {
           "type": "unit_act_end",
@@ -5874,7 +5991,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 5238
         },
         {
           "type": "unit_act_end",
@@ -6153,7 +6271,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9400
         },
         {
           "type": "unit_act_end",
@@ -6181,7 +6300,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8895
         },
         {
           "type": "unit_act_end",
@@ -6209,7 +6329,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8512
         },
         {
           "type": "unit_act_end",
@@ -6237,7 +6358,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9647
         },
         {
           "type": "unit_act_end",
@@ -6265,7 +6387,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9276
         },
         {
           "type": "unit_act_end",
@@ -6356,7 +6479,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9415
         },
         {
           "type": "unit_act_end",
@@ -6384,7 +6508,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8000
         },
         {
           "type": "unit_act_end",
@@ -6412,7 +6537,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7617
         },
         {
           "type": "unit_act_end",
@@ -6440,7 +6566,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8942
         },
         {
           "type": "unit_act_end",
@@ -6468,7 +6595,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8581
         },
         {
           "type": "unit_act_end",
@@ -6559,7 +6687,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8839
         },
         {
           "type": "unit_act_end",
@@ -6587,7 +6716,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7105
         },
         {
           "type": "unit_act_end",
@@ -6615,7 +6745,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6736
         },
         {
           "type": "unit_act_end",
@@ -6643,7 +6774,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 5679
         },
         {
           "type": "unit_act_end",
@@ -6671,7 +6803,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8224
         },
         {
           "type": "unit_act_end",
@@ -6762,7 +6895,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8262
         },
         {
           "type": "unit_act_end",
@@ -6790,7 +6924,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6242
         },
         {
           "type": "unit_act_end",
@@ -6818,7 +6953,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 5866
         },
         {
           "type": "unit_act_end",
@@ -6846,7 +6982,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 5378
         },
         {
           "type": "unit_act_end",
@@ -6874,7 +7011,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7880
         },
         {
           "type": "unit_act_end",
@@ -6965,7 +7103,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7691
         },
         {
           "type": "unit_act_end",
@@ -6993,7 +7132,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 5377
         },
         {
           "type": "unit_act_end",
@@ -7021,7 +7161,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 4997
         },
         {
           "type": "unit_act_end",
@@ -7049,7 +7190,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 5098
         },
         {
           "type": "unit_act_end",
@@ -7077,7 +7219,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7543
         },
         {
           "type": "unit_act_end",
@@ -7168,7 +7311,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 4440
         },
         {
           "type": "unit_act_end",
@@ -7196,7 +7340,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 3956
         },
         {
           "type": "unit_act_end",
@@ -7224,7 +7369,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 3589
         },
         {
           "type": "unit_act_end",
@@ -7252,7 +7398,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 4865
         },
         {
           "type": "unit_act_end",
@@ -7280,7 +7427,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7206
         },
         {
           "type": "unit_act_end",
@@ -7371,7 +7519,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 3039
         },
         {
           "type": "unit_act_end",
@@ -7399,7 +7548,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 2577
         },
         {
           "type": "unit_act_end",
@@ -7427,7 +7577,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 2201
         },
         {
           "type": "unit_act_end",
@@ -7455,7 +7606,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 4687
         },
         {
           "type": "unit_act_end",
@@ -7483,7 +7635,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6871
         },
         {
           "type": "unit_act_end",
@@ -7574,7 +7727,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 1657
         },
         {
           "type": "unit_act_end",
@@ -7602,7 +7756,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 1191
         },
         {
           "type": "unit_act_end",
@@ -7630,7 +7785,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 819
         },
         {
           "type": "unit_act_end",
@@ -7658,7 +7814,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6777
         },
         {
           "type": "unit_act_end",
@@ -7686,7 +7843,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6440
         },
         {
           "type": "unit_act_end",
@@ -7982,7 +8140,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9393
         },
         {
           "type": "unit_act_end",
@@ -8010,7 +8169,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9393
         },
         {
           "type": "unit_act_end",
@@ -8038,7 +8198,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9395
         },
         {
           "type": "unit_act_end",
@@ -8066,7 +8227,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9634
         },
         {
           "type": "unit_act_end",
@@ -8094,7 +8256,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9637
         },
         {
           "type": "unit_act_end",
@@ -8185,7 +8348,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8786
         },
         {
           "type": "unit_act_end",
@@ -8213,7 +8377,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8191
         },
         {
           "type": "unit_act_end",
@@ -8241,7 +8406,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7579
         },
         {
           "type": "unit_act_end",
@@ -8269,7 +8435,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9304
         },
         {
           "type": "unit_act_end",
@@ -8297,7 +8464,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8938
         },
         {
           "type": "unit_act_end",
@@ -8388,7 +8556,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6995
         },
         {
           "type": "unit_act_end",
@@ -8416,7 +8585,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8802
         },
         {
           "type": "unit_act_end",
@@ -8444,7 +8614,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8193
         },
         {
           "type": "unit_act_end",
@@ -8472,7 +8643,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8612
         },
         {
           "type": "unit_act_end",
@@ -8500,7 +8672,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8265
         },
         {
           "type": "unit_act_end",
@@ -8591,7 +8764,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6425
         },
         {
           "type": "unit_act_end",
@@ -8619,7 +8793,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 5834
         },
         {
           "type": "unit_act_end",
@@ -8647,7 +8822,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 5236
         },
         {
           "type": "unit_act_end",
@@ -8675,7 +8851,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9352
         },
         {
           "type": "unit_act_end",
@@ -8703,7 +8880,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7921
         },
         {
           "type": "unit_act_end",
@@ -8794,7 +8972,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 4681
         },
         {
           "type": "unit_act_end",
@@ -8822,7 +9001,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7591
         },
         {
           "type": "unit_act_end",
@@ -8850,7 +9030,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6980
         },
         {
           "type": "unit_act_end",
@@ -8878,7 +9059,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9080
         },
         {
           "type": "unit_act_end",
@@ -8906,7 +9088,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7596
         },
         {
           "type": "unit_act_end",
@@ -8997,7 +9180,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 4120
         },
         {
           "type": "unit_act_end",
@@ -9025,7 +9209,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 3537
         },
         {
           "type": "unit_act_end",
@@ -9053,7 +9238,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 2934
         },
         {
           "type": "unit_act_end",
@@ -9081,7 +9267,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7387
         },
         {
           "type": "unit_act_end",
@@ -9109,7 +9296,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7064
         },
         {
           "type": "unit_act_end",
@@ -9200,7 +9388,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 2388
         },
         {
           "type": "unit_act_end",
@@ -9228,7 +9417,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 1802
         },
         {
           "type": "unit_act_end",
@@ -9256,7 +9446,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 1193
         },
         {
           "type": "unit_act_end",
@@ -9284,7 +9475,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6945
         },
         {
           "type": "unit_act_end",
@@ -9312,7 +9504,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6623
         },
         {
           "type": "unit_act_end",
@@ -9403,7 +9596,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 660
         },
         {
           "type": "unit_act_end",
@@ -9431,7 +9625,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6394
         },
         {
           "type": "unit_act_end",
@@ -9459,7 +9654,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 49
         },
         {
           "type": "unit_act_end",
@@ -9487,7 +9683,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9056
         },
         {
           "type": "unit_act_end",
@@ -9515,7 +9712,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6312
         },
         {
           "type": "unit_act_end",
@@ -9819,7 +10017,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 9591
         },
         {
           "type": "unit_act_start",
@@ -9889,7 +10088,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 9223
         },
         {
           "type": "unit_act_end",
@@ -9942,7 +10142,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 9641
         },
         {
           "type": "unit_act_end",
@@ -9970,7 +10171,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9626
         },
         {
           "type": "unit_act_end",
@@ -9998,7 +10200,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9246
         },
         {
           "type": "unit_act_end",
@@ -10097,7 +10300,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 9245
         },
         {
           "type": "unit_act_start",
@@ -10201,7 +10405,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8877
         },
         {
           "type": "unit_act_end",
@@ -10254,7 +10459,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8862
         },
         {
           "type": "unit_act_end",
@@ -10387,7 +10593,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8464
         },
         {
           "type": "unit_act_start",
@@ -10479,7 +10686,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8506
         },
         {
           "type": "unit_act_end",
@@ -10532,7 +10740,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8102
         },
         {
           "type": "unit_act_end",
@@ -10665,7 +10874,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8107
         },
         {
           "type": "unit_act_start",
@@ -10735,7 +10945,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 7734
         },
         {
           "type": "unit_act_end",
@@ -10794,7 +11005,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 7374
         },
         {
           "type": "unit_act_end",
@@ -10839,7 +11051,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8890
         },
         {
           "type": "unit_act_end",
@@ -10938,7 +11151,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 9611
         },
         {
           "type": "unit_act_start",
@@ -11030,7 +11244,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 7002
         },
         {
           "type": "unit_act_end",
@@ -11084,7 +11299,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 6574
         },
         {
           "type": "damage",
@@ -11111,7 +11327,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 7679
         },
         {
           "type": "damage",
@@ -11138,7 +11355,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 9183
         },
         {
           "type": "status_inflicted",
@@ -11188,7 +11406,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 6213
         },
         {
           "type": "unit_act_end",
@@ -11321,7 +11540,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 7287
         },
         {
           "type": "unit_act_start",
@@ -11379,7 +11599,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 6714
         },
         {
           "type": "status_inflicted",
@@ -11454,7 +11675,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 6346
         },
         {
           "type": "unit_act_end",
@@ -11507,7 +11729,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 5853
         },
         {
           "type": "unit_act_end",
@@ -11633,7 +11856,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8795
         },
         {
           "type": "unit_act_start",
@@ -11691,7 +11915,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8216
         },
         {
           "type": "status_inflicted",
@@ -11750,7 +11975,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 5977
         },
         {
           "type": "unit_act_end",
@@ -11803,7 +12029,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 5490
         },
         {
           "type": "unit_act_end",
@@ -11929,7 +12156,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 7826
         },
         {
           "type": "unit_act_start",
@@ -11987,7 +12215,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 7248
         },
         {
           "type": "unit_act_end",
@@ -12040,7 +12269,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 5119
         },
         {
           "type": "unit_act_end",
@@ -12099,7 +12329,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 5618
         },
         {
           "type": "unit_act_end",
@@ -12485,7 +12716,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 9556
         },
         {
           "type": "unit_act_start",
@@ -12543,7 +12775,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8876
         },
         {
           "type": "status_inflicted",
@@ -12607,7 +12840,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8189
         },
         {
           "type": "unit_act_start",
@@ -12639,7 +12873,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 9556
         },
         {
           "type": "unit_act_start",
@@ -12774,7 +13009,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 9628
         },
         {
           "type": "unit_act_end",
@@ -12833,7 +13069,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 9267
         },
         {
           "type": "unit_act_end",
@@ -13007,7 +13244,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8819
         },
         {
           "type": "unit_act_start",
@@ -13082,7 +13320,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8132
         },
         {
           "type": "unit_act_start",
@@ -13114,7 +13353,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 7747
         },
         {
           "type": "unit_act_start",
@@ -13243,7 +13483,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 7376
         },
         {
           "type": "unit_act_end",
@@ -13297,7 +13538,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 7704
         },
         {
           "type": "damage",
@@ -13324,7 +13566,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 6948
         },
         {
           "type": "damage",
@@ -13351,7 +13594,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 9128
         },
         {
           "type": "status_inflicted",
@@ -13401,7 +13645,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 7343
         },
         {
           "type": "unit_act_end",
@@ -13582,7 +13827,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8681
         },
         {
           "type": "unit_act_start",
@@ -13657,7 +13903,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8005
         },
         {
           "type": "unit_act_start",
@@ -13689,7 +13936,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 7563
         },
         {
           "type": "unit_act_start",
@@ -13764,7 +14012,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 6876
         },
         {
           "type": "unit_act_end",
@@ -13859,7 +14108,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 6578
         },
         {
           "type": "unit_act_end",
@@ -13918,7 +14168,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 6518
         },
         {
           "type": "unit_act_end",
@@ -14103,7 +14354,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 6936
         },
         {
           "type": "unit_act_start",
@@ -14161,7 +14413,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 6341
         },
         {
           "type": "status_inflicted",
@@ -14313,7 +14566,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 5974
         },
         {
           "type": "unit_act_end",
@@ -14367,7 +14621,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 5546
         },
         {
           "type": "damage",
@@ -14394,7 +14649,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 6150
         },
         {
           "type": "damage",
@@ -14421,7 +14677,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 6090
         },
         {
           "type": "unit_act_start",
@@ -14453,7 +14710,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 5186
         },
         {
           "type": "unit_act_end",
@@ -14579,7 +14837,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 5740
         },
         {
           "type": "unit_act_start",
@@ -14637,7 +14896,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 5143
         },
         {
           "type": "status_inflicted",
@@ -14701,7 +14961,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 4546
         },
         {
           "type": "unit_act_end",
@@ -14812,7 +15073,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 4179
         },
         {
           "type": "unit_act_end",
@@ -14888,7 +15150,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 5730
         },
         {
           "type": "unit_act_end",
@@ -15014,7 +15277,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 3770
         },
         {
           "type": "unit_act_start",
@@ -15159,7 +15423,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 3399
         },
         {
           "type": "unit_act_end",
@@ -15229,7 +15494,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 4825
         },
         {
           "type": "unit_act_end",
@@ -15348,7 +15614,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 4417
         },
         {
           "type": "unit_act_start",
@@ -15406,7 +15673,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 3813
         },
         {
           "type": "status_inflicted",
@@ -15524,7 +15792,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 3029
         },
         {
           "type": "unit_act_end",
@@ -15600,7 +15869,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 2667
         },
         {
           "type": "unit_act_end",
@@ -15719,7 +15989,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 5323
         },
         {
           "type": "unit_act_start",
@@ -15777,7 +16048,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 4714
         },
         {
           "type": "status_inflicted",
@@ -15911,7 +16183,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 2297
         },
         {
           "type": "unit_act_end",
@@ -15975,7 +16248,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 1935
         },
         {
           "type": "unit_act_end",
@@ -16299,7 +16573,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 9488
         },
         {
           "type": "unit_act_start",
@@ -16403,7 +16678,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 9573
         },
         {
           "type": "unit_act_end",
@@ -16462,7 +16738,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 9150
         },
         {
           "type": "unit_act_end",
@@ -16595,7 +16872,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8976
         },
         {
           "type": "unit_act_start",
@@ -16681,7 +16959,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8723
         },
         {
           "type": "unit_act_end",
@@ -16735,7 +17014,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 7953
         },
         {
           "type": "damage",
@@ -16762,7 +17042,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8206
         },
         {
           "type": "damage",
@@ -16789,7 +17070,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 9230
         },
         {
           "type": "status_inflicted",
@@ -16839,7 +17121,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8807
         },
         {
           "type": "unit_act_end",
@@ -16972,7 +17255,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8295
         },
         {
           "type": "unit_act_start",
@@ -17042,7 +17326,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 7523
         },
         {
           "type": "unit_act_end",
@@ -17095,7 +17380,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 7104
         },
         {
           "type": "unit_act_end",
@@ -17228,7 +17514,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 7769
         },
         {
           "type": "unit_act_start",
@@ -17298,7 +17585,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 7781
         },
         {
           "type": "unit_act_end",
@@ -17351,7 +17639,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 7359
         },
         {
           "type": "unit_act_end",
@@ -17484,7 +17773,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 6582
         },
         {
           "type": "unit_act_start",
@@ -17542,7 +17832,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 5748
         },
         {
           "type": "status_inflicted",
@@ -17601,7 +17892,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 6933
         },
         {
           "type": "unit_act_end",
@@ -17660,7 +17952,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 6515
         },
         {
           "type": "unit_act_end",
@@ -17786,7 +18079,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 6001
         },
         {
           "type": "unit_act_start",
@@ -17878,7 +18172,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 5323
         },
         {
           "type": "unit_act_end",
@@ -17932,7 +18227,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 4553
         },
         {
           "type": "damage",
@@ -17959,7 +18255,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 5231
         },
         {
           "type": "damage",
@@ -17986,7 +18283,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 6999
         },
         {
           "type": "status_inflicted",
@@ -18036,7 +18334,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 4809
         },
         {
           "type": "unit_act_end",
@@ -18169,7 +18468,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 4292
         },
         {
           "type": "unit_act_start",
@@ -18255,7 +18555,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 4127
         },
         {
           "type": "unit_act_end",
@@ -18308,7 +18609,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 3869
         },
         {
           "type": "unit_act_end",
@@ -18441,7 +18743,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 3603
         },
         {
           "type": "unit_act_start",
@@ -18527,7 +18830,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 3439
         },
         {
           "type": "unit_act_end",
@@ -18580,7 +18884,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 3020
         },
         {
           "type": "unit_act_end",
@@ -18916,7 +19221,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 9492
         },
         {
           "type": "unit_act_start",
@@ -18974,7 +19280,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8663
         },
         {
           "type": "status_inflicted",
@@ -19016,7 +19323,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8205
         },
         {
           "type": "unit_act_end",
@@ -19072,7 +19380,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9050
         },
         {
           "type": "damage",
@@ -19091,7 +19400,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 9035
         },
         {
           "type": "damage",
@@ -19119,7 +19429,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8360
         },
         {
           "type": "damage",
@@ -19147,7 +19458,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8342
         },
         {
           "type": "unit_act_start",
@@ -19171,7 +19483,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7594
         },
         {
           "type": "unit_act_end",
@@ -19345,7 +19658,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 7079
         },
         {
           "type": "unit_act_start",
@@ -19398,7 +19712,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 6621
         },
         {
           "type": "unit_act_end",
@@ -19443,7 +19758,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6004
         },
         {
           "type": "unit_act_end",
@@ -19696,7 +20012,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 4570
         },
         {
           "type": "unit_act_start",
@@ -19749,7 +20066,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 4111
         },
         {
           "type": "unit_act_end",
@@ -19794,7 +20112,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 3481
         },
         {
           "type": "unit_act_end",
@@ -19822,7 +20141,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8786
         },
         {
           "type": "unit_act_end",
@@ -19850,7 +20170,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8476
         },
         {
           "type": "unit_act_end",
@@ -19949,7 +20270,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 6908
         },
         {
           "type": "unit_act_start",
@@ -20002,7 +20324,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 3030
         },
         {
           "type": "unit_act_end",
@@ -20047,7 +20370,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 2418
         },
         {
           "type": "unit_act_end",
@@ -20075,7 +20399,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8306
         },
         {
           "type": "unit_act_end",
@@ -20103,7 +20428,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7999
         },
         {
           "type": "unit_act_end",
@@ -20202,7 +20528,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 1908
         },
         {
           "type": "unit_act_start",
@@ -20255,7 +20582,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 6993
         },
         {
           "type": "unit_act_end",
@@ -20300,7 +20628,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 1312
         },
         {
           "type": "unit_act_end",
@@ -20328,7 +20657,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8889
         },
         {
           "type": "unit_act_end",
@@ -20356,7 +20686,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7698
         },
         {
           "type": "unit_act_end",
@@ -20455,7 +20786,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 6395
         },
         {
           "type": "unit_act_start",
@@ -20508,7 +20840,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 857
         },
         {
           "type": "unit_act_end",
@@ -20553,7 +20886,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6413
         },
         {
           "type": "unit_act_end",
@@ -20581,7 +20915,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8807
         },
         {
           "type": "unit_act_end",
@@ -20609,7 +20944,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7409
         },
         {
           "type": "unit_act_end",
@@ -20708,7 +21044,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 345
         },
         {
           "type": "unit_act_start",
@@ -20761,7 +21098,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 0
         },
         {
           "type": "unit_dead",
@@ -20823,7 +21161,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 5498
         },
         {
           "type": "damage",
@@ -20842,7 +21181,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 5484
         },
         {
           "type": "damage",
@@ -20870,7 +21210,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 4791
         },
         {
           "type": "damage",
@@ -20898,7 +21239,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 4793
         },
         {
           "type": "unit_act_start",
@@ -20922,7 +21264,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 4201
         },
         {
           "type": "unit_act_end",
@@ -20950,7 +21293,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7158
         },
         {
           "type": "unit_act_end",
@@ -20978,7 +21322,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6925
         },
         {
           "type": "unit_act_end",
@@ -21059,7 +21404,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 3689
         },
         {
           "type": "unit_act_start",
@@ -21112,7 +21458,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 4335
         },
         {
           "type": "unit_act_end",
@@ -21157,7 +21504,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 3773
         },
         {
           "type": "unit_act_end",
@@ -21185,7 +21533,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6701
         },
         {
           "type": "unit_act_end",
@@ -21213,7 +21562,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6482
         },
         {
           "type": "unit_act_end",
@@ -21505,7 +21855,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 9464
         },
         {
           "type": "unit_act_start",
@@ -21581,7 +21932,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 9538
         },
         {
           "type": "unit_act_end",
@@ -21615,7 +21967,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8865
         },
         {
           "type": "unit_act_end",
@@ -21649,7 +22002,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8698
         },
         {
           "type": "unit_act_end",
@@ -21683,7 +22037,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8399
         },
         {
           "type": "unit_act_end",
@@ -21788,7 +22143,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8321
         },
         {
           "type": "unit_act_start",
@@ -21898,7 +22254,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 7865
         },
         {
           "type": "unit_act_end",
@@ -21932,7 +22289,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8957
         },
         {
           "type": "unit_act_end",
@@ -22083,7 +22441,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8412
         },
         {
           "type": "unit_act_start",
@@ -22159,7 +22518,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 7409
         },
         {
           "type": "unit_act_end",
@@ -22193,7 +22553,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6829
         },
         {
           "type": "unit_act_end",
@@ -22250,7 +22611,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 8121
         },
         {
           "type": "unit_act_end",
@@ -22355,7 +22717,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 9460
         },
         {
           "type": "unit_act_start",
@@ -22419,7 +22782,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8549
         },
         {
           "type": "status_inflicted",
@@ -22484,7 +22848,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 6374
         },
         {
           "type": "unit_act_end",
@@ -22518,7 +22883,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7830
         },
         {
           "type": "unit_act_end",
@@ -22552,7 +22918,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7865
         },
         {
           "type": "unit_act_end",
@@ -22586,7 +22953,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7597
         },
         {
           "type": "unit_act_end",
@@ -22684,7 +23052,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 8002
         },
         {
           "type": "unit_act_start",
@@ -22782,7 +23151,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 7369
         },
         {
           "type": "unit_act_end",
@@ -22816,7 +23186,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 5813
         },
         {
           "type": "unit_act_end",
@@ -22967,7 +23338,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 5273
         },
         {
           "type": "unit_act_start",
@@ -23043,7 +23415,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 4813
         },
         {
           "type": "unit_act_end",
@@ -23077,7 +23450,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6804
         },
         {
           "type": "unit_act_end",
@@ -23228,7 +23602,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 4282
         },
         {
           "type": "unit_act_start",
@@ -23304,7 +23679,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 3819
         },
         {
           "type": "unit_act_end",
@@ -23338,7 +23714,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 3250
         },
         {
           "type": "unit_act_end",
@@ -23372,7 +23749,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7416
         },
         {
           "type": "unit_act_end",
@@ -23406,7 +23784,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 7160
         },
         {
           "type": "unit_act_end",
@@ -23511,7 +23890,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 6266
         },
         {
           "type": "unit_act_start",
@@ -23587,7 +23967,8 @@
                 "direction": "reduce"
               }
             ]
-          }
+          },
+          "afterTroops": 5812
         },
         {
           "type": "unit_act_end",
@@ -23621,7 +24002,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 5265
         },
         {
           "type": "unit_act_end",
@@ -23678,7 +24060,8 @@
             "caused": [],
             "taken": [],
             "reduce": []
-          }
+          },
+          "afterTroops": 6934
         },
         {
           "type": "unit_act_end",

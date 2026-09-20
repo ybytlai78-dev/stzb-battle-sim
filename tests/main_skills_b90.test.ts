@@ -219,6 +219,7 @@ describe('言出必克（XP王朗 h652）', () => {
     expect(events[0].amount).toBe(300);
     expect(mateBefore - mate.troops).toBe(300); // 受击者只承担剩余 300
     expect(wangBefore - wang.troops).toBe(300); // 承担部分按分摊量直接扣兵（不再二次减免）
+  expect(events[0].afterTroops).toBe(wang.troops); // 战报「（剩余 N）」用的分摊者结算后兵力
     // 「分摊一次」→ 次数用尽移除
     expect(wang.statuses.some((s) => s.type === 'damage_share')).toBe(false);
 

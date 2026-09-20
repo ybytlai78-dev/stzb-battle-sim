@@ -161,9 +161,9 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
       break;
     case 'damage':
       if (ev.delayedEffect && ev.afterTroops !== undefined) {
-        lines.push(`  ✦ 【${ev.sourceId}】【${ev.skillName}】的效果使【${ev.targetId}】损失了${ev.damage}兵力(${ev.afterTroops})`);
+        lines.push(`  ✦ 【${ev.sourceId}】【${ev.skillName}】的效果使【${ev.targetId}】损失了${ev.damage}兵力${afterSuffix(ev.afterTroops)}`);
       } else {
-        lines.push(`  → 对「${ev.targetId}」造成${ev.damageType === 'physical' ? '攻击' : '谋略'}伤害 ${fmt(ev.damage)}（${renderBreakdown(ev.breakdown)}）`);
+        lines.push(`  → 对「${ev.targetId}」造成${ev.damageType === 'physical' ? '攻击' : '谋略'}伤害 ${fmt(ev.damage)}${afterSuffix(ev.afterTroops)}（${renderBreakdown(ev.breakdown)}）`);
       }
       break;
     case 'stored_effect_expired': {
@@ -172,7 +172,7 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
       break;
     }
     case 'attack_hit':
-      lines.push(`  → 普攻命中「${ev.targetId}」（距离${ev.distance}）造成 ${fmt(ev.damage)}（${renderBreakdown(ev.breakdown)}）`);
+      lines.push(`  → 普攻命中「${ev.targetId}」（距离${ev.distance}）造成 ${fmt(ev.damage)}${afterSuffix(ev.afterTroops)}（${renderBreakdown(ev.breakdown)}）`);
       break;
     case 'no_attack_target':
       lines.push(`  → ${ev.name} 无法普攻：${ev.reason}`);
@@ -200,7 +200,7 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
       break;
     case 'share_damage':
       // 伤害分摊（言出必克 / 雅虑适时）：unitId 替 targetId 承担 amount；引擎分摊时不另发 damage 事件
-      lines.push(`  ⇄ ${ev.unitId} 为 ${ev.targetId} 分摊伤害 ${fmt(ev.amount)}（${SKILL_REGISTRY[ev.skillId]?.name ?? ev.skillId}）`);
+      lines.push(`  ⇄ ${ev.unitId} 为 ${ev.targetId} 分摊伤害 ${fmt(ev.amount)}（${SKILL_REGISTRY[ev.skillId]?.name ?? ev.skillId}）${afterSuffix(ev.afterTroops)}`);
       break;
     case 'prepare_start':
       lines.push(`  ⏳ ${ev.unitId} 开始准备「${ev.skillName}」`);
@@ -223,7 +223,7 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
       lines.push(`  ☠ ${ev.name}（${ev.side === 'my' ? '我方' : '敌方'}）阵亡`);
       break;
     case 'dot_tick':
-      lines.push(`  ✦ ${ev.targetId} 受到${dotTypeName(ev.dotType)}伤害 ${fmt(ev.damage)}（${renderBreakdown(ev.breakdown)}）`);
+      lines.push(`  ✦ ${ev.targetId} 受到${dotTypeName(ev.dotType)}伤害 ${fmt(ev.damage)}${afterSuffix(ev.afterTroops)}（${renderBreakdown(ev.breakdown)}）`);
       break;
     case 'siege_blocked':
       lines.push(`  ✘ ${ev.unitId} 受围困影响，无法回复兵力`);
@@ -241,7 +241,7 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
       lines.push(`  ✦ ${ev.unitId} 抵御了${statusName(ev.statusType)}效果（${SKILL_REGISTRY[ev.skillId]?.name ?? ev.skillId}）`);
       break;
     case 'split_damage':
-      lines.push(`  → 分兵溅射「${ev.targetId}」造成 ${fmt(ev.damage)}（${renderBreakdown(ev.breakdown)}）`);
+      lines.push(`  → 分兵溅射「${ev.targetId}」造成 ${fmt(ev.damage)}${afterSuffix(ev.afterTroops)}（${renderBreakdown(ev.breakdown)}）`);
       break;
     case 'unit_act_end':
       break;
@@ -257,6 +257,12 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
 
 function renderBreakdown(b: { troopBase: number; base: number; main: number }): string {
   return `兵力基础${b.troopBase} + 属性基础${b.base} + 主要${b.main}`;
+}
+
+/** 动兵力事件统一后缀：结算后剩余兵力（引擎带 afterTroops；缺省不显示）。
+ *  注意：`fmt` 是各渲染函数内部各自的局部常量，这里直接照同样口径格式化。 */
+function afterSuffix(after?: number): string {
+  return after === undefined ? '' : `（剩余 ${after.toLocaleString('en-US')}）`;
 }
 
 function renderPhase(phase: string): string {

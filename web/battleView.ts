@@ -491,14 +491,14 @@ function renderEvents(
         if (ev.delayedEffect && ev.afterTroops !== undefined) {
           const cls = ev.damageType === 'physical' ? 'dmg-phy' : 'dmg-stg';
           add(cls,
-            `【${nm(ev.sourceId)}】【${ev.skillName}】的效果使【${nm(ev.targetId)}】损失了<b>${ev.damage}</b>兵力(${ev.afterTroops})`);
+            `【${nm(ev.sourceId)}】【${ev.skillName}】的效果使【${nm(ev.targetId)}】损失了<b>${ev.damage.toLocaleString()}</b>兵力${afterSuffix(ev.afterTroops)}`);
           break;
         }
         appendDamageModifierLine(group, ev.modifiers, popupApi);
         const cls = ev.damageType === 'physical' ? 'dmg-phy' : 'dmg-stg';
         const typeName = ev.damageType === 'physical' ? '攻击' : '谋略';
         add(cls,
-          `对「${nm(ev.targetId)}」造成<b> ${typeName}伤害 ${ev.damage.toLocaleString()} </b>`);
+          `对「${nm(ev.targetId)}」造成<b> ${typeName}伤害 ${ev.damage.toLocaleString()} </b>${afterSuffix(ev.afterTroops)}`);
         break;
       }
       case 'stored_effect_expired': {
@@ -509,7 +509,7 @@ function renderEvents(
       case 'attack_hit': {
         appendDamageModifierLine(group, ev.modifiers, popupApi);
         add('dmg-phy',
-          `普攻命中「${nm(ev.targetId)}」（距离${ev.distance}）造成 <b>${ev.damage.toLocaleString()}</b>`);
+          `普攻命中「${nm(ev.targetId)}」（距离${ev.distance}）造成 <b>${ev.damage.toLocaleString()}</b>${afterSuffix(ev.afterTroops)}`);
         break;
       }
       case 'no_attack_target':
@@ -527,7 +527,7 @@ function renderEvents(
         // 引擎分摊时不另发 damage 事件 —— 只有这一条 → 不渲染就完全看不出「谁替谁挨了多少」。
         const shareSkill = SKILL_REGISTRY[ev.skillId];
         add('share',
-          `【${nm(ev.unitId)}】为【${nm(ev.targetId)}】分摊伤害 <b>${ev.amount.toLocaleString()}</b>${shareSkill ? `（${shareSkill.name}）` : ''}`);
+          `【${nm(ev.unitId)}】为【${nm(ev.targetId)}】分摊伤害 <b>${ev.amount.toLocaleString()}</b>${shareSkill ? `（${shareSkill.name}）` : ''}${afterSuffix(ev.afterTroops)}`);
         break;
       }
       case 'status_inflicted':
@@ -590,12 +590,12 @@ function renderEvents(
         // DoT（燃烧/恐慌/妖术/诅咒/引燃）：增减伤归因在挂上时冻结（modifiers 恒存在），
         // 归属施法者（casterId）而非受击者
         appendDamageModifierLine(group, ev.modifiers, popupApi);
-        add('dmg-stg', `「${nm(ev.targetId)}」受到${dotName(ev.dotType)}伤害 <b>${ev.damage.toLocaleString()}</b>`);
+        add('dmg-stg', `「${nm(ev.targetId)}」受到${dotName(ev.dotType)}伤害 <b>${ev.damage.toLocaleString()}</b>${afterSuffix(ev.afterTroops)}`);
         break;
       }
       case 'split_damage': {
         appendDamageModifierLine(group, ev.modifiers, popupApi);
-        add('dmg-phy', `分兵溅射「${nm(ev.targetId)}」造成 <b>${ev.damage.toLocaleString()}</b>`);
+        add('dmg-phy', `分兵溅射「${nm(ev.targetId)}」造成 <b>${ev.damage.toLocaleString()}</b>${afterSuffix(ev.afterTroops)}`);
         break;
       }
       case 'prepare_start':
@@ -628,6 +628,11 @@ function renderEvents(
 /** 属性增减 / 持节镇西战报行：官方口径，不套「获得：」 */
 function isAttrReportDetail(detail: string): boolean {
   return detail.includes('执行来自') || /的(攻击|防御|谋略|速度)属性(提高了|降低了)/.test(detail);
+}
+
+/** 动兵力行统一后缀：结算后剩余兵力（引擎在事件里带 afterTroops；缺省不显示） */
+function afterSuffix(after?: number): string {
+  return after === undefined ? '' : `（剩余 ${after.toLocaleString()}）`;
 }
 
 function appendEv(group: HTMLElement | null, cls: string, html: string): void {

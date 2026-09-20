@@ -8276,6 +8276,30 @@ function findCoverGuard(ctx: CombatContext, victim: UnitState): UnitState | unde
   );
 }
 
+/** 会改动兵力的伤害类事件（战报要在伤害数字后补「结算后兵力」） */
+const TROOP_DAMAGE_TYPES = new Set(['damage', 'attack_hit', 'dot_tick', 'split_damage', 'share_damage']);
+
+/**
+ * 给「刚推入的动兵力事件」补上结算后兵力（`afterTroops`），供战报显示「（剩余 N）」。
+ * 各伤害路径统一写法是「先 push 事件 → 紧接着 applyDamage」，所以这里从事件尾部往前找最近一条
+ * 归因到本单位、且尚未写 afterTroops 的事件：
+ *   - damage / attack_hit / dot_tick / split_damage：`targetId` = 受击者；
+ *   - share_damage：`unitId` = 代为承担者（自己扣兵），`targetId` 是原受击者。
+ * 找不到就跳过（例：援护代受 —— 事件 targetId 是被保护者，扣兵却发生在援护者身上）。
+ */
+function annotateAfterTroops(ctx: CombatContext, unit: UnitState): void {
+  for (let i = ctx.events.length - 1; i >= 0 && i >= ctx.events.length - 6; i--) {
+    const ev = ctx.events[i];
+    if (!TROOP_DAMAGE_TYPES.has(ev.type)) continue;
+    const e = ev as Extract<BattleEvent, { type: 'damage' | 'attack_hit' | 'dot_tick' | 'split_damage' | 'share_damage' }>;
+    if (e.afterTroops !== undefined) continue;
+    const mine = e.type === 'share_damage' ? e.unitId === unit.general.id : e.targetId === unit.general.id;
+    if (!mine) continue;
+    e.afterTroops = unit.troops;
+    return;
+  }
+}
+
 export function applyDamage(
   ctx: CombatContext,
   target: UnitState,
@@ -8283,8 +8307,7 @@ export function applyDamage(
   source?: UnitState,
   damageType?: DamageType,
   damageSource?: 'basic' | 'skill'
-): void {
-  // 已阵亡单位不再吃伤害、不再走急救（阻止伤兵池膨胀后被救回）
+): void {  // 已阵亡单位不再吃伤害、不再走急救（阻止伤兵池膨胀后被救回）
   if (!target.alive) return;
   // 援护代受：被援护者的普攻转由援护者承接（战报记 cover 事件，原目标本次不受伤害）。
   // 嵌套结算（反击/引爆）不再次转移，避免与 ctx.resolvingHurtHooks 下的二次 applyDamage 打架。
@@ -8397,6 +8420,9 @@ export function applyDamage(
   }
   target.troops -= actual;
   if (target.troops <= 0) target.troops = 0;
+  // 给刚推入的动兵力事件补「结算后兵力」（战报在伤害数字后显示「（剩余 N）」）；
+  // 补在受击钩子之前 → 该值=本次伤害结算后的兵力，不含随之触发的急救恢复
+  annotateAfterTroops(ctx, target);
   const lethal = target.troops <= 0;
   // 伤兵死亡机制：损失按「当回合死亡率」即时拆分为死亡（永久损失，不可恢复）与伤兵（入池，可恢复）。
   // 死亡按受伤量结算，治疗不冲减死亡（避免高恢复队伍在战场上太过逆天）。

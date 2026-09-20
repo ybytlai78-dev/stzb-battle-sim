@@ -419,7 +419,7 @@ describe('白衣渡江详情战报文案', () => {
     view.setRound(3);
     document.body.appendChild(view.el);
     const text = view.el.textContent ?? '';
-    expect(text).toContain('【吕蒙】【白衣渡江】的效果使【太史慈】损失了1414兵力(7986)');
+    expect(text).toContain('【吕蒙】【白衣渡江】的效果使【太史慈】损失了1,414兵力（剩余 7,986）');
     expect(text).toContain('【太史慈】的来自【吕蒙】【白衣渡江】的策略攻击伤害效果消失了');
     expect(text).not.toContain('对「太史慈」造成');
   });
@@ -446,8 +446,8 @@ describe('白衣渡江详情战报文案', () => {
         { type: 'preparation_end' },
         { type: 'round_start', round: 1 },
         { type: 'unit_act_start', unitId: 'e1', name: '敌军前锋', position: '前锋', phase: 'normal_attack' },
-        { type: 'attack_hit', sourceId: 'e1', targetId: 'maliang', distance: 1, damage: 2093, breakdown: { troopBase: 0, base: 0, main: 2093 } },
-        { type: 'share_damage', unitId: 'liubei', targetId: 'maliang', skillId: 'yalv_shishi', amount: 280 },
+        { type: 'attack_hit', sourceId: 'e1', targetId: 'maliang', distance: 1, damage: 2093, afterTroops: 6907, breakdown: { troopBase: 0, base: 0, main: 2093 } },
+        { type: 'share_damage', unitId: 'liubei', targetId: 'maliang', skillId: 'yalv_shishi', amount: 280, afterTroops: 6964 },
         { type: 'heal', sourceId: 'liubei', targetId: 'liubei', skillId: 'huangyi_liuli', skillName: '皇裔流离', amount: 280, before: 6964, after: 7244 },
         { type: 'round_end', round: 1, myTroops: [9000, 9000], enemyTroops: [8900], myWounded: [0, 0], enemyWounded: [0], myDead: [0, 0], enemyDead: [0] },
         { type: 'battle_end', result: 'win', rounds: 1, myTroops: [9000, 9000], enemyTroops: [8900] },
@@ -462,6 +462,9 @@ describe('白衣渡江详情战报文案', () => {
     expect(row.textContent).toContain('XP马良');     // 被分摊的受击者
     expect(row.textContent).toContain('280');        // 承担量
     expect(row.textContent).toContain('雅虑适时');   // 战法名（SKILL_REGISTRY 反查）
+    // 动兵力的行必须接上「结算后兵力」
+    expect(row.textContent).toContain('（剩余 6,964）');                      // 分摊者（刘备）分摊后剩余
+    expect(view.el.textContent).toContain('造成 2,093（剩余 6,907）');        // 受击者挨完这一下的剩余
     // 事件顺序：先分摊、后（分摊扣血触发的）恢复 —— 行序必须一致
     const evs = Array.from(view.el.querySelectorAll('.ev')) as HTMLElement[];
     expect(evs.findIndex((e) => e.classList.contains('share')))

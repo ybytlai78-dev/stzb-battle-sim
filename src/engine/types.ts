@@ -2047,6 +2047,8 @@ export type BattleEvent =
       targetId: string;
       distance: number;
       damage: number;
+      /** 本次伤害结算后目标剩余兵力（战报在伤害数字后显示「（剩余 N）」） */
+      afterTroops?: number;
       breakdown: DamageBreakdown;
       /** 本次伤害的增减伤归因（神兵天降/大赏三军/减伤/兵种克制），无增减伤时为 undefined */
       modifiers?: DamageModifiers;
@@ -2136,6 +2138,8 @@ export type BattleEvent =
       /** 施法者（DoT 伤害归属） */
       casterId: string;
       damage: number;
+      /** 本次跳伤结算后目标剩余兵力（战报在伤害数字后显示「（剩余 N）」） */
+      afterTroops?: number;
       breakdown: DamageBreakdown;
       /** 本次伤害的增减伤归因（DoT 为挂上时冻结的归因：含增伤/减伤/兵种克制，滞后触发） */
       modifiers?: DamageModifiers;
@@ -2147,13 +2151,23 @@ export type BattleEvent =
   /** 抵御负面效果（审时定计，XP程昱）：该次施加被取消 */
   | { type: 'status_resisted'; unitId: string; skillId: string; statusType: StatusType }
   /** 伤害分摊（言出必克 / 雅虑适时）：unitId = 代为承担者，targetId = 原受击者 */
-  | { type: 'share_damage'; unitId: string; targetId: string; skillId: string; amount: number }
+  | {
+      type: 'share_damage';
+      unitId: string;
+      targetId: string;
+      skillId: string;
+      amount: number;
+      /** 分摊结算后「承担者」剩余兵力（战报在数字后显示「（剩余 N）」） */
+      afterTroops?: number;
+    }
   | { type: 'cowardice_immune_blocked'; unitId: string; statusType: StatusType }
   | {
       type: 'split_damage';
       sourceId: string;
       targetId: string;
       damage: number;
+      /** 本次溅射结算后目标剩余兵力（战报在伤害数字后显示「（剩余 N）」） */
+      afterTroops?: number;
       breakdown: DamageBreakdown;
       /** 本次伤害的增减伤归因（神兵天降/大赏三军/减伤/兵种克制），无增减伤时为 undefined */
       modifiers?: DamageModifiers;
