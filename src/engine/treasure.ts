@@ -185,6 +185,19 @@ const MECHANICS: Record<string, Mechanic> = {
     ctx.self.gender === 'female'
       ? [{ type: 'treasure_control_amplify', rate: v / 100, mainSkillOnly: true, duration: FOREVER } as CreateStatus]
       : [],
+  // 强固（泰阿）：正式回合后，每回合首次受到的伤害降低 20%
+  强固: (v) => [{ type: 'damage_reduce', rate: v / 100, duration: FOREVER, firstHitPerRound: true } as CreateStatus],
+  // 奇袭（彤素）：与目标距离每提高 1，造成的攻击伤害提高 3.0%
+  奇袭: (v) => [
+    {
+      type: 'damage_boost',
+      rate: v / 100,
+      duration: FOREVER,
+      direction: 'caused',
+      damageType: 'physical',
+      perDistance: true,
+    } as CreateStatus,
+  ],
 };
 
 /** 同名词条但语义随宝物变化：key = `${treasureId}:${slot}` */
@@ -208,14 +221,10 @@ const OVERRIDES: Record<string, Mechanic> = {
 
 /** 尚未落地的词条（分档见方案 §3.2）；键 = 词条名，值 = 需要的机制 */
 export const PENDING: Record<string, string> = {
-  强固: '每回合首次受伤减伤（回合窗口）',
   迸发: '首次追击额外选 1 个目标',
   劲弩: '首回合禁普攻 + 次回合全体普攻',
   谋断: '第 2 次准备战法跳过 1 个准备回合',
-  阵舞: '女性携带：控制目标受伤害提高（对目标 debuff）',
   燮理: '燃烧伤害后恢复（恢复率）',
-  鸠佑: '主动主战法发动后叠层增伤',
-  奇袭: '按距离增伤（条件）',
   击虚: '按目标身上的 DoT/控制种类数增伤（C 档）',
 };
 

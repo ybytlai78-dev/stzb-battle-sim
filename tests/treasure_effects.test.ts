@@ -77,11 +77,15 @@ describe('宝物引擎 · 自带特效换算', () => {
 
   it('未实现词条（PENDING）不产出状态，但会被登记', () => {
     expect(Object.keys(PENDING).length).toBeGreaterThan(0);
-    const tai = TREASURES_BY_ID[1075]; // 泰阿：骁锐/明镜/强固
+    // 位至三公：稳固 / 炎势 / 燮理（燮理 未实现 → 只出 2 条）
+    const wei = TREASURES_BY_ID[1114];
+    expect(wei.effects.map((e) => e.name)).toEqual(['稳固', '炎势', '燮理']);
+    expect(build(1114)).toHaveLength(2);
+    expect(PENDING['燮理']).toBeTruthy();
+    // 已实现的 强固（泰阿）正常产出 → 3 条
+    const tai = TREASURES_BY_ID[1075];
     expect(tai.effects.map((e) => e.name)).toEqual(['骁锐', '明镜', '强固']);
-    // 强固（每回合首次受伤减伤）未实现 → 只出 骁锐/明镜
-    expect(build(1075)).toHaveLength(2);
-    expect(PENDING['强固']).toBeTruthy();
+    expect(build(1075)).toHaveLength(3);
   });
 
   it('明镜（泰阿）：谋略 ×5=10，仅当初始统率 < 3 时额外给 1.5×5=7.5 防御', () => {

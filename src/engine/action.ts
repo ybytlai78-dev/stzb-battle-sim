@@ -518,6 +518,8 @@ export interface CombatContext {
   dealFirstKeys?: Set<string>;
   /** 宝物「归心」：我军全体主动战法发动次数计数（key `${unitId}:${sourceSkillId}`） */
   treasureActiveCounters?: Map<string, number>;
+  /** 宝物「强固」：「每回合首次受伤减伤」已用标记（key `${回合}:${unitId}:${sourceSkillId}`） */
+  firstHitReduceKeys?: Set<string>;
   /**
    * 「造成伤害后再受一次策略伤害」标记（翕处还张）：按持有者记录，命中其**下一次造成伤害**时结算并消耗。
    */
@@ -1044,7 +1046,7 @@ function triggerStrategyAdjacentBonus(
       triggerStackBuff(ctx, source, raw, 'strategy');
       const hit: DamageHitContext = { damageSource: 'skill', damageType: 'strategy', skillType: l.skill.type };
       const { causedMult, takenMult } = damageBoosts(ctx, source, raw, hit);
-      const reduce = sumReduce(raw, hit) + troopCounterReduceOf(source, raw);
+      const reduce = sumReduce(ctx, raw, hit) + troopCounterReduceOf(source, raw);
       const { damage, breakdown } = calcDamage(
         {
           damageType: 'strategy',
@@ -1584,7 +1586,7 @@ function executeRoundCommand(ctx: CombatContext, unit: UnitState, skill: Command
         const hit: DamageHitContext = { damageSource: 'skill', damageType: 'physical', skillType: 'command' };
         const { causedMult, takenMult } = damageBoosts(ctx, source, t, hit);
         const counterReduce = out.ignoresTroopCounter ? 0 : troopCounterReduceOf(source, t);
-        const reduce = sumReduce(t, hit) + counterReduce;
+        const reduce = sumReduce(ctx, t, hit) + counterReduce;
         const { damage, breakdown } = calcDamage(
           {
             damageType: 'physical',
@@ -1997,7 +1999,7 @@ function computeDotTickDamage(
     ...(dot.dotType ? { dotType: dot.dotType } : {}),
   };
   const { causedMult, takenMult } = damageBoosts(ctx, caster, target, hit);
-  const reduce = sumReduce(target, hit) + troopCounterReduceOf(caster, target);
+  const reduce = sumReduce(ctx, target, hit) + troopCounterReduceOf(caster, target);
   const { damage, breakdown } = calcDamage(
     {
       damageType: 'strategy',
@@ -2192,7 +2194,7 @@ function executeSplitAttack(
     const def = physicalTargetDefense(unit, adjTarget);
     const hit: DamageHitContext = { damageSource: 'basic', damageType: 'physical', split: true };
     const { causedMult, takenMult } = damageBoosts(ctx, unit, adjTarget, hit);
-    const reduce = sumReduce(adjTarget, hit) + troopCounterReduceOf(unit, adjTarget);
+    const reduce = sumReduce(ctx, adjTarget, hit) + troopCounterReduceOf(unit, adjTarget);
     const { damage, breakdown } = calcDamage(
       {
         damageType: 'physical',
@@ -3741,6 +3743,14 @@ function pushStatus(
     if ((type === 'damage_reduce' || type === 'damage_boost') && 'requireSelfStatus' in create && create.requireSelfStatus != null) {
       (push as { requireSelfStatus?: StatusType | StatusType[] }).requireSelfStatus = create.requireSelfStatus;
     }
+    // 宝物「强固」：每回合首次受伤减伤标记
+    if (type === 'damage_reduce' && 'firstHitPerRound' in create && create.firstHitPerRound) {
+      (push as { firstHitPerRound?: boolean }).firstHitPerRound = true;
+    }
+    // 宝物「奇袭」：按距离逐点增伤
+    if (type === 'damage_boost' && 'perDistance' in create && create.perDistance) {
+      (push as { perDistance?: boolean }).perDistance = true;
+    }
     // 仅「进行攻击」的增减伤（缚父临危「下两次**攻击**造成的伤害提升 30%」）：普攻 / 物理主动 / 追击
     if (type === 'damage_boost' && 'attackOnly' in create && create.attackOnly) {
       (push as { attackOnly?: boolean }).attackOnly = true;
@@ -4577,14 +4587,26 @@ export function statusMatchesHit(
 
 /** 受击方减伤合计；hit 过滤后仍走 formulas.sumRates，不改其签名。
  *  条件减伤（人公将军）：`requireSelfStatus` 未满足时本减伤不生效（按**携带者当前**状态实时判定）。 */
-function sumReduce(target: UnitState, hit?: DamageHitContext): number {
+export function sumReduce(ctx: CombatContext, target: UnitState, hit?: DamageHitContext): number {
   const list = target.statuses.filter(
     (s) =>
       s.type === 'damage_reduce' &&
       statusMatchesHit(s, hit) &&
-      (!('requireSelfStatus' in s) || !s.requireSelfStatus || hasRequiredSelfStatus(target, s.requireSelfStatus))
+      (!('requireSelfStatus' in s) || !s.requireSelfStatus || hasRequiredSelfStatus(target, s.requireSelfStatus)) &&
+      // 宝物「强固」：每回合首次减伤 —— 本回合该状态尚未生效过才计入
+      (!('firstHitPerRound' in s && s.firstHitPerRound) ||
+        !ctx.firstHitReduceKeys?.has(`${ctx.currentRound}:${target.general.id}:${s.sourceSkillId}`))
   );
   return sumRates(list, 'damage_reduce') + pendingStacksReduceOf(target) + hurtStackReduceOf(target);
+}
+
+/** 宝物「强固」：本次实际扣兵后标记「本回合已用」（applyDamage 扣兵后调用） */
+export function markFirstHitReduceUsed(ctx: CombatContext, target: UnitState): void {
+  for (const s of target.statuses) {
+    if (s.type !== 'damage_reduce' || !s.firstHitPerRound) continue;
+    ctx.firstHitReduceKeys ??= new Set();
+    ctx.firstHitReduceKeys.add(`${ctx.currentRound}:${target.general.id}:${s.sourceSkillId}`);
+  }
 }
 
 /** 宝物「不屈」：受击叠层式减伤（值 = stacks × perStack；stacks 由受击钩子累加、回合开始清零） */
@@ -4665,11 +4687,26 @@ function damageBoosts(
     hasRequiredSelfStatus(holder, s.requireSelfStatus);
   const causedBoost = sumRates(
     source.statuses.filter(
-      (s) => s.type === 'damage_boost' && statusMatchesHit(s, hit) && factionOk(s) && selfReqOk(source, s)
+      (s) =>
+        s.type === 'damage_boost' &&
+        !s.perDistance &&
+        statusMatchesHit(s, hit) &&
+        factionOk(s) &&
+        selfReqOk(source, s)
     ),
     'damage_boost',
     'caused'
   );
+  // 宝物「奇袭」：与目标距离每提高 1 点增伤（rate × 距离，逐点线性）
+  const perDistanceBoost = source.statuses
+    .filter(
+      (s): s is Extract<Status, { type: 'damage_boost' }> =>
+        s.type === 'damage_boost' &&
+        !!s.perDistance &&
+        (s.direction ?? 'taken') === 'caused' &&
+        statusMatchesHit(s, hit),
+    )
+    .reduce((a, s) => a + s.rate * distanceBetween(ctx, source, target), 0);
   const takenBoost = sumRates(
     target.statuses.filter(
       (s) => s.type === 'damage_boost' && statusMatchesHit(s, hit) && selfReqOk(target, s)
@@ -4680,7 +4717,7 @@ function damageBoosts(
   // 被动概率增伤（侵掠如火）：命中则并入造成侧合计（数值体现在伤害本身，不进战报增减伤明细）
   // 叠层待发·下次普攻增伤（奉令护蜀）：同属「进行攻击」的一次性造成侧增伤
   return {
-    causedMult: 1 + causedBoost + attackProcBoostOf(ctx, source, hit) + pendingStacksBoostOf(source, hit) + hurtStackBoostOf(source),
+    causedMult: 1 + causedBoost + perDistanceBoost + attackProcBoostOf(ctx, source, hit) + pendingStacksBoostOf(source, hit) + hurtStackBoostOf(source),
     takenMult: 1 + takenBoost,
   };
 }
@@ -5691,7 +5728,7 @@ function triggerDealPunish(ctx: CombatContext, source: UnitState): void {
     if (!caster || !caster.alive || !skill) continue;
     const hit: DamageHitContext = { damageSource: 'skill', damageType: 'strategy', skillType: skill.type, skillId: skill.id };
     const { causedMult, takenMult } = damageBoosts(ctx, caster, source, hit);
-    const reduce = sumReduce(source, hit) + troopCounterReduceOf(caster, source);
+    const reduce = sumReduce(ctx, source, hit) + troopCounterReduceOf(caster, source);
     const { damage, breakdown } = calcDamage(
       {
         damageType: 'strategy',
@@ -6418,7 +6455,7 @@ function executeSkillOutputs(
               const hit: DamageHitContext = { damageSource: 'skill', damageType, skillType: skill.type, skillId: skill.id };
               const { causedMult, takenMult } = damageBoosts(ctx, rider, t, hit);
               const counterReduce = out.ignoresTroopCounter ? 0 : troopCounterReduceOf(rider, t);
-              const reduce = sumReduce(t, hit) + counterReduce;
+              const reduce = sumReduce(ctx, t, hit) + counterReduce;
               const rate = byHigher
                 ? useStrategy
                   ? byHigher.strategyRate
@@ -6516,7 +6553,7 @@ function executeSkillOutputs(
             const hit: DamageHitContext = { damageSource: 'skill', damageType: 'physical', skillType: skill.type, skillId: skill.id };
             const { causedMult, takenMult } = damageBoosts(ctx, source, t, hit);
             const counterReduce = out.ignoresTroopCounter ? 0 : troopCounterReduceOf(source, t);
-            const reduce = sumReduce(t, hit) + counterReduce;
+            const reduce = sumReduce(ctx, t, hit) + counterReduce;
             // 每次发动后伤害率递增（及锋而试）：加在输出段 rate 上（不封顶、整场累计）
             // 每次 repeats 逐次递增伤害率（银龙孤胆）：第 i 次（i 从 0 起）额外 +i×ratePerRepeat 个百分点
             // 自身兵力比例替换伤害率（亡命一搏）：低于初始 25% → 460%
@@ -6685,7 +6722,7 @@ function executeSkillOutputs(
               ...(out.dotFormula ? { dotType: 'burning' as DotType } : {}),
             };
             const { causedMult, takenMult } = damageBoosts(ctx, stratSrc, t, hit);
-            const reduce = sumReduce(t, hit) + troopCounterReduceOf(stratSrc, t);
+            const reduce = sumReduce(ctx, t, hit) + troopCounterReduceOf(stratSrc, t);
             const { damage, breakdown } = calcDamage(
               {
                 damageType: 'strategy',
@@ -7158,7 +7195,7 @@ function executeSkillOutputs(
           const hit: DamageHitContext = { damageSource: 'skill', damageType: 'physical', skillType: skill.type, skillId: skill.id };
           const { causedMult, takenMult } = damageBoosts(ctx, source, t, hit);
           const counterReduce = out.ignoresTroopCounter ? 0 : troopCounterReduceOf(source, t);
-          const reduce = sumReduce(t, hit) + counterReduce;
+          const reduce = sumReduce(ctx, t, hit) + counterReduce;
           const { damage, breakdown } = calcDamage(
             {
               damageType: 'physical',
@@ -7910,7 +7947,7 @@ function dealAttack(ctx: CombatContext, unit: UnitState, target: UnitState, dist
   const def = physicalTargetDefense(unit, hit);
   const hitCtx: DamageHitContext = { damageSource: 'basic', damageType: 'physical' };
   const { causedMult, takenMult } = damageBoosts(ctx, unit, hit, hitCtx);
-  const reduce = sumReduce(hit, hitCtx) + troopCounterReduceOf(unit, hit);
+  const reduce = sumReduce(ctx, hit, hitCtx) + troopCounterReduceOf(unit, hit);
   const mult = buffMult(causedMult, takenMult, reduce);
   const { damage, breakdown } = calcDamage(
     {
@@ -8560,7 +8597,7 @@ function settleCounterOnHurt(ctx: CombatContext, holder: UnitState, attacker: Un
     const def = physicalTargetDefense(holder, attacker);
     const hit: DamageHitContext = { damageSource: 'skill', damageType: 'physical', skillType: 'command' };
     const { causedMult, takenMult } = damageBoosts(ctx, holder, attacker, hit);
-    const reduce = sumReduce(attacker, hit) + troopCounterReduceOf(holder, attacker);
+    const reduce = sumReduce(ctx, attacker, hit) + troopCounterReduceOf(holder, attacker);
     const { damage, breakdown } = calcDamage(
       {
         damageType: 'physical',
@@ -8837,6 +8874,8 @@ export function applyDamage(
   if (actual > 0) triggerOnHurt(ctx, target, source, damageType, damageSource);
   // 宝物·受击叠层（不屈/破浪）与首次受击规避（避险）——纯状态变更，不产生二次伤害
   if (actual > 0) updateTreasureOnHurt(ctx, target);
+  // 宝物「强固」：本次扣兵后标记「本回合已用」，本回合后续伤害不再吃该减伤
+  if (actual > 0) markFirstHitReduceUsed(ctx, target);
   // 每受到 N 次伤害触发（蛮王御众）：包一层 resolvingHurtHooks，触发段的伤害不再回灌计数/受击钩子
   if (!ctx.resolvingHurtHooks && actual > 0) {
     ctx.resolvingHurtHooks = true;

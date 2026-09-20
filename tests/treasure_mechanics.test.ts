@@ -7,7 +7,7 @@
  *  再战：第 5 回合 50% 获得连击
  */
 import { describe, it, expect } from 'vitest';
-import { inflictStatus, getStatus, hasStatus, consumeEvasion, recoverTroops, tickRoundStartStatuses, updateTreasureOnHurt, applyTreasureBasicHit, applyTreasureAfterActive } from '../src/engine/action';
+import { inflictStatus, getStatus, hasStatus, consumeEvasion, recoverTroops, sumReduce, markFirstHitReduceUsed, tickRoundStartStatuses, updateTreasureOnHurt, applyTreasureBasicHit, applyTreasureAfterActive } from '../src/engine/action';
 import type { General } from '../src/engine/types';
 import type { CombatContext } from '../src/engine/action';
 import type { CreateStatus, UnitState } from '../src/engine/types';
@@ -352,6 +352,26 @@ describe('宝物 · 控制延时 / 免疫 / 反击 / 回合钩子', () => {
     expect(amp).toBeTruthy();
     expect(amp!.rate).toBeCloseTo(0.24, 6);
     expect(amp!.remaining).toBe(2); // 与本次控制同长
+  });
+
+  it('强固（泰阿）/ 奇袭（彤素）：每回合首次减伤与按距离增伤', () => {
+    // 强固：第一击吃 20% 减伤，标记后本回合不再吃；下回合恢复
+    const ctx = makeCtx(1);
+    const u = makeUnit('u');
+    ctx.myTeam = [u];
+    inflictStatus(ctx, u, { type: 'damage_reduce', rate: 0.2, duration: 999, firstHitPerRound: true }, 'passive', 'treasure:1075:3', 'u');
+    expect(sumReduce(ctx, u)).toBeCloseTo(0.2, 6);
+    markFirstHitReduceUsed(ctx, u);
+    expect(sumReduce(ctx, u)).toBeCloseTo(0, 6);
+    ctx.currentRound = 2;
+    expect(sumReduce(ctx, u)).toBeCloseTo(0.2, 6);
+
+    // 奇袭：构造出「按距离逐点增伤」的造成侧攻击增伤
+    const [qixi] = buildTreasureStatuses({ treasureId: 1003 /* 彤素 */ }, makeUnit('x').general)
+      .filter((x) => x.label === '奇袭')
+      .map((x) => x.create);
+    expect(qixi).toMatchObject({ type: 'damage_boost', direction: 'caused', damageType: 'physical', perDistance: true });
+    expect((qixi as { rate: number }).rate).toBeCloseTo(0.03, 6);
   });
 
   it('再战（少府）：仅第 5 回合判定，50% 几率获得连击', () => {    const results: boolean[] = [];
