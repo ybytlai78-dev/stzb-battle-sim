@@ -202,6 +202,8 @@ const MECHANICS: Record<string, Mechanic> = {
   燮理: (v) => [
     { type: 'dot_tick_heal', rate: v, dotTypes: ['burning', 'ignite'], duration: FOREVER } as CreateStatus,
   ],
+  // 谋断（掩日）：第 2 次发动需要准备的主动武将主战法时，跳过 1 个准备回合
+  谋断: () => [{ type: 'treasure_prepare_skip', atCast: 2, mainSkillOnly: true, duration: FOREVER } as CreateStatus],
 };
 
 /** 同名词条但语义随宝物变化：key = `${treasureId}:${slot}` */
@@ -227,7 +229,6 @@ const OVERRIDES: Record<string, Mechanic> = {
 export const PENDING: Record<string, string> = {
   迸发: '首次追击额外选 1 个目标',
   劲弩: '首回合禁普攻 + 次回合全体普攻',
-  谋断: '第 2 次准备战法跳过 1 个准备回合',
   击虚: '按目标身上的 DoT/控制种类数增伤（C 档）',
 };
 

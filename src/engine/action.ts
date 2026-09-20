@@ -522,6 +522,8 @@ export interface CombatContext {
   firstHitReduceKeys?: Set<string>;
   /** 宝物「燮理」：DoT 每回合首次跳伤恢复去重（key `${回合}:${unitId}:${sourceSkillId}`） */
   dotTickHealKeys?: Set<string>;
+  /** 宝物「谋断」：准备型（主）主动战法发动次数（key `${unitId}:${sourceSkillId}`） */
+  treasurePrepareCounters?: Map<string, number>;
   /**
    * 「造成伤害后再受一次策略伤害」标记（翕处还张）：按持有者记录，命中其**下一次造成伤害**时结算并消耗。
    */
@@ -4153,6 +4155,9 @@ function pushStatus(
     ...(create.type === 'dot_tick_heal'
       ? { rate: create.rate, ...(create.dotTypes ? { dotTypes: create.dotTypes } : {}) }
       : {}),
+    ...(create.type === 'treasure_prepare_skip'
+      ? { atCast: create.atCast, ...(create.mainSkillOnly ? { mainSkillOnly: true } : {}) }
+      : {}),
   } as Status);
   ctx.events.push({
     type: 'status_inflicted',
@@ -4444,6 +4449,8 @@ export function isBeneficialStatus(s: Status): boolean {
     case 'treasure_control_amplify':
     // 宝物：DoT 跳伤后恢复
     case 'dot_tick_heal':
+    // 宝物：第 N 次准备战法跳过准备
+    case 'treasure_prepare_skip':
       return true;
     default:
       return false;
@@ -4857,6 +4864,7 @@ function statusName(type: StatusType): string {
     case 'treasure_ally_active_heal': return '全体主动计数恢复';
     case 'treasure_control_amplify': return '控制目标易伤';
     case 'dot_tick_heal': return 'DoT 跳伤恢复';
+    case 'treasure_prepare_skip': return '第 N 次跳过准备';
     case 'siege': return '围困';
     case 'sorcery': return '妖术';
     case 'burning': return '燃烧';
@@ -7316,6 +7324,8 @@ export function triggerActiveSkill(
   // 1 回合准备：本回合只登记准备，不释放。
   // 难知如阴跳过准备：施法者被施加 jump_prep 状态（rate=0~1 概率）时，发动即按概率直接释放（无准备回合）
   if (skill.type === 'active' && skill.prepare) {
+    // 宝物「谋断」：第 N 次发动需要准备的（主）主动战法时，跳过 1 个准备回合
+    applyTreasurePrepareSkip(ctx, unit, skill);
     const jump = getStatus(unit, 'jump_prep');
     if (jump && ctx.rng.chance(jump.rate)) {
       ctx.events.push({
@@ -7656,8 +7666,24 @@ export function triggerPassiveAfterAct(ctx: CombatContext, unit: UnitState): voi
 }
 
 /**
- * 宝物·主动战法发动后钩子（在主动/准备战法成功释放后调用，与 `triggerPassiveAfterActive` 同点）：
- *  - `treasure_after_main`（鸠佑）：**主战法**发动后 → 叠 1 层「造成攻击伤害提高」
+ * 宝物「谋断」（掩日）：**第 N 次**发动需要准备的（主）主动战法时，跳过 1 个准备回合。
+ * 时点：在 `jump_prep` 判定之前挂 `jump_prep(rate=1)`，本次发动即直接释放、不进准备。
+ */
+function applyTreasurePrepareSkip(ctx: CombatContext, unit: UnitState, skill: Skill): void {
+  for (const s of unit.statuses) {
+    if (s.type !== 'treasure_prepare_skip') continue;
+    if (s.mainSkillOnly && skill.id !== unit.general.mainSkillId) continue;
+    const key = `${unit.general.id}:${s.sourceSkillId}`;
+    ctx.treasurePrepareCounters ??= new Map();
+    const n = (ctx.treasurePrepareCounters.get(key) ?? 0) + 1;
+    ctx.treasurePrepareCounters.set(key, n);
+    if (n !== s.atCast) continue;
+    inflictStatus(ctx, unit, { type: 'jump_prep', rate: 1, duration: 1 }, s.sourceSkillType, s.sourceSkillId, unit.general.id);
+  }
+}
+
+/**
+ * 宝物·主动战法发动后钩子（在主动/准备战法成功释放后调用，与 `triggerPassiveAfterActive` 同点）： *  - `treasure_after_main`（鸠佑）：**主战法**发动后 → 叠 1 层「造成攻击伤害提高」
  *  - `treasure_ally_active_heal`（归心）：我军全体每发动 N 次主动战法 → **携带者自身**恢复
  * 无宝物时零开销（状态不存在即空转）。
  */

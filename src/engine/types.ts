@@ -698,6 +698,8 @@ export type CreateStatus =
   | { type: 'treasure_control_amplify'; rate: number; mainSkillOnly?: boolean; duration: number }
   /** 宝物「燮理」：携带者施加的 DoT（可限类型）每回合首次跳伤后，按恢复率 rate（%）恢复一次兵力 */
   | { type: 'dot_tick_heal'; rate: number; dotTypes?: DotType[]; duration: number }
+  /** 宝物「谋断」：**第 atCast 次**发动需要准备的（主）主动战法时，跳过 1 个准备回合 */
+  | { type: 'treasure_prepare_skip'; atCast: number; mainSkillOnly?: boolean; duration: number }
   /** 免疫怯战（魏武之泽）：持续期间无法被施加怯战 */
   | { type: 'cowardice_immune'; duration: number }
   | { type: 'siege'; duration: number }
@@ -1839,6 +1841,8 @@ export type StatusType =
   | 'treasure_control_amplify'
   /** 宝物「燮理」：DoT 跳伤后恢复 */
   | 'dot_tick_heal'
+  /** 宝物「谋断」：第 N 次准备战法跳过准备 */
+  | 'treasure_prepare_skip'
   | 'cowardice_immune'
   | 'siege'
   | 'sorcery'
@@ -1934,6 +1938,7 @@ export type Status =
   | { type: 'treasure_ally_active_heal'; every: number; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'treasure_control_amplify'; rate: number; mainSkillOnly?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'dot_tick_heal'; rate: number; dotTypes?: DotType[]; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'treasure_prepare_skip'; atCast: number; mainSkillOnly?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'cowardice_immune'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'siege'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   /**
