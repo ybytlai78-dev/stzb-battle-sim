@@ -8,7 +8,7 @@
 import type { BattleReport, General, UnitState } from '../src/engine/types';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import { computeDetailedStats, computeContributionShares, type UnitDetailedStats } from '../src/engine/stats';
-import { avatarSrc, portraitSrc, getHeroById, rednessStars, skillGrade, TROOP_CHAR, FACTION_CLASS, cardFrameSrc } from './heroes';
+import { avatarSrc, portraitSrc, getHeroById, rednessStars, skillGrade, TROOP_CHAR, factionIconSrc, cardFrameSrc } from './heroes';
 import { RESULT_GLYPH } from './resultGlyph';
 
 /** 统计视图用的占位单位（只取 general / side，兵力与状态不参与汇总） */
@@ -87,14 +87,15 @@ function heroCard(g: General, troops: number, color: 'red' | 'blue'): string {
   const r = g.redness ?? 0;
   const lv = g.level ?? 40;
   const hero = getHeroById(g.id);
-  const facCls = FACTION_CLASS[hero?.faction ?? ''] ?? 'qun';
+  const faction = hero?.faction ?? '';
+  const facIcon = factionIconSrc(faction);
   return `
     <div class="sum-hero ${dead ? 'dead' : ''}">
       <div class="sh-card">
         <img class="sh-art" src="${portraitSrc(g.id)}" alt="${g.name}" onerror="this.style.display='none'" />
         <div class="frame" style="background-image:url('${cardFrameSrc()}')"></div>
         <div class="plate">
-          <div class="fac ${facCls}">${hero?.faction ?? ''}</div>
+          ${facIcon ? `<img class="fac" data-faction="${faction}" alt="${faction}" src="${facIcon}" />` : ''}
           <div class="sh-name">${g.name}</div>
           <div class="sh-stars" title="红度 ${r}/5">${rednessStars(r)}</div>
           <div class="card-bar">

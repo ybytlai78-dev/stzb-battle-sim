@@ -112,14 +112,13 @@
   /* 空槽：84px 窄列放不下「点击选择 前锋」（会折成四行），只留素材加号 slot-add.png；
      文字本身保留在 DOM 里（font-size:0 只是看不见），读屏仍能读到。 */
   .slot.empty { font-size: 0; letter-spacing: 0; gap: 4px; }
-  /* 加号素材矮视口缩小，避免撑高槽位（基础 34px 见 styles.css） */
   .slot-add-icon { width: 24px; height: 24px; }
   .slot .hint { font-size: 9px; margin-top: 0; }
   /* 战法名底板（grade-plate）需要额外内边距（宽屏/竖屏槽位可见时生效） */
   .slot-skill-name.has-plate { padding: 0 5px; }
   /* 简略战报卡面：矮视口下字号压一档 */
-  .sum-hero .fac { font-size: 9px; }
-  .sum-hero .sh-name { font-size: 11px; letter-spacing: 0; }
+  .sum-hero .fac { top: 2px; }
+  .sum-hero .sh-name { font-size: 9px; letter-spacing: 0; }
   .sum-hero .sh-stars { font-size: 7px; }
   .sum-hero .card-bar { font-size: 9px; }
 
@@ -132,7 +131,7 @@
   /* 武将池：卡框版卡片缩小（比例由 aspect-ratio 保持，只压字号） */
   .hero-grid { gap: 5px; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); }
   .hero-card .fac { font-size: 8px; top: 2px; }
-  .hero-card .n { font-size: 9px; letter-spacing: 0; }
+  .hero-card .n { font-size: 8px; letter-spacing: 0; }
   .hero-card .stars { font-size: 6.5px; letter-spacing: 0; }
   .hero-card .bar { font-size: 7px; gap: 3px; }
   .hero-card .sp-badge { font-size: 6px; padding: 0 1px; }

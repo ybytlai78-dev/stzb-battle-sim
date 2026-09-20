@@ -602,21 +602,22 @@ main {
   background-position: top center;
   background-color: var(--color-bg);
 }
-.slot-card .fac { position: absolute; left: 1px; top: 2px; width: 19%; font-size: 8px; }
+.slot-card .fac { position: absolute; left: 1px; top: 2px; width: 17%; }
 .slot-card .hero-name {
   position: absolute;
   left: 1px;
-  top: 14%;
+  /* 下移到 20%：避开左上势力图标下沿（图标高≈17% 卡宽，槽位卡换算约 14% 卡高），首字不再压图标 */
+  top: 20%;
   width: 19%;
   /* 竖排名封顶 + 裁切：长名（小乔&大乔 / SP赵云）不许压到底栏或灌出边框 */
-  max-height: 46%;
+  max-height: 40%;
   overflow: hidden;
   writing-mode: vertical-rl;
   text-orientation: upright;
   display: flex;
   justify-content: center;
   font-family: var(--font-kai);
-  font-size: 11px;
+  font-size: 8px;
   font-weight: 700;
   letter-spacing: 1px;
   color: #e9c983;
@@ -835,33 +836,24 @@ main {
 /* 卡面信息层（绝对定位铺满卡面，不吃鼠标事件；overflow:hidden 兜底——卡面文字一律不越框） */
 .plate { position: absolute; inset: 0; z-index: 3; pointer-events: none; overflow: hidden; }
 /* 信息层：左上势力字 + 竖排名 / 右上五星 / 底部 Lv·兵种·主战法 */
-.hero-card .fac { position: absolute; left: 1px; top: 3px; width: 19%; font-size: 10px; }
-/* 势力字配色（卡面通用：武将池卡 / 配将槽位卡 / 简略战报卡） */
-.fac {
-  font-family: var(--font-kai);
-  font-weight: 700;
-  text-align: center;
-  line-height: 1.1;
-}
-.fac.han { color: #d9b45c; }
-.fac.wei { color: #7fb0e8; }
-.fac.shu { color: #7cc98f; }
-.fac.wu { color: #e88a80; }
-.fac.qun { color: #c9a8e0; }
-.fac.jin { color: #b9c9a2; }
+/* 势力图标（官方行书彩字，卡面通用：武将池卡 / 配将槽位卡 / 简略战报卡）
+   宽度按卡面宽度的百分比 → 天然不超出左侧黑竖带（带宽 19.4%），且各档都大于武将名 */
+.fac { display: block; height: auto; object-fit: contain; }
+.hero-card .fac { position: absolute; left: 1px; top: 2px; width: 17%; }
 .hero-card .n {
   position: absolute;
   left: 1px;
-  top: 15%;
+  /* 下移到 20%：避开左上势力图标下沿（图标高≈17% 卡宽 ≈ 12–13% 卡高），首字不再压图标 */
+  top: 20%;
   width: 19%;
   /* 竖排名封顶 + 裁切：长名不许压到底栏或灌出边框 */
-  max-height: 46%;
+  max-height: 40%;
   overflow: hidden;
   writing-mode: vertical-rl;
   text-orientation: upright;
   display: flex;
   justify-content: center;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 700;
   font-family: var(--font-kai);
   letter-spacing: 1px;
@@ -1674,24 +1666,24 @@ main {
   object-position: top center;
   display: block;
 }
-/* 战报卡信息层：字号与武将池卡同档（势力 10px / 名 12px）；
-   宽度改固定 20px —— 池卡用 19% 在固定卡宽下刚好，战报卡宽度随面板变化，
-   百分比会让势力字与竖排名往卡内漂（用户 2026-09-19 反馈「名字和势力错位」） */
-.sum-hero .fac { position: absolute; left: 2px; top: 3px; width: 20px; font-size: 10px; }
+/* 战报卡信息层：位置/宽度用**固定 px**（战报卡宽度随面板变化，百分比会让势力图标与竖排名往卡内漂
+   —— 用户 2026-09-19 反馈「名字和势力错位」）；势力已改素材图标：19px 宽 < 黑竖带（卡宽 ~112px 时约 21.7px） */
+.sum-hero .fac { position: absolute; left: 2px; top: 3px; width: 19px; }
 .sum-hero .sh-name {
   position: absolute;
   left: 2px;
-  top: 15%;
+  /* 下移到 20%：避开势力图标下沿，首字不再压图标 */
+  top: 20%;
   width: 20px;
   /* 竖排名封顶 + 裁切：长名不许压到底栏或灌出边框 */
-  max-height: 46%;
+  max-height: 40%;
   overflow: hidden;
   writing-mode: vertical-rl;
   text-orientation: upright;
   display: flex;
   justify-content: center;
   font-family: var(--font-kai);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 1px;
   color: #e9c983;
