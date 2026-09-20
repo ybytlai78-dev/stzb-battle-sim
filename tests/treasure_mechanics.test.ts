@@ -410,6 +410,42 @@ describe('宝物 · 控制延时 / 免疫 / 反击 / 回合钩子', () => {
     expect(ctx.events.filter((e) => e.type === 'heal')).toHaveLength(2);
   });
 
+  it('击虚 / 艮止 / 不懈 / 亢厉：C 档按状态种类增伤、禁普攻、兵力越低恢复越高', () => {
+    const affixOnly = (name: string, value: number) =>
+      buildTreasureStatuses({ treasureId: 1009, affix: { name, value } }, makeUnit('x').general)
+        .filter((x) => x.label === name)
+        .map((x) => x.create);
+
+    // 击虚：按目标身上 DoT/控制种类数增伤
+    const [jixu] = affixOnly('击虚', 9);
+    expect(jixu).toMatchObject({ type: 'damage_boost', direction: 'caused', perTargetStatusCount: true });
+    expect((jixu as { rate: number }).rate).toBeCloseTo(0.09, 6);
+
+    // 艮止：谋略提高 + 无法普通攻击
+    const genzhi = affixOnly('艮止', 20);
+    expect(genzhi.map((s) => s.type).sort()).toEqual(['no_attack', 'strategy_buff']);
+
+    // 不懈：兵力越低恢复越高
+    const ctx = makeCtx();
+    const u = makeUnit('u');
+    ctx.myTeam = [u];
+    inflictStatus(ctx, u, { type: 'heal_low_troops', perStep: 0.09, stepPct: 15, duration: 999 }, 'passive', 'treasure:affix:不懈', 'u');
+    u.troops = 10000;
+    u.wounded = 5000;
+    const full = recoverTroops(ctx, u, 1000, undefined);
+    u.troops = 6000; // 已损失 40% → floor(40/15)=2 档
+    u.wounded = 5000;
+    const low = recoverTroops(ctx, u, 1000, undefined);
+    expect(low).toBeGreaterThan(full);
+    expect(low).toBe(1180); // 1000 × (1 + 2×0.09)
+
+    // 亢厉：默认口径「主动及追击武将主战法伤害提高」——铭鸿（三阶）/ 金鸠（二阶）等都要有产出
+    const [kangli] = buildTreasureStatuses({ treasureId: 1030 }, makeUnit('x').general)
+      .filter((x) => x.label === '亢厉')
+      .map((x) => x.create);
+    expect(kangli).toMatchObject({ type: 'damage_boost', direction: 'caused', skillTypes: ['active', 'pursuit'] });
+  });
+
   it('再战（少府）：仅第 5 回合判定，50% 几率获得连击', () => {    const results: boolean[] = [];
     for (let seed = 1; seed <= 20; seed++) {
       const u = makeUnit('u');

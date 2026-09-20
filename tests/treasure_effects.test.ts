@@ -3,9 +3,8 @@
  * 覆盖：官方数值 → 状态数值的换算（默认 10 级：一阶/二阶 ×5、三阶固定）、词条过滤维、未实现词条不产出。
  */
 import { describe, it, expect } from 'vitest';
-import type { General, CreateStatus, UnitState } from '../src/engine/types';
-import { buildTreasureStatuses, PENDING } from '../src/engine/treasure';
-import { TREASURES_BY_ID } from '../src/data/treasures';
+import type { General, CreateStatus, UnitState } from '../src/engine/types';import { buildTreasureStatuses, PENDING } from '../src/engine/treasure';
+import { TREASURES, TREASURES_BY_ID } from '../src/data/treasures';
 
 const self = {} as General;
 const build = (treasureId: number, level = 10) =>
@@ -73,6 +72,25 @@ describe('宝物引擎 · 自带特效换算', () => {
     expect(t.type).toBe('trigger_boost');
     expect(t.rate).toBeCloseTo(0.06, 6);
     expect(t.mainSkillOnly).toBe(true);
+  });
+
+  it('回归守护：每件宝物每一条**已实现**特效都必须产出状态（防静默丢失）', () => {
+    // 构造一个「女性 + 统率 3」的携带者并给一个大营友军，覆盖性别/站位/条件类词条
+    const carrier = { gender: 'female', cost: 3 } as General;
+    const allies = [{ general: { id: 'back', position: '大营' } } as unknown as UnitState];
+    // 走「回合开始钩子」而非准备阶段的特效（不产出常驻状态）
+    const ROUND_HOOK_ONLY = ['再战'];
+    const lost: string[] = [];
+    for (const t of TREASURES) {
+      const labels = new Set(
+        buildTreasureStatuses({ treasureId: t.id }, carrier, allies).map((x) => x.label),
+      );
+      for (const e of t.effects) {
+        if (PENDING[e.name] || ROUND_HOOK_ONLY.includes(e.name)) continue;
+        if (!labels.has(e.name)) lost.push(`${t.name}·${e.name}`);
+      }
+    }
+    expect(lost, `这些已实现特效没有产出状态：${lost.join('、')}`).toEqual([]);
   });
 
   it('未实现词条（PENDING）不产出状态，但会被登记', () => {

@@ -204,6 +204,19 @@ const MECHANICS: Record<string, Mechanic> = {
   ],
   // 谋断（掩日）：第 2 次发动需要准备的主动武将主战法时，跳过 1 个准备回合
   谋断: () => [{ type: 'treasure_prepare_skip', atCast: 2, mainSkillOnly: true, duration: FOREVER } as CreateStatus],
+  // 击虚（锻造词条）：目标每有一种持续性伤害或控制效果，对其伤害提高（最多计 5 种）
+  击虚: (v) => [
+    { type: 'damage_boost', rate: v / 100, duration: FOREVER, direction: 'caused', perTargetStatusCount: true } as CreateStatus,
+  ],
+  // 亢厉：主动及追击武将主战法伤害提高（默认口径；旌阳万仞/掩日/悬翦 的专属措辞走 OVERRIDES）
+  亢厉: boost({ skillTypes: ['active', 'pursuit'] }),
+  // 艮止（锻造词条）：自身无法普通攻击，谋略属性提高（点数）
+  艮止: (v) => [
+    { type: 'strategy_buff', amount: v, duration: FOREVER } as CreateStatus,
+    { type: 'no_attack', duration: FOREVER } as CreateStatus,
+  ],
+  // 不懈（锻造词条）：自身每低于初始兵力 15%，受到的恢复效果提升
+  不懈: (v) => [{ type: 'heal_low_troops', perStep: v / 100, stepPct: 15, duration: FOREVER } as CreateStatus],
 };
 
 /** 同名词条但语义随宝物变化：key = `${treasureId}:${slot}` */
@@ -227,9 +240,10 @@ const OVERRIDES: Record<string, Mechanic> = {
 
 /** 尚未落地的词条（分档见方案 §3.2）；键 = 词条名，值 = 需要的机制 */
 export const PENDING: Record<string, string> = {
+  /** 需在伤害路径携带「攻击方」引用（DamageHitContext 目前无 attackerId）→ 待补 */
+  威势: '受到初始统率值低于自身武将的所有伤害降低（需伤害路径带攻击方统率）',
   迸发: '首次追击额外选 1 个目标',
   劲弩: '首回合禁普攻 + 次回合全体普攻',
-  击虚: '按目标身上的 DoT/控制种类数增伤（C 档）',
 };
 
 /** 取某条特效的机制（先查覆盖表，再查同名表） */

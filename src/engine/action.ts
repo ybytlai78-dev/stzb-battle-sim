@@ -312,6 +312,9 @@ function troopCounterReduceOf(source: UnitState, target: UnitState): number {
 /** 四种控制状态（混乱/犹豫/暴走/怯战）：洞察免疫、控制冲突、鸾凤和鸣「控制 +1 目标」共用同一口径 */
 const CONTROL_STATUS_TYPES: StatusType[] = ['confusion', 'rampage', 'cowardice', 'hesitation'];
 
+/** 宝物「击虚」计数维：持续性伤害（妖术/燃烧/恐慌/诅咒/引燃）+ 控制（混乱/暴走/怯战/犹豫） */
+const DOT_OR_CONTROL_TYPES: StatusType[] = [...CONTROL_STATUS_TYPES, 'sorcery', 'burning', 'panic', 'curse', 'ignite'];
+
 /** skillTargets 能吃的选敌模式；`self` 等回退 fallback，避免 random_single 被降成 all/group */
 type CombatTargetMode = 'single' | 'nearest' | 'random_single' | 'farthest' | 'group' | 'all';
 function resolveCombatTargetMode(mode: string | undefined, fallback: CombatTargetMode): CombatTargetMode {
@@ -2532,7 +2535,10 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
   // 4. 怯战检查：怯战期间无法普攻（但可放主动战法）。
   //    待下次行动才生效的怯战（张昭 竭忠尽智「下一次行动时进入怯战」）本次行动不封普攻——
   //    其 pendingNextAct 由 markStatusesOnActStart 在下次行动开始时清掉后生效。
-  const canNormalAttack = !unit.statuses.some((s) => s.type === 'cowardice' && !s.pendingNextAct);
+  //    宝物「艮止」用独立的 no_attack 状态表达「自身无法普通攻击（但谋略提高）」。
+  const canNormalAttack =
+    !unit.statuses.some((s) => s.type === 'cowardice' && !s.pendingNextAct) &&
+    !hasStatus(unit, 'no_attack');
 
   // 暴走：攻击与战法目标不分敌我（可打友军/敌军，不打自己）
   const rampage = hasStatus(unit, 'rampage');
@@ -3793,6 +3799,10 @@ function pushStatus(
     if (type === 'damage_boost' && 'perDistance' in create && create.perDistance) {
       (push as { perDistance?: boolean }).perDistance = true;
     }
+    // 宝物「击虚」：按目标状态种类数增伤
+    if (type === 'damage_boost' && 'perTargetStatusCount' in create && create.perTargetStatusCount) {
+      (push as { perTargetStatusCount?: boolean }).perTargetStatusCount = true;
+    }
     // 仅「进行攻击」的增减伤（缚父临危「下两次**攻击**造成的伤害提升 30%」）：普攻 / 物理主动 / 追击
     if (type === 'damage_boost' && 'attackOnly' in create && create.attackOnly) {
       (push as { attackOnly?: boolean }).attackOnly = true;
@@ -4158,6 +4168,10 @@ function pushStatus(
     ...(create.type === 'treasure_prepare_skip'
       ? { atCast: create.atCast, ...(create.mainSkillOnly ? { mainSkillOnly: true } : {}) }
       : {}),
+    // 宝物「不懈」：兵力越低恢复越高的档位参数
+    ...(create.type === 'heal_low_troops'
+      ? { perStep: create.perStep, ...(create.stepPct != null ? { stepPct: create.stepPct } : {}) }
+      : {}),
   } as Status);
   ctx.events.push({
     type: 'status_inflicted',
@@ -4451,6 +4465,9 @@ export function isBeneficialStatus(s: Status): boolean {
     case 'dot_tick_heal':
     // 宝物：第 N 次准备战法跳过准备
     case 'treasure_prepare_skip':
+    // 宝物：禁普攻 / 兵力越低恢复越高
+    case 'no_attack':
+    case 'heal_low_troops':
       return true;
     default:
       return false;
@@ -4742,6 +4759,7 @@ function damageBoosts(
       (s) =>
         s.type === 'damage_boost' &&
         !s.perDistance &&
+        !s.perTargetStatusCount &&
         statusMatchesHit(s, hit) &&
         factionOk(s) &&
         selfReqOk(source, s)
@@ -4749,6 +4767,21 @@ function damageBoosts(
     'damage_boost',
     'caused'
   );
+  // 宝物「击虚」：目标身上每存在一种持续性伤害/控制 → 增伤 rate × 种类数（上限 5）
+  const targetStatusKinds = new Set(
+    target.statuses
+      .filter((s) => DOT_OR_CONTROL_TYPES.includes(s.type))
+      .map((s) => s.type),
+  ).size;
+  const perStatusCountBoost = source.statuses
+    .filter(
+      (s): s is Extract<Status, { type: 'damage_boost' }> =>
+        s.type === 'damage_boost' &&
+        !!s.perTargetStatusCount &&
+        (s.direction ?? 'taken') === 'caused' &&
+        statusMatchesHit(s, hit),
+    )
+    .reduce((a, s) => a + s.rate * Math.min(5, targetStatusKinds), 0);
   // 宝物「奇袭」：与目标距离每提高 1 点增伤（rate × 距离，逐点线性）
   const perDistanceBoost = source.statuses
     .filter(
@@ -4769,7 +4802,7 @@ function damageBoosts(
   // 被动概率增伤（侵掠如火）：命中则并入造成侧合计（数值体现在伤害本身，不进战报增减伤明细）
   // 叠层待发·下次普攻增伤（奉令护蜀）：同属「进行攻击」的一次性造成侧增伤
   return {
-    causedMult: 1 + causedBoost + perDistanceBoost + attackProcBoostOf(ctx, source, hit) + pendingStacksBoostOf(source, hit) + hurtStackBoostOf(source),
+    causedMult: 1 + causedBoost + perDistanceBoost + perStatusCountBoost + attackProcBoostOf(ctx, source, hit) + pendingStacksBoostOf(source, hit) + hurtStackBoostOf(source),
     takenMult: 1 + takenBoost,
   };
 }
@@ -4865,6 +4898,8 @@ function statusName(type: StatusType): string {
     case 'treasure_control_amplify': return '控制目标易伤';
     case 'dot_tick_heal': return 'DoT 跳伤恢复';
     case 'treasure_prepare_skip': return '第 N 次跳过准备';
+    case 'no_attack': return '无法普通攻击';
+    case 'heal_low_troops': return '兵力越低恢复越高';
     case 'siege': return '围困';
     case 'sorcery': return '妖术';
     case 'burning': return '燃烧';
@@ -8229,9 +8264,17 @@ export function recoverTroops(ctx: CombatContext, target: UnitState, amount: num
   // 已阵亡（兵力 0）不可被急救/休整/主动恢复复活
   if (!target.alive || target.troops <= 0) return 0;
   // 受恢复方（heal_boost）+ 施法方（宝物 仁心/矜节 heal_out_boost）两边加成，统一收口
+  // 另加宝物「不懈」：自身每低于初始兵力 stepPct%（缺省 15%）→ 受到的恢复效果提升 perStep（多档累加）
+  const lostPct = target.general.maxTroops > 0
+    ? ((target.general.maxTroops - target.troops) / target.general.maxTroops) * 100
+    : 0;
+  const lowTroopsBoost = target.statuses
+    .filter((s): s is Extract<Status, { type: 'heal_low_troops' }> => s.type === 'heal_low_troops')
+    .reduce((a, s) => a + Math.floor(lostPct / (s.stepPct ?? 15)) * s.perStep, 0);
   const boost =
     target.statuses.filter((s) => s.type === 'heal_boost').reduce((a, s) => a + s.rate, 0) +
-    (caster ? caster.statuses.filter((s) => s.type === 'heal_out_boost').reduce((a, s) => a + s.rate, 0) : 0);
+    (caster ? caster.statuses.filter((s) => s.type === 'heal_out_boost').reduce((a, s) => a + s.rate, 0) : 0) +
+    lowTroopsBoost;
   const demand = boost > 0 ? Math.floor(amount * (1 + boost)) : amount;
   const pool = ctx.woundedMortality ? Math.min(target.wounded, target.general.maxTroops - target.troops) : target.general.maxTroops - target.troops;
   const recoverable = Math.max(0, Math.min(demand, pool));
