@@ -234,6 +234,9 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
     case 'cowardice_immune_blocked':
       lines.push(`  ✦ ${ev.unitId} 免疫了${statusName(ev.statusType)}效果`);
       break;
+    case 'control_immune_blocked':
+      lines.push(`  ✦ ${ev.unitId} 免疫了${statusName(ev.statusType)}效果（坚毅）`);
+      break;
     case 'command_immune_blocked':
       lines.push(`  ✦ ${ev.unitId} 免疫了${ev.statusType ? statusName(ev.statusType) : '负面'}效果（${SKILL_REGISTRY[ev.skillId]?.name ?? ev.skillId}）`);
       break;

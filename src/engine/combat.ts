@@ -12,7 +12,7 @@ import { computeStats } from './stats';
 import { SKILL_REGISTRY } from '../data/skills';
 import { validateMutualExclusion } from '../data/hero-utils';
 import { computeTroopBonuses } from './troopBonus';
-import { applyTreasureEffects } from './treasure';
+import { applyTreasureEffects, triggerTreasureRoundStart } from './treasure';
 
 const POSITION_PRIORITY: Record<string, number> = { 前锋: 0, 中军: 1, 大营: 2 };
 
@@ -112,6 +112,8 @@ export function runBattle(config: BattleConfig): BattleReport {
 
     // 一类指挥回合前准备阶段（谋议宏图）：减伤按 1/8 衰减 + 士气叠层，再进入 delayedOutput / 单位行动
     tickRoundStartStatuses(ctx);
+    // 宝物·回合窗口效果（再战 第 5 回合连击 / 清毅 第 N 回合洞察）——无宝物时零开销、不发事件
+    triggerTreasureRoundStart(ctx);
     triggerImperialDecrees(ctx);
     // 一类指挥·每回合开始前几率判定（锦车持节）：命中则挂本回合状态，并登记待回合末的附加恢复
     triggerRoundStartChance(ctx);

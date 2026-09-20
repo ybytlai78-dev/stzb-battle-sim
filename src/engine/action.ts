@@ -2692,6 +2692,35 @@ function inflictStatusCore(
     return;
   }
 
+  // 免疫控制（宝物「坚毅」：前 N 回合免疫混乱及暴走）：`types` 内的控制整段拦截
+  if (CONTROL_STATUS_TYPES.includes(type)) {
+    const immune = target.statuses.find(
+      (s): s is Extract<Status, { type: 'control_immune' }> =>
+        s.type === 'control_immune' && s.types.includes(type),
+    );
+    if (immune) {
+      ctx.events.push({ type: 'control_immune_blocked', unitId: target.general.id, statusType: type });
+      return;
+    }
+  }
+
+  // 控制时长 +1（宝物「惑言」/「慑心」）：施法者匹配的延时状态消耗 1 次，令本次控制 +1 回合
+  if (CONTROL_STATUS_TYPES.includes(type) && casterId) {
+    const caster = castUnit(ctx, casterId);
+    const extend = caster?.statuses.find(
+      (s): s is Extract<Status, { type: 'control_extend' }> =>
+        s.type === 'control_extend' &&
+        s.charges > 0 &&
+        (!s.mainSkillOnly || caster!.general.mainSkillId === sourceSkillId) &&
+        (!s.skillTypes || s.skillTypes.includes(sourceSkillType)),
+    );
+    if (caster && extend && 'duration' in create && typeof create.duration === 'number') {
+      create = { ...create, duration: create.duration + 1 } as CreateStatus;
+      extend.charges -= 1;
+      if (extend.charges <= 0) caster.statuses = caster.statuses.filter((s) => s !== extend);
+    }
+  }
+
   // 持续型急救（皇裔流离/金匮要略）：同为指挥战法的持续型急救互斥——先施加者生效，后施加者被拒；
   // 不同战法类型（被动/主动/追击的急救）各自独立共存
   if (type === 'first_aid') {
@@ -3992,6 +4021,12 @@ function pushStatus(
     sourceSkillType,
     sourceSkillId,
     ...(create.type === 'cover' && create.protectId ? { protectId: create.protectId } : {}),
+    // 宝物「惑言」/「慑心」：控制延时状态（charges = 剩余可延时的控制次数）
+    ...(create.type === 'control_extend'
+      ? { charges: create.charges, ...(create.mainSkillOnly ? { mainSkillOnly: true } : {}), ...(create.skillTypes ? { skillTypes: create.skillTypes } : {}) }
+      : {}),
+    // 宝物「坚毅」：免疫的控制类型清单
+    ...(create.type === 'control_immune' ? { types: create.types } : {}),
   } as Status);
   ctx.events.push({
     type: 'status_inflicted',
@@ -4259,6 +4294,10 @@ export function isBeneficialStatus(s: Status): boolean {
     case 'damage_share':
     case 'control_spread':
     case 'jump_prep':
+    // 宝物：控制延时 / 免疫控制 / 普攻不触发反击
+    case 'control_extend':
+    case 'control_immune':
+    case 'no_retaliate':
       return true;
     default:
       return false;
@@ -4592,6 +4631,9 @@ function statusName(type: StatusType): string {
     case 'trigger_boost': return '发动率提升';
     case 'insight': return '洞察';
     case 'cowardice_immune': return '免疫怯战';
+    case 'control_extend': return '控制延时';
+    case 'control_immune': return '免疫控制';
+    case 'no_retaliate': return '不触发反击';
     case 'siege': return '围困';
     case 'sorcery': return '妖术';
     case 'burning': return '燃烧';
@@ -8242,6 +8284,8 @@ function applyOnHurtEffect(
  * 不消耗 counter 状态。
  */
 function settleCounterOnHurt(ctx: CombatContext, holder: UnitState, attacker: UnitState): void {
+  // 宝物「强击」：攻击方在前 N 回合内普通攻击不触发反击
+  if (attacker.statuses.some((s) => s.type === 'no_retaliate' && s.remaining > 0)) return;
   const counters = holder.statuses.filter(
     (s): s is Extract<Status, { type: 'counter' }> => s.type === 'counter'
   );

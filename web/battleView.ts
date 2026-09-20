@@ -574,6 +574,9 @@ function renderEvents(
       case 'cowardice_immune_blocked':
         add('good', `【${nm(ev.unitId)}】免疫了${statusName(ev.statusType)}效果`);
         break;
+      case 'control_immune_blocked':
+        add('good', `【${nm(ev.unitId)}】免疫了${statusName(ev.statusType)}效果（坚毅）`);
+        break;
       case 'status_resisted': {
         // 抵御负面（暂时定策，XP程昱）：该次施加被取消
         const s = SKILL_REGISTRY[ev.skillId];

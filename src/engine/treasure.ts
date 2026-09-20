@@ -142,6 +142,16 @@ const MECHANICS: Record<string, Mechanic> = {
   机敏: (v) => [{ type: 'trigger_boost', rate: v / 100, duration: FOREVER, mainSkillOnly: true } as CreateStatus],
   英勇: (v) => [{ type: 'trigger_boost', rate: v / 100, duration: FOREVER, mainSkillOnly: true, attackSkillsOnly: true } as CreateStatus],
   奔袭: (v) => [{ type: 'trigger_boost', rate: v / 100, duration: FOREVER, skillTypes: ['pursuit'] } as CreateStatus],
+
+  // ── 控制相关 ──
+  // 惑言（锻造词条）：主战法施加的前 N 个控制 +1 回合
+  惑言: (v) => [{ type: 'control_extend', charges: v, duration: FOREVER, mainSkillOnly: true } as CreateStatus],
+  // 慑心（龙鳞）：追击武将主战法施加的控制 +1 回合（不限次数）
+  慑心: () => [{ type: 'control_extend', charges: 999, duration: FOREVER, mainSkillOnly: true, skillTypes: ['pursuit'] } as CreateStatus],
+  // 坚毅（锻造词条）：前 N 回合免疫混乱及暴走
+  坚毅: (v) => [{ type: 'control_immune', types: ['confusion', 'rampage'], duration: v } as CreateStatus],
+  // 强击（锻造词条）：前 N 回合普通攻击不会触发反击
+  强击: (v) => [{ type: 'no_retaliate', duration: v } as CreateStatus],
 };
 
 /** 同名词条但语义随宝物变化：key = `${treasureId}:${slot}` */
@@ -167,11 +177,9 @@ const OVERRIDES: Record<string, Mechanic> = {
 export const PENDING: Record<string, string> = {
   强固: '每回合首次受伤减伤（回合窗口）',
   避险: '首次受击后进入规避',
-  再战: '第 5 回合几率获得连击（回合钩子）',
   迸发: '首次追击额外选 1 个目标',
   劲弩: '首回合禁普攻 + 次回合全体普攻',
   谋断: '第 2 次准备战法跳过 1 个准备回合',
-  慑心: '追击主战法施加的控制 +1 回合',
   阵舞: '女性携带：控制目标受伤害提高（对目标 debuff）',
   矜节: '女性携带：主战法恢复效果提高',
   燮理: '燃烧伤害后恢复（恢复率）',
@@ -184,11 +192,7 @@ export const PENDING: Record<string, string> = {
   筹算: '策略伤害武将主战法发动率（条件发动率）',
   熟虑: '需准备的主动战法发动率（准备限定）',
   善谋: '第 4/6 回合发动率提高（回合窗口）',
-  坚毅: '前 N 回合免疫混乱/暴走',
-  清毅: '第 N~M 回合获得洞察（回合窗口）',
-  惑言: '主战法控制 +1 回合',
   识破: '前 N 回合战法伤害无视规避',
-  强击: '前 N 回合普攻不触发反击',
   不屈: '受击叠层减伤',
   济世: '恢复触发 → 目标下次受伤降低',
   仁心: '造成的恢复效果提高',
@@ -257,5 +261,43 @@ export function applyTreasureEffects(ctx: CombatContext, unit: UnitState): void 
   const allies = unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
   for (const { create, sourceId } of buildTreasureStatuses(loadout, unit.general, allies)) {
     inflictStatus(ctx, unit, create, TREASURE_SOURCE_TYPE, sourceId, unit.general.id);
+  }
+}
+
+/** 回合开始钩子（每回合由 `combat.ts` 调用）：`value` = 该特效/词条在当前等级下的数值 */
+type RoundStartHook = (ctx: CombatContext, unit: UnitState, value: number, sourceId: string) => void;
+
+const ROUND_START_HOOKS: Record<string, RoundStartHook> = {
+  // 再战（少府）：第 5 回合有 50% 几率获得连击
+  再战: (ctx, unit, _v, sourceId) => {
+    if (ctx.currentRound !== 5) return;
+    if (!ctx.rng.chance(0.5)) return;
+    inflictStatus(ctx, unit, { type: 'combo', duration: 1 }, TREASURE_SOURCE_TYPE, sourceId, unit.general.id);
+  },
+  // 清毅（锻造词条）：第 N 回合（玩家选值，官方区间 5~8）行动时获得洞察
+  清毅: (ctx, unit, value, sourceId) => {
+    if (ctx.currentRound !== value) return;
+    inflictStatus(ctx, unit, { type: 'insight', duration: 1 }, TREASURE_SOURCE_TYPE, sourceId, unit.general.id);
+  },
+};
+
+/** 回合开始结算宝物的「回合窗口」类效果（再战 / 清毅） */
+export function triggerTreasureRoundStart(ctx: CombatContext): void {
+  for (const unit of [...ctx.myTeam, ...ctx.enemyTeam]) {
+    if (!unit.alive) continue;
+    const loadout = unit.general.treasure;
+    if (!loadout) continue;
+    const level = loadout.level ?? 10;
+    const treasure = TREASURES_BY_ID[loadout.treasureId];
+    if (treasure) {
+      for (const effect of treasure.effects) {
+        const hook = ROUND_START_HOOKS[effect.name];
+        if (hook) hook(ctx, unit, treasureEffectValue(effect, level), `${TREASURE_SOURCE_PREFIX}${treasure.id}:${effect.slot}`);
+      }
+    }
+    if (loadout.affix) {
+      const hook = ROUND_START_HOOKS[loadout.affix.name];
+      if (hook) hook(ctx, unit, loadout.affix.value, `${TREASURE_SOURCE_PREFIX}affix:${loadout.affix.name}`);
+    }
   }
 }
