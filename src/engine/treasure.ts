@@ -176,6 +176,15 @@ const MECHANICS: Record<string, Mechanic> = {
   // 矜节（比翼）：女性武将携带时，主战法造成的恢复效果提高 30%（男性携带不生效 → 构造期判定）
   矜节: (v, _effect, ctx) =>
     ctx.self.gender === 'female' ? [{ type: 'heal_out_boost', rate: v / 100, duration: FOREVER } as CreateStatus] : [],
+  // 鸠佑（金鸠）：主动武将主战法发动后，自身造成攻击伤害提高 6.0%（可叠加）
+  鸠佑: () => [{ type: 'treasure_after_main', perStack: 0.06, maxStacks: 10, duration: FOREVER } as CreateStatus],
+  // 归心（星汉）：我军全体每发动 2 次主动战法，自身恢复一定兵力（恢复率 150%）
+  归心: (v) => [{ type: 'treasure_ally_active_heal', every: 2, rate: v, duration: FOREVER } as CreateStatus],
+  // 阵舞（障日）：女性武将携带时，主战法施加控制的目标在受控期间受到的所有伤害提高 24%
+  阵舞: (v, _effect, ctx) =>
+    ctx.self.gender === 'female'
+      ? [{ type: 'treasure_control_amplify', rate: v / 100, mainSkillOnly: true, duration: FOREVER } as CreateStatus]
+      : [],
 };
 
 /** 同名词条但语义随宝物变化：key = `${treasureId}:${slot}` */
@@ -205,7 +214,6 @@ export const PENDING: Record<string, string> = {
   谋断: '第 2 次准备战法跳过 1 个准备回合',
   阵舞: '女性携带：控制目标受伤害提高（对目标 debuff）',
   燮理: '燃烧伤害后恢复（恢复率）',
-  归心: '我军每 2 次主动战法 → 自身恢复',
   鸠佑: '主动主战法发动后叠层增伤',
   奇袭: '按距离增伤（条件）',
   击虚: '按目标身上的 DoT/控制种类数增伤（C 档）',

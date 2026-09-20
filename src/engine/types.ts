@@ -690,6 +690,12 @@ export type CreateStatus =
   | { type: 'heal_out_boost'; rate: number; duration: number }
   /** 宝物「济世」：携带者每造成一次恢复 → 被恢复者获得「受到伤害降低」（可叠加） */
   | { type: 'heal_trigger_reduce'; rate: number; duration: number }
+  /** 宝物「鸠佑」：主动主战法发动后，自身造成攻击伤害提高 perStack（每次一层，可叠加至 maxStacks） */
+  | { type: 'treasure_after_main'; perStack: number; maxStacks: number; duration: number }
+  /** 宝物「归心」：我军全体每发动 every 次主动战法 → 携带者恢复（恢复率 rate，% ） */
+  | { type: 'treasure_ally_active_heal'; every: number; rate: number; duration: number }
+  /** 宝物「阵舞」：携带者（女性）主战法施加控制时，目标在该控制期间受到的所有伤害提高 rate */
+  | { type: 'treasure_control_amplify'; rate: number; mainSkillOnly?: boolean; duration: number }
   /** 免疫怯战（魏武之泽）：持续期间无法被施加怯战 */
   | { type: 'cowardice_immune'; duration: number }
   | { type: 'siege'; duration: number }
@@ -1825,6 +1831,10 @@ export type StatusType =
   | 'heal_out_boost'
   /** 宝物「济世」：造成恢复 → 目标受伤降低 */
   | 'heal_trigger_reduce'
+  /** 宝物「鸠佑」/「归心」/「阵舞」：主战法发动后钩子 */
+  | 'treasure_after_main'
+  | 'treasure_ally_active_heal'
+  | 'treasure_control_amplify'
   | 'cowardice_immune'
   | 'siege'
   | 'sorcery'
@@ -1916,6 +1926,9 @@ export type Status =
   | { type: 'treasure_basic_purge'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'heal_out_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'heal_trigger_reduce'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'treasure_after_main'; perStack: number; maxStacks: number; stacks: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'treasure_ally_active_heal'; every: number; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'treasure_control_amplify'; rate: number; mainSkillOnly?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'cowardice_immune'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'siege'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   /**

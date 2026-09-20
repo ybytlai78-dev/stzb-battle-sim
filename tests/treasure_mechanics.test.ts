@@ -7,7 +7,7 @@
  *  再战：第 5 回合 50% 获得连击
  */
 import { describe, it, expect } from 'vitest';
-import { inflictStatus, getStatus, hasStatus, consumeEvasion, recoverTroops, tickRoundStartStatuses, updateTreasureOnHurt, applyTreasureBasicHit } from '../src/engine/action';
+import { inflictStatus, getStatus, hasStatus, consumeEvasion, recoverTroops, tickRoundStartStatuses, updateTreasureOnHurt, applyTreasureBasicHit, applyTreasureAfterActive } from '../src/engine/action';
 import type { General } from '../src/engine/types';
 import type { CombatContext } from '../src/engine/action';
 import type { CreateStatus, UnitState } from '../src/engine/types';
@@ -308,6 +308,50 @@ describe('宝物 · 控制延时 / 免疫 / 反击 / 回合钩子', () => {
     expect(from(male)).toHaveLength(0);
     expect(from(female)).toHaveLength(1);
     expect(from(female)[0]).toMatchObject({ type: 'heal_out_boost', rate: 0.3 });
+  });
+
+  it('鸠佑 / 归心 / 阵舞：主战法发动后钩子', () => {
+    // 鸠佑（金鸠）：主战法发动后叠 1 层造成攻击伤害提高；非主战法不叠
+    const ctx = makeCtx();
+    const u = makeUnit('u');
+    ctx.myTeam = [u];
+    inflictStatus(ctx, u, { type: 'treasure_after_main', perStack: 0.06, maxStacks: 10, duration: 999 }, 'passive', 'treasure:1123:3', 'u');
+    const mainSkill = { id: 'main_x' } as never;
+    applyTreasureAfterActive(ctx, u, mainSkill);
+    expect(u.statuses.filter((s) => s.type === 'damage_boost' && s.damageType === 'physical')).toHaveLength(1);
+    applyTreasureAfterActive(ctx, u, { id: 'other_skill' } as never);
+    expect(u.statuses.filter((s) => s.type === 'damage_boost')).toHaveLength(1);
+    expect(getStatus(u, 'treasure_after_main')!.stacks).toBe(1);
+
+    // 归心（星汉）：我军全体每 2 次主动战法 → 携带者恢复
+    const ctx2 = makeCtx();
+    const h = makeUnit('h');
+    h.troops = 5000;
+    h.wounded = 2000;
+    ctx2.myTeam = [h];
+    inflictStatus(ctx2, h, { type: 'treasure_ally_active_heal', every: 2, rate: 150, duration: 999 }, 'passive', 'treasure:1111:3', 'h');
+    applyTreasureAfterActive(ctx2, h, { id: 'any' } as never);
+    expect(ctx2.events.some((e) => e.type === 'heal')).toBe(false);
+    applyTreasureAfterActive(ctx2, h, { id: 'any' } as never);
+    expect(ctx2.events.some((e) => e.type === 'heal')).toBe(true);
+    expect(h.troops).toBeGreaterThan(5000);
+
+    // 阵舞（障日）：女性携带者主战法施加控制 → 目标获得「受控期间受到伤害提高」
+    const ctx3 = makeCtx();
+    const dancer = makeUnit('d');
+    dancer.general.gender = 'female';
+    dancer.general.mainSkillId = 'main_x';
+    const victim = makeUnit('v', 'enemy');
+    ctx3.myTeam = [dancer];
+    ctx3.enemyTeam = [victim];
+    inflictStatus(ctx3, dancer, { type: 'treasure_control_amplify', rate: 0.24, mainSkillOnly: true, duration: 999 }, 'passive', 'treasure:1099:3', 'd');
+    inflictStatus(ctx3, victim, { type: 'confusion', duration: 2 }, 'active', 'main_x', 'd');
+    const amp = victim.statuses.find((s) => s.type === 'damage_boost' && s.direction === 'taken') as
+      | { rate: number; remaining: number }
+      | undefined;
+    expect(amp).toBeTruthy();
+    expect(amp!.rate).toBeCloseTo(0.24, 6);
+    expect(amp!.remaining).toBe(2); // 与本次控制同长
   });
 
   it('再战（少府）：仅第 5 回合判定，50% 几率获得连击', () => {    const results: boolean[] = [];

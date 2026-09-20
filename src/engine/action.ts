@@ -516,6 +516,8 @@ export interface CombatContext {
   troopThresholdKeys?: Set<string>;
   /** 「每回合首次造成伤害」去重（以直报怨）：key `${回合}:${skillId}:${casterId}` */
   dealFirstKeys?: Set<string>;
+  /** 宝物「归心」：我军全体主动战法发动次数计数（key `${unitId}:${sourceSkillId}`） */
+  treasureActiveCounters?: Map<string, number>;
   /**
    * 「造成伤害后再受一次策略伤害」标记（翕处还张）：按持有者记录，命中其**下一次造成伤害**时结算并消耗。
    */
@@ -2736,6 +2738,22 @@ function inflictStatusCore(
       extend.charges -= 1;
       if (extend.charges <= 0) caster.statuses = caster.statuses.filter((s) => s !== extend);
     }
+    // 宝物「阵舞」：女性携带者用主战法施加控制时，目标「受该控制期间受到的所有伤害提高」
+    const amplify = caster?.statuses.find(
+      (s): s is Extract<Status, { type: 'treasure_control_amplify' }> =>
+        s.type === 'treasure_control_amplify' &&
+        (!s.mainSkillOnly || caster!.general.mainSkillId === sourceSkillId),
+    );
+    if (caster && amplify && 'duration' in create && typeof create.duration === 'number') {
+      pushStatus(
+        ctx,
+        target,
+        { type: 'damage_boost', rate: amplify.rate, duration: create.duration, direction: 'taken' },
+        amplify.sourceSkillType,
+        amplify.sourceSkillId,
+        caster.general.id,
+      );
+    }
   }
 
   // 持续型急救（皇裔流离/金匮要略）：同为指挥战法的持续型急救互斥——先施加者生效，后施加者被拒；
@@ -4074,6 +4092,14 @@ function pushStatus(
     ...(create.type === 'treasure_basic_next' ? { rate: create.rate } : {}),
     // 宝物「仁心」/「矜节」/「济世」：恢复加成与恢复触发减伤
     ...(create.type === 'heal_out_boost' || create.type === 'heal_trigger_reduce' ? { rate: create.rate } : {}),
+    // 宝物「鸠佑」/「归心」/「阵舞」
+    ...(create.type === 'treasure_after_main'
+      ? { perStack: create.perStack, maxStacks: create.maxStacks, stacks: 0 }
+      : {}),
+    ...(create.type === 'treasure_ally_active_heal' ? { every: create.every, rate: create.rate } : {}),
+    ...(create.type === 'treasure_control_amplify'
+      ? { rate: create.rate, ...(create.mainSkillOnly ? { mainSkillOnly: true } : {}) }
+      : {}),
   } as Status);
   ctx.events.push({
     type: 'status_inflicted',
@@ -4359,6 +4385,10 @@ export function isBeneficialStatus(s: Status): boolean {
     // 宝物：恢复加成 / 恢复触发减伤
     case 'heal_out_boost':
     case 'heal_trigger_reduce':
+    // 宝物：主战法发动后钩子
+    case 'treasure_after_main':
+    case 'treasure_ally_active_heal':
+    case 'treasure_control_amplify':
       return true;
     default:
       return false;
@@ -4741,6 +4771,9 @@ function statusName(type: StatusType): string {
     case 'treasure_basic_purge': return '普攻移除增益';
     case 'heal_out_boost': return '恢复效果提高';
     case 'heal_trigger_reduce': return '恢复触发减伤';
+    case 'treasure_after_main': return '主战法后增伤';
+    case 'treasure_ally_active_heal': return '全体主动计数恢复';
+    case 'treasure_control_amplify': return '控制目标易伤';
     case 'siege': return '围困';
     case 'sorcery': return '妖术';
     case 'burning': return '燃烧';
@@ -7228,6 +7261,7 @@ export function triggerActiveSkill(
   triggerAfterFirstActiveCommands(ctx, unit);
   triggerAllyRecastCommands(ctx, unit, skill);
   triggerPassiveAfterActive(ctx, unit);
+  applyTreasureAfterActive(ctx, unit, skill);
   // 三军夺帅：成功发动主动战法后触发；奉令护蜀：本侧友军行动叠层
   triggerActHooks(ctx, unit);
   // 乘间击隙 / 勠力同心：主动战法成功发动后钩子（准备战法在释放时同样算发动）
@@ -7249,6 +7283,7 @@ function executePreparedSkill(
   triggerAfterFirstActiveCommands(ctx, unit);
   triggerAllyRecastCommands(ctx, unit, skill);
   triggerPassiveAfterActive(ctx, unit);
+  applyTreasureAfterActive(ctx, unit, skill);
   // 三军夺帅：成功发动主动战法后触发；奉令护蜀：本侧友军行动叠层
   triggerActHooks(ctx, unit);
   // 乘间击隙 / 勠力同心：主动战法成功发动后钩子（准备战法在释放时同样算发动）
@@ -7534,6 +7569,54 @@ export function triggerPassiveAfterAct(ctx: CombatContext, unit: UnitState): voi
       skillName: skill.name,
     });
     executeSkillOutputs(ctx, unit, skill, enemies, skill.afterAct.output);
+  }
+}
+
+/**
+ * 宝物·主动战法发动后钩子（在主动/准备战法成功释放后调用，与 `triggerPassiveAfterActive` 同点）：
+ *  - `treasure_after_main`（鸠佑）：**主战法**发动后 → 叠 1 层「造成攻击伤害提高」
+ *  - `treasure_ally_active_heal`（归心）：我军全体每发动 N 次主动战法 → **携带者自身**恢复
+ * 无宝物时零开销（状态不存在即空转）。
+ */
+export function applyTreasureAfterActive(ctx: CombatContext, unit: UnitState, skill: Skill): void {
+  const allies = unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+  const isMainSkill = !!unit.general.mainSkillId && skill.id === unit.general.mainSkillId;
+  for (const u of allies) {
+    if (!u.alive) continue;
+    for (const s of [...u.statuses]) {
+      if (s.type === 'treasure_after_main') {
+        if (!isMainSkill || s.stacks >= s.maxStacks) continue;
+        s.stacks += 1;
+        inflictStatus(
+          ctx,
+          u,
+          { type: 'damage_boost', rate: s.perStack, duration: 999, direction: 'caused', damageType: 'physical' },
+          s.sourceSkillType,
+          s.sourceSkillId,
+          u.general.id,
+        );
+      } else if (s.type === 'treasure_ally_active_heal') {
+        const key = `${u.general.id}:${s.sourceSkillId}`;
+        ctx.treasureActiveCounters ??= new Map();
+        const n = (ctx.treasureActiveCounters.get(key) ?? 0) + 1;
+        ctx.treasureActiveCounters.set(key, n);
+        if (n % s.every !== 0) continue;
+        const before = u.troops;
+        const healed = recoverTroops(ctx, u, calcHealAmount(u.troops, s.rate), u);
+        if (healed > 0) {
+          ctx.events.push({
+            type: 'heal',
+            sourceId: u.general.id,
+            targetId: u.general.id,
+            skillId: s.sourceSkillId,
+            skillName: statusName('treasure_ally_active_heal') ?? s.sourceSkillId,
+            amount: healed,
+            before,
+            after: u.troops,
+          });
+        }
+      }
+    }
   }
 }
 
