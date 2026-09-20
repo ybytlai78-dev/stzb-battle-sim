@@ -2379,7 +2379,7 @@
     "growthDefense": 1.8,
     "growthStrategy": 2.4,
     "growthSpeed": 1.01,
-    "mainSkillId": "",
+    "mainSkillId": "chizhi_nanchou",
     "mainSkillName": "迟智难酬",
     "skillDesc": "对敌军群体发动一次策略攻击（伤害率240.0%，受谋略属性影响），并使友军群体受到下1次策略攻击的伤害大幅度降低"
   },

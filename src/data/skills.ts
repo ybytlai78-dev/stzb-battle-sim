@@ -9121,4 +9121,47 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+
+  /**
+   * 迟智难酬（陈宫·群弓 h443 主战法）：主动 S（无准备），距离 5，敌军群体（有效距离内 2 个目标），发动率 40%。
+   * 满级「对敌军群体发动一次策略攻击（伤害率 240.0%，受谋略属性影响），并使友军群体受到下 1-2 次策略攻击的
+   *   伤害大幅度降低」；1 级：策略伤害 120.0%（旧版本描述写「下 1 次」）。
+   * 官方：scripts/skill_extra.json id 200805（主动 / 距离 5 / 敌军群体2 / 兵种弓；
+   *   effect 标签 策略攻击伤害;受到策略攻击伤害降低）。来源 https://stzb.163.com/m/skilllist/200805.html
+   *
+   * 口径（策略 A，2026-09-20；推定处已标注）：
+   *   ① 官方现页为 40%，本地旧数据（skill_extra/web/heroes.json）为 35% → 按策略 A ① 取**官方 40%**；
+   *   ② 「使友军群体…」= 段级 `targetSide:'ally'` + `targetMode:'group'`（群体 = 有效距离内 2 个目标，
+   *      含施法者自身，仓库 `allies` 口径）；
+   *   ③ 「受到…伤害大幅度降低」——用户 2026-09-20 口径「大幅度」= 极大值 → `damage_boost` direction **taken**
+   *      rate **−99.99（−9999%）**，配合 buffMult 10% 伤害下限把该次策略伤害压到最低，战报显示「受到的伤害大幅降低」；
+   *   ④ 「下 1-2 次」按字面取**随机 1~2 次**（`charges: [1,2]` 施加时均匀随机；辕门射戟 groupCount [2,3] 先例），**推定**；
+   *      只对**策略攻击**消耗（`damageType:'strategy'` 过滤 → 普通攻击/攻击战法不吃也不扣）；
+   *   ⑤ 策略伤害 240% 受谋略而官方未给成长系数 → `strategyScaled: true` + `growthRate` 缺（按基值不缩放）
+   *      → 登记 OFFLINE_MAIN_SKILLS → **武将下架**。
+   */
+  chizhi_nanchou: {
+    id: 'chizhi_nanchou',
+    name: '迟智难酬',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.4, // 官方现页 40%（本地旧数据 35% 按策略 A ① 弃用）
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage', 'damage_boost'],
+    output: [
+      // ① 敌军群体（2 目标）策略攻击 240%（受谋略未确认 → 基值）
+      { kind: 'strategy_damage', rate: 240, strategyScaled: true },
+      // ② 友军群体（2 目标）「受到下 1-2 次策略攻击的伤害大幅降低」（极大值 −9999%，只吃策略攻击）
+      {
+        kind: 'inflict_status',
+        targetSide: 'ally',
+        targetMode: 'group',
+        groupCount: 2,
+        status: { type: 'damage_boost', rate: -99.99, duration: 999, direction: 'taken', damageType: 'strategy', charges: [1, 2] },
+      },
+    ],
+  },
 };

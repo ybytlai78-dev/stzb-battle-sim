@@ -3587,7 +3587,9 @@ function pushStatus(
       if ((push as { stacks?: number }).stacks == null) (push as { stacks?: number }).stacks = 1;
     }
     if (type === 'damage_boost' && 'charges' in create && create.charges != null) {
-      (push as { charges?: number }).charges = create.charges;
+      // 次数可为 [min,max]：**施加时**均匀随机取一次（迟智难酬「受到下 1-2 次策略攻击的伤害大幅度降低」）
+      const c = create.charges;
+      (push as { charges?: number }).charges = Array.isArray(c) ? ctx.rng.intInclusive(c[0], c[1]) : c;
     }
     // 增减伤按本次伤害过滤（方圆/锋矢/白刃）：拷到 Status，缺省不过滤
     if ((type === 'damage_boost' || type === 'damage_reduce') && 'damageSource' in create && create.damageSource != null) {
