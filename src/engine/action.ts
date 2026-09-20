@@ -1926,6 +1926,10 @@ function addStackLayer(
     (s) => s.type === type && s.sourceSkillId === eff.skillId
   );
   if (sameSource.length >= maxStacks) return;
+  // 属性升降「之前」判定（举贤决机）：本路径**不经 `inflictStatus`**（同源同类型逐层独立 push，
+  // 不走冲突/刷新逻辑），须在此补判一次「被成功施加属性升降效果前」——命中则先结算 output，再落层。
+  // 持节镇西只会提高属性（sign='up' → 友军恢复）；已达上限时上面已 return（本次不落层）故不判定。
+  triggerOnAttrChange(ctx, unit, amount >= 0 ? 'up' : 'down');
   const status: Status =
     type === 'attack_buff'
       ? { type: 'attack_buff', amount, remaining: 1, appliedRound: ctx.currentRound, sourceSkillType: 'command', sourceSkillId: eff.skillId }
