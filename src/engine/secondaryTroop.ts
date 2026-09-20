@@ -85,9 +85,17 @@ export interface SecondaryTroopDef {
   /** 是否为武将专属（转换方向由个别武将独有） */
   exclusive: boolean;
   /**
-   * 攻击距离修正（用户 2026-09-20 确认：长弓兵 +1、死士 −1）。
+   * **攻击距离**修正（死士 −1；其余 0）。
+   * 官方：死士攻击距离固定 1 → 只影响普攻可达范围（target.ts `attackRangeOf`）。
    */
   rangeMod?: number;
+  /**
+   * **战法距离**修正（弓骑兵 +1；其余 0）。
+   * 官方：弓骑兵「骑射」→ 战法距离 +1（target.ts `skillRangeOf`）。
+   */
+  skillRangeMod?: number;
+  /** 永久四维加减（点数，直接并入 effectiveStat）：死士 攻/防/谋 +18、轻骑兵 速度 +15 */
+  statMod?: Partial<Record<'attack' | 'defense' | 'strategy' | 'speed', number>>;
 }
 
 /** 二级兵种注册表（code 与中文名双向可查） */
@@ -108,9 +116,13 @@ export const SECONDARY_TROOPS: Record<SecondaryTroopType, SecondaryTroopDef> = {
   死士: {
     code: '31',
     family: '弓兵系',
-    exclusiveTrait: ['钢毅：怯战、犹豫状态下自身受到所有伤害 −20%'],
+    exclusiveTrait: [
+      '无畏 / 短兵：自身**攻击距离固定为 1**（−1），攻击、防御、谋略属性各 **+18**',
+      '钢毅：怯战、犹豫状态下自身受到所有伤害 −20%',
+    ],
     exclusive: false,
     rangeMod: -1,
+    statMod: { attack: 18, defense: 18, strategy: 18 },
   },
   重步兵: {
     code: '12',
@@ -154,8 +166,12 @@ export const SECONDARY_TROOPS: Record<SecondaryTroopType, SecondaryTroopDef> = {
   轻骑兵: {
     code: '23',
     family: '骑兵系',
-    exclusiveTrait: ['轻骑冲阵：战斗开始后前 4 次攻击造成的伤害 +18%（用户 2026-09-20 口径）'],
+    exclusiveTrait: [
+      '速度属性提高 15 点（用户 2026-09-20 口径）',
+      '轻骑冲阵：战斗开始后前 4 次攻击造成的伤害 +18%',
+    ],
     exclusive: false,
+    statMod: { speed: 15 },
   },
   铁骑兵: {
     code: '43',
@@ -166,13 +182,17 @@ export const SECONDARY_TROOPS: Record<SecondaryTroopType, SecondaryTroopDef> = {
   弓骑兵: {
     code: '33',
     family: '骑兵系',
-    exclusiveTrait: ['行踪难测：受到追击战法伤害 −90%', '骑射：可学弓兵与骑兵战法，战法距离 +1'],
+    exclusiveTrait: ['行踪难测：受到追击战法伤害 −90%', '骑射：可学弓兵与骑兵战法，**战法距离 +1**'],
     exclusive: false,
+    skillRangeMod: 1,
   },
   象兵: {
     code: '53',
     family: '骑兵系',
-    exclusiveTrait: ['野性：不受任何指挥战法产生的效果影响（敌我双方、正面负面一视同仁）'],
+    exclusiveTrait: [
+      '野性：不受任何指挥战法产生的效果影响（敌我双方、正面负面一视同仁）',
+      '自身受到的所有伤害 −10%',
+    ],
     exclusive: false,
   },
   // —— 武将专属（占位：专属特性数值待补，训练/转换关系已入库）——
@@ -204,6 +224,19 @@ export function familyOf(troop: SecondaryTroopType): TroopFamily {
 /** 攻击距离修正（长弓兵 +1 / 死士 −1 / 其余 0） */
 export function rangeModOf(troop: SecondaryTroopType | undefined): number {
   return troop ? SECONDARY_TROOPS[troop].rangeMod ?? 0 : 0;
+}
+
+/** 战法距离修正（弓骑兵 +1 / 其余 0） */
+export function skillRangeModOf(troop: SecondaryTroopType | undefined): number {
+  return troop ? SECONDARY_TROOPS[troop].skillRangeMod ?? 0 : 0;
+}
+
+/** 二级兵种永久属性加减（点数）：死士 攻/防/谋 +18、轻骑兵 速度 +15 */
+export function statModOf(
+  troop: SecondaryTroopType | undefined,
+  kind: 'attack' | 'defense' | 'strategy' | 'speed'
+): number {
+  return troop ? SECONDARY_TROOPS[troop].statMod?.[kind] ?? 0 : 0;
 }
 
 /**
@@ -405,6 +438,7 @@ export function traitCombatModifiers(x: TraitCombatContext): TraitModifiers {
     if (any) reduce += 0.25;
   }
   if (t === '重骑兵') reduce += 0.1;
+  if (t === '象兵') reduce += 0.1;
   if (t === '藤甲兵') reduce += x.isBurning ? -0.15 : 0.3;
   if (t === '长弓兵') reduce -= 0.08; // 轻装：自身受到所有伤害 +8%
   if (t === '弓骑兵' && x.isPursuit) reduce += 0.9;

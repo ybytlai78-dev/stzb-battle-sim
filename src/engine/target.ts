@@ -10,7 +10,7 @@
  * 相对位次查距离矩阵。例：双方只剩大营 → 双方大营都压到己方 0 位 → 距离 1。
  */
 import type { UnitState } from './types';
-import { rangeModOf } from './secondaryTroop';
+import { rangeModOf, skillRangeModOf } from './secondaryTroop';
 import type { CombatContext } from './action';
 
 const POSITION_INDEX: Record<string, number> = { 前锋: 0, 中军: 1, 大营: 2 };
@@ -87,7 +87,8 @@ export function skillRangeOf(unit: UnitState, base: number): number {
   for (const s of unit.statuses) {
     if (s.type === 'skill_range_buff') bonus += s.amount;
   }
-  return base + bonus;
+  // 二级兵种：弓骑兵「骑射」战法距离 +1
+  return base + bonus + skillRangeModOf(unit.general.secondaryTroop);
 }
 
 /** 攻击范围内随机一个存活敌军（率土普攻目标选取：距离内均匀随机，非最近优先）。距离实时计算 */

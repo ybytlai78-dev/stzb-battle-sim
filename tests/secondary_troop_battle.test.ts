@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 二级兵种（兵种转换）战斗期测试
  *
  * 覆盖用户 2026-09-20 审定的口径：
@@ -14,7 +14,7 @@ import { runBattle } from '../src/engine/combat';
 import type { BattleEvent, DamageModifiers, General, TroopType } from '../src/engine/types';
 import type { GeneralTrait, SecondaryTroopType } from '../src/engine/secondaryTroop';
 import { initHeroDB } from '../src/data/heroes';
-import { attackRangeOf } from '../src/engine/target';
+import { attackRangeOf, skillRangeOf } from '../src/engine/target';
 import { effectiveStat } from '../src/engine/action';
 
 beforeAll(async () => {
@@ -363,6 +363,41 @@ describe('二级兵种专属特性：状态类（反击 / 分兵）', () => {
 
     const plain = runBattle({ myTeam: [plainG], enemyTeam: enemies(), seed: 555, maxRounds: 4 });
     expect(plain.events.filter((e) => e.type === 'split_damage').length).toBe(0);
+  });
+});
+
+describe('二级兵种：永久属性加减（用户 2026-09-20 纠正）', () => {
+  it('死士：攻/防/谋各 +18（effectiveStat 生效）', () => {
+    const g = makeGeneral('d', 'archer', { attack: 200, defense: 100, strategy: 90, secondaryTroop: '死士' });
+    const unit = { general: g, statuses: [] } as never;
+    expect(effectiveStat(unit, 'attack')).toBe(218);
+    expect(effectiveStat(unit, 'defense')).toBe(118);
+    expect(effectiveStat(unit, 'strategy')).toBe(108);
+  });
+
+  it('轻骑兵：速度 +15（effectiveStat 生效，且能吃先手排序）', () => {
+    const g = makeGeneral('c', 'cavalry', { speed: 100, secondaryTroop: '轻骑兵' });
+    expect(effectiveStat({ general: g, statuses: [] } as never, 'speed')).toBe(115);
+    const plain = makeGeneral('c', 'cavalry', { speed: 100 });
+    expect(effectiveStat({ general: plain, statuses: [] } as never, 'speed')).toBe(100);
+  });
+
+  it('弓骑兵：战法距离 +1（skillRangeOf）；象兵无距离修正', () => {
+    const bow = makeGeneral('b', 'cavalry', { secondaryTroop: '弓骑兵' });
+    const eleph = makeGeneral('e', 'cavalry', { secondaryTroop: '象兵' });
+    expect(skillRangeOf({ general: bow, statuses: [] } as never, 4)).toBe(5);
+    expect(skillRangeOf({ general: eleph, statuses: [] } as never, 4)).toBe(4);
+    expect(skillRangeOf({ general: eleph, statuses: [] } as never, 4)).toBe(4);
+  });
+
+  it('象兵：受到的所有伤害 −10%', () => {
+    const atk = () => makeGeneral('a', 'infantry', { speed: 200, attack: 250 });
+    const plain = runDuel(atk(), makeGeneral('d', 'cavalry', { speed: 1 }), 818);
+    const eleph = runDuel(atk(), makeGeneral('d', 'cavalry', { speed: 1, secondaryTroop: '象兵' }), 818);
+    const t0 = totalTaken(plain, 'd');
+    const t1 = totalTaken(eleph, 'd');
+    expect(t1).toBeLessThan(t0);
+    expect(t1).toBeLessThan(t0 * 0.95);
   });
 });
 
