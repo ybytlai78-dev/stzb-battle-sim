@@ -3795,6 +3795,10 @@ function pushStatus(
     if (type === 'damage_reduce' && 'firstHitPerRound' in create && create.firstHitPerRound) {
       (push as { firstHitPerRound?: boolean }).firstHitPerRound = true;
     }
+    // 宝物「威势」：攻击方统率低于自身才生效
+    if (type === 'damage_reduce' && 'enemyCostBelowSelf' in create && create.enemyCostBelowSelf) {
+      (push as { enemyCostBelowSelf?: boolean }).enemyCostBelowSelf = true;
+    }
     // 宝物「奇袭」：按距离逐点增伤
     if (type === 'damage_boost' && 'perDistance' in create && create.perDistance) {
       (push as { perDistance?: boolean }).perDistance = true;
@@ -4468,6 +4472,10 @@ export function isBeneficialStatus(s: Status): boolean {
     // 宝物：禁普攻 / 兵力越低恢复越高
     case 'no_attack':
     case 'heal_low_troops':
+    // 宝物：首次追击额外目标
+    case 'treasure_extra_pursuit_target':
+    // 宝物：首次普攻横扫
+    case 'treasure_basic_sweep':
       return true;
     default:
       return false;
@@ -4664,9 +4672,18 @@ export function sumReduce(ctx: CombatContext, target: UnitState, hit?: DamageHit
       (!('requireSelfStatus' in s) || !s.requireSelfStatus || hasRequiredSelfStatus(target, s.requireSelfStatus)) &&
       // 宝物「强固」：每回合首次减伤 —— 本回合该状态尚未生效过才计入
       (!('firstHitPerRound' in s && s.firstHitPerRound) ||
-        !ctx.firstHitReduceKeys?.has(`${ctx.currentRound}:${target.general.id}:${s.sourceSkillId}`))
+        !ctx.firstHitReduceKeys?.has(`${ctx.currentRound}:${target.general.id}:${s.sourceSkillId}`)) &&
+      // 宝物「威势」：仅当伤害来源（当前行动者）的初始统率低于携带者时生效
+      (!('enemyCostBelowSelf' in s && s.enemyCostBelowSelf) || isLowerCostAttacker(ctx, target))
   );
   return sumRates(list, 'damage_reduce') + pendingStacksReduceOf(target) + hurtStackReduceOf(target);
+}
+
+/** 宝物「威势」：当前伤害来源（`ctx.actingUnitId`）的**初始统率**是否低于携带者 */
+function isLowerCostAttacker(ctx: CombatContext, target: UnitState): boolean {
+  const attacker = ctx.actingUnitId ? castUnit(ctx, ctx.actingUnitId) : undefined;
+  if (!attacker || attacker === target) return false;
+  return attacker.general.cost < target.general.cost;
 }
 
 /** 宝物「强固」：本次实际扣兵后标记「本回合已用」（applyDamage 扣兵后调用） */
@@ -4900,6 +4917,8 @@ function statusName(type: StatusType): string {
     case 'treasure_prepare_skip': return '第 N 次跳过准备';
     case 'no_attack': return '无法普通攻击';
     case 'heal_low_troops': return '兵力越低恢复越高';
+    case 'treasure_extra_pursuit_target': return '首次追击额外目标';
+    case 'treasure_basic_sweep': return '首次普攻横扫';
     case 'siege': return '围困';
     case 'sorcery': return '妖术';
     case 'burning': return '燃烧';
@@ -7940,11 +7959,25 @@ function triggerPursuitSkill(
   });
   if (!success) return;
 
+  // 宝物「迸发」（元戎）：首次发动追击主战法时，额外选取攻击距离内 1 个目标（触发即移除）
+  let targets = [hitTarget];
+  const extraMark = unit.statuses.find((s) => s.type === 'treasure_extra_pursuit_target');
+  if (extraMark) {
+    unit.statuses = unit.statuses.filter((s) => s !== extraMark);
+    const range = attackRangeOf(unit);
+    const candidates = enemies.filter(
+      (e) => e.alive && e !== hitTarget && distanceBetween(ctx, unit, e) <= range,
+    );
+    if (candidates.length > 0) {
+      targets = [...targets, candidates[ctx.rng.intInclusive(0, candidates.length - 1)]];
+    }
+  }
+
   ctx.events.push({
     type: 'skill_target',
     unitId: unit.general.id,
     skillId: skill.id,
-    targetIds: [hitTarget.general.id],
+    targetIds: targets.map((t) => t.general.id),
   });
   ctx.events.push({
     type: 'skill_cast',
@@ -7952,7 +7985,7 @@ function triggerPursuitSkill(
     skillId: skill.id,
     skillName: skill.name,
   });
-  executeSkillOutputs(ctx, unit, skill, [hitTarget]);
+  executeSkillOutputs(ctx, unit, skill, targets);
   // 三军夺帅：成功发动追击战法后触发；奉令护蜀：本侧友军行动叠层
   triggerActHooks(ctx, unit);
   // 乘间击隙 / 勠力同心：追击战法成功发动后钩子
@@ -8035,6 +8068,18 @@ function normalAttack(
 
   const distance = distanceBetween(ctx, unit, target);
   dealAttack(ctx, unit, target, distance);
+  // 宝物「劲弩」（神锋）：第 2 回合起首次发动普通攻击时，对攻击距离内敌军全体各发动 1 次普通攻击
+  const sweep = unit.statuses.find((s) => s.type === 'treasure_basic_sweep');
+  if (sweep && ctx.currentRound >= 2) {
+    unit.statuses = unit.statuses.filter((s) => s !== sweep);
+    const range = attackRangeOf(unit);
+    for (const e of enemies) {
+      if (!e.alive || e === target) continue;
+      const d = distanceBetween(ctx, unit, e);
+      if (d > range) continue;
+      dealAttack(ctx, unit, e, d);
+    }
+  }
   // 七步释嫌等：成功发动普通攻击（含规避命中）后触发
   triggerAllyActCommands(ctx, unit);
   // 三军夺帅：成功发动普通攻击后触发；奉令护蜀：本侧友军行动叠层

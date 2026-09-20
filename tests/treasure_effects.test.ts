@@ -93,15 +93,12 @@ describe('宝物引擎 · 自带特效换算', () => {
     expect(lost, `这些已实现特效没有产出状态：${lost.join('、')}`).toEqual([]);
   });
 
-  it('未实现词条（PENDING）不产出状态，但会被登记', () => {
-    expect(Object.keys(PENDING).length).toBeGreaterThan(0);
-    // 元戎：陷阵 / 无畏 / 迸发（迸发 未实现 → 只出 2 条）
-    const yuanrong = TREASURES_BY_ID[1102];
-    expect(yuanrong.effects.map((e) => e.name)).toEqual(['陷阵', '无畏', '迸发']);
-    expect(build(1102)).toHaveLength(2);
-    expect(PENDING['迸发']).toBeTruthy();
-    // 已实现的 谋断（掩日）正常产出 → 3 条
-    expect(build(1063)).toHaveLength(3);
+  it('PENDING 已清空：43 条自带特效名 + 36 条锻造词条全部落地', () => {
+    expect(Object.keys(PENDING)).toEqual([]);
+    // 彤素：骁锐 / 亢厉 / 奇袭 —— 三条都产出状态
+    expect(build(1003)).toHaveLength(3);
+    // 神锋：无畏 / 英才 / 劲弩 —— 劲弩 = 禁普攻 + 首攻横扫 两条状态
+    expect(build(1105).length).toBeGreaterThanOrEqual(4);
   });
 
   it('明镜（泰阿）：谋略 ×5=10，仅当初始统率 < 3 时额外给 1.5×5=7.5 防御', () => {

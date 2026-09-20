@@ -217,6 +217,17 @@ const MECHANICS: Record<string, Mechanic> = {
   ],
   // 不懈（锻造词条）：自身每低于初始兵力 15%，受到的恢复效果提升
   不懈: (v) => [{ type: 'heal_low_troops', perStep: v / 100, stepPct: 15, duration: FOREVER } as CreateStatus],
+  // 迸发（元戎）：首次发动追击主战法时，额外选取攻击距离内 1 个目标
+  迸发: () => [{ type: 'treasure_extra_pursuit_target', duration: FOREVER } as CreateStatus],
+  // 劲弩（神锋）：首回合无法普通攻击；第 2 回合起首次发动普通攻击时，对攻击距离内敌军全体发动 1 次普通攻击
+  劲弩: () => [
+    { type: 'no_attack', duration: 1 } as CreateStatus,
+    { type: 'treasure_basic_sweep', duration: FOREVER } as CreateStatus,
+  ],
+  // 威势（锻造词条）：受到初始统率值低于自身武将的所有伤害降低（按当前伤害来源统率判定）
+  威势: (v) => [
+    { type: 'damage_reduce', rate: v / 100, duration: FOREVER, enemyCostBelowSelf: true } as CreateStatus,
+  ],
 };
 
 /** 同名词条但语义随宝物变化：key = `${treasureId}:${slot}` */
@@ -239,12 +250,7 @@ const OVERRIDES: Record<string, Mechanic> = {
 };
 
 /** 尚未落地的词条（分档见方案 §3.2）；键 = 词条名，值 = 需要的机制 */
-export const PENDING: Record<string, string> = {
-  /** 需在伤害路径携带「攻击方」引用（DamageHitContext 目前无 attackerId）→ 待补 */
-  威势: '受到初始统率值低于自身武将的所有伤害降低（需伤害路径带攻击方统率）',
-  迸发: '首次追击额外选 1 个目标',
-  劲弩: '首回合禁普攻 + 次回合全体普攻',
-};
+export const PENDING: Record<string, string> = {};
 
 /** 取某条特效的机制（先查覆盖表，再查同名表） */
 function mechanicFor(treasureId: number, effect: TreasureEffectDef): Mechanic | undefined {
