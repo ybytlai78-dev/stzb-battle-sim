@@ -817,12 +817,17 @@ main {
 }
 .hero-card.picked { opacity: .45; }
 /* 画像：铺满整张卡——左侧竖带与顶部渐变是卡框的半透明遮罩，画像透过它显示 */
+/* 画像＝<img loading="lazy" decoding="async">：池卡一屏只拉视口附近的图，不再一次性解码 163 张大图（卡死主因） */
 .hero-card .art {
   position: absolute;
   inset: 0;
-  background-size: cover;
-  background-position: top center;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: top center;
   background-color: var(--color-bg);
+  display: block;
+  pointer-events: none;
 }
 /* 卡框素材层（卡面通用：武将池卡 / 配将槽位卡 / 简略战报卡；background-image 内联注入，走 asset() 加 BASE_URL） */
 .frame {

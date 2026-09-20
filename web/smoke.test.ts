@@ -127,7 +127,14 @@ describe('Web 战斗模拟器冒烟', () => {
     const frame = card.querySelector('.frame') as HTMLElement;
     expect(frame, '武将卡应有卡框层').toBeTruthy();
     expect(frame.style.backgroundImage).toContain('card-frame-5.png');
-    expect((card.querySelector('.art') as HTMLElement).style.backgroundImage).toContain('/portraits/');
+    // 画像＝<img class="art" loading="lazy">（懒加载：一屏只拉视口附近的图，避免 163 张大图把标签卡死）
+    const art = card.querySelector('img.art') as HTMLImageElement;
+    expect(art, '画像应是 img.art').toBeTruthy();
+    expect(art.src).toContain('/portraits/');
+    expect(art.getAttribute('loading')).toBe('lazy');
+    expect(art.getAttribute('decoding')).toBe('async');
+    expect(art.getAttribute('draggable')).toBe('false');   // 不抢卡片自身的拖拽
+    expect(art.alt).toBe('');
     // 左上角＝官方势力图标（faction-*.png 行书彩字），data-faction 供筛选/测试读取
     const fac = card.querySelector('img.fac') as HTMLImageElement;
     expect(fac, '左上角应是势力图标').toBeTruthy();

@@ -92,7 +92,7 @@ function heroCard(g: General, troops: number, color: 'red' | 'blue'): string {
   return `
     <div class="sum-hero ${dead ? 'dead' : ''}">
       <div class="sh-card">
-        <img class="sh-art" src="${portraitSrc(g.id)}" alt="${g.name}" onerror="this.style.display='none'" />
+        <img class="sh-art" src="${portraitSrc(g.id)}" alt="${g.name}" loading="lazy" decoding="async" onerror="this.style.display='none'" />
         <div class="frame" style="background-image:url('${cardFrameSrc()}')"></div>
         <div class="plate">
           ${facIcon ? `<img class="fac" data-faction="${faction}" alt="${faction}" src="${facIcon}" />` : ''}

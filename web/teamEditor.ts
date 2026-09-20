@@ -296,7 +296,7 @@ function heroCardHtml(hero: HeroJson, level = 40, offlineNote?: string): string 
   const sp = hero.tags.includes('sp');
   const tag = offlineNote ? ' <span class="offline-tag">下架</span>' : '';
   return `
-      <div class="art" style="background-image:url('${art}')"></div>
+      <img class="art" src="${art}" alt="" draggable="false" loading="lazy" decoding="async" />
       <div class="frame" style="background-image:url('${frame}')"></div>
       <div class="plate">
         <img class="fac" data-faction="${hero.faction}" alt="${hero.faction}" src="${factionIconSrc(hero.faction)}" />
