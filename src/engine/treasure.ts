@@ -113,6 +113,10 @@ const MECHANICS: Record<string, Mechanic> = {
   妙算: boost({ skillTypes: ['active'], damageType: 'strategy' }), // 主动战法的策略伤害提高
   勇猛: boost({ damageType: 'physical' }), // 造成的攻击伤害提高
   睚眦: boost({ dotTypes: ['panic', 'sorcery', 'burning', 'ignite'] }), // 恐慌/妖术/燃烧/火攻
+  // 迅猛：处于连击状态时，普通攻击伤害提高（条件增伤：携带者自身带 combo）
+  迅猛: (v) => [
+    { type: 'damage_boost', rate: v / 100, direction: 'caused', duration: FOREVER, damageSource: 'basic', requireSelfStatus: 'combo' } as CreateStatus,
+  ],
   炎势: boost({ dotTypes: ['burning', 'ignite'] }), // 火攻、燃烧
   驱火: boost({ dotTypes: ['burning', 'ignite'] }), // 燃烧及火攻（锻造词条）
   炫惑: boost({ dotTypes: ['panic', 'sorcery'] }), // 恐慌及妖术（锻造词条）
@@ -175,7 +179,6 @@ export const PENDING: Record<string, string> = {
   破浪: '受伤叠层增伤（上限 10 层）',
   破障: '普攻后移除目标 1 种增益',
   鸠佑: '主动主战法发动后叠层增伤',
-  迅猛: '连击状态下普攻增伤（条件）',
   奇袭: '按距离增伤（条件）',
   机敏_: '—',
   筹算: '策略伤害武将主战法发动率（条件发动率）',

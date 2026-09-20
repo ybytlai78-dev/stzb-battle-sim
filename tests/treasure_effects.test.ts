@@ -110,4 +110,13 @@ describe('宝物引擎 · 自带特效换算', () => {
     expect(anzhen.rate).toBeCloseTo(0.05, 6);
     expect(anzhen.requireSelfStatus).toEqual(['confusion', 'rampage', 'cowardice', 'hesitation']);
   });
+
+  it('迅猛（貅猊）：连击状态下普攻增伤 = 20%，条件挂在 requireSelfStatus\n（增伤 20% 为三阶固定值）', () => {
+    const [meng] = labelled(1093, '迅猛');
+    expect(meng.type).toBe('damage_boost');
+    expect(meng.direction).toBe('caused');
+    expect(meng.damageSource).toBe('basic');
+    expect(meng.requireSelfStatus).toBe('combo');
+    expect(meng.rate).toBeCloseTo(0.2, 6);
+  });
 });

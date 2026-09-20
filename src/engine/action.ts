@@ -3662,8 +3662,8 @@ function pushStatus(
     if (type === 'damage_boost' && 'skillIds' in create && create.skillIds != null) {
       (push as { skillIds?: string[] }).skillIds = create.skillIds;
     }
-    // 条件减伤（人公将军）：仅当携带者自身带该状态时生效
-    if (type === 'damage_reduce' && 'requireSelfStatus' in create && create.requireSelfStatus != null) {
+    // 条件减伤（人公将军）/ 条件增伤（宝物「迅猛」）：仅当携带者自身带该状态（可多值）时生效
+    if ((type === 'damage_reduce' || type === 'damage_boost') && 'requireSelfStatus' in create && create.requireSelfStatus != null) {
       (push as { requireSelfStatus?: StatusType | StatusType[] }).requireSelfStatus = create.requireSelfStatus;
     }
     // 仅「进行攻击」的增减伤（缚父临危「下两次**攻击**造成的伤害提升 30%」）：普攻 / 物理主动 / 追击
@@ -4491,15 +4491,20 @@ function damageBoosts(
   // 状态挂在攻击者身上，按**携带者阵营 vs 受击者阵营**判定；同阵营则该增伤不生效。
   const factionOk = (s: { targetFactionNotSelf?: boolean }) =>
     !s.targetFactionNotSelf || source.general.faction !== target.general.faction;
+  // 条件增减伤（宝物「迅猛」：处于连击状态时普攻增伤）——按**携带者当前**状态实时判定
+  const selfReqOk = (holder: UnitState, s: { requireSelfStatus?: StatusType | StatusType[] }) =>
+    hasRequiredSelfStatus(holder, s.requireSelfStatus);
   const causedBoost = sumRates(
     source.statuses.filter(
-      (s) => s.type === 'damage_boost' && statusMatchesHit(s, hit) && factionOk(s)
+      (s) => s.type === 'damage_boost' && statusMatchesHit(s, hit) && factionOk(s) && selfReqOk(source, s)
     ),
     'damage_boost',
     'caused'
   );
   const takenBoost = sumRates(
-    target.statuses.filter((s) => s.type === 'damage_boost' && statusMatchesHit(s, hit)),
+    target.statuses.filter(
+      (s) => s.type === 'damage_boost' && statusMatchesHit(s, hit) && selfReqOk(target, s)
+    ),
     'damage_boost',
     'taken'
   );
