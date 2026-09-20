@@ -9372,7 +9372,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    *   ④ 「若持续时间内任一战法发动，则下回合可选择 3 个」→ `allySlotBoost.firedCount:3`：
    *      窗口监视（`ctx.allySlotBoostWatch` + `triggerAllySlotBoostWatch`：被加持友军成功发动主动战法即置位），
    *      下一次行动按 2 / 3 取人数（**推定**：官方主语模糊，按「田丰下回合可选 3 个」实现）；
-   *   ⑤ 两段「受谋略属性影响」官方均未给成长系数 → 基值不缩放 → 登记 OFFLINE_MAIN_SKILLS → **武将下架**。
+   *   ⑤ 官方描述**无「受…属性」段**（已核 200966 现页 + `scripts/skill_extra.json` 缓存：发动率 +10.0%、
+   *      伤害 +30.0% 均为**固定值**）→ 无数值缺口 → **上架**（不登记 OFFLINE_MAIN_SKILLS）。
    */
   jinyan_zhijian: {
     id: 'jinyan_zhijian',

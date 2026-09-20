@@ -132,7 +132,7 @@ function setup(seed = 1) {
 }
 
 describe('尽言直谏（田丰 h692）', () => {
-  it('装配：二类指挥 on_act·距离 3·友军群体·allySlotBoost（2→3 名 / 发动率 +10% / 伤害 +30%）·挂槽·下架', () => {
+  it('装配：二类指挥 on_act·距离 3·友军群体·allySlotBoost（2→3 名 / 发动率 +10% / 伤害 +30%）·挂槽·上架', () => {
     const hero = HERO_REGISTRY[HERO_ID];
     expect(hero.name).toBe('田丰');
     expect(hero.faction).toBe('群');
@@ -153,9 +153,9 @@ describe('尽言直谏（田丰 h692）', () => {
     expect(s.output).toEqual([]);
     expect(s.allySlotBoost).toEqual({ baseCount: 2, firedCount: 3, triggerRate: 0.1, damageRate: 0.3 });
 
-    // 受谋略成长系数未确认 → 下架
-    expect(OFFLINE_MAIN_SKILLS[SKILL_ID]).toBeTruthy();
-    expect(isHeroListed(HERO_RECORDS[HERO_ID]!)).toBe(false);
+    // 官方 desc 无「受…属性」段（+10% / +30% 为固定值）→ 无数值缺口 → 上架
+    expect(OFFLINE_MAIN_SKILLS[SKILL_ID]).toBeUndefined();
+    expect(isHeroListed(HERO_RECORDS[HERO_ID]!)).toBe(true);
   });
 
   it('机制·自身行动时：随机 2 名**其他**友军各得「主动战法发动率 +10% / 伤害 +30%」（施法者自身不得）', () => {
