@@ -1939,7 +1939,7 @@
     "growthDefense": 1.55,
     "growthStrategy": 2.23,
     "growthSpeed": 1.52,
-    "mainSkillId": "",
+    "mainSkillId": "jinyan_zhijian",
     "mainSkillName": "尽言直谏",
     "skillDesc": "自身每回合行动时，随机令友方群体2个主动战法在下次行动阶段发动率提升10.0%且造成的伤害增加30.0%，若持续时间内任一战法发动，则下回合可选择3个主动战法"
   },

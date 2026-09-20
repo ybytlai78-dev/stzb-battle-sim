@@ -627,6 +627,10 @@ export interface CombatContext {
   allyTroopThresholdKeys?: Set<string>;
   /** 一类指挥「每回合开始前几率判定」已触发（锦车持节）：key `${round}:${skillId}` */
   roundStartChanceFired?: Set<string>;
+  /** 尽言直谏·窗口监视：本窗口被加持的友军（任一主动战法发动 → 下回合数量升级） */
+  allySlotBoostWatch?: { skillId: string; casterId: string; unitIds: string[] };
+  /** 尽言直谏·本窗口内是否已有主动战法发动 */
+  allySlotBoostFired?: boolean;
 }
 
 /** 持续型急救战法级计数器（皇裔流离/金匮要略）：一个战法一个实例，全队共享。
@@ -1142,6 +1146,19 @@ export function triggerRoundCommandOnAct(ctx: CombatContext, unit: UnitState): v
         phase: 'command_skill',
       });
       executeActLayer(ctx, unit, skill);
+      continue;
+    }
+
+    // 友军主动战法增益（尽言直谏）：行动时随机为 N 名其他友军加持（持续到其行动结束，无需锁定目标）
+    if (skill.allySlotBoost) {
+      ctx.events.push({
+        type: 'unit_act_start',
+        unitId: unit.general.id,
+        name: unit.general.name,
+        position: unit.general.position,
+        phase: 'command_skill',
+      });
+      executeAllySlotBoost(ctx, unit, skill);
       continue;
     }
 
@@ -2313,9 +2330,13 @@ function endUnitAct(
   actEndMarked?: ActEndCountingStatus[],
   statusesAtActStart?: ReadonlySet<Status>
 ): void {
-  const expiring = unit.statuses.filter((s) => s.type === 'trigger_boost' && s.expireAfterOwnAct);
+  const expiring = unit.statuses.filter(
+    (s) => (s.type === 'trigger_boost' || s.type === 'damage_boost') && s.expireAfterOwnAct
+  );
   if (expiring.length > 0) {
-    unit.statuses = unit.statuses.filter((s) => !(s.type === 'trigger_boost' && s.expireAfterOwnAct));
+    unit.statuses = unit.statuses.filter(
+      (s) => !((s.type === 'trigger_boost' || s.type === 'damage_boost') && s.expireAfterOwnAct)
+    );
     for (const s of expiring) {
       ctx.events.push({ type: 'status_expired', unitId: unit.general.id, statusType: s.type });
     }
@@ -3673,7 +3694,11 @@ function pushStatus(
     if (type === 'trigger_boost' && 'damageSkillsOnly' in create && create.damageSkillsOnly) {
       (push as { damageSkillsOnly?: boolean }).damageSkillsOnly = true;
     }
-    if (type === 'trigger_boost' && 'expireAfterOwnAct' in create && create.expireAfterOwnAct) {
+    if (
+      (type === 'trigger_boost' || type === 'damage_boost') &&
+      'expireAfterOwnAct' in create &&
+      create.expireAfterOwnAct
+    ) {
       (push as { expireAfterOwnAct?: boolean }).expireAfterOwnAct = true;
     }
     target.statuses.push(push);
@@ -5572,6 +5597,63 @@ export function triggerRoundEndChanceOutputs(ctx: CombatContext): void {
 }
 
 /**
+ * 尽言直谏·友军主动战法增益（二类指挥，携带者行动时）：
+ * 随机取 `baseCount`（窗口内曾发动 → `firedCount`）名**其他**存活友军，各挂
+ * 「主动战法发动率 +`triggerRate`」与「主动战法造成伤害 +`damageRate`」（`expireAfterOwnAct`：
+ * **目标本次行动结束时清除**——用户 2026-09-20 口径，非常规「下次行动前递减」）；
+ * 记录本窗口监视名单（`ctx.allySlotBoostWatch`）并清空「已发动」标记（供下回合数量升级）。
+ * 目标粒度**推定**：官方作用对象是「主动战法（槽）」，引擎无槽位机制 → 按友军单位施加。
+ */
+function executeAllySlotBoost(ctx: CombatContext, caster: UnitState, skill: Extract<Skill, { type: 'command' }>): void {
+  const cfg = skill.allySlotBoost;
+  if (!cfg) return;
+  const count = ctx.allySlotBoostFired ? cfg.firedCount : cfg.baseCount;
+  const pool = (caster.side === 'my' ? ctx.myTeam : ctx.enemyTeam).filter(
+    (u) => u.alive && u.general.id !== caster.general.id
+  );
+  const picked: UnitState[] = [];
+  while (picked.length < count && pool.length > 0) {
+    picked.push(pool.splice(ctx.rng.int(pool.length), 1)[0]);
+  }
+  ctx.allySlotBoostWatch = undefined;
+  ctx.allySlotBoostFired = false;
+  if (picked.length === 0) return;
+  ctx.events.push({
+    type: 'status_changed',
+    unitId: caster.general.id,
+    statusType: 'trigger_boost',
+    detail: `【${skill.name}】为 ${picked.length} 名友军的主动战法提升发动率 ${Math.round(cfg.triggerRate * 100)}% 与伤害 ${Math.round(cfg.damageRate * 100)}%（持续到其行动结束）`,
+  });
+  for (const t of picked) {
+    executeSkillOutputs(ctx, caster, skill, [t], [
+      {
+        kind: 'inflict_status',
+        status: { type: 'trigger_boost', rate: cfg.triggerRate, duration: 999, skillTypes: ['active'], expireAfterOwnAct: true },
+      },
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'damage_boost',
+          rate: cfg.damageRate,
+          duration: 999,
+          direction: 'caused',
+          skillTypes: ['active'],
+          expireAfterOwnAct: true,
+        },
+      },
+    ]);
+  }
+  ctx.allySlotBoostWatch = { skillId: skill.id, casterId: caster.general.id, unitIds: picked.map((u) => u.general.id) };
+}
+
+/** 尽言直谏·窗口监视：被加持的友军成功发动任意主动战法 → 标记（下回合数量升级为 firedCount） */
+function triggerAllySlotBoostWatch(ctx: CombatContext, actor: UnitState): void {
+  const w = ctx.allySlotBoostWatch;
+  if (!w || ctx.allySlotBoostFired) return;
+  if (w.unitIds.includes(actor.general.id)) ctx.allySlotBoostFired = true;
+}
+
+/**
  * 友军兵力阈值首次跨越·指挥版（鏖兵卫主「当自身位于中军及前锋时，大营兵力首次低于初始兵力的
  * 90%、70%、50% 时，自身必定援护友军群体 1 回合，且自身下 2 次受到的伤害大幅度降低」）：
  * 受击者（实际扣兵）若为某指挥战法 `allyTroopThreshold.watchPosition` 站位，则遍历**同侧**携带者，
@@ -6913,6 +6995,8 @@ export function triggerActiveSkill(
   triggerActHooks(ctx, unit);
   // 乘间击隙 / 勠力同心：主动战法成功发动后钩子（准备战法在释放时同样算发动）
   triggerCastKindHooks(ctx, unit, 'active', skill);
+  // 尽言直谏：窗口监视（被加持的友军发动主动战法 → 下回合数量升级）
+  triggerAllySlotBoostWatch(ctx, unit);
 }
 
 /** 准备完成的战法自动发动 */
@@ -6932,6 +7016,8 @@ function executePreparedSkill(
   triggerActHooks(ctx, unit);
   // 乘间击隙 / 勠力同心：主动战法成功发动后钩子（准备战法在释放时同样算发动）
   triggerCastKindHooks(ctx, unit, 'active', skill);
+  // 尽言直谏：窗口监视（被加持的友军发动主动战法 → 下回合数量升级）
+  triggerAllySlotBoostWatch(ctx, unit);
 }
 
 /**

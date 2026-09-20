@@ -9353,4 +9353,45 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+
+  /**
+   * 尽言直谏（田丰·群骑 h692 主战法）：指挥 S（二类指挥：自身每回合行动时判定），距离 3，友军群体，发动率 --。
+   * 满级「自身每回合行动时，随机令友方群体 2 个主动战法在下次行动阶段发动率提升 10.0% 且造成的伤害增加 30.0%，
+   *   若持续时间内任一战法发动，则下回合可选择 3 个主动战法」；1 级：5.0% / 15.0%（数量 2 → 3 同）。
+   * 官方：scripts/skill_extra.json id 200966（指挥 / S / 距离 3 / 友军群体 / 兵种骑；
+   *   effect 标签 主动战法伤害提高;发动率提高）。来源 https://stzb.163.com/m/skilllist/200966.html
+   *
+   * 口径（策略 A + 用户 2026-09-20 口径；推定处已标注）：
+   *   ① 触发时机「自身每回合行动时」→ `phase:'round'` + `roundTrigger:'on_act'`；
+   *   ② **持续时间（用户 2026-09-20 明确）**：「下次行动阶段」= 增益**持续到目标本次行动结束就消失**，
+   *      非常规「持续一回合（到下次行动前）」→ 新引擎件 `expireAfterOwnAct`（原仅 trigger_boost 支持，
+   *      本次扩到 damage_boost）→ 目标行动末由 `endUnitAct` 清除；
+   *   ③ **作用对象粒度（推定）**：官方作用于「主动战法（槽）」，引擎无槽位机制 → 按**友军单位**施加：
+   *      随机 `baseCount:2` 名**其他**存活友军（=「友方群体」2 目标口径；排除施法者，因其本回合已在行动、
+   *      `expireAfterOwnAct` 会令自身增益立即失效）；
+   *   ④ 「若持续时间内任一战法发动，则下回合可选择 3 个」→ `allySlotBoost.firedCount:3`：
+   *      窗口监视（`ctx.allySlotBoostWatch` + `triggerAllySlotBoostWatch`：被加持友军成功发动主动战法即置位），
+   *      下一次行动按 2 / 3 取人数（**推定**：官方主语模糊，按「田丰下回合可选 3 个」实现）；
+   *   ⑤ 两段「受谋略属性影响」官方均未给成长系数 → 基值不缩放 → 登记 OFFLINE_MAIN_SKILLS → **武将下架**。
+   */
+  jinyan_zhijian: {
+    id: 'jinyan_zhijian',
+    name: '尽言直谏',
+    type: 'command',
+    phase: 'round',
+    roundTrigger: 'on_act',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'random_single',
+    targetSide: 'ally',
+    tags: ['trigger_boost', 'damage_boost'],
+    output: [],
+    // 行动时随机 2 名其他友军（窗口内曾发动 → 3 名）：主动战法发动率 +10% / 造成伤害 +30%，持续到其行动结束
+    allySlotBoost: {
+      baseCount: 2,
+      firedCount: 3,
+      triggerRate: 0.1,
+      damageRate: 0.3,
+    },
+  },
 };
