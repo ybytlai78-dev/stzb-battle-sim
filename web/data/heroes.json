@@ -2625,7 +2625,7 @@
     "growthDefense": 1.8,
     "growthStrategy": 0.62,
     "growthSpeed": 1.05,
-    "mainSkillId": "",
+    "mainSkillId": "fangzhen_yansha",
     "mainSkillName": "方阵掩杀",
     "skillDesc": "普通攻击后，对攻击目标再次发动猛攻（伤害率235.0%），并使其进行下一次攻击的伤害大幅度降低"
   },

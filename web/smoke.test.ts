@@ -17,7 +17,7 @@ async function boot(): Promise<typeof import('./main')> {
   return mod;
 }
 
-/** 点击红/蓝队第 idx 个槽位 → 武将选择弹窗 → 点击名字含 name 的武将（可选再按主战法名区分同名）→ 详情页 → 点「放入」 */
+/** 点击红/蓝队第 idx 个槽位 → 武将选择弹窗 → 点击名字**精确等于** name 的武将（可选再按主战法名区分同名）→ 详情页 → 点「放入」 */
 function pickHeroIntoSlot(
   teamIdx: 'red' | 'blue',
   slotIdx: number,
@@ -31,7 +31,8 @@ function pickHeroIntoSlot(
   expect(modal, '武将选择弹窗应打开').toBeTruthy();
   const cards = Array.from(modal.querySelectorAll('.hero-card')) as HTMLElement[];
   const card = cards.find((c) => {
-    if (!c.querySelector('.n')!.textContent!.includes(heroName)) return false;
+    // 精确匹配（2026-09-20）：SP 前缀卡入池后 `includes` 会抢走基础卡（「SP太史慈」抢「太史慈」）
+    if (c.querySelector('.n')!.textContent!.trim() !== heroName) return false;
     // 主战法名不再进卡面（2026-09-19 回退）→ 从卡片 title 判定，用于区分同名武将（关羽 蜀/魏）
     if (opts.skill && !(c.title || '').includes(opts.skill)) return false;
     return true;
@@ -45,10 +46,10 @@ function pickHeroIntoSlot(
   placeBtn.click();
 }
 
-/** 从武将池点击名字含 name 的武将卡（打开详情页，不放入） */
+/** 从武将池点击名字**精确等于** name 的武将卡（打开详情页，不放入） */
 function clickPoolCard(name: string): HTMLElement {
   const cards = Array.from(document.querySelectorAll('.hero-pool .hero-card')) as HTMLElement[];
-  const card = cards.find((c) => c.querySelector('.n')!.textContent!.includes(name));
+  const card = cards.find((c) => c.querySelector('.n')!.textContent!.trim() === name);
   expect(card, `武将池应有「${name}」`).toBeTruthy();
   card!.click();
   const modal = document.querySelector('.modal') as HTMLElement;
