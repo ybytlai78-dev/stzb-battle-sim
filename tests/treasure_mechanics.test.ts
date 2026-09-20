@@ -7,7 +7,8 @@
  *  再战：第 5 回合 50% 获得连击
  */
 import { describe, it, expect } from 'vitest';
-import { inflictStatus, getStatus, hasStatus, consumeEvasion, tickRoundStartStatuses, updateTreasureOnHurt, applyTreasureBasicHit } from '../src/engine/action';
+import { inflictStatus, getStatus, hasStatus, consumeEvasion, recoverTroops, tickRoundStartStatuses, updateTreasureOnHurt, applyTreasureBasicHit } from '../src/engine/action';
+import type { General } from '../src/engine/types';
 import type { CombatContext } from '../src/engine/action';
 import type { CreateStatus, UnitState } from '../src/engine/types';
 import { Rng } from '../src/engine/rng';
@@ -267,6 +268,46 @@ describe('宝物 · 控制延时 / 免疫 / 反击 / 回合钩子', () => {
     expect(left).toHaveLength(1);
     expect(left[0].sourceSkillType).toBe('passive'); // 只移除主动/追击带来的增益
     expect(ctx.events.some((e) => e.type === 'status_changed' && e.detail.includes('破障'))).toBe(true);
+  });
+
+  it('仁心 / 矜节 / 济世：造成的恢复提高与恢复触发减伤', () => {
+    const ctx = makeCtx();
+    const healer = makeUnit('h');
+    const hurt = makeUnit('t');
+    ctx.myTeam = [healer, hurt];
+    hurt.troops = 5000;
+    hurt.wounded = 2000;
+
+    // 仁心：heal_out_boost（施法者侧）→ 实际恢复量提高
+    inflictStatus(ctx, healer, { type: 'heal_out_boost', rate: 0.15, duration: 999 }, 'passive', 'treasure:affix:仁心', 'h');
+    const base = recoverTroops(ctx, hurt, 1000, undefined);
+    hurt.troops = 5000;
+    hurt.wounded = 2000; // 复位伤兵池，避免被上限截断
+    const boosted = recoverTroops(ctx, hurt, 1000, healer);
+    expect(boosted).toBeGreaterThan(base);
+    expect(boosted).toBe(1150);
+
+    // 济世：造成恢复后给目标叠一条可叠加的减伤
+    inflictStatus(ctx, healer, { type: 'heal_trigger_reduce', rate: 0.1, duration: 999 }, 'passive', 'treasure:affix:济世', 'h');
+    recoverTroops(ctx, hurt, 500, healer);
+    recoverTroops(ctx, hurt, 500, healer);
+    const reductions = hurt.statuses.filter((s) => s.type === 'damage_reduce');
+    expect(reductions.length).toBeGreaterThanOrEqual(1);
+    // 宝物来源不参与「取高替换」→ 多次触发各挂一条，减伤池求和（0.1 + 0.1）
+    const total = reductions.reduce((a, s) => a + s.rate, 0);
+    expect(total).toBeCloseTo(0.2, 6);
+
+    // 矜节：仅女性武将携带生效
+    const male = makeUnit('m');
+    const female = makeUnit('f');
+    female.general.gender = 'female';
+    const from = (u: UnitState) =>
+      buildTreasureStatuses({ treasureId: 1096 /* 比翼 */ }, u.general)
+        .filter((x) => x.label === '矜节')
+        .map((x) => x.create);
+    expect(from(male)).toHaveLength(0);
+    expect(from(female)).toHaveLength(1);
+    expect(from(female)[0]).toMatchObject({ type: 'heal_out_boost', rate: 0.3 });
   });
 
   it('再战（少府）：仅第 5 回合判定，50% 几率获得连击', () => {    const results: boolean[] = [];

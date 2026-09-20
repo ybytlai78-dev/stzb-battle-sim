@@ -76,7 +76,7 @@ describe('宝物引擎 · 自带特效换算', () => {
   });
 
   it('未实现词条（PENDING）不产出状态，但会被登记', () => {
-    expect(Object.keys(PENDING).length).toBeGreaterThan(10);
+    expect(Object.keys(PENDING).length).toBeGreaterThan(0);
     const tai = TREASURES_BY_ID[1075]; // 泰阿：骁锐/明镜/强固
     expect(tai.effects.map((e) => e.name)).toEqual(['骁锐', '明镜', '强固']);
     // 强固（每回合首次受伤减伤）未实现 → 只出 骁锐/明镜

@@ -169,6 +169,13 @@ const MECHANICS: Record<string, Mechanic> = {
   选锋: (v) => [{ type: 'treasure_basic_next', rate: v / 100, duration: FOREVER } as CreateStatus],
   // 破障：普通攻击后，移除攻击目标由主动/追击战法带来的 1 种增益
   破障: () => [{ type: 'treasure_basic_purge', duration: FOREVER } as CreateStatus],
+  // 仁心（锻造词条）：造成的恢复效果提高
+  仁心: (v) => [{ type: 'heal_out_boost', rate: v / 100, duration: FOREVER } as CreateStatus],
+  // 济世（锻造词条）：主战法每造成一次恢复，效果目标受到伤害降低（可叠加）
+  济世: (v) => [{ type: 'heal_trigger_reduce', rate: v / 100, duration: FOREVER } as CreateStatus],
+  // 矜节（比翼）：女性武将携带时，主战法造成的恢复效果提高 30%（男性携带不生效 → 构造期判定）
+  矜节: (v, _effect, ctx) =>
+    ctx.self.gender === 'female' ? [{ type: 'heal_out_boost', rate: v / 100, duration: FOREVER } as CreateStatus] : [],
 };
 
 /** 同名词条但语义随宝物变化：key = `${treasureId}:${slot}` */
@@ -197,13 +204,10 @@ export const PENDING: Record<string, string> = {
   劲弩: '首回合禁普攻 + 次回合全体普攻',
   谋断: '第 2 次准备战法跳过 1 个准备回合',
   阵舞: '女性携带：控制目标受伤害提高（对目标 debuff）',
-  矜节: '女性携带：主战法恢复效果提高',
   燮理: '燃烧伤害后恢复（恢复率）',
   归心: '我军每 2 次主动战法 → 自身恢复',
   鸠佑: '主动主战法发动后叠层增伤',
   奇袭: '按距离增伤（条件）',
-  济世: '恢复触发 → 目标下次受伤降低',
-  仁心: '造成的恢复效果提高',
   击虚: '按目标身上的 DoT/控制种类数增伤（C 档）',
 };
 

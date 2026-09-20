@@ -4072,6 +4072,8 @@ function pushStatus(
       : {}),
     // 宝物「选锋」：普攻后的一次性策略增伤
     ...(create.type === 'treasure_basic_next' ? { rate: create.rate } : {}),
+    // 宝物「仁心」/「矜节」/「济世」：恢复加成与恢复触发减伤
+    ...(create.type === 'heal_out_boost' || create.type === 'heal_trigger_reduce' ? { rate: create.rate } : {}),
   } as Status);
   ctx.events.push({
     type: 'status_inflicted',
@@ -4354,6 +4356,9 @@ export function isBeneficialStatus(s: Status): boolean {
     case 'treasure_basic_count':
     case 'treasure_basic_next':
     case 'treasure_basic_purge':
+    // 宝物：恢复加成 / 恢复触发减伤
+    case 'heal_out_boost':
+    case 'heal_trigger_reduce':
       return true;
     default:
       return false;
@@ -4734,6 +4739,8 @@ function statusName(type: StatusType): string {
     case 'treasure_basic_count': return '普攻计数叠层';
     case 'treasure_basic_next': return '下次策略增伤';
     case 'treasure_basic_purge': return '普攻移除增益';
+    case 'heal_out_boost': return '恢复效果提高';
+    case 'heal_trigger_reduce': return '恢复触发减伤';
     case 'siege': return '围困';
     case 'sorcery': return '妖术';
     case 'burning': return '燃烧';
@@ -6713,7 +6720,7 @@ function executeSkillOutputs(
           const amount = calcHealAmount(caster.troops, rate);
           const before = t.troops;
           // 伤兵机制：恢复只能从伤兵池扣除（死亡兵力不可恢复）
-          const healed = recoverTroops(ctx, t, amount);
+          const healed = recoverTroops(ctx, t, amount, caster);
           if (healed > 0) {
             ctx.events.push({
               type: 'heal',
@@ -7895,7 +7902,7 @@ function triggerFirstAidOnHurt(ctx: CombatContext, target: UnitState): void {
     } else {
       const before = target.troops;
       // 伤兵机制：恢复只能从伤兵池扣除（死亡兵力不可恢复；受伤即刻入池，受击恢复立即可用）
-      const healed = recoverTroops(ctx, target, amount);
+      const healed = recoverTroops(ctx, target, amount, castUnit(ctx, aid.sourceUnitId));
       if (healed > 0) {
         ctx.events.push({
           type: 'heal',
@@ -8026,10 +8033,13 @@ function triggerOnHeal(ctx: CombatContext, target: UnitState): void {
  *  `demand = floor(amount × (1 + Σheal_boost.rate))`。这是全引擎唯一收口处（主动 heal / 休整 rest /
  *  持续急救 first_aid / 每回合恢复 recoverEachRound / 代打 healSource 均经此函数），
  *  故新状态 heal_boost（勇挚刚毅「受到恢复效果提升」）只需在这里加一次，所有恢复途径统一受益。 */
-export function recoverTroops(ctx: CombatContext, target: UnitState, amount: number): number {
+export function recoverTroops(ctx: CombatContext, target: UnitState, amount: number, caster?: UnitState): number {
   // 已阵亡（兵力 0）不可被急救/休整/主动恢复复活
   if (!target.alive || target.troops <= 0) return 0;
-  const boost = target.statuses.filter((s) => s.type === 'heal_boost').reduce((a, s) => a + s.rate, 0);
+  // 受恢复方（heal_boost）+ 施法方（宝物 仁心/矜节 heal_out_boost）两边加成，统一收口
+  const boost =
+    target.statuses.filter((s) => s.type === 'heal_boost').reduce((a, s) => a + s.rate, 0) +
+    (caster ? caster.statuses.filter((s) => s.type === 'heal_out_boost').reduce((a, s) => a + s.rate, 0) : 0);
   const demand = boost > 0 ? Math.floor(amount * (1 + boost)) : amount;
   const pool = ctx.woundedMortality ? Math.min(target.wounded, target.general.maxTroops - target.troops) : target.general.maxTroops - target.troops;
   const recoverable = Math.max(0, Math.min(demand, pool));
@@ -8037,8 +8047,24 @@ export function recoverTroops(ctx: CombatContext, target: UnitState, amount: num
     target.troops += recoverable;
     if (ctx.woundedMortality) target.wounded -= recoverable;
   }
+  if (recoverable > 0 && caster) applyTreasureHealOnTarget(ctx, caster, target);
   if (recoverable > 0) triggerOnHeal(ctx, target);
   return recoverable;
+}
+
+/** 宝物「济世」：携带者每造成一次恢复 → 被恢复者获得一条「受到伤害降低」（可叠加） */
+function applyTreasureHealOnTarget(ctx: CombatContext, caster: UnitState, target: UnitState): void {
+  for (const s of caster.statuses) {
+    if (s.type !== 'heal_trigger_reduce') continue;
+    inflictStatus(
+      ctx,
+      target,
+      { type: 'damage_reduce', rate: s.rate, duration: 999, stack: true },
+      s.sourceSkillType,
+      s.sourceSkillId,
+      caster.general.id,
+    );
+  }
 }
 
 export /** 妖术诅咒（密谋定蜀）：携带者试图发动追击战法时触发——结算一次妖术伤害（挂上时冻结），

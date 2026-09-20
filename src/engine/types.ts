@@ -686,6 +686,10 @@ export type CreateStatus =
   | { type: 'treasure_basic_next'; rate: number; duration: number }
   /** 宝物「破障」：普攻后，移除攻击目标由主动/追击战法带来的 1 种增益 */
   | { type: 'treasure_basic_purge'; duration: number }
+  /** 宝物「仁心」/「矜节」：携带者**造成**的恢复效果提高（`recoverTroops` 入口按施法者结算） */
+  | { type: 'heal_out_boost'; rate: number; duration: number }
+  /** 宝物「济世」：携带者每造成一次恢复 → 被恢复者获得「受到伤害降低」（可叠加） */
+  | { type: 'heal_trigger_reduce'; rate: number; duration: number }
   /** 免疫怯战（魏武之泽）：持续期间无法被施加怯战 */
   | { type: 'cowardice_immune'; duration: number }
   | { type: 'siege'; duration: number }
@@ -1817,6 +1821,10 @@ export type StatusType =
   | 'treasure_basic_count'
   | 'treasure_basic_next'
   | 'treasure_basic_purge'
+  /** 宝物「仁心」/「矜节」：造成的恢复效果提高 */
+  | 'heal_out_boost'
+  /** 宝物「济世」：造成恢复 → 目标受伤降低 */
+  | 'heal_trigger_reduce'
   | 'cowardice_immune'
   | 'siege'
   | 'sorcery'
@@ -1906,6 +1914,8 @@ export type Status =
   | { type: 'treasure_basic_count'; every: number; perStack: number; skillTypes?: SkillType[]; maxStacks: number; stacks: number; counter: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'treasure_basic_next'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'treasure_basic_purge'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'heal_out_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'heal_trigger_reduce'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'cowardice_immune'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'siege'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   /**
