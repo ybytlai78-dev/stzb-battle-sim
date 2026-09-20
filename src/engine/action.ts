@@ -30,7 +30,7 @@ import type {
 } from './types';
 import type { Rng } from './rng';
 import { calcDamage, applyTroopCap, scaledValue, roundRate, sumRates, buffMult, calcHealAmount, moraleRate, applyIgnoreDef, troopCounterReduce } from './formulas';
-import { troopCounterReduceOf as secondaryCounterReduceOf, traitCombatModifiers, traitStatBonus, type TraitCombatContext } from './secondaryTroop';
+import { troopCounterReduceOf as secondaryCounterReduceOf, traitCombatModifiers, traitStatBonus, statModOf, type TraitCombatContext } from './secondaryTroop';
 import { nearestEnemy, skillTargets, distanceBetween, adjacentUnits, sameSideDistance, attackRangeOf, POSITION_INDEX, unitsInSkillRange } from './target';
 
 /**
@@ -4392,13 +4392,15 @@ export function effectiveStat(unit: UnitState, kind: 'attack' | 'defense' | 'str
   const formation = unit.formationBonus?.[kind] ?? 0;
   // 兵种特性点数加成（利刃：每个非主动战法 +22 攻击；地利：按站位加四维）
   const traitFlat = traitStatBonus(g, kind);
+  // 二级兵种永久属性（死士 攻/防/谋 +18、轻骑兵 速度 +15）
+  const troopFlat = statModOf(g.secondaryTroop, kind);
   const buffs = unit.statuses.filter((s) =>
     kind === 'attack' ? s.type === 'attack_buff'
       : kind === 'defense' ? s.type === 'defense_buff'
         : kind === 'strategy' ? s.type === 'strategy_buff'
           : s.type === 'speed_buff'
   );
-  const flat = formation + traitFlat + buffs.reduce((acc, s) => acc + (('amount' in s && !('percent' in s && s.percent) ? s.amount : 0) as number), 0);
+  const flat = formation + traitFlat + troopFlat + buffs.reduce((acc, s) => acc + (('amount' in s && !('percent' in s && s.percent) ? s.amount : 0) as number), 0);
   const pct = buffs.reduce((acc, s) => acc + (('amount' in s && 'percent' in s && s.percent ? s.amount : 0) as number), 0);
   const eff = base + flat;
   if (pct === 0) return eff;
@@ -4809,7 +4811,8 @@ function lightCavalryAttackLeft(
   return used < LIGHT_CAVALRY_ATTACK_LIMIT;
 }
 
-/** 记录一次「进行攻击」（轻骑兵计数器）；只在真正打出攻击时调用 */
+/** 记录一次「进行攻击」（轻骑兵计数器）；只在真正打出攻击时调用。
+ *  轻骑兵「前 4 次攻击」：普攻 / 物理主动 / 追击都算，分兵溅射不算（isAttackHitForProc 口径）。 */
 function countLightCavalryAttack(ctx: CombatContext, attacker: UnitState, hit?: DamageHitContext): void {
   if (attacker.general.secondaryTroop !== '轻骑兵') return;
   if (!isAttackHitForProc(hit)) return;

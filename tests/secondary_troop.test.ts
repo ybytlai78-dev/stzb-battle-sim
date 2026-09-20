@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 二级兵种（兵种转换）数据层测试
  *
  * 依据 `docs/兵种转换调研.md`（用户 2026-09-20 审定口径）：
@@ -19,6 +19,8 @@ import {
   familyOf,
   liRenAttackBonus,
   rangeModOf,
+  skillRangeModOf,
+  statModOf,
   traitsFor,
   troopCounterReduceOf,
   type GeneralTrait,
@@ -77,12 +79,31 @@ describe('二级兵种注册表', () => {
     expect(SECONDARY_TROOPS['弩兵'].code).toBe('21');
   });
 
-  it('攻击距离修正：长弓兵 +1、死士 −1、其余 0', () => {
+  it('攻击距离修正：长弓兵 +1、死士 −1、其余 0（用户 2026-09-20 纠正）', () => {
     expect(rangeModOf('长弓兵')).toBe(1);
     expect(rangeModOf('死士')).toBe(-1);
     expect(rangeModOf('弩兵')).toBe(0);
     expect(rangeModOf('象兵')).toBe(0);
     expect(rangeModOf(undefined)).toBe(0);
+  });
+
+  it('战法距离修正：只有弓骑兵 +1（象兵无距离修正 —— 用户纠正）', () => {
+    expect(skillRangeModOf('弓骑兵')).toBe(1);
+    expect(skillRangeModOf('象兵')).toBe(0);
+    expect(skillRangeModOf('死士')).toBe(0);
+    expect(skillRangeModOf('长弓兵')).toBe(0);
+    expect(skillRangeModOf(undefined)).toBe(0);
+  });
+
+  it('永久属性加减：死士 攻/防/谋 +18；轻骑兵 速度 +15；其余 0', () => {
+    expect(statModOf('死士', 'attack')).toBe(18);
+    expect(statModOf('死士', 'defense')).toBe(18);
+    expect(statModOf('死士', 'strategy')).toBe(18);
+    expect(statModOf('死士', 'speed')).toBe(0);
+    expect(statModOf('轻骑兵', 'speed')).toBe(15);
+    expect(statModOf('轻骑兵', 'attack')).toBe(0);
+    expect(statModOf('象兵', 'speed')).toBe(0);
+    expect(statModOf(undefined, 'attack')).toBe(0);
   });
 });
 
