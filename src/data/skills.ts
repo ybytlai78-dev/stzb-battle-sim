@@ -9394,4 +9394,64 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       damageRate: 0.3,
     },
   },
+
+  /**
+   * 酒池肉林（董卓·汉步 h480 主战法）：指挥 S（一类指挥 prep，三段按回合窗口展开），距离 3，
+   * 我军群体（有效距离内 3 个目标），发动率 --。
+   * 满级「战斗开始后前 2 回合，使我军全体受到的所有伤害降低 32.0%（受防御属性影响），此效果结束后，
+   *   将在 1 回合内使我军全体造成的所有伤害大幅度降低，第 4 回合开始，使自身造成攻击伤害时能够借此
+   *   恢复相当于伤害值 35.0% 的兵力，持续直到战斗结束」；1 级：减伤 16.0% / 恢复 17.5%。
+   * 官方：scripts/skill_extra.json id 200014（指挥 / S / 距离 3 / 我军群体3 / 兵种步；
+   *   effect 标签 受到攻击伤害降低;受到策略攻击伤害降低;攻击伤害降低;策略攻击伤害降低;攻心）。
+   *   来源 https://stzb.163.com/m/skilllist/200014.html
+   *
+   * 口径（策略 A + 用户 2026-09-20 口径；推定处已标注）：
+   *   ① 段一（前 2 回合我军全体受到所有伤害 −32%，受防御）→ `initialOutput` + `damage_reduce`
+   *      `duration: 2`（准备阶段施加按**回合末**递减 → 覆盖第 1~2 回合、第 3 回合行动前已失效，
+   *      与用户口径「实则持续到第三回合行动前」一致）；「受防御属性影响」→ `defenseScaled`（成长率未确认 → 基值 32%）；
+   *   ② 目标行「我军群体（有效距离内 3 个目标）」与描述「我军全体」冲突 → 按**描述**取 `targetMode:'all'`
+   *      （策略 A ③；3 人队下两者等价）；
+   *   ③ 段二（该效果结束后 1 回合内 = 第 3 回合）我军全体造成所有伤害大幅降低 → `roundStartRepeat.rounds:[3]`
+   *      + `damage_boost` direction **caused**；「大幅度」= **极大值 −99.99（−9999%）**（用户 2026-09-20 口径），
+   *      `duration: 1`（第 3 回合内生效、回合末递减）；
+   *   ④ 段三（第 4 回合开始，自身造成**攻击伤害**时恢复伤害值 35.0%）→ `healOnDamage` 新增
+   *      `selfOnly`（只对携带者自身的伤害）+ `startRound: 4`；**官方现页写明 35.0%（1 级 17.5%）**，
+   *      与用户「吸血比例未知」的说法不同 → 按策略 A ①（官方现页 > 其他）取 35.0%，待用户复核；
+   *   ⑤ 减伤受防御成长系数未给 → 基值不缩放 → 登记 OFFLINE_MAIN_SKILLS → **武将下架**。
+   */
+  jiuchi_roulin: {
+    id: 'jiuchi_roulin',
+    name: '酒池肉林',
+    type: 'command',
+    phase: 'prep',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['damage_reduce', 'damage_boost', 'heal'],
+    output: [],
+    // ① 战斗开始后前 2 回合：我军全体受到所有伤害 −32%（受防御未确认 → 基值）
+    initialOutput: [
+      {
+        kind: 'inflict_status',
+        targetSide: 'ally',
+        targetMode: 'all',
+        status: { type: 'damage_reduce', rate: 0.32, duration: 2, defenseScaled: true },
+      },
+    ],
+    // ③ 第 3 回合：我军全体造成的所有伤害大幅降低（极大值 −9999%）
+    roundStartRepeat: {
+      rounds: [3],
+      output: [
+        {
+          kind: 'inflict_status',
+          targetSide: 'ally',
+          targetMode: 'all',
+          status: { type: 'damage_boost', rate: -99.99, duration: 1, direction: 'caused' },
+        },
+      ],
+    },
+    // ④ 第 4 回合开始：自身造成攻击伤害时恢复伤害值 35% 的兵力（受谋略缩放但官方未给系数 → growthRate 0 基值）
+    healOnDamage: { healRate: 35, selfOnly: true, startRound: 4 },
+  },
 };

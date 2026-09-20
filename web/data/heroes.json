@@ -2049,7 +2049,7 @@
     "growthDefense": 2.11,
     "growthStrategy": 1.01,
     "growthSpeed": 0.54,
-    "mainSkillId": "",
+    "mainSkillId": "jiuchi_roulin",
     "mainSkillName": "酒池肉林",
     "skillDesc": "战斗开始后前2回合，使我军全体受到的所有伤害降低32.0%（受防御属性影响），此效果结束后，将在1回合内使我军全体造成的所有伤害大幅度降低，第4回合开始，使自身造成攻击伤害时能够借此恢复相当于伤害值35.0%的兵力，持续直到战斗结束"
   },

@@ -1051,6 +1051,10 @@ export interface CommandSkill extends BaseSkill {
     /** 攻心恢复率（心战为上 50，受施法者谋略缩放） */
     healRate: number;
     growthRate?: number;
+    /** 只对**携带者本人**造成的伤害生效（酒池肉林「使**自身**造成攻击伤害时能够借此恢复」）；缺省 = 本侧全体 */
+    selfOnly?: boolean;
+    /** 第几回合起生效（酒池肉林「第 4 回合开始」）；缺省 1 */
+    startRound?: number;
   };
   /**
    * 【扬砂】层数累计 + 消耗触发（伏波扬砂，马腾）：我军（含携带者）每次**普通攻击命中**后，把该次普攻的

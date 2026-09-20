@@ -4973,6 +4973,9 @@ function triggerHealOnDamageCommands(
       const skill = resolveSkill(ctx, id);
       const cfg = skill?.type === 'command' ? skill.healOnDamage : undefined;
       if (!cfg) continue;
+      // 生效窗口：第 N 回合起（酒池肉林「第 4 回合开始」）/ 只对携带者本人的伤害（「使自身造成攻击伤害时」）
+      if (cfg.startRound != null && ctx.currentRound < cfg.startRound) continue;
+      if (cfg.selfOnly && source.general.id !== holder.general.id) continue;
       // ① 士气降低：全队累计上限内逐次施加（施加模板带 stack: true → 显式叠层、同源累加）
       //    官方未写「可叠加」；用户 2026-09-19 确认可叠加（9 次 → −45），故显式标注而非特判保留
       if (cfg.moraleReduce && cfg.moraleReduce > 0) {
