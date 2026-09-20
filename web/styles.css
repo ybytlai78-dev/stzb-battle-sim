@@ -811,6 +811,10 @@ main {
   border-radius: 3px;
   background: var(--color-bg);
   transition: box-shadow .12s, opacity .12s;
+  /* 池子最大 157 张卡：屏外卡片跳过布局/绘制/解码（content-visibility），
+     contain-intrinsic-size 给出占位高度，滚动条长度保持稳定（≈ 110px 宽卡的实际高度） */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 158px;
 }
 .hero-card:hover {
   box-shadow: inset 0 0 0 2px var(--color-gold), 0 5px 16px color-mix(in srgb, var(--color-bg) 55%, transparent);
@@ -928,12 +932,22 @@ main {
   accent-color: var(--color-gold);
   cursor: pointer;
 }
+/* 下架卡变灰：**不用 `filter: grayscale`** —— filter 会对每张图单独做滤镜合成，67 张下架卡
+   一起上会把真机 GPU/解码内存压死（用户 2026-09-20 反馈「点开显示下架武将后整页卡死」）。
+   改成 `.art` 上一层半透明灰罩（在卡框之下、信息层之上），零滤镜开销。 */
 .hero-card.offline {
   border-style: dashed;
 }
 .hero-card.offline .art {
-  filter: grayscale(.7);
-  opacity: .82;
+  opacity: .55;
+}
+.hero-card.offline::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: rgba(46, 44, 40, .45);
+  pointer-events: none;
 }
 .offline-tag {
   font-size: 9px;
