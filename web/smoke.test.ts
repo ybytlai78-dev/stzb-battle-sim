@@ -117,7 +117,12 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(frame, '武将卡应有卡框层').toBeTruthy();
     expect(frame.style.backgroundImage).toContain('card-frame-5.png');
     expect((card.querySelector('.art') as HTMLElement).style.backgroundImage).toContain('/portraits/');
-    expect(card.querySelector('.fac')!.textContent).toMatch(/^(汉|魏|蜀|吴|群|晋)$/);
+    // 左上角＝官方势力图标（faction-*.png 行书彩字），data-faction 供筛选/测试读取
+    const fac = card.querySelector('img.fac') as HTMLImageElement;
+    expect(fac, '左上角应是势力图标').toBeTruthy();
+    expect(fac.dataset.faction).toMatch(/^(汉|魏|蜀|吴|群|晋)$/);
+    expect(fac.src).toContain('/skills/faction-');
+    expect(fac.alt).toBe(fac.dataset.faction);
     expect(card.querySelector('.n')!.textContent!.length).toBeGreaterThan(1);   // 竖排名
     expect(card.querySelector('.stars')!.textContent).toBe('★★★★★');
     expect(card.querySelector('.bar .lv')!.textContent).toContain('Lv.40');      // 未上阵 = 默认 40 级
@@ -265,7 +270,9 @@ describe('Web 战斗模拟器冒烟', () => {
     const slotCard = redPanel.querySelectorAll('.slot')[2].querySelector('.slot-card') as HTMLElement;
     expect(slotCard, '槽位卡应有官方卡面').toBeTruthy();
     expect((slotCard.querySelector('.frame') as HTMLElement).style.backgroundImage).toContain('card-frame-5.png');
-    expect(slotCard.querySelector('.fac')!.textContent).toBe('吴');                 // 太史慈 = 吴
+    const slotFac = slotCard.querySelector('img.fac') as HTMLImageElement;
+    expect(slotFac.dataset.faction).toBe('吴');                                     // 太史慈 = 吴
+    expect(slotFac.src).toContain('faction-wu.png');
     expect(slotCard.querySelector('.hero-name')!.textContent).toBe('太史慈');       // 左竖排名
     expect(slotCard.querySelector('.card-bar .lv')!.textContent).toContain('Lv.40');
     expect(slotCard.querySelector('.card-bar .troop')!.textContent).toBe('弓');     // 太史慈 = 弓兵
@@ -292,6 +299,9 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(shCard, '简略战报卡应有官方卡面').toBeTruthy();
     expect((shCard.querySelector('.frame') as HTMLElement).style.backgroundImage).toContain('card-frame-5.png');
     expect((shCard.querySelector('img.sh-art') as HTMLImageElement).src).toContain('/portraits/');
+    const shFac = shCard.querySelector('img.fac') as HTMLImageElement;
+    expect(shFac, '战报卡面也应有势力图标').toBeTruthy();
+    expect(shFac.src).toContain('/skills/faction-');
     expect(shCard.querySelector('.sh-name')!.textContent!.length).toBeGreaterThan(1);
     expect(shCard.querySelector('.card-bar .lv')!.textContent).toContain('Lv.');
     expect(shCard.querySelector('.card-bar .troop')!.textContent).toMatch(/^(骑|步|弓)$/);
@@ -592,13 +602,13 @@ describe('Web 战斗模拟器冒烟', () => {
     clickTag('魏');
     const weiNames = new Set(['曹操', '张辽', '司马懿', '荀彧', '曹仁', '夏侯惇']);
     expect(cards().length).toBeGreaterThan(0);
-    // 卡框版卡片：势力字在左上 .fac、兵种在底部栏 .bar .troop
-    expect(cards().every((c) => c.querySelector('.fac')!.textContent === '魏')).toBe(true);
+    // 卡框版卡片：势力图标在左上 img.fac（data-faction 记势力）、兵种在底部栏 .bar .troop
+    expect(cards().every((c) => (c.querySelector('img.fac') as HTMLElement).dataset.faction === '魏')).toBe(true);
     // 再点「骑」→ 同时是魏且骑兵（交集）
     clickTag('骑');
     const weiCav = cards();
     expect(weiCav.length).toBeGreaterThan(0);
-    expect(weiCav.every((c) => c.querySelector('.fac')!.textContent === '魏')).toBe(true);
+    expect(weiCav.every((c) => (c.querySelector('img.fac') as HTMLElement).dataset.faction === '魏')).toBe(true);
     expect(weiCav.every((c) => c.querySelector('.bar .troop')!.textContent === '骑')).toBe(true);
     expect(weiNames.has('张辽')).toBe(true); // 魏骑代表
     // 取消骑、加吴 → 魏或吴（并集）
@@ -607,7 +617,7 @@ describe('Web 战斗模拟器冒烟', () => {
     const weiOrWu = cards();
     expect(weiOrWu.length).toBeGreaterThan(0);
     expect(weiOrWu.every((c) => {
-      const fac = c.querySelector('.fac')!.textContent!;
+      const fac = (c.querySelector('img.fac') as HTMLElement).dataset.faction;
       return fac === '魏' || fac === '吴';
     })).toBe(true);
     // 重置 → 全部恢复

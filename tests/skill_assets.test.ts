@@ -9,7 +9,7 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { SKILL_REGISTRY } from '../src/data/skills';
-import { skillTypeIcon, gradeFrame, gradeRibbon, gradePlate } from '../web/heroes';
+import { skillTypeIcon, gradeFrame, gradeRibbon, gradePlate, factionIconSrc } from '../web/heroes';
 
 const SKILLS_DIR = fileURLToPath(new URL('../public/skills/', import.meta.url));
 
@@ -49,6 +49,15 @@ describe('战法图标素材（public/skills）', () => {
 
   it('五星武将卡框素材存在（card-frame-5.png：白底已抠透，画像位/竖带为半透明遮罩）', () => {
     expect(existsSync(join(SKILLS_DIR, 'card-frame-5.png'))).toBe(true);
+  });
+
+  it('势力图标：汉/魏/蜀/吴/群/晋 六张行书彩字素材齐备（卡面左上角用图不用字）', () => {
+    for (const f of ['汉', '魏', '蜀', '吴', '群', '晋']) {
+      const src = factionIconSrc(f);
+      expect(src).toContain('faction-');
+      expect(existsSync(diskPath(src)), `缺势力图标 ${src}`).toBe(true);
+    }
+    expect(factionIconSrc('未知')).toBe('');   // 未知势力返回空串，不造坏路径
   });
 
   it('战法名背景框：S/A/B 三档有素材，C/D 明确无素材（返回空串而非坏路径 → CSS 芯片兜底）', () => {

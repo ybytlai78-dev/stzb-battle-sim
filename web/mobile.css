@@ -57,9 +57,9 @@
   /* 卡槽压缩：三槽均分，不再滚动；圆角/绯红底边继承 styles.css 套2 */
   .slot { padding: 4px; border-radius: var(--radius); }
   .slot-inner { gap: 6px; }
-  /* 卡面（242:350）随槽高缩小，字号同步压一档 */
-  .slot-card .fac { font-size: 6.5px; top: 1px; }
-  .slot-card .hero-name { font-size: 9px; letter-spacing: 0; }
+  /* 卡面（242:350）随槽高缩小，字号同步压一档；势力图标是图片（宽度百分比自适应，只调位置） */
+  .slot-card .fac { top: 1px; }
+  .slot-card .hero-name { font-size: 7px; letter-spacing: 0; }
   .slot-card .hero-stars { font-size: 5.5px; }
   .slot-card .card-bar { font-size: 6.5px; gap: 3px; }
   .slot-card .sp-badge { font-size: 5.5px; }
@@ -73,8 +73,8 @@
   .slot-add-icon { width: 24px; height: 24px; }
   .slot.empty { gap: 4px; letter-spacing: 1px; }
   /* 简略战报卡面：矮视口下字号压一档 */
-  .sum-hero .fac { font-size: 9px; }
-  .sum-hero .sh-name { font-size: 11px; letter-spacing: 0; }
+  .sum-hero .fac { top: 2px; }
+  .sum-hero .sh-name { font-size: 9px; letter-spacing: 0; }
   .sum-hero .sh-stars { font-size: 7px; }
   .sum-hero .card-bar { font-size: 9px; }
 
@@ -87,7 +87,7 @@
   /* 武将池：卡框版卡片缩小（比例由 aspect-ratio 保持，只压字号） */
   .hero-grid { gap: 5px; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); }
   .hero-card .fac { font-size: 8px; top: 2px; }
-  .hero-card .n { font-size: 9px; letter-spacing: 0; }
+  .hero-card .n { font-size: 8px; letter-spacing: 0; }
   .hero-card .stars { font-size: 6.5px; letter-spacing: 0; }
   .hero-card .bar { font-size: 7px; gap: 3px; }
   .hero-card .sp-badge { font-size: 6px; padding: 0 1px; }

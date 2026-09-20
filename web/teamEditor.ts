@@ -4,7 +4,7 @@
  * 点击武将 → 率土风武将详情页（左画像右数据：四维+成长 / 加点 / 红度 / 兵种转换占位 / 三战法栏）
  * 战法判定顺序：被动 > 指挥 > 主动 > 追击；同类型内主战法先判定、装配战法按添加顺序。
  */
-import { HEROES, getHeroById, SKILL_TYPE_NAME, avatarSrc, portraitSrc, isFemale, freePointBudget, troopCapacity, skillGrade, skillTypeIcon, gradeFrame, gradeRibbon, gradePlate, SKILL_DESCS, isMainSkill, isLearnableSkillListed, rednessStars, buildGeneral, TROOP_CHAR as TYPE_CHAR, FACTION_CLASS, cardFrameSrc } from './heroes';
+import { HEROES, getHeroById, SKILL_TYPE_NAME, avatarSrc, portraitSrc, isFemale, freePointBudget, troopCapacity, skillGrade, skillTypeIcon, gradeFrame, gradeRibbon, gradePlate, SKILL_DESCS, isMainSkill, isLearnableSkillListed, rednessStars, buildGeneral, TROOP_CHAR as TYPE_CHAR, factionIconSrc, cardFrameSrc } from './heroes';
 import type { HeroJson } from './heroes';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import type { General, Skill, TroopType, FormationBonus } from '../src/engine/types';
@@ -263,7 +263,7 @@ export function heroMainSkillName(hero: HeroJson): string {
 }
 
 /** 武将卡内部内容（.art 画像 / .frame 卡框 / .plate 覆盖信息——由调用方包 .hero-card）。
- *  结构对齐官方卡（wujiang5 卡框）：左上势力字 + 竖排名、右上五星、底部 Lv·兵种。
+ *  结构对齐官方卡（wujiang5 卡框）：左上势力图标 + 竖排名、右上五星、底部 Lv·兵种。
  *  ⚠️ 主战法名**不进卡面**（2026-09-19 回退「卡上画战法名」的决策）：卡面只留 势力/姓名/星级/Lv/兵种，
  *     战法名与描述走 `card.title` 悬浮提示。
  *  @param level 展示等级（武将池传该武将当前上阵等级，缺省 40＝引擎默认等级） */
@@ -271,12 +271,11 @@ function heroCardHtml(hero: HeroJson, level = 40): string {
   const art = portraitSrc(hero.id) || '';
   const frame = cardFrameSrc();
   const sp = hero.tags.includes('sp');
-  const facCls = FACTION_CLASS[hero.faction] ?? 'qun';
   return `
       <div class="art" style="background-image:url('${art}')"></div>
       <div class="frame" style="background-image:url('${frame}')"></div>
       <div class="plate">
-        <div class="fac ${facCls}">${hero.faction}</div>
+        <img class="fac" data-faction="${hero.faction}" alt="${hero.faction}" src="${factionIconSrc(hero.faction)}" />
         <div class="n">${hero.name}</div>
         ${sp ? '<div class="sp-badge">SP</div>' : ''}
         <div class="stars">★★★★★</div>
@@ -533,17 +532,16 @@ export function renderSlot(team: 'red' | 'blue', i: number, slot: SlotState, lab
   const hero = getHeroById(slot.heroId)!;
   const portrait = portraitSrc(hero.id);
   const avatar = avatarSrc(hero.id);
-  const facCls = FACTION_CLASS[hero.faction] ?? 'qun';
   const div = document.createElement('div');
   div.className = 'slot-inner';
-  /* 左＝官方卡面（wujiang5 卡框：画像铺满 / 左上势力字 + 竖排名 / 右上红度 / 底部 Lv·兵种），
+  /* 左＝官方卡面（wujiang5 卡框：画像铺满 / 左上势力图标 + 竖排名 / 右上红度 / 底部 Lv·兵种），
      右＝配将信息列（站位、头像、属性概览、三战法位）。名称只画一次（在卡面竖排，类名仍是 .hero-name）。 */
   div.innerHTML = `
     <div class="slot-card">
       <div class="slot-art" style="background-image:url('${portrait}')"></div>
       <div class="frame" style="background-image:url('${cardFrameSrc()}')"></div>
       <div class="plate">
-        <div class="fac ${facCls}">${hero.faction}</div>
+        <img class="fac" data-faction="${hero.faction}" alt="${hero.faction}" src="${factionIconSrc(hero.faction)}" />
         <div class="hero-name">${hero.name}</div>
         ${hero.tags.includes('sp') ? '<div class="sp-badge">SP</div>' : ''}
         <div class="hero-stars" title="红度 ${slot.redness}/5">${rednessStars(slot.redness)}</div>

@@ -255,11 +255,18 @@ describe('伤害测试实验室（主站模块 v2）', () => {
     expect(titles[1]).toContain('侍卫'); // 右 = 侍卫
     // 简略战报在滚动容器内会把 .sh-art 压成 0 高：必须撑满剩余视口（与主站 report-view 同链）
     expect(analysis.querySelector('.la-body')!.classList.contains('la-fill')).toBe(true);
-    const imgs = Array.from(summary.querySelectorAll('.sum-hero img')) as HTMLImageElement[];
+    // 画像＝卡面里的 img.sh-art（卡面上另有 img.fac 势力图标，别混进来）
+    const imgs = Array.from(summary.querySelectorAll('.sum-hero img.sh-art')) as HTMLImageElement[];
     expect(imgs.length).toBeGreaterThanOrEqual(4); // 我方武将 + 侍卫 ×3
     for (const img of imgs) {
       const src = img.getAttribute('src') ?? '';
       expect(src, `${img.alt || '武将'} 画像 src 不应为空`).toMatch(/^\/portraits\//);
+    }
+    // 侍卫没有势力（无 faction 记录）→ 不渲染势力图标；我方武将要渲染
+    for (const card of Array.from(summary.querySelectorAll('.sum-hero')) as HTMLElement[]) {
+      const art = (card.querySelector('img.sh-art') as HTMLImageElement).getAttribute('src') ?? '';
+      const isGuard = art.includes('guard');
+      expect(!!card.querySelector('img.fac'), `势力图标缺失状态不对：${art}`).toBe(!isGuard);
     }
     const guardImgs = imgs.filter((img) => img.alt === '侍卫');
     expect(guardImgs.length).toBe(3);

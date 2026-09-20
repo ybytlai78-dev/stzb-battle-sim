@@ -94,7 +94,7 @@ export function rednessStars(r: number): string {
 /** 兵种 → 单字（官方卡底部兵种位；无兵种图标素材时用文字） */
 export const TROOP_CHAR: Record<string, string> = { cavalry: '骑', infantry: '步', archer: '弓' };
 
-/** 势力 → 势力字配色类（官方卡左上角势力字：魏蓝 / 蜀绿 / 吴红 / 群紫 / 汉金 / 晋黄绿） */
+/** 势力 → 势力图标文件名 key（官方卡左上角行书彩字：汉紫 / 魏蓝 / 蜀黄绿 / 吴红 / 群银 / 晋青） */
 export const FACTION_CLASS: Record<string, string> = {
   汉: 'han', 魏: 'wei', 蜀: 'shu', 吴: 'wu', 群: 'qun', 晋: 'jin',
 };
@@ -102,6 +102,12 @@ export const FACTION_CLASS: Record<string, string> = {
 /** 武将卡框素材（五星卡框 wujiang5：画像铺满 + 左竖带/顶栏半透明遮罩 + 底部等级栏） */
 export function cardFrameSrc(): string {
   return asset('/skills/card-frame-5.png');
+}
+
+/** 势力图标素材：faction-{han|wei|shu|wu|qun|jin}.png（未知势力返回空串） */
+export function factionIconSrc(faction: string): string {
+  const key = FACTION_CLASS[faction];
+  return key ? asset(`/skills/faction-${key}.png`) : '';
 }
 
 /** 战法官方描述（满级效果），无则返回空串 */
