@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 二级兵种（高级兵种）系统 —— 数据与规则表
  *
  * 依据：`docs/兵种转换调研.md`（用户 2026-09-20 审定口径，全部按现版）。
@@ -108,7 +108,7 @@ export const SECONDARY_TROOPS: Record<SecondaryTroopType, SecondaryTroopDef> = {
   死士: {
     code: '31',
     family: '弓兵系',
-    exclusiveTrait: ['钢毅：怯战、犹豫状态下自身受到所有伤害 −20%', '出奇：本场战斗首次受到攻击时规避伤害'],
+    exclusiveTrait: ['钢毅：怯战、犹豫状态下自身受到所有伤害 −20%'],
     exclusive: false,
     rangeMod: -1,
   },
@@ -133,7 +133,7 @@ export const SECONDARY_TROOPS: Record<SecondaryTroopType, SecondaryTroopDef> = {
   蛮兵: {
     code: '52',
     family: '步兵系',
-    exclusiveTrait: ['野地作战时自身造成所有伤害 +18%', '城池/建筑作战时造成伤害 −8%'],
+    exclusiveTrait: ['自身造成所有伤害 +18%（用户 2026-09-20：地形不建模，默认吃得到效果）'],
     exclusive: false,
   },
   藤甲兵: {
@@ -145,13 +145,16 @@ export const SECONDARY_TROOPS: Record<SecondaryTroopType, SecondaryTroopDef> = {
   重骑兵: {
     code: '13',
     family: '骑兵系',
-    exclusiveTrait: ['披甲：自身受到所有伤害 −10%', '重骑冲阵：前 2 回合受到普通攻击时反击（伤害率 75%）'],
+    exclusiveTrait: [
+      '披甲：自身受到所有伤害 −10%',
+      '重骑冲阵：前 2 回合受到普通攻击时反击（伤害率 75%）——反击是**状态类**效果，与其它同类型反击冲突（先施加者生效，同分兵）',
+    ],
     exclusive: false,
   },
   轻骑兵: {
     code: '23',
     family: '骑兵系',
-    exclusiveTrait: ['出奇：本场战斗首次受到攻击时规避伤害', '轻骑冲阵：前 2 回合优先行动，造成所有伤害 +18%'],
+    exclusiveTrait: ['轻骑冲阵：战斗开始后前 4 次攻击造成的伤害 +18%（用户 2026-09-20 口径）'],
     exclusive: false,
   },
   铁骑兵: {
@@ -163,7 +166,7 @@ export const SECONDARY_TROOPS: Record<SecondaryTroopType, SecondaryTroopDef> = {
   弓骑兵: {
     code: '33',
     family: '骑兵系',
-    exclusiveTrait: ['行踪难测：受到追击战法伤害 −90%', '料敌机先：前 2 次受到攻击时规避伤害', '骑射：可学弓兵与骑兵战法，战法距离 +1'],
+    exclusiveTrait: ['行踪难测：受到追击战法伤害 −90%', '骑射：可学弓兵与骑兵战法，战法距离 +1'],
     exclusive: false,
   },
   象兵: {
@@ -311,8 +314,6 @@ export interface TraitCombatContext {
   targetPosition: Position;
   /** 施法者到受击者的距离（直射） */
   distance: number;
-  /** 野地作战（蛮兵）；缺省 false = 城池作战 */
-  fieldBattle?: boolean;
   /** 防守方视角（守备/以静制动）：施法者处于防守方为 true */
   attackerIsDefender?: boolean;
   /** 受击者处于防守方（守备） */
@@ -329,8 +330,10 @@ export interface TraitCombatContext {
   isDot?: boolean;
   /** 是否普攻或追击伤害（难测） */
   isBasicOrPursuit?: boolean;
-  /** 施法者攻击是否为「进行攻击」（普攻/物理主动/追击；列阵只吃主动战法） */
+  /** 施法者攻击是否为「进行攻击」（列阵只吃主动战法） */
   isActiveSkill?: boolean;
+  /** 轻骑兵「前 4 次攻击」是否仍在次数内（由轻骑兵攻击计数器判定） */
+  lightCavalryAttackLeft?: boolean;
 }
 
 /** 特性增减伤结算结果：caused = 造成侧加成（1 = 无），reduce = 受击侧减伤（加算） */
@@ -371,8 +374,10 @@ export function traitCombatModifiers(x: TraitCombatContext): TraitModifiers {
   // ── 施法者二级兵种专属特性（造成侧）──
   if (x.attackerTroop === '弩兵') caused += 0.08;
   if (x.attackerTroop === '长弓兵' && x.round <= 4) caused += 0.1;
-  if (x.attackerTroop === '轻骑兵' && x.round <= 2) caused += 0.18;
-  if (x.attackerTroop === '蛮兵') caused += x.fieldBattle ? 0.18 : -0.08;
+  // 轻骑冲阵：战斗开始后前 4 次**攻击** +18%（次数由 action.ts 的轻骑兵计数器传入；缺省视为已用尽）
+  if (x.attackerTroop === '轻骑兵' && x.lightCavalryAttackLeft === true) caused += 0.18;
+  // 蛮兵：野地 +18%（用户 2026-09-20：地形不建模，默认吃得到效果）
+  if (x.attackerTroop === '蛮兵') caused += 0.18;
 
   // ── 受击者通用特性（受击侧）──
   if (tt.includes('守备')) reduce += x.targetIsDefender ? 0.16 : 0.06;

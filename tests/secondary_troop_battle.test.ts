@@ -39,6 +39,7 @@ function makeGeneral(
     traits?: GeneralTrait[];
     activeSkillIds?: string[];
     commandSkillIds?: string[];
+    position?: '大营' | '中军' | '前锋';
   } = {}
 ): General {
   return {
@@ -50,7 +51,7 @@ function makeGeneral(
     tags: [],
     mutualExclusionGroup: null,
     troopType,
-    position: '大营',
+    position: opts.position ?? '大营',
     attack: opts.attack ?? 220,
     defense: opts.defense ?? 60,
     strategy: opts.strategy ?? 100,
@@ -303,6 +304,65 @@ describe('通用特性：战斗期效果', () => {
     expect(effectiveStat(mk('中军'), 'strategy')).toBe(100);
     expect(effectiveStat(mk('大营'), 'attack')).toBe(206);
     expect(effectiveStat(mk('大营'), 'strategy')).toBe(96);
+  });
+});
+
+describe('二级兵种专属特性：状态类（反击 / 分兵）', () => {
+  it('重骑兵：准备阶段获得「反击」状态（前 2 回合，伤害率 75%）', () => {
+    const iron = makeGeneral('u', 'cavalry', { secondaryTroop: '重骑兵', speed: 200 });
+    const rep = runDuel(iron, makeGeneral('e', 'infantry', { speed: 1 }), 11);
+    const counterEv = rep.events.find(
+      (e) => e.type === 'status_inflicted' && (e as { statusType?: string }).statusType === 'counter'
+    );
+    expect(counterEv).toBeDefined();
+    expect((counterEv as { detail: string }).detail).toContain('反击');
+    expect((counterEv as { detail: string }).detail).toContain('75');
+    // 反击伤害事件会出现（来源为持有者、skillId 为兵种特性合成 id）
+    const counterDmg = rep.events.filter(
+      (e) => e.type === 'damage' && e.skillId === 'trait_zhongqi_counter'
+    );
+    expect(counterDmg.length).toBeGreaterThan(0);
+  });
+
+  it('普通兵种 / 其它兵种不吃反击（不授予该状态）', () => {
+    for (const t of ['轻骑兵', '弩兵', '藤甲兵'] as SecondaryTroopType[]) {
+      const g = makeGeneral('u', 'cavalry', { secondaryTroop: t, speed: 200 });
+      const rep = runDuel(g, makeGeneral('e', 'infantry', { speed: 1 }), 11);
+      const ev = rep.events.find(
+        (e) => e.type === 'status_inflicted' && (e as { statusType?: string }).statusType === 'counter'
+      );
+      expect(ev, `${t} 不应授予反击`).toBeUndefined();
+    }
+  });
+
+  it('轻骑兵「轻骑冲阵」：前 4 次攻击 +18%，第 5 次起失效', () => {
+    // 打满 8 回合 → 普攻 8 次以上：第 1~4 次带加成、之后不带
+    const g = makeGeneral('u', 'cavalry', { speed: 200, secondaryTroop: '轻骑兵' });
+    const rep = runDuel(g, makeGeneral('e', 'infantry', { speed: 1 }), 2468);
+    const hits = hitsOf(rep, 'u');
+    expect(hits.length).toBeGreaterThan(4);
+    const boosted = hits.map((h) =>
+      h.modifiers?.caused.some((m) => m.skillId === 'troop_trait' && Math.abs(m.rate - 0.18) < 1e-9)
+    );
+    expect(boosted.slice(0, 4).every(Boolean)).toBe(true);
+    expect(boosted.slice(4).every((x) => x === false)).toBe(true);
+  });
+
+  it('散射（通用特性）：首次普攻附带分兵 40%（split 状态 charges=1，用后即消）', () => {
+    const g = makeGeneral('u', 'archer', { speed: 200, secondaryTroop: '弩兵', traits: ['散射'] });
+    const plainG = makeGeneral('u', 'archer', { speed: 200, secondaryTroop: '弩兵' });
+    // 敌军 2 人（大营 + 中军）→ 普攻主目标身边有相邻目标，分兵才有落点
+    const enemies = () => [makeGeneral('e1', 'archer', { speed: 1 }), makeGeneral('e2', 'archer', { speed: 1, position: '中军' })];
+    const rep = runBattle({ myTeam: [g], enemyTeam: enemies(), seed: 555, maxRounds: 4 });
+    const splitEv = rep.events.find(
+      (e) => e.type === 'status_inflicted' && (e as { statusType?: string }).statusType === 'split'
+    );
+    expect(splitEv).toBeDefined();
+    expect((splitEv as { detail: string }).detail).toContain('40');
+    expect(rep.events.filter((e) => e.type === 'split_damage').length).toBeGreaterThan(0);
+
+    const plain = runBattle({ myTeam: [plainG], enemyTeam: enemies(), seed: 555, maxRounds: 4 });
+    expect(plain.events.filter((e) => e.type === 'split_damage').length).toBe(0);
   });
 });
 

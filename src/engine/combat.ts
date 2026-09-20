@@ -7,7 +7,7 @@
  */
 import type { BattleConfig, BattleEvent, BattleReport, General, Side, Skill, UnitState } from './types';
 import { Rng } from './rng';
-import { actUnit, triggerCommandSkills, triggerPassiveSkills, triggerDelayedOutputs, triggerRangeDecayPassives, triggerRoundEndCommands, triggerImperialDecrees, triggerRoundStartChance, triggerRoundEndChanceOutputs, tickStatuses, tickRoundStartStatuses, effectiveStat, type CombatContext } from './action';
+import { actUnit, triggerCommandSkills, triggerPassiveSkills, triggerDelayedOutputs, triggerRangeDecayPassives, triggerRoundEndCommands, triggerImperialDecrees, triggerRoundStartChance, triggerRoundEndChanceOutputs, tickStatuses, tickRoundStartStatuses, effectiveStat, grantSecondaryTroopStatuses, type CombatContext } from './action';
 import { computeStats } from './stats';
 import { SKILL_REGISTRY } from '../data/skills';
 import { validateMutualExclusion } from '../data/hero-utils';
@@ -37,7 +37,6 @@ export function runBattle(config: BattleConfig): BattleReport {
     basicHitProcs: [],
     currentRound: 0,
     defenderSide: config.defenderSide,
-    fieldBattle: config.fieldBattle,
     actLayerCounters: new Map(),
     // 伤兵死亡机制：默认启用（第 1 回合 5%，每回合 +14%，封顶 100%）
     woundedMortality: config.woundedMortality ?? { base: 5, perRound: 14 },
@@ -82,6 +81,9 @@ export function runBattle(config: BattleConfig): BattleReport {
   emitLines(enemyTeam, enemyBonus.lines);
 
   events.push({ type: 'prep_phase', phase: 'troop' });
+  // 二级兵种专属/通用特性的**状态类**效果：重骑兵「重骑冲阵」（前 2 回合反击 75%）、
+  // 通用特性「散射」（首次普攻附带分兵 40%）——准备阶段一次性授予，走状态冲突闸门
+  for (const unit of turnOrder) grantSecondaryTroopStatuses(ctx, unit);
   events.push({ type: 'prep_phase', phase: 'skill' });
   // 【战法】先判定全部 battle_start 被动（百战精兵等加属性），再判定一类指挥（持节镇西等读生效属性）
   for (const unit of turnOrder) {

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 单武将行动阶段 + 指挥/被动管线（率土标准流程，v0.3）
  *   准备阶段【战法】：battle_start 被动 → 一类指挥 → 正式回合单将行动：
  *     被动（round_start）→ 指挥预备/二类 → 混乱检查 → 怯战检查 → 准备检查 → 主动战法(逐个) → 普通攻击(连击×N) → 追击战法(逐个)
@@ -506,8 +506,8 @@ export interface CombatContext {
    * 缺省 undefined = 无防守方（相关特性不生效）；野地遭遇战/驻守战可由调用方指定。
    */
   defenderSide?: 'my' | 'enemy';
-  /** 是否野地作战（蛮兵：野地 +18% / 城池 −8%）；缺省 undefined = 城池作战 */
-  fieldBattle?: boolean;
+  /** 轻骑兵「前 4 次攻击」已用次数计数器（key = 单位 id）；可选字段，单元测试可直接构造 ctx 省略 */
+  lightCavalryAttacks?: Map<string, number>;
   /** 二类指挥行动叠层计数器（奋疾先登）：key `${casterId}:${skillId}` → 当前增伤层数。
    *  可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化 */
   actLayerCounters?: Map<string, number>;
@@ -1380,6 +1380,39 @@ for (const caster of team) {
     executeSkillOutputs(ctx, caster, skill, [], exPassed, false, actor);
   }
 }
+}
+
+/**
+ * 二级兵种专属特性：准备阶段授予**状态类**效果。
+ *  - 重骑兵「重骑冲阵」：前 2 回合受到普通攻击时反击（伤害率 75%）——用 `counter` 状态，
+ *    与其它同类型反击冲突（先施加者生效，同分兵；用户 2026-09-20 口径）；
+ *  - 通用特性「散射」：首次普通攻击附带分兵 40% —— 用带 `charges:1` 的 `split` 状态。
+ * 幂等：同一单位同一来源只授一次。返回是否授出（供测试）。
+ */
+export function grantSecondaryTroopStatuses(ctx: CombatContext, unit: UnitState): void {
+  const g = unit.general;
+
+  // 重骑兵：前 2 回合反击（75%）——反击是状态类，走 inflictStatus 的冲突闸门
+  if (g.secondaryTroop === '重骑兵') {
+    inflictStatus(
+      ctx,
+      unit,
+      { type: 'counter', rate: 75, duration: 2 },
+      'passive',
+      'trait_zhongqi_counter'
+    );
+  }
+
+  // 散射（通用特性）：首次普攻附带分兵 40%
+  if (g.secondaryTraits?.includes('散射') && !hasStatus(unit, 'split')) {
+    inflictStatus(
+      ctx,
+      unit,
+      { type: 'split', rate: 40, duration: 999, charges: 1 },
+      'passive',
+      'trait_sanshe_split'
+    );
+  }
 }
 
 /**
@@ -2980,11 +3013,25 @@ function inflictStatusCore(
   if (sameType) {
     // 同类型不同战法：冲突
     // 概率规避（列营守险）是状态类：不同来源同样先施加者生效、后施加者被拒（与同源冲突口径一致）
-    if (sameType.type === 'confusion' || sameType.type === 'rampage' || sameType.type === 'cowardice' || sameType.type === 'hesitation' || sameType.type === 'combo' || sameType.type === 'evade_chance') {
-      // 控制：先施加者生效，后施加者被拒
+    // 反击 / 分兵（用户 2026-09-20 口径）：同为**状态类**效果——不同来源不可叠加，先施加者生效、后施加者被拒
+    if (
+      sameType.type === 'confusion' ||
+      sameType.type === 'rampage' ||
+      sameType.type === 'cowardice' ||
+      sameType.type === 'hesitation' ||
+      sameType.type === 'combo' ||
+      sameType.type === 'evade_chance' ||
+      sameType.type === 'counter' ||
+      sameType.type === 'split'
+    ) {
+      // 控制 / 状态类：先施加者生效，后施加者被拒
       const detail = sameType.type === 'evade_chance'
         ? '规避效果冲突（已有效果），先施加者生效，未生效'
-        : `${statusName(sameType.type)}冲突（已有${skillTypeName(sameType.sourceSkillType)}战法施加的${statusName(sameType.type)}），未生效`;
+        : sameType.type === 'counter'
+          ? '反击冲突（已有反击效果），先施加者生效，未生效'
+          : sameType.type === 'split'
+            ? '分兵冲突（已有分兵效果），先施加者生效，未生效'
+            : `${statusName(sameType.type)}冲突（已有${skillTypeName(sameType.sourceSkillType)}战法施加的${statusName(sameType.type)}），未生效`;
       ctx.events.push({
         type: 'status_conflict',
         unitId: target.general.id,
@@ -4467,7 +4514,6 @@ function traitCtx(
     round: ctx?.currentRound ?? 1,
     targetPosition: target.general.position,
     distance: distanceBetween(ctx as CombatContext, source, target),
-    fieldBattle: ctx?.fieldBattle,
     attackerIsDefender: ctx?.defenderSide != null && source.side === ctx.defenderSide,
     targetIsDefender: ctx?.defenderSide != null && target.side === ctx.defenderSide,
     damageType: hit?.damageType,
@@ -4477,6 +4523,7 @@ function traitCtx(
     isDot: hit?.dotType != null,
     isBasicOrPursuit: hit?.damageSource === 'basic' || hit?.skillType === 'pursuit',
     isActiveSkill: hit?.skillType === 'active',
+    lightCavalryAttackLeft: lightCavalryAttackLeft(source, ctx, hit),
   };
 }
 
@@ -4743,7 +4790,36 @@ function redirectPhysicalHit(ctx: CombatContext, original: UnitState): UnitState
  * 只扣 caused（青丘 / 全军突击），taken 由受击路径消耗。
  * `hit` 过滤不匹配的 charges（虎步关右 physical 不被策略消耗）；无 hit 时不过滤（兼容青丘等无过滤 charges）。
  */
+/** 轻骑兵「轻骑冲阵」前 4 次攻击上限（用户 2026-09-20 口径） */
+const LIGHT_CAVALRY_ATTACK_LIMIT = 4;
+
+/**
+ * 轻骑兵「战斗开始后前 4 次攻击造成伤害 +18%」——
+ * 是否仍在次数内（**读**计数，不消耗；消耗在 `consumeAttackCharges` 内统一 +1）。
+ * 非轻骑兵 / 非「进行攻击」/ 次数用尽 → false。
+ */
+function lightCavalryAttackLeft(
+  attacker: UnitState,
+  ctx: CombatContext | undefined,
+  hit?: DamageHitContext
+): boolean {
+  if (attacker.general.secondaryTroop !== '轻骑兵') return false;
+  if (!isAttackHitForProc(hit)) return false;
+  const used = ctx?.lightCavalryAttacks?.get(attacker.general.id) ?? 0;
+  return used < LIGHT_CAVALRY_ATTACK_LIMIT;
+}
+
+/** 记录一次「进行攻击」（轻骑兵计数器）；只在真正打出攻击时调用 */
+function countLightCavalryAttack(ctx: CombatContext, attacker: UnitState, hit?: DamageHitContext): void {
+  if (attacker.general.secondaryTroop !== '轻骑兵') return;
+  if (!isAttackHitForProc(hit)) return;
+  ctx.lightCavalryAttacks ??= new Map();
+  const used = ctx.lightCavalryAttacks.get(attacker.general.id) ?? 0;
+  ctx.lightCavalryAttacks.set(attacker.general.id, used + 1);
+}
+
 function consumeAttackCharges(ctx: CombatContext, attacker: UnitState, hit?: DamageHitContext): void {
+  countLightCavalryAttack(ctx, attacker, hit);
   for (const s of [...attacker.statuses]) {
     if (s.type !== 'damage_boost' || s.charges == null) continue;
     if (s.direction === 'taken') continue;
