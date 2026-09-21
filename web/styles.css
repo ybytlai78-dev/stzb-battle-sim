@@ -248,122 +248,56 @@ main {
   border-color: var(--beige-hi);
   color: var(--beige-ink);
 }
-/* ── 部队加成弹窗（率土手游复刻：深色古风，红棕磨砂暗纹，三栏并列卡片）── */
-.bm-mask {
-  position: fixed;
-  inset: 0;
-  z-index: 200;
-  background: rgba(4, 3, 2, 0.78);
-  backdrop-filter: blur(3px);
-  -webkit-backdrop-filter: blur(3px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.bonus-modal {
-  width: min(980px, 94vw);
-  position: relative;
-  border-radius: 10px;
-  border: 1px solid rgba(212, 175, 55, 0.5);
-  background:
-    radial-gradient(1100px 420px at 50% -12%, rgba(140, 82, 44, 0.42), transparent 62%),
-    repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.014) 0 2px, transparent 2px 7px),
-    linear-gradient(180deg, #402723 0%, #33201c 55%, #271613 100%);
-  box-shadow:
-    0 22px 70px rgba(0, 0, 0, 0.65),
-    inset 0 0 46px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 214, 130, 0.14);
-  color: var(--text);
-  overflow: hidden;
-}
-/* 古风四角纹饰 */
-.bonus-modal::before,
-.bonus-modal::after {
-  content: '';
-  position: absolute;
-  width: 22px;
-  height: 22px;
-  border: 1px solid rgba(212, 175, 55, 0.55);
-  pointer-events: none;
-}
-.bonus-modal::before {
-  top: 6px;
-  left: 6px;
-  border-right: none;
-  border-bottom: none;
-}
-.bonus-modal::after {
-  bottom: 6px;
-  right: 6px;
-  border-left: none;
-  border-top: none;
-}
-.bm-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 11px 18px 10px;
-  background:
-    linear-gradient(180deg, rgba(212, 175, 55, 0.2), rgba(212, 175, 55, 0.05)),
-    rgba(0, 0, 0, 0.28);
-  border-bottom: 1px solid rgba(212, 175, 55, 0.4);
-}
-.bm-title {
-  font-family: var(--font-kai);
-  font-size: 18px;
-  letter-spacing: 8px;
-  color: #ecd39a;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8), 0 0 14px rgba(212, 175, 55, 0.25);
-}
-.bm-close {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 17px;
-  line-height: 1;
-  color: #ff9d8a;
-  background: radial-gradient(circle at 50% 35%, #7a2f24, #571f17 70%);
-  border: 1px solid rgba(255, 128, 100, 0.55);
-  cursor: pointer;
-  transition: filter .12s;
-  user-select: none;
-}
-.bm-close:hover { filter: brightness(1.2); }
-.bm-cols {
+/* ── 部队加成弹窗 ─────────────────────────────────────────────────────────────
+   骨架：普通长方形弹窗（沿用统一外壳 .modal / .m-head / .m-body / .m-foot），
+        内容纵向三段（阵营 / 称号 / 兵种），每段 = 标题行 + 该队武将加成行；
+   风格：只用套 2 色板 token（无渐变 / 无纹理 / 无发光 / 无图案徽章），与站内其它弹窗一致。
+   旧版（三栏并排 980px 宽 + 四角纹饰 + 径向高光 + 橙青标签 + 马头剪影）已全部移除。 */
+.modal.bonus-modal { width: min(620px, 92vw); }
+/* 两列：阵营 | 称号；兵种通栏 —— 得到正常的长方形（≈620×~400），而不是又高又窄 */
+.bm-body {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-  padding: 16px 18px 20px;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
 }
+.bm-card:nth-child(3) { grid-column: 1 / -1; }
 .bm-card {
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(0, 0, 0, 0.22)),
-    rgba(26, 16, 13, 0.72);
-  border: 1px solid rgba(212, 175, 55, 0.32);
-  border-radius: 8px;
-  padding: 12px 12px 14px;
-  box-shadow: inset 0 0 22px rgba(0, 0, 0, 0.35);
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius);
+  background: var(--color-surface-2);
+  padding: 10px 12px 12px;
 }
 .bm-card-head {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-bottom: 10px;
-  margin-bottom: 10px;
-  border-bottom: 1px solid rgba(212, 175, 55, 0.22);
+  padding-bottom: 8px;
+  margin-bottom: 9px;
+  border-bottom: 1px solid var(--color-line);
+}
+.bm-badge {
+  flex-shrink: 0;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  background: var(--color-bg);
+  color: var(--gold-bright);
+  font-family: var(--font-kai);
+  font-size: 14px;
+  font-weight: 700;
 }
 .bm-card-title {
+  font-family: var(--font-kai);
   font-size: 13.5px;
   font-weight: 700;
-  color: #e9cf98;
-  font-family: var(--font-kai);
-  letter-spacing: 1px;
+  color: var(--color-text);
+  letter-spacing: .5px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -371,149 +305,96 @@ main {
 .bm-tag {
   margin-left: auto;
   flex-shrink: 0;
+  white-space: nowrap;
   font-size: 10.5px;
   padding: 1px 7px;
   border-radius: 3px;
-  letter-spacing: 1px;
-  white-space: nowrap;
+  border: 1px solid var(--color-line);
+  background: var(--color-bg);
+  color: var(--color-text-muted);
 }
-.bm-tag.battle { color: #f0a05e; background: rgba(176, 92, 40, 0.22); border: 1px solid rgba(240, 160, 94, 0.45); }
-.bm-tag.global { color: #7fc4dc; background: rgba(52, 118, 146, 0.24); border: 1px solid rgba(127, 196, 220, 0.45); }
-/* 徽章 */
-.bm-badge {
+.bm-tag.battle { color: var(--gold); border-color: color-mix(in srgb, var(--gold) 45%, transparent); }
+.bm-tag.global { color: color-mix(in srgb, var(--color-text) 70%, var(--color-text-muted)); border-color: var(--line-strong); }
+/* 武将加成行：头像 + 名字 + 四维加成格 */
+.bm-list { display: flex; flex-direction: column; gap: 8px; }
+.bm-hero { display: flex; align-items: center; gap: 9px; }
+.bm-av {
   width: 34px;
   height: 34px;
-  border-radius: 50%;
   flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 16px;
-  font-weight: 700;
-  font-family: var(--font-kai);
-  box-shadow: 0 0 0 1px rgba(212, 175, 55, 0.5), inset 0 0 8px rgba(0, 0, 0, 0.5);
-}
-.bm-faction-badge {
-  color: #f2d9a0;
-  background: radial-gradient(circle at 50% 30%, #8c3f2c, #5c2418 75%);
-}
-.bm-title-badge {
-  color: #cfe8f2;
-  background: radial-gradient(circle at 50% 30%, #33586a, #1e3644 75%);
-}
-.bm-troop-badge {
-  color: #e9cf98;
-  background: radial-gradient(circle at 50% 30%, #7a5a24, #4a3514 75%);
-}
-.bm-horse {
-  width: 24px;
-  height: 22px;
-  display: block;
-}
-/* 武将行：头像 + 名字 + 四维加成格 */
-.bm-list {
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-  min-height: 0;
-}
-.bm-hero {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-.bm-av {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
+  border: 1px solid var(--color-line);
+  border-radius: 4px;
   object-fit: cover;
-  border: 1px solid rgba(212, 175, 55, 0.5);
-  flex-shrink: 0;
-  background: #17100e;
+  object-position: 50% 18%;
+  background: var(--color-bg);
 }
-.bm-hero-main {
-  min-width: 0;
-  flex: 1;
-}
+.bm-hero-main { flex: 1; min-width: 0; }
 .bm-hero-name {
   display: block;
-  font-size: 12.5px;
-  color: var(--text);
-  font-weight: 600;
   margin-bottom: 3px;
+  font-family: var(--font-kai);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--color-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.bm-stats {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 3px;
-}
+/* 四维加成：内容宽度自适应（不摊满整行，避免稀稀拉拉） */
+.bm-stats { display: flex; flex-wrap: wrap; gap: 3px 12px; }
 .bm-stat {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: 3px;
-  font-size: 10.5px;
-  color: #6f6a63;
+  font-size: 11px;
+  color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
-  min-width: 0;
 }
 .bm-stat i { font-style: normal; }
-.bm-stat.on {
-  color: #7ecf7e;
-  text-shadow: 0 0 6px rgba(110, 200, 110, 0.35);
-}
-.bm-ic {
-  width: 13px;
-  height: 13px;
-  flex-shrink: 0;
-}
+.bm-stat.on { color: color-mix(in srgb, var(--green) 55%, var(--color-text)); }
+.bm-ic { width: 13px; height: 13px; flex-shrink: 0; opacity: .8; }
 /* 空态 / 提示 */
 .bm-empty {
+  padding: 12px 6px 10px;
   text-align: center;
-  padding: 18px 6px 20px;
-  color: var(--text-weak);
-  font-size: 13px;
-  letter-spacing: 2px;
   font-family: var(--font-kai);
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: var(--color-text-muted);
 }
 .bm-empty span {
   display: block;
-  margin-top: 6px;
+  margin-top: 5px;
+  font-family: var(--font-sans);
   font-size: 11px;
   letter-spacing: 0;
-  color: var(--text-dim);
-  font-family: inherit;
+  color: var(--color-text-muted);
 }
 .bm-hint {
+  padding: 12px 6px;
   text-align: center;
-  padding: 22px 8px 24px;
-  color: var(--text-dim);
   font-size: 12px;
-  line-height: 2.1;
+  line-height: 1.9;
+  color: var(--color-text-muted);
 }
 .bm-hint-link {
   display: block;
+  margin-top: 4px;
   color: var(--gold);
   font-size: 12px;
-  cursor: pointer;
   letter-spacing: 1px;
+  cursor: pointer;
 }
 .bm-hint-link:hover { color: var(--gold-bright); }
-.bm-title-act {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-bottom: 8px;
-}
+.bm-title-act { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
 .bm-title-chip {
   font-size: 11px;
-  color: #cfe8f2;
-  border: 1px solid rgba(127, 196, 220, 0.5);
-  background: rgba(52, 118, 146, 0.2);
-  border-radius: 3px;
   padding: 1px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--line-strong);
+  background: var(--color-bg);
+  color: var(--ink);
 }
 .team-panel .slots {
   flex: 1;

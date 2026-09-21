@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Web UI 冒烟测试（jsdom）：初始化 → 选将 → 详情页 → 开始模拟 → 战报渲染
  * 验证浏览器端主链路无运行时错误（引擎已在 Node 侧全量覆盖）。
  */
@@ -926,7 +926,7 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(stat).toBeTruthy();
     expect(stat!.textContent!.startsWith('+')).toBe(true);
     expect(modal.textContent).not.toContain('魏延'); // 只看本队
-    (modal.querySelector('.bm-close') as HTMLElement).click();
+    (modal.querySelector('.m-close') as HTMLElement).click();   // 统一弹窗外壳的关闭按钮
 
     blueBtn.click();
     const blueModal = document.querySelector('.bonus-modal') as HTMLElement;

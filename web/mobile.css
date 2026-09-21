@@ -389,3 +389,9 @@
     grid-template-columns: minmax(220px, 1fr) minmax(240px, 1.6fr) minmax(220px, 1fr);
   }
 }
+
+/* 部队加成弹窗：窄屏改单列（两列骨架在手机上会挤） */
+@media (max-width: 640px) {
+  .bm-body { grid-template-columns: 1fr; }
+  .bm-card:nth-child(3) { grid-column: auto; }
+}

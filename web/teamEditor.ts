@@ -475,43 +475,45 @@ export function openTroopBonusPanel(teamLabel: string, slots: SlotState[]): void
       ? `<div class="bm-title-act">${titleNames.map((n) => `<span class="bm-title-chip">${n}</span>`).join('')}</div>${heroRows(titleLines, '')}`
       : `<div class="bm-hint">配置指定武将组合可激活<span class="bm-hint-link">前往查看 &gt;&gt;</span></div>`;
 
+  /**
+   * 一个分区：徽章 + 标题 + 生效范围 + 内容（武将加成行 / 空态 / 称号提示）。
+   * 骨架是普通长方形弹窗里的纵向三段，不做三栏并排（原来 980px 宽 × 三列，长宽比夸张）。
+   */
+  const section = (
+    badge: string,
+    title: string,
+    scope: 'battle' | 'global',
+    lines: typeof factionLines,
+    emptyHint: string,
+    body?: string,
+  ): string => `
+        <section class="bm-card">
+          <div class="bm-card-head">
+            <span class="bm-badge">${badge}</span>
+            <span class="bm-card-title">${title}</span>
+            <span class="bm-tag ${scope}">${scope === 'battle' ? '战斗中生效' : '全局生效'}</span>
+          </div>
+          <div class="bm-list">${body ?? heroRows(lines, emptyHint)}</div>
+        </section>`;
+
+  // 兵种徽章用单字（骑/步/弓），与武将卡底部兵种位、筛选栏用字一致；不用图案/图标
+  const troopBadge = mainTroop ? TYPE_CHAR[mainTroop] ?? '—' : '—';
+
   const mask = document.createElement('div');
-  mask.className = 'bm-mask';
+  mask.className = 'modal-mask';
   mask.innerHTML = `
-    <div class="bonus-modal">
-      <div class="bm-head">
-        <span class="bm-title">部队加成</span>
-        <span class="bm-close" title="关闭">×</span>
+    <div class="modal bonus-modal">
+      <div class="m-head"><h3>部队加成 · ${teamLabel}</h3><span class="m-close">×</span></div>
+      <div class="m-body bm-body">
+        ${section(mainFaction, `阵营加成-${mainFaction}`, 'battle', factionLines, '上阵 ≥2 名同阵营武将可触发')}
+        ${section('号', '称号加成', 'global', titleLines, '', titleBody)}
+        ${section(troopBadge, `兵种加成-${mainTroop ? TROOP_CN[mainTroop] : '—'}`, 'battle', troopLines, '上阵 ≥2 名同兵种武将可触发')}
       </div>
-      <div class="bm-cols">
-        <div class="bm-card">
-          <div class="bm-card-head">
-            <span class="bm-badge bm-faction-badge">${mainFaction}</span>
-            <span class="bm-card-title">阵营加成-${mainFaction}</span>
-            <span class="bm-tag battle">战斗中生效</span>
-          </div>
-          <div class="bm-list">${heroRows(factionLines, '上阵 ≥2 名同阵营武将可触发')}</div>
-        </div>
-        <div class="bm-card">
-          <div class="bm-card-head">
-            <span class="bm-badge bm-title-badge">号</span>
-            <span class="bm-card-title">称号加成</span>
-            <span class="bm-tag global">全局生效</span>
-          </div>
-          <div class="bm-list">${titleBody}</div>
-        </div>
-        <div class="bm-card">
-          <div class="bm-card-head">
-            <span class="bm-badge bm-troop-badge">${BM_HORSE_SVG}</span>
-            <span class="bm-card-title">兵种加成-${mainTroop ? TROOP_CN[mainTroop] : '—'}</span>
-            <span class="bm-tag battle">战斗中生效</span>
-          </div>
-          <div class="bm-list">${heroRows(troopLines, '上阵 ≥2 名同兵种武将可触发')}</div>
-        </div>
-      </div>
+      <div class="m-foot"><button type="button" class="btn ghost done">完成</button></div>
     </div>`;
   const close = () => mask.remove();
-  mask.querySelector('.bm-close')!.addEventListener('click', close);
+  mask.querySelector('.m-close')!.addEventListener('click', close);
+  (mask.querySelector('.done') as HTMLElement).addEventListener('click', close);
   mask.addEventListener('click', (e) => { if (e.target === mask) close(); });
   document.body.appendChild(mask);
 }
@@ -532,10 +534,7 @@ const BM_STAT_ICONS: Record<string, string> = {
     '<svg class="bm-ic" viewBox="0 0 24 24"><path d="M5 21h9.5c2.2 0 3.2-1.8 3.2-3.6V13c1.6 0 2.6-1.6 2.6-3.2V6.8c0-1.2-1-2.2-2.2-2.2h-3.8c-1.2 0-2.2 1-2.2 2.2V9c0 1 .6 1.8 1.5 2.2L13 13l-2.6 3.6H5z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
 };
 
-/** 兵种徽章：马头剪影（金色） */
-const BM_HORSE_SVG = `<svg class="bm-horse" viewBox="0 0 48 44"><path d="M6 36c0-12 8-22 22-24 1-7 7-10 12-8-3 4-5 7-7 10 9 2 15 9 15 20v2H6z" fill="currentColor"/><circle cx="37" cy="17" r="1.8" fill="#2b1a18"/><path d="M9 34c6-6 13-9 21-9" fill="none" stroke="#2b1a18" stroke-width="1.6" stroke-linecap="round"/></svg>`;
-
-/** 属性格：图标 + 绿色加成数字（0 灰显） */
+/** 属性格：图标 + 加成数字（0 灰显） */
 function statCell(key: string, v: number): string {
   const on = v > 0;
   return `<span class="bm-stat${on ? ' on' : ''}" title="${STAT_CN[key]}">${BM_STAT_ICONS[key]}<i>${v > 0 ? '+' + v : v}</i></span>`;
