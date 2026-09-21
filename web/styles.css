@@ -2888,6 +2888,14 @@ main {
 .hd-treasure.empty .ts-plus { font-size: 18px; color: var(--gold-2, #d9c07a); line-height: 1; }
 .hd-treasure.empty .ts-tip { font-size: 12px; }
 .hd-treasure.empty .ts-sub { font-size: 10px; color: var(--text-dim); }
+.treasure-modal { width: min(880px, 94vw); max-height: 88vh; overflow: hidden; }
+.treasure-modal .tp-body { padding: 12px 14px 14px; display: flex; flex-direction: column; max-height: 84vh; }
+.tp-steps { display: flex; gap: 14px; font-size: 12px; color: var(--text-dim); margin-bottom: 10px; }
+.tp-steps .on { color: var(--gold-2, #d9c07a); font-weight: 700; }
+.tp-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px; overflow-y: auto; max-height: 44vh; padding-right: 4px;
+}
 .tp-card {
   display: flex; flex-direction: column; align-items: center; gap: 3px;
   background: var(--panel-2); border: 1px solid var(--line); cursor: pointer; padding: 6px 4px;
