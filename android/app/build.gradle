@@ -17,7 +17,7 @@ android {
         targetSdkVersion rootProject.ext.targetSdkVersion
         // 每次出测试包都要 +1：手机「设置 → 应用 → 战斗模拟器」里能直接看到装的是哪一版
         // （原来长期停在 4 / 1.3，新旧包在手机上无法区分，装错了也看不出来）
-        versionCode 22
+        versionCode 23
         versionName "2.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
