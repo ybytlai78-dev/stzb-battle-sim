@@ -18,6 +18,20 @@ import { createBattleView } from './battleView';
 import { createBattleSummary, createStatsView } from './battleSummary';
 import { asset } from './assets';
 
+/** 词条数值档位（与官方/社区口径一致）：红 = 达到上限档，粉 = 高于蓝区上限，其余为蓝 */
+export type AffixTier = 'blue' | 'pink' | 'red';
+
+/** 按玩家选定数值自动判定蓝/粉/红（上限档无数据时只分蓝/粉） */
+export function affixTier(a: AffixDef, value: number): AffixTier {
+  const h = a.hint;
+  if (!h) return 'blue';
+  if (h.red != null && value >= h.red) return 'red';
+  if (value > h.blueMax) return 'pink';
+  return 'blue';
+}
+
+export const AFFIX_TIER_NAME: Record<AffixTier, string> = { blue: '蓝', pink: '粉', red: '红' };
+
 export interface SlotState {
   heroId: string | null;
   /** 装配战法 id（不含主战法），同类型按数组顺序判定 */
@@ -870,7 +884,6 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
         <span class="hd-budget">自由属性剩余 <b>${remain}</b> / ${budget} 点${r > 0 ? ` <i class="red-extra">（含红度 +${r * 10}）</i>` : ''}</span>
       </div>
       <div class="hd-stats">${statRows}</div>
-      ${hdTreasureHtml()}
       <div class="hd-skills">
         <div class="skills-title">战法</div>
         <div class="skills-row">${mainSkillEl}${equips}</div>
@@ -878,43 +891,6 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
     `;
   };
 
-  /** 板块 1 内嵌 · 宝物：未佩戴显示「选择宝物」，已佩戴显示图标/自带特效/锻造词条与数值 */
-  const hdTreasureHtml = (): string => {
-    const cur = slot.treasure;
-    if (!cur) {
-      return `<div class="hd-treasure">
-        <div class="bt-title">宝物</div>
-        <div class="bt-row bt-empty">
-          <span class="bt-tip">未佩戴</span>
-          <button class="bt-pick" ${editable ? '' : 'disabled'}>选择宝物</button>
-        </div>
-      </div>`;
-    }
-    const t = TREASURES_BY_ID[cur.treasureId];
-    if (!t) return '';
-    const affix = cur.affix ? AFFIXES[cur.affix.name] : null;
-    const valText = cur.affix && affix ? `${cur.affix.value}${affix.unit === 'percent' ? '%' : affix.unit === 'round' ? ' 回合' : ''}` : '';
-    const effects = t.effects
-      .map((e) => `<div class="bt-eff"><b>${e.name}</b>：${e.desc}</div>`)
-      .join('');
-    return `<div class="hd-treasure">
-      <div class="bt-title">宝物</div>
-      <div class="bt-row">
-        <img class="bt-icon" src="${asset(t.icon)}" alt="${t.name}" onerror="this.style.display='none'" />
-        <div class="bt-info">
-          <div class="bt-name">${t.name}<span class="bt-tag">${t.type}</span><span class="bt-tag q">稀世</span><span class="bt-tag lv">${cur.level ?? 10} 级</span></div>
-          <div class="bt-effects">${effects}</div>
-          ${affix && cur.affix
-            ? `<div class="bt-affix">锻造词条 <b>${affix.name}</b><span class="bt-val">${valText}</span><span class="bt-range">区间 ${affix.min}~${affix.max}${affix.unit === 'percent' ? '%' : ''}</span></div>`
-            : `<div class="bt-affix dim">未锻造（尚未选择词条）</div>`}
-        </div>
-        <div class="bt-ops">
-          <button class="bt-pick" ${editable ? '' : 'disabled'}>${affix ? '更换词条' : '选择词条'}</button>
-          <button class="bt-clear" ${editable ? '' : 'disabled'}>卸下</button>
-        </div>
-      </div>
-    </div>`;
-  };
 
   /** 左侧固定栏：阵营 + 名字（竖排，仿参考图）+ 画像 + 星级 —— 三个板块共用 */
   const hdSideHtml = (): string => {
@@ -924,10 +900,48 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
         <span class="faction-badge ${FACTION_CLS[hero.faction] ?? ''}">${hero.faction}</span>
         <span class="hd-side-name">${hero.name}${sp ? '<span class="sp-tag">SP</span>' : ''}${isFemale(heroId) ? '<span class="hd-female">女</span>' : ''}</span>
       </div>
-      <div class="hd-portrait">
-        <img src="${portraitSrc(heroId)}" alt="${hero.name}" onerror="this.style.display='none'" />
-        <div class="hd-stars" title="红度 ${slot.redness}/5（每红 +10 自由属性点）">${rednessStars(slot.redness)}</div>
+      <div class="hd-side-col">
+        <div class="hd-portrait">
+          <img src="${portraitSrc(heroId)}" alt="${hero.name}" onerror="this.style.display='none'" />
+          <div class="hd-stars" title="红度 ${slot.redness}/5（每红 +10 自由属性点）">${rednessStars(slot.redness)}</div>
+        </div>
+        ${hdTreasureSlotHtml()}
       </div>`;
+  };
+
+  /**
+   * 左栏宝物槽（游戏卡面样式）：未佩戴 = 空槽（点击进入第 1 步选宝物）；
+   * 已佩戴 = 立绘 + 「稀世」角标 + 锻造词条名（**按数值自动蓝/粉/红**）+ 宝物名；
+   * 再次点击图片可直接选第 4 条（锻造词条）并拖滑杆调值，右上 × 卸下。
+   */
+  const hdTreasureSlotHtml = (): string => {
+    const cur = slot.treasure;
+    if (!cur) {
+      return `<div class="hd-treasure empty" ${editable ? 'data-treasure-open="1"' : ''} title="${editable ? '点击选择宝物' : '放入阵容后可佩戴宝物'}">
+        <span class="ts-plus">＋</span><span class="ts-tip">选择宝物</span><span class="ts-sub">未佩戴</span>
+      </div>`;
+    }
+    const t = TREASURES_BY_ID[cur.treasureId];
+    if (!t) return '';
+    const affix = cur.affix ? AFFIXES[cur.affix.name] : null;
+    const tier = affix && cur.affix ? affixTier(affix, cur.affix.value) : null;
+    const effText = t.effects.map((e) => `${e.name}：${e.desc}`).join('\n');
+    const affixLine =
+      affix && cur.affix
+        ? `<span class="ts-affix ${tier}">${affix.name}<b>${cur.affix.value}${affix.unit === 'percent' ? '%' : ''}</b></span>`
+        : `<span class="ts-affix none">未锻造</span>`;
+    const tip = `${t.name}（${t.type}）· ${cur.level ?? 10} 级\n【自带特效】\n${effText}${
+      affix && cur.affix
+        ? `\n【锻造词条】${affix.name} ${cur.affix.value}${affix.unit === 'percent' ? '%' : ''}（区间 ${affix.min}~${affix.max}）`
+        : '\n【锻造词条】未选择（点击图片可选）'
+    }`;
+    return `<div class="hd-treasure filled" ${editable ? 'data-treasure-open="1"' : ''} title="${tip}">
+      <span class="ts-rarity">稀世</span>
+      <img class="ts-img" src="${asset(t.image)}" alt="${t.name}" onerror="this.style.display='none'" />
+      ${affixLine}
+      <span class="ts-name">${t.name}</span>
+      ${editable ? '<span class="ts-remove" title="卸下宝物">×</span>' : ''}
+    </div>`;
   };
 
   /** 板块切换条（详情 / 配点 / 兵种） */
@@ -1035,9 +1049,10 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
       h.onSetLevel(placed!.team, placed!.idx, v);
       redraw();
     });
-    // 宝物：选择/更换（三步弹窗）与卸下
-    const pickBtn = body.querySelector('.hd-treasure .bt-pick') as HTMLElement | null;
-    pickBtn?.addEventListener('click', () => {
+    // 宝物（左栏卡面）：点击图片 → 选/换宝物，或（已佩戴时）直接进第 2 步选第 4 条锻造词条；右上 × 卸下
+    const tSlot = body.querySelector('[data-treasure-open]') as HTMLElement | null;
+    tSlot?.addEventListener('click', (e) => {
+      if ((e.target as HTMLElement).classList.contains('ts-remove')) return;
       if (!editable) { showNotice('放入阵容后可佩戴宝物'); return; }
       openTreasurePicker({
         heroId,
@@ -1045,11 +1060,13 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
         idx: placed!.idx,
         slot,
         handlers: h,
+        startStep: slot.treasure ? 2 : 1,
         onDone: () => redraw(),
       });
     });
-    const clearBtn = body.querySelector('.hd-treasure .bt-clear') as HTMLElement | null;
-    clearBtn?.addEventListener('click', () => {
+    const rmTreasure = body.querySelector('.hd-treasure .ts-remove') as HTMLElement | null;
+    rmTreasure?.addEventListener('click', (e) => {
+      e.stopPropagation();
       if (!editable) return;
       h.onSetTreasure(placed!.team, placed!.idx, null);
       redraw();
@@ -1563,9 +1580,11 @@ export function openTreasurePicker(opts: {
   slot: SlotState;
   handlers: EditorHandlers;
   onDone?: () => void;
+  /** 打开时直接进入的步骤（已佩戴宝物 → 从第 2 步「选第 4 条锻造词条」开始） */
+  startStep?: 1 | 2 | 3;
 }): void {
   const cur = opts.slot.treasure;
-  let step: 1 | 2 | 3 = cur ? 2 : 1;
+  let step: 1 | 2 | 3 = opts.startStep ?? (cur ? 2 : 1);
   let treasureId = cur?.treasureId ?? TREASURES[0].id;
   let affixName: string | null = cur?.affix?.name ?? null;
   let value = cur?.affix?.value ?? 0;
@@ -1625,7 +1644,7 @@ export function openTreasurePicker(opts: {
       })
       .join('');
     return `${stepBar()}
-      <div class="tp-sub">「${t.name}」可锻造出的词条（${t.affixPool.length} 条，锻造随机获得其一）</div>
+      <div class="tp-sub">「${t.name}」可锻造出的词条（第 4 条 · ${t.affixPool.length} 条随机其一；前 3 条为宝物自带特效）</div>
       <div class="tp-affixes">${rows}</div>
       <div class="tp-foot"><button class="tp-back">← 上一步</button><button class="tp-skip">不锻造（仅用自带特效）</button></div>`;
   };
@@ -1633,21 +1652,22 @@ export function openTreasurePicker(opts: {
   const step3 = (): string => {
     const a = affixOf();
     if (!a) return step2();
+    const tier = affixTier(a, value);
     const ticks = a.hint
       ? `<div class="tp-legend">
-          <span class="dot blue"></span><span class="blue">蓝</span>
-          <span class="dot pink"></span><span class="pink">粉</span>
-          <span class="dot red"></span><span class="red">红</span>
+          <span class="dot blue${tier === 'blue' ? ' on' : ''}"></span><span class="blue">蓝</span>
+          <span class="dot pink${tier === 'pink' ? ' on' : ''}"></span><span class="pink">粉</span>
+          <span class="dot red${tier === 'red' ? ' on' : ''}"></span><span class="red">红</span>
           <span class="tp-legend-text">蓝 ≤ ${fmt(a.hint.blueMax, a)} ｜ 粉 ${fmt(a.hint.pinkMin, a)}${
             a.hint.pinkMin === a.hint.pinkMax ? '' : '~' + fmt(a.hint.pinkMax, a)
           } ｜ 红 ${a.hint.red == null ? '—' : fmt(a.hint.red, a)}</span>
         </div>`
       : '';
     return `${stepBar()}
-      <div class="tp-sub">「${a.name}」：${a.desc}</div>
+      <div class="tp-sub">第 4 条 · 锻造词条「${a.name}」：${a.desc}</div>
       <div class="tp-slider">
         <input type="range" min="${a.min}" max="${a.max}" step="1" value="${value}" class="tp-range" />
-        <div class="tp-value"><b>${fmt(value, a)}</b><span class="tp-range-text">官方区间 ${fmt(a.min, a)} ~ ${fmt(a.max, a)}</span></div>
+        <div class="tp-value"><b class="${tier}">${fmt(value, a)}</b><span class="tp-tier ${tier}">当前档位：${AFFIX_TIER_NAME[tier]}</span><span class="tp-range-text">官方区间 ${fmt(a.min, a)} ~ ${fmt(a.max, a)}</span></div>
         ${ticks}
       </div>
       <div class="tp-foot"><button class="tp-back">← 上一步</button><button class="tp-ok">确认佩戴</button></div>`;
@@ -1688,8 +1708,22 @@ export function openTreasurePicker(opts: {
     range?.addEventListener('input', () => {
       value = Number(range.value);
       const a = affixOf();
+      if (!a) return;
+      const t = affixTier(a, value);
       const box = modal.querySelector('.tp-value b');
-      if (box && a) box.textContent = fmt(value, a);
+      if (box) {
+        box.textContent = fmt(value, a);
+        box.className = t;
+      }
+      const chip = modal.querySelector('.tp-tier');
+      if (chip) {
+        chip.className = `tp-tier ${t}`;
+        chip.textContent = `当前档位：${AFFIX_TIER_NAME[t]}`;
+      }
+      modal.querySelectorAll('.tp-legend .dot').forEach((d) => {
+        const el = d as HTMLElement;
+        el.classList.toggle('on', el.classList.contains(t));
+      });
     });
     (modal.querySelector('.tp-next') as HTMLElement | null)?.addEventListener('click', () => {
       step = 2;

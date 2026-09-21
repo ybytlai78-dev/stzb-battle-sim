@@ -616,7 +616,7 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(detail.querySelector('.hd-treasure')!.textContent).toContain('未佩戴');
 
     // 打开三步弹窗：第一步是 36 件稀世网格
-    (detail.querySelector('.hd-treasure .bt-pick') as HTMLElement).click();
+    (detail.querySelector('.hd-treasure') as HTMLElement).click();
     const picker = document.querySelectorAll('.modal')[1] as HTMLElement;
     expect(picker.classList.contains('treasure-modal')).toBe(true);
     expect(picker.querySelectorAll('.tp-card').length).toBe(36);
@@ -651,6 +651,39 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(box.textContent).toContain('屈卢');
     expect(box.textContent).toContain('骁锐');
     expect(box.textContent).toContain('10');
+
+    // 词条标签按数值自动档位色：10 → 蓝（骁锐 蓝 ≤10）… 拖到 15 → 红
+    const tag = refreshed.querySelector('.hd-treasure .ts-affix')!;
+    expect(tag.classList.contains('blue')).toBe(true);
+    // 再次点击宝物图片：直接进第 2 步（选第 4 条锻造词条），滑杆调到上限 → 自动变红
+    (refreshed.querySelector('.hd-treasure') as HTMLElement).click();
+    const picker2 = document.querySelectorAll('.modal')[1] as HTMLElement;
+    expect(picker2.querySelector('.tp-steps')!.textContent).toContain('② 选词条');
+    expect(picker2.querySelectorAll('.tp-affix').length).toBe(6);
+    (picker2.querySelector('.tp-affix[data-affix="骁锐"]') as HTMLElement).click();
+    const range2 = picker2.querySelector('.tp-range') as HTMLInputElement;
+    range2.value = '15';
+    range2.dispatchEvent(new Event('input'));
+    expect(picker2.querySelector('.tp-tier')!.textContent).toContain('红');
+    expect(picker2.querySelector('.tp-tier')!.classList.contains('red')).toBe(true);
+    (picker2.querySelector('.tp-ok') as HTMLElement).click();
+    const after = document.querySelector('.modal') as HTMLElement;
+    const tag2 = after.querySelector('.hd-treasure .ts-affix')!;
+    expect(tag2.classList.contains('red')).toBe(true);
+    expect(tag2.textContent).toContain('15');
+
+    // 档位函数单元校验（蓝 ≤ 蓝区上限 / 粉 = 高于蓝区 / 红 = 上限档）
+    const { affixTier } = await import('./teamEditor');
+    const { AFFIXES } = await import('../src/data/treasures');
+    const xiaorui = AFFIXES['骁锐'];
+    expect(affixTier(xiaorui, 5)).toBe('blue');
+    expect(affixTier(xiaorui, 10)).toBe('blue');
+    expect(affixTier(xiaorui, 13)).toBe('pink');
+    expect(affixTier(xiaorui, 15)).toBe('red');
+    const zhice = AFFIXES['至策'];
+    expect(affixTier(zhice, 16)).toBe('blue');
+    expect(affixTier(zhice, 17)).toBe('pink');
+    expect(affixTier(zhice, 20)).toBe('red');
 
     // 引擎透传：buildGeneral 收下宝物载荷（默认 10 级）
     const { buildGeneral, HEROES } = await import('./heroes');
