@@ -1,0 +1,365 @@
+/**
+ * 宝物系统 · 引擎侧（率土之滨）
+ *
+ * 口径（用户 2026-09-21 确认，见 `dateyuan/宝物系统方案.md` §0）：
+ *  1. 宝物效果**与任何来源都不冲突**，纯提升、可叠加 → 施加时跳过 `inflictStatus` 的冲突判定；
+ *  2. 默认 10 级：一阶/二阶特效 = 官方数值 × 5（官方数值即「每次强化增量」），三阶固定；
+ *  3. 锻造词条由玩家选具体数值（官方区间内任意值）。
+ *
+ * 本文件是「词条名 → 引擎机制」的映射表（`MECHANICS`），数据来自 `src/data/treasures.ts`。
+ * 未实现的词条集中在 `PENDING`（分档见方案 §3.2），随 P3 逐批补齐。
+ */
+import type { CreateStatus, General, SkillType, StatusType, TreasureLoadout, UnitState } from './types';
+import type { CombatContext } from './action';
+import {
+  AFFIXES,
+  TREASURES_BY_ID,
+  treasureEffectScale,
+  treasureEffectValue,
+  type TreasureEffectDef,
+} from '../data/treasures';
+import { TREASURE_SOURCE_PREFIX } from './treasure-source';
+import { inflictStatus } from './action';
+
+export { TREASURE_SOURCE_PREFIX, isTreasureSource } from './treasure-source';
+/** 宝物状态登记的 `sourceSkillType`（常驻、不可被驱散类判定命中） */
+export const TREASURE_SOURCE_TYPE: SkillType = 'passive';
+
+/** 持续至战斗结束 */
+const FOREVER = 999;
+
+/** 四类控制（宝物「安贞」= 控制状态下受伤害降低） */
+const CONTROL_TYPES: StatusType[] = ['confusion', 'rampage', 'cowardice', 'hesitation'];
+
+/** 构造期上下文：携带者 / 同侧友军 / 按阶缩放（= 强化次数） */
+export interface TreasureBuildCtx {
+  self: General;
+  allies: UnitState[];
+  /** 把「官方单次数值」换算成当前等级下的数值（slot1/2 = ×强化次数，slot3 = ×1） */
+  scale: (raw: number) => number;
+}
+
+/** 单个词条 → 状态模板（value 已按等级/自选数值算好） */
+type Mechanic = (value: number, effect: TreasureEffectDef, ctx: TreasureBuildCtx) => CreateStatus[];
+
+/** 攻击/防御/谋略/速度：数值型属性提升 */
+const attr = (type: 'attack_buff' | 'defense_buff' | 'strategy_buff' | 'speed_buff', percent = false) =>
+  (v: number): CreateStatus[] => [{ type, amount: v, ...(percent ? { percent: true } : {}), duration: FOREVER } as CreateStatus];
+
+/** 造成伤害提高（可按 来源/战法类型/伤害类型/DoT 类型 限定） */
+const boost = (
+  filter: Partial<{
+    damageSource: 'basic' | 'skill';
+    skillTypes: SkillType[];
+    damageType: 'physical' | 'strategy';
+    dotTypes: ('sorcery' | 'burning' | 'panic' | 'curse' | 'ignite')[];
+  }>,
+  duration = FOREVER,
+) =>
+  (v: number): CreateStatus[] => [{ type: 'damage_boost', rate: v / 100, direction: 'caused', duration, ...filter } as CreateStatus];
+
+/** 受到伤害降低（同上过滤维） */
+const reduce = (
+  filter: Partial<{
+    damageSource: 'basic' | 'skill';
+    skillTypes: SkillType[];
+    damageType: 'physical' | 'strategy';
+  }>,
+  duration = FOREVER,
+) =>
+  (v: number): CreateStatus[] => [{ type: 'damage_reduce', rate: v / 100, duration, ...filter } as CreateStatus];
+
+/**
+ * 「词条名 → 机制」。键 = 官方词条名（同名在不同宝物上语义一致的走这里；
+ * 语义随宝物变化的（如 英才 的属性对、亢厉 的战法类型）走 `OVERRIDES`）。
+ */
+const MECHANICS: Record<string, Mechanic> = {
+  // ── 属性 ──
+  骁锐: attr('attack_buff'),
+  天资: attr('strategy_buff'),
+  稳固: attr('defense_buff'),
+  灵动: attr('speed_buff'),
+
+  // ── 减伤 ──
+  坚忍: reduce({ skillTypes: ['active'] }), // 受到的主动战法伤害降低
+  强韧: reduce({ damageSource: 'basic' }), // 受到的普通攻击伤害降低
+  沉稳: reduce({ skillTypes: ['command'] }), // 受到的指挥战法伤害降低
+  不移: reduce({ damageType: 'physical' }), // 受攻击伤害降低
+  先知: reduce({ damageType: 'strategy' }), // 受策略伤害降低
+  戒备: (v) => reduce({}, 2)(v), // 前 2 回合受到的所有伤害降低
+  // 安贞：控制状态下受伤害降低（混乱/暴走/怯战/犹豫任一）
+  安贞: (v) => [
+    { type: 'damage_reduce', rate: v / 100, duration: FOREVER, requireSelfStatus: CONTROL_TYPES } as CreateStatus,
+  ],
+  // 强固：正式回合后，每回合首次受到的伤害降低 20%（TODO：需「每回合首次」标记，暂列 PENDING）
+  // 明镜：谋略属性提高 + 初始统率 < 3 的武将额外防御（泰阿）
+  明镜: (v, effect, ctx) => [
+    { type: 'strategy_buff', amount: ctx.scale(effect.numbers[0] ?? v), duration: FOREVER } as CreateStatus,
+    ...(ctx.self.cost < 3
+      ? [{ type: 'defense_buff', amount: ctx.scale(effect.numbers[2] ?? 0), duration: FOREVER } as CreateStatus]
+      : []),
+  ],
+  // 护主：战斗开始后前 N 回合援护我军大营（cover 挂在携带者身上，protectId = 大营）
+  护主: (_v, effect, ctx) => {
+    const back = ctx.allies.find((a) => a.general.position === '大营');
+    if (!back) return [];
+    return [{ type: 'cover', duration: effect.numbers[0] ?? 2, protectId: back.general.id } as CreateStatus];
+  },
+
+  // ── 增伤 ──
+  陷阵: boost({ damageSource: 'basic' }), // 普通攻击伤害提高
+  无畏: boost({ skillTypes: ['pursuit'] }), // 追击战法伤害提高
+  至策: boost({ skillTypes: ['active'] }), // 主动战法伤害提高
+  妙算: boost({ skillTypes: ['active'], damageType: 'strategy' }), // 主动战法的策略伤害提高
+  勇猛: boost({ damageType: 'physical' }), // 造成的攻击伤害提高
+  睚眦: boost({ dotTypes: ['panic', 'sorcery', 'burning', 'ignite'] }), // 恐慌/妖术/燃烧/火攻
+  // 迅猛：处于连击状态时，普通攻击伤害提高（条件增伤：携带者自身带 combo）
+  迅猛: (v) => [
+    { type: 'damage_boost', rate: v / 100, direction: 'caused', duration: FOREVER, damageSource: 'basic', requireSelfStatus: 'combo' } as CreateStatus,
+  ],
+  炎势: boost({ dotTypes: ['burning', 'ignite'] }), // 火攻、燃烧
+  驱火: boost({ dotTypes: ['burning', 'ignite'] }), // 燃烧及火攻（锻造词条）
+  炫惑: boost({ dotTypes: ['panic', 'sorcery'] }), // 恐慌及妖术（锻造词条）
+  盛气: (v) => boost({ damageType: 'physical' }, 2)(v), // 前 2 回合造成的攻击伤害提高
+  机先: (v) => [
+    { type: 'damage_boost', rate: v / 100, direction: 'caused', duration: FOREVER, damageType: 'strategy', charges: 2 } as CreateStatus,
+  ], // 前 2 次造成的策略伤害提高
+  宿胜: boost({}), // 占位（不存在，保持表结构可读性）
+  逐胜: boost({}), // TODO(B 档)：需「目标兵力最低」条件，暂按全域增伤
+
+  // ── 无视防御 / 谋略 ──
+  破敌: (v) => [{ type: 'ignore_def', rate: v / 100, duration: FOREVER, damageType: 'physical' } as CreateStatus],
+  颖悟: (v) => [{ type: 'ignore_def', rate: v / 100, duration: FOREVER, damageType: 'strategy' } as CreateStatus],
+
+  // ── 距离 ──
+  穿杨: () => [{ type: 'range_buff', amount: 1, duration: FOREVER } as CreateStatus],
+  豪纵: () => [{ type: 'skill_range_buff', amount: 1, duration: FOREVER } as CreateStatus],
+
+  // ── 恢复 ──
+  抖擞: (v) => [{ type: 'heal_boost', rate: v / 100, duration: FOREVER } as CreateStatus],
+
+  // ── 发动率（锻造词条）──
+  机敏: (v) => [{ type: 'trigger_boost', rate: v / 100, duration: FOREVER, mainSkillOnly: true } as CreateStatus],
+  英勇: (v) => [{ type: 'trigger_boost', rate: v / 100, duration: FOREVER, mainSkillOnly: true, attackSkillsOnly: true } as CreateStatus],
+  奔袭: (v) => [{ type: 'trigger_boost', rate: v / 100, duration: FOREVER, skillTypes: ['pursuit'] } as CreateStatus],
+  // 筹算：造成策略伤害的武将主战法发动率提高
+  筹算: (v) => [{ type: 'trigger_boost', rate: v / 100, duration: FOREVER, mainSkillOnly: true, strategySkillsOnly: true } as CreateStatus],
+  // 熟虑：需要准备的主动武将主战法发动率提升
+  熟虑: (v) => [{ type: 'trigger_boost', rate: v / 100, duration: FOREVER, mainSkillOnly: true, preparedOnly: true } as CreateStatus],
+  // 识破：前 1~4 回合，主动及追击武将主战法造成的伤害无视规避（回合窗口，不消耗）
+  识破: (v) => [{ type: 'ignore_evasion', duration: FOREVER, throughRound: v } as CreateStatus],
+
+  // ── 控制相关 ──  // 惑言（锻造词条）：主战法施加的前 N 个控制 +1 回合
+  惑言: (v) => [{ type: 'control_extend', charges: v, duration: FOREVER, mainSkillOnly: true } as CreateStatus],
+  // 慑心（龙鳞）：追击武将主战法施加的控制 +1 回合（不限次数）
+  慑心: () => [{ type: 'control_extend', charges: 999, duration: FOREVER, mainSkillOnly: true, skillTypes: ['pursuit'] } as CreateStatus],
+  // 坚毅（锻造词条）：前 N 回合免疫混乱及暴走
+  坚毅: (v) => [{ type: 'control_immune', types: ['confusion', 'rampage'], duration: v } as CreateStatus],
+  // 强击（锻造词条）：前 N 回合普通攻击不会触发反击
+  强击: (v) => [{ type: 'no_retaliate', duration: v } as CreateStatus],
+  // 不屈（锻造词条）：每次受伤后本回合受到伤害降低（可叠加；本回合语义 → 回合开始清零，上限 10 层）
+  不屈: (v) => [{ type: 'hurt_stack', mode: 'reduce', perStack: v / 100, maxStacks: 10, duration: FOREVER } as CreateStatus],
+  // 破浪（沧海）：每受到 1 次伤害，本回合造成所有伤害提升 10%（最多 10 层）
+  破浪: () => [{ type: 'hurt_stack', mode: 'boost', perStack: 0.1, maxStacks: 10, duration: FOREVER } as CreateStatus],
+  // 避险（大橹）：战斗中首次受到伤害后进入规避，免疫下 1 次伤害
+  避险: () => [{ type: 'hurt_evade_once', duration: FOREVER } as CreateStatus],
+  // 蓄锐：每 2 次普通攻击后，自身造成追击战法伤害增加（可叠加，上限 5 层）
+  蓄锐: (v) => [{ type: 'treasure_basic_count', every: 2, perStack: v / 100, skillTypes: ['pursuit'], maxStacks: 5, duration: FOREVER } as CreateStatus],
+  // 选锋：普通攻击后，自身下一次造成策略伤害提高（一次性）
+  选锋: (v) => [{ type: 'treasure_basic_next', rate: v / 100, duration: FOREVER } as CreateStatus],
+  // 破障：普通攻击后，移除攻击目标由主动/追击战法带来的 1 种增益
+  破障: () => [{ type: 'treasure_basic_purge', duration: FOREVER } as CreateStatus],
+  // 仁心（锻造词条）：造成的恢复效果提高
+  仁心: (v) => [{ type: 'heal_out_boost', rate: v / 100, duration: FOREVER } as CreateStatus],
+  // 济世（锻造词条）：主战法每造成一次恢复，效果目标受到伤害降低（可叠加）
+  济世: (v) => [{ type: 'heal_trigger_reduce', rate: v / 100, duration: FOREVER } as CreateStatus],
+  // 矜节（比翼）：女性武将携带时，主战法造成的恢复效果提高 30%（男性携带不生效 → 构造期判定）
+  矜节: (v, _effect, ctx) =>
+    ctx.self.gender === 'female' ? [{ type: 'heal_out_boost', rate: v / 100, duration: FOREVER } as CreateStatus] : [],
+  // 鸠佑（金鸠）：主动武将主战法发动后，自身造成攻击伤害提高 6.0%（可叠加）
+  鸠佑: () => [{ type: 'treasure_after_main', perStack: 0.06, maxStacks: 10, duration: FOREVER } as CreateStatus],
+  // 归心（星汉）：我军全体每发动 2 次主动战法，自身恢复一定兵力（恢复率 150%）
+  归心: (v) => [{ type: 'treasure_ally_active_heal', every: 2, rate: v, duration: FOREVER } as CreateStatus],
+  // 阵舞（障日）：女性武将携带时，主战法施加控制的目标在受控期间受到的所有伤害提高 24%
+  阵舞: (v, _effect, ctx) =>
+    ctx.self.gender === 'female'
+      ? [{ type: 'treasure_control_amplify', rate: v / 100, mainSkillOnly: true, duration: FOREVER } as CreateStatus]
+      : [],
+  // 强固（泰阿）：正式回合后，每回合首次受到的伤害降低 20%
+  强固: (v) => [{ type: 'damage_reduce', rate: v / 100, duration: FOREVER, firstHitPerRound: true } as CreateStatus],
+  // 奇袭（彤素）：与目标距离每提高 1，造成的攻击伤害提高 3.0%
+  奇袭: (v) => [
+    {
+      type: 'damage_boost',
+      rate: v / 100,
+      duration: FOREVER,
+      direction: 'caused',
+      damageType: 'physical',
+      perDistance: true,
+    } as CreateStatus,
+  ],
+  // 燮理（位至三公）：自身施加的燃烧效果每回合首次造成伤害后，自身恢复一次兵力（恢复率 120%）
+  燮理: (v) => [
+    { type: 'dot_tick_heal', rate: v, dotTypes: ['burning', 'ignite'], duration: FOREVER } as CreateStatus,
+  ],
+  // 谋断（掩日）：第 2 次发动需要准备的主动武将主战法时，跳过 1 个准备回合
+  谋断: () => [{ type: 'treasure_prepare_skip', atCast: 2, mainSkillOnly: true, duration: FOREVER } as CreateStatus],
+  // 击虚（锻造词条）：目标每有一种持续性伤害或控制效果，对其伤害提高（最多计 5 种）
+  击虚: (v) => [
+    { type: 'damage_boost', rate: v / 100, duration: FOREVER, direction: 'caused', perTargetStatusCount: true } as CreateStatus,
+  ],
+  // 亢厉：主动及追击武将主战法伤害提高（默认口径；旌阳万仞/掩日/悬翦 的专属措辞走 OVERRIDES）
+  亢厉: boost({ skillTypes: ['active', 'pursuit'] }),
+  // 艮止（锻造词条）：自身无法普通攻击，谋略属性提高（点数）
+  艮止: (v) => [
+    { type: 'strategy_buff', amount: v, duration: FOREVER } as CreateStatus,
+    { type: 'no_attack', duration: FOREVER } as CreateStatus,
+  ],
+  // 不懈（锻造词条）：自身每低于初始兵力 15%，受到的恢复效果提升
+  不懈: (v) => [{ type: 'heal_low_troops', perStep: v / 100, stepPct: 15, duration: FOREVER } as CreateStatus],
+  // 迸发（元戎）：首次发动追击主战法时，额外选取攻击距离内 1 个目标
+  迸发: () => [{ type: 'treasure_extra_pursuit_target', duration: FOREVER } as CreateStatus],
+  // 劲弩（神锋）：首回合无法普通攻击；第 2 回合起首次发动普通攻击时，对攻击距离内敌军全体发动 1 次普通攻击
+  劲弩: () => [
+    { type: 'no_attack', duration: 1 } as CreateStatus,
+    { type: 'treasure_basic_sweep', duration: FOREVER } as CreateStatus,
+  ],
+  // 威势（锻造词条）：受到初始统率值低于自身武将的所有伤害降低（按当前伤害来源统率判定）
+  威势: (v) => [
+    { type: 'damage_reduce', rate: v / 100, duration: FOREVER, enemyCostBelowSelf: true } as CreateStatus,
+  ],
+};
+
+/** 同名词条但语义随宝物变化：key = `${treasureId}:${slot}` */
+const OVERRIDES: Record<string, Mechanic> = {
+  // 英才：属性对随宝物不同（攻+防 / 谋+速 / 攻+谋），点/百分比也随官方文案
+  '1027:3': (v) => [...attr('strategy_buff', true)(v), ...attr('speed_buff', true)(v)], // 别鸣：谋略、速度提高 5.0%
+  '1018:3': (v) => [...attr('attack_buff', true)(v), ...attr('defense_buff', true)(v)], // 惊鲵：攻击、防御提高 6.0%
+  '1030:2': (v) => [...attr('attack_buff')(v), ...attr('strategy_buff')(v)], // 铭鸿：攻击、谋略提高 1.5
+  '1033:3': (v) => [...attr('attack_buff')(v), ...attr('strategy_buff')(v), ...attr('speed_buff')(v)], // 锟铻：攻击、谋略、速度提高 8.0
+  '1057:3': (v) => [...attr('attack_buff', true)(v), ...attr('strategy_buff', true)(v)], // 徐氏匕首：攻击、谋略提高 5.0%
+  '1105:2': (v) => [...attr('attack_buff')(v), ...attr('strategy_buff')(v)], // 神锋：攻击、谋略提高 1.5
+  // 亢厉：战法类型随宝物不同
+  '1042:2': boost({ skillTypes: ['active'] }), // 旌阳万仞：主动战法伤害提高
+  '1063:2': boost({ skillTypes: ['active'] }), // 掩日：主动武将主战法伤害提高
+  '1036:3': boost({ skillTypes: ['active'], damageType: 'physical' }), // 悬翦：主动战法的攻击伤害提高
+  // 陷阵：少府为「前 4 回合普通攻击伤害提高」
+  '1060:2': (v) => boost({ damageSource: 'basic' }, 4)(v),
+  // 天资：仁风为「谋略属性提高 8.0%」（百分比）
+  '1054:3': attr('strategy_buff', true),
+};
+
+/** 尚未落地的词条（分档见方案 §3.2）；键 = 词条名，值 = 需要的机制 */
+export const PENDING: Record<string, string> = {};
+
+/** 取某条特效的机制（先查覆盖表，再查同名表） */
+function mechanicFor(treasureId: number, effect: TreasureEffectDef): Mechanic | undefined {
+  return OVERRIDES[`${treasureId}:${effect.slot}`] ?? MECHANICS[effect.name];
+}
+
+/** 把一件宝物的自带特效 + 锻造词条翻译成待施加的状态列表 */
+export function buildTreasureStatuses(
+  loadout: TreasureLoadout,
+  self: General,
+  allies: UnitState[] = [],
+): { create: CreateStatus; sourceId: string; label: string }[] {
+  const treasure = TREASURES_BY_ID[loadout.treasureId];
+  if (!treasure) return [];
+  const level = loadout.level ?? 10;
+  const out: { create: CreateStatus; sourceId: string; label: string }[] = [];
+
+  for (const effect of treasure.effects) {
+    const fn = mechanicFor(treasure.id, effect);
+    if (!fn) continue; // 未实现（见 PENDING）
+    const value = treasureEffectValue(effect, level);
+    // 一阶/二阶在尚未强化时为 0（如二阶刚在 5 级解锁）→ 不产出空状态；三阶固定值始终产出
+    if (effect.slot !== 3 && value === 0) continue;
+    const ctx: TreasureBuildCtx = { self, allies, scale: (raw) => raw * treasureEffectScale(effect, level) };
+    for (const create of fn(value, effect, ctx)) {
+      out.push({ create, sourceId: `${TREASURE_SOURCE_PREFIX}${treasure.id}:${effect.slot}`, label: effect.name });
+    }
+  }
+
+  if (loadout.affix) {
+    const affix = AFFIXES[loadout.affix.name];
+    const fn = affix ? (OVERRIDES[`affix:${affix.name}`] ?? MECHANICS[affix.name]) : undefined;
+    if (affix && fn) {
+      const ctx: TreasureBuildCtx = { self, allies, scale: (raw) => raw };
+      const synthetic: TreasureEffectDef = {
+        slot: 3,
+        name: affix.name,
+        desc: affix.desc,
+        value: loadout.affix.value,
+        unit: affix.unit === 'percent' ? 'percent' : 'point',
+        numbers: [],
+      };
+      for (const create of fn(loadout.affix.value, synthetic, ctx)) {
+        out.push({ create, sourceId: `${TREASURE_SOURCE_PREFIX}affix:${affix.name}`, label: affix.name });
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * 准备阶段结算该武将佩戴宝物的全部效果（`combat.ts` 的 `prep_phase: 'treasure'` 调用）。
+ * 语义：宝物效果与任何来源都不冲突、纯提升可叠加（`action.ts` 按来源前缀跳过冲突判定）。
+ */
+export function applyTreasureEffects(ctx: CombatContext, unit: UnitState): void {
+  const loadout = unit.general.treasure;
+  if (!loadout) return;
+  const allies = unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+  for (const { create, sourceId } of buildTreasureStatuses(loadout, unit.general, allies)) {
+    inflictStatus(ctx, unit, create, TREASURE_SOURCE_TYPE, sourceId, unit.general.id);
+  }
+}
+
+/** 回合开始钩子（每回合由 `combat.ts` 调用）：`value` = 该特效/词条在当前等级下的数值 */
+type RoundStartHook = (ctx: CombatContext, unit: UnitState, value: number, sourceId: string) => void;
+
+const ROUND_START_HOOKS: Record<string, RoundStartHook> = {
+  // 再战（少府）：第 5 回合有 50% 几率获得连击
+  再战: (ctx, unit, _v, sourceId) => {
+    if (ctx.currentRound !== 5) return;
+    if (!ctx.rng.chance(0.5)) return;
+    inflictStatus(ctx, unit, { type: 'combo', duration: 1 }, TREASURE_SOURCE_TYPE, sourceId, unit.general.id);
+  },
+  // 清毅（锻造词条）：第 N 回合（玩家选值，官方区间 5~8）行动时获得洞察
+  清毅: (ctx, unit, value, sourceId) => {
+    if (ctx.currentRound !== value) return;
+    inflictStatus(ctx, unit, { type: 'insight', duration: 1 }, TREASURE_SOURCE_TYPE, sourceId, unit.general.id);
+  },
+  // 善谋（锻造词条）：第 4、6 回合，造成攻击伤害的武将主战法发动率提高
+  善谋: (ctx, unit, value, sourceId) => {
+    if (ctx.currentRound !== 4 && ctx.currentRound !== 6) return;
+    inflictStatus(
+      ctx,
+      unit,
+      { type: 'trigger_boost', rate: value / 100, duration: 1, mainSkillOnly: true, attackSkillsOnly: true },
+      TREASURE_SOURCE_TYPE,
+      sourceId,
+      unit.general.id,
+    );
+  },
+};
+
+/** 回合开始结算宝物的「回合窗口」类效果（再战 / 清毅） */
+export function triggerTreasureRoundStart(ctx: CombatContext): void {
+  for (const unit of [...ctx.myTeam, ...ctx.enemyTeam]) {
+    if (!unit.alive) continue;
+    const loadout = unit.general.treasure;
+    if (!loadout) continue;
+    const level = loadout.level ?? 10;
+    const treasure = TREASURES_BY_ID[loadout.treasureId];
+    if (treasure) {
+      for (const effect of treasure.effects) {
+        const hook = ROUND_START_HOOKS[effect.name];
+        if (hook) hook(ctx, unit, treasureEffectValue(effect, level), `${TREASURE_SOURCE_PREFIX}${treasure.id}:${effect.slot}`);
+      }
+    }
+    if (loadout.affix) {
+      const hook = ROUND_START_HOOKS[loadout.affix.name];
+      if (hook) hook(ctx, unit, loadout.affix.value, `${TREASURE_SOURCE_PREFIX}affix:${loadout.affix.name}`);
+    }
+  }
+}

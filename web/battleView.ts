@@ -17,9 +17,10 @@ interface RenderEvCtx {
 }
 
 /** 准备阶段三段标题：阵容 / 兵种 / 战法 */
-const PHASE_LABEL: Record<'formation' | 'troop' | 'skill', string> = {
+const PHASE_LABEL: Record<'formation' | 'troop' | 'treasure' | 'skill', string> = {
   formation: '阵容',
   troop: '兵种',
+  treasure: '宝物',
   skill: '战法',
 };
 
@@ -343,12 +344,13 @@ function renderPrepEvents(
   ctx?: RenderEvCtx
 ): void {
   const start = evs.find((e) => e.type === 'battle_start');
-  const sections: Record<'formation' | 'troop' | 'skill', BattleEvent[]> = {
+  const sections: Record<'formation' | 'troop' | 'treasure' | 'skill', BattleEvent[]> = {
     formation: [],
     troop: [],
+    treasure: [],
     skill: [],
   };
-  let cur: 'formation' | 'troop' | 'skill' | null = null;
+  let cur: 'formation' | 'troop' | 'treasure' | 'skill' | null = null;
   for (const ev of evs) {
     if (ev.type === 'prep_phase') {
       cur = ev.phase;
@@ -397,6 +399,12 @@ function renderPrepEvents(
   empty.className = 'ev dim';
   empty.textContent = '暂无效果';
   container.appendChild(empty);
+
+  // 宝物（佩戴才发 prep_phase: 'treasure'）：展示准备阶段挂载的宝物效果
+  if (sections.treasure.length > 0) {
+    addHead(PHASE_LABEL.treasure);
+    renderEvents(container, sections.treasure, nm, popupApi, ctx);
+  }
 
   addHead(PHASE_LABEL.skill);
   const skillEvs = sections.skill;
@@ -572,6 +580,12 @@ function renderEvents(
       }
       case 'cowardice_immune_blocked':
         add('good', `【${nm(ev.unitId)}】免疫了${statusName(ev.statusType)}效果`);
+        break;
+      case 'control_immune_blocked':
+        add('good', `【${nm(ev.unitId)}】免疫了${statusName(ev.statusType)}效果（坚毅）`);
+        break;
+      case 'treasure_evade_triggered':
+        add('good', `【${nm(ev.unitId)}】首次受击触发避险：进入规避（免疫下 1 次伤害）`);
         break;
       case 'status_resisted': {
         // 抵御负面（暂时定策，XP程昱）：该次施加被取消

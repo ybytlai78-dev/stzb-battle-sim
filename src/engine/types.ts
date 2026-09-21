@@ -642,7 +642,7 @@ export type CreateStatus =
    *  strategyScaled / defenseScaled + growthRate 给定时按属性缩放（公式同 damage_reduce），growthRate 缺省用基值；
    *  `stack: true` = 显式可叠加（同源重复施加累加 rate）。 */
   | { type: 'heal_boost'; rate: number; duration: number; strategyScaled?: boolean; defenseScaled?: boolean; growthRate?: number; stack?: true }
-  | { type: 'damage_reduce'; rate: number; duration: number; strategyScaled?: boolean; /** 受防御缩放（一夫当关 −50%，公式同受谋略，属性换生效防御）；growthRate === undefined 时不缩放、用基值 */ defenseScaled?: boolean; /** 受攻击缩放（对称字段）；growthRate === undefined 时不缩放、用基值 */ attackScaled?: boolean; growthRate?: number; /** 按 8 份衰减（谋议宏图）：第 1 回合 8/8，第 2 回合起每回合回合前 −1/8（第 8 回合 1/8） */ decayEighths?: number; /** 按 N 份受击衰减（疮痍累身 12）：受匹配伤害且实际扣兵后 −1 份，rate = baseRate × 剩余/初始 */ decayFifths?: number; /** 按 N 份「造成伤害」衰减（抚民励德 4）：携带者每次造成伤害（实际扣兵 > 0）后 −1 份，rate = baseRate × 剩余/初始；与 decayFifths（受击衰减）独立 */ decayOnDeal?: number; /** 显式「可叠加」（同仇敌忾等官方写「可叠加」/「层数」）：同源重复施加累加；缺省刷新 */ stack?: true; /** 同战法同过滤维叠层上限（张昭 竭忠尽智「该效果可以叠加 1 次」= 2 层）；达到后不再加 rate */ maxStacks?: number; /** 伤害来源过滤：basic=普攻（分类键小类「普通」）/ skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效（分类键小类「主动/追击/指挥」）；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省攻击+策略都吃（分类键「大类」，见 action.ts damageClassKey） */ damageType?: 'physical' | 'strategy'; /** 只对这些 DoT 类型生效（全主诿异：被施加的燃烧/恐慌/妖术诅咒伤害提升 20%）；缺省不限（非 DoT 伤害也吃） */ dotTypes?: DotType[]; /** 条件减伤（人公将军「敌方武将存在妖术效果时造成的攻击伤害降低 20%」）：仅当**携带者自身**带该状态时本减伤才生效 */ requireSelfStatus?: StatusType }
+  | { type: 'damage_reduce'; rate: number; duration: number; strategyScaled?: boolean; /** 受防御缩放（一夫当关 −50%，公式同受谋略，属性换生效防御）；growthRate === undefined 时不缩放、用基值 */ defenseScaled?: boolean; /** 受攻击缩放（对称字段）；growthRate === undefined 时不缩放、用基值 */ attackScaled?: boolean; growthRate?: number; /** 按 8 份衰减（谋议宏图）：第 1 回合 8/8，第 2 回合起每回合回合前 −1/8（第 8 回合 1/8） */ decayEighths?: number; /** 按 N 份受击衰减（疮痍累身 12）：受匹配伤害且实际扣兵后 −1 份，rate = baseRate × 剩余/初始 */ decayFifths?: number; /** 按 N 份「造成伤害」衰减（抚民励德 4）：携带者每次造成伤害（实际扣兵 > 0）后 −1 份，rate = baseRate × 剩余/初始；与 decayFifths（受击衰减）独立 */ decayOnDeal?: number; /** 显式「可叠加」（同仇敌忾等官方写「可叠加」/「层数」）：同源重复施加累加；缺省刷新 */ stack?: true; /** 同战法同过滤维叠层上限（张昭 竭忠尽智「该效果可以叠加 1 次」= 2 层）；达到后不再加 rate */ maxStacks?: number; /** 伤害来源过滤：basic=普攻（分类键小类「普通」）/ skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效（分类键小类「主动/追击/指挥」）；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省攻击+策略都吃（分类键「大类」，见 action.ts damageClassKey） */ damageType?: 'physical' | 'strategy'; /** 只对这些 DoT 类型生效（全主诿异：被施加的燃烧/恐慌/妖术诅咒伤害提升 20%）；缺省不限（非 DoT 伤害也吃） */ dotTypes?: DotType[]; /** 条件减伤（人公将军「敌方武将存在妖术效果时造成的攻击伤害降低 20%」）：仅当**携带者自身**带该状态时本减伤才生效 */ requireSelfStatus?: StatusType | StatusType[]; /** 宝物「强固」：**每回合首次**受到的伤害降低（该回合第一次实际扣兵享受，其余不吃） */ firstHitPerRound?: boolean; /** 宝物「威势」：仅当**当前行动者（伤害来源）初始统率 < 携带者初始统率**时生效 */ enemyCostBelowSelf?: boolean }
   /** direction：'caused'=自身造成伤害提高/降低（血溅黄砂、强势）；'taken'=自身受到伤害提高/降低（神兵天降、名士在野）。缺省 'taken'。
    *  stacks：叠层计数（带上限的增减伤，银龙冲阵），同战法累加时 +1
    *  strategyScaled=true 且给 growthRate 时（密谋定蜀每次发动 +5% 受谋略）：rate 为谋略 80 时的基础值，实际数值按 scaledValue 缩放
@@ -653,7 +653,7 @@ export type CreateStatus =
    *  attackScaled=true（万箭 −50% / 恃强 −30%）：受攻击缩放；growthRate === undefined 时不缩放、用基值
    *  decayFifths：按 N 份衰减（恃强 5）：挂上时满额，每次受到匹配伤害且实际扣兵 > 0 则 −1 份，rate = baseRate × fifths/N
    *  chargesStack：同战法重复施加时累加 rate（七步释嫌）；缺省不叠加（青丘媚祸） */
-  | { type: 'damage_boost'; rate: number; duration: number; direction?: 'caused' | 'taken'; stacks?: number; /** 同战法同过滤维叠层达到此上限后不再加 rate；文德椒房 3 */ maxStacks?: number; /** 按 8 份衰减（虎豹督军）：第 1 回合 8/8，第 2 回合起每回合回合前 −1/8（同谋议宏图口径） */ decayEighths?: number; strategyScaled?: boolean; /** 受防御缩放（当敌制决 +8%，公式同受谋略，属性换生效防御） */ defenseScaled?: boolean; /** 受速度缩放（攻其不备 +11.6%）；growthRate === undefined 时不缩放、用基值 */ speedScaled?: boolean; /** 受攻击缩放（万箭齐发 −50%、恃强淬锋 −30% / +3.4%）；growthRate === undefined 时不缩放、用基值 */ attackScaled?: boolean; growthRate?: number; charges?: number | [number, number]; chargesStack?: boolean; /** 消耗于携带者**本次行动结束**（尽言直谏「在下次行动阶段…发动率提升」= 行动末清除，不按回合递减） */ expireAfterOwnAct?: boolean; /** 显式「可叠加」标记：同源重复施加累加 rate（与 stacks / chargesStack 等价；官方写「可叠加」的非层数增减伤用） */ stack?: true; /** 按 N 份**每回合结束**衰减（敛微穷极 6）：每回合结束 −1 份，rate = baseRate × 剩余/初始 */ decayRoundParts?: number; /** 只对**非自身阵营**的伤害目标生效（合纵连横「对非自身阵营的武将造成攻击与策略伤害提升 10%」：按携带者与受击者阵营比较） */ targetFactionNotSelf?: boolean; /** 按 N 份衰减（恃强淬锋 5）：挂上满额，每次匹配受击实际扣兵后 −1 份 */ decayFifths?: number; /** 只对**指定战法**造成的伤害生效（守静却敌「造成【守静却敌】的策略伤害时」）：按伤害事件的 skillId 过滤（DamageHitContext.skillId）；缺省不限 */ skillIds?: string[]; /** 伤害来源过滤：basic=普攻（分类键小类「普通」）/ skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效（分类键小类「主动/追击/指挥」）；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省攻击+策略都吃（分类键「大类」，见 action.ts damageClassKey） */ damageType?: 'physical' | 'strategy'; /** 只对这些 DoT 类型生效（全主诿异：被施加的燃烧/恐慌/妖术诅咒伤害提升 20%）；缺省不限（非 DoT 伤害也吃） */ dotTypes?: DotType[]; /** 仅「进行攻击」（普攻/物理主动/追击，口径见 action.isAttackHitForProc；不含分兵溅射/反击/指挥代打/DoT）——缚父临危「下两次攻击造成的伤害提升 30%」 */ attackOnly?: boolean }
+  | { type: 'damage_boost'; rate: number; duration: number; direction?: 'caused' | 'taken'; stacks?: number; /** 同战法同过滤维叠层达到此上限后不再加 rate；文德椒房 3 */ maxStacks?: number; /** 按 8 份衰减（虎豹督军）：第 1 回合 8/8，第 2 回合起每回合回合前 −1/8（同谋议宏图口径） */ decayEighths?: number; strategyScaled?: boolean; /** 受防御缩放（当敌制决 +8%，公式同受谋略，属性换生效防御） */ defenseScaled?: boolean; /** 受速度缩放（攻其不备 +11.6%）；growthRate === undefined 时不缩放、用基值 */ speedScaled?: boolean; /** 受攻击缩放（万箭齐发 −50%、恃强淬锋 −30% / +3.4%）；growthRate === undefined 时不缩放、用基值 */ attackScaled?: boolean; growthRate?: number; charges?: number | [number, number]; chargesStack?: boolean; /** 消耗于携带者**本次行动结束**（尽言直谏「在下次行动阶段…发动率提升」= 行动末清除，不按回合递减） */ expireAfterOwnAct?: boolean; /** 显式「可叠加」标记：同源重复施加累加 rate（与 stacks / chargesStack 等价；官方写「可叠加」的非层数增减伤用） */ stack?: true; /** 按 N 份**每回合结束**衰减（敛微穷极 6）：每回合结束 −1 份，rate = baseRate × 剩余/初始 */ decayRoundParts?: number; /** 只对**非自身阵营**的伤害目标生效（合纵连横「对非自身阵营的武将造成攻击与策略伤害提升 10%」：按携带者与受击者阵营比较） */ targetFactionNotSelf?: boolean; /** 按 N 份衰减（恃强淬锋 5）：挂上满额，每次匹配受击实际扣兵后 −1 份 */ decayFifths?: number; /** 只对**指定战法**造成的伤害生效（守静却敌「造成【守静却敌】的策略伤害时」）：按伤害事件的 skillId 过滤（DamageHitContext.skillId）；缺省不限 */ skillIds?: string[]; /** 伤害来源过滤：basic=普攻（分类键小类「普通」）/ skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效（分类键小类「主动/追击/指挥」）；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省攻击+策略都吃（分类键「大类」，见 action.ts damageClassKey） */ damageType?: 'physical' | 'strategy'; /** 只对这些 DoT 类型生效（全主诿异：被施加的燃烧/恐慌/妖术诅咒伤害提升 20%）；缺省不限（非 DoT 伤害也吃） */ dotTypes?: DotType[]; /** 仅「进行攻击」（普攻/物理主动/追击，口径见 action.isAttackHitForProc；不含分兵溅射/反击/指挥代打/DoT）——缚父临危「下两次攻击造成的伤害提升 30%」 */ attackOnly?: boolean; /** 条件增伤（宝物「迅猛」：处于连击状态时普通攻击伤害提高）：仅当**携带者自身**带该状态时才生效（可多值，任一命中） */ requireSelfStatus?: StatusType | StatusType[]; /** 宝物「奇袭」：按**与目标距离**逐点增伤（rate × 距离） */ perDistance?: boolean; /** 宝物「击虚」：按**目标身上持续性伤害/控制的状态种类数**增伤（rate × 种类数，上限 5） */ perTargetStatusCount?: boolean }
   /**
    * 发动率提升。rate 为小数（1.2 = +120% / ×2.2）。
    * skillTypes：只对这些战法类型生效（动如雷震仅追击）；缺省主动+追击都吃（难知如阴）。
@@ -661,8 +661,54 @@ export type CreateStatus =
    * 超过 100% 由发动率判定封顶为必定发动。
    * additive：仅 `false` 有意义——显式退回乘算 基础率 × (1+rate)。
    */
-  | { type: 'trigger_boost'; rate: number; duration: number; skillTypes?: SkillType[]; /** 仅 false 生效：退回乘算；缺省加法 */ additive?: boolean; /** 只对「攻击类」战法生效（输出段含物理伤害）——侵掠如火「攻击类主动战法发动率提升 20%」 */ attackSkillsOnly?: boolean; /** 显式「可叠加」：同源重复施加累加 rate；缺省刷新 */ stack?: true; /** 只对**携带者的主战法**生效（甚陷不惧「武将主战法发动率提高」） */ mainSkillOnly?: boolean; /** 只对「可造成攻击伤害或策略伤害的战法」生效（甚陷不惧；物理/策略输出段任一即可） */ damageSkillsOnly?: boolean; /** 消耗于携带者**本次行动结束**（甚陷不惧「下次行动时」）——行动末清除，不按回合递减 */ expireAfterOwnAct?: boolean }
+  | { type: 'trigger_boost'; rate: number; duration: number; skillTypes?: SkillType[]; /** 仅 false 生效：退回乘算；缺省加法 */ additive?: boolean; /** 只对「攻击类」战法生效（输出段含物理伤害）——侵掠如火「攻击类主动战法发动率提升 20%」 */ attackSkillsOnly?: boolean; /** 显式「可叠加」：同源重复施加累加 rate；缺省刷新 */ stack?: true; /** 只对**携带者的主战法**生效（甚陷不惧「武将主战法发动率提高」） */ mainSkillOnly?: boolean; /** 只对「可造成攻击伤害或策略伤害的战法」生效（甚陷不惧；物理/策略输出段任一即可） */ damageSkillsOnly?: boolean; /** 只对「会造成策略伤害的战法」生效（宝物「筹算」：造成策略伤害的武将主战法发动率提高） */ strategySkillsOnly?: boolean; /** 只对**需要准备的主动战法**生效（宝物「熟虑」） */ preparedOnly?: boolean; /** 消耗于携带者**本次行动结束**（甚陷不惧「下次行动时」）——行动末清除，不按回合递减 */ expireAfterOwnAct?: boolean }
   | { type: 'insight'; duration: number }
+  /**
+   * 控制时长 +1（宝物「惑言」/「慑心」）：携带者用匹配战法施加控制时，该次控制 duration +1，
+   * 并消耗 1 点 `charges`（`charges` 用尽即移除）。`mainSkillOnly` = 只对主战法生效；
+   * `skillTypes` 限定战法类型（慑心 = 追击）。
+   */
+  | { type: 'control_extend'; charges: number; duration: number; mainSkillOnly?: boolean; skillTypes?: SkillType[] }
+  /** 免疫指定控制（宝物「坚毅」：前 N 回合免疫混乱及暴走）：`types` 内的控制施加时整段拦截 */
+  | { type: 'control_immune'; types: StatusType[]; duration: number }
+  /** 普通攻击不触发反击（宝物「强击」：前 N 回合）：持有者作为**攻击方**时，受击方的 counter 不结算 */
+  | { type: 'no_retaliate'; duration: number }
+  /**
+   * 受击叠层（宝物「不屈」= 本回合受到伤害降低 / 「破浪」= 本回合造成伤害提升）：
+   * 每次**实际扣兵**后 +1 层（上限 maxStacks），**每回合开始清零**；
+   * 生效值 = stacks × perStack（reduce 进受击方减伤池、boost 进造成方增伤池）。
+   */
+  | { type: 'hurt_stack'; mode: 'reduce' | 'boost'; perStack: number; maxStacks: number; duration: number }
+  /** 首次受击后进入规避（宝物「避险」）：战斗中第一次实际扣兵后获得 1 层 evasion，标记随即移除 */
+  | { type: 'hurt_evade_once'; duration: number }
+  /** 宝物「蓄锐」：每 every 次普攻后，自身造成（限定战法类型的）伤害增加 perStack，可叠加至 maxStacks */
+  | { type: 'treasure_basic_count'; every: number; perStack: number; skillTypes?: SkillType[]; maxStacks: number; duration: number }
+  /** 宝物「选锋」：普攻后，自身**下一次**造成策略伤害提高 rate（一次性 charges=1） */
+  | { type: 'treasure_basic_next'; rate: number; duration: number }
+  /** 宝物「破障」：普攻后，移除攻击目标由主动/追击战法带来的 1 种增益 */
+  | { type: 'treasure_basic_purge'; duration: number }
+  /** 宝物「仁心」/「矜节」：携带者**造成**的恢复效果提高（`recoverTroops` 入口按施法者结算） */
+  | { type: 'heal_out_boost'; rate: number; duration: number }
+  /** 宝物「济世」：携带者每造成一次恢复 → 被恢复者获得「受到伤害降低」（可叠加） */
+  | { type: 'heal_trigger_reduce'; rate: number; duration: number }
+  /** 宝物「鸠佑」：主动主战法发动后，自身造成攻击伤害提高 perStack（每次一层，可叠加至 maxStacks） */
+  | { type: 'treasure_after_main'; perStack: number; maxStacks: number; duration: number }
+  /** 宝物「归心」：我军全体每发动 every 次主动战法 → 携带者恢复（恢复率 rate，% ） */
+  | { type: 'treasure_ally_active_heal'; every: number; rate: number; duration: number }
+  /** 宝物「阵舞」：携带者（女性）主战法施加控制时，目标在该控制期间受到的所有伤害提高 rate */
+  | { type: 'treasure_control_amplify'; rate: number; mainSkillOnly?: boolean; duration: number }
+  /** 宝物「燮理」：携带者施加的 DoT（可限类型）每回合首次跳伤后，按恢复率 rate（%）恢复一次兵力 */
+  | { type: 'dot_tick_heal'; rate: number; dotTypes?: DotType[]; duration: number }
+  /** 宝物「谋断」：**第 atCast 次**发动需要准备的（主）主动战法时，跳过 1 个准备回合 */
+  | { type: 'treasure_prepare_skip'; atCast: number; mainSkillOnly?: boolean; duration: number }
+  /** 宝物「艮止」：自身无法普通攻击（但可正常放主动/追击以外的战法） */
+  | { type: 'no_attack'; duration: number }
+  /** 宝物「不懈」：自身每低于初始兵力 `stepPct`%，受到的恢复效果提升 perStep（可多档累加） */
+  | { type: 'heal_low_troops'; perStep: number; stepPct?: number; duration: number }
+  /** 宝物「迸发」：**首次**发动追击主战法时额外选取攻击距离内 1 个目标（触发即移除） */
+  | { type: 'treasure_extra_pursuit_target'; duration: number }
+  /** 宝物「劲弩」：第 2 回合起**首次**发动普通攻击时，对攻击距离内敌军全体各发动 1 次普通攻击（触发即移除） */
+  | { type: 'treasure_basic_sweep'; duration: number }
   /** 免疫怯战（魏武之泽）：持续期间无法被施加怯战 */
   | { type: 'cowardice_immune'; duration: number }
   | { type: 'siege'; duration: number }
@@ -679,7 +725,7 @@ export type CreateStatus =
   | { type: 'jump_prep'; duration: number; rate: number }
   /** 下一次造成伤害无视规避（缚父临危）：无 duration——消耗制，不按回合递减 */
   /** 下一次造成伤害无视规避（缚父临危）：duration 仅占位——消耗制，不按回合递减（两个 tick 函数显式跳过） */
-  | { type: 'ignore_evasion'; duration: number }
+  | { type: 'ignore_evasion'; duration: number; /** 宝物「识破」：只在前 N 回合有效（不消耗，到回合即失效）；缺省 = 消耗制（缚父临危） */ throughRound?: number }
   /**
    * 控制效果额外 +1 目标（鸾凤和鸣）：携带者「下一次造成的控制效果（混乱/犹豫/暴走/怯战）
    * 额外对一个目标生效」。消耗制（duration 仅占位，不按回合递减），由携带者打出控制时消耗并移除。
@@ -1628,6 +1674,22 @@ export interface TroopBonusResult {
 
 // ─── 武将 ───
 
+/**
+ * 武将佩戴的宝物（率土「宝物系统」；数据见 `src/data/treasures.ts`）。
+ * 口径（用户 2026-09-21，见 dateyuan/宝物系统方案.md §0）：
+ *  - 宝物效果**与任何来源都不冲突**，纯提升、可叠加；
+ *  - 默认 10 级：一阶/二阶特效 = 官方值 × 5（官方值即每次强化增量），三阶固定；
+ *  - 锻造词条（`affix`）数值由玩家在官方区间内自选。
+ */
+export interface TreasureLoadout {
+  /** 宝物 id（`TREASURES_BY_ID`） */
+  treasureId: number;
+  /** 宝物等级（缺省 10） */
+  level?: number;
+  /** 锻造出的词条；未锻造则不填。`value` = 玩家选定数值（官方区间内） */
+  affix?: { name: string; value: number };
+}
+
 export interface General {
   id: string;
   name: string;
@@ -1649,6 +1711,11 @@ export interface General {
    * null = 无限制，可任意共存。
    */
   mutualExclusionGroup: string | null;
+  /**
+   * 佩戴的宝物（缺省不佩戴）。引擎在准备阶段最先结算（`prep_phase: 'treasure'`，
+   * 早于 battle_start 被动与一类指挥，保证属性类特效被后续结算读到）。
+   */
+  treasure?: TreasureLoadout;
   troopType: TroopType;
   /**
    * 二级兵种转换（高级兵种，可选）：由 `src/data/secondaryTroops.ts` 的转换方向提供。
@@ -1777,6 +1844,40 @@ export type StatusType =
   | 'heal_boost'
   | 'trigger_boost'
   | 'insight'
+  /** 宝物「惑言」/「慑心」：控制时长 +1（消耗 charges） */
+  | 'control_extend'
+  /** 宝物「坚毅」：免疫指定控制（types 清单） */
+  | 'control_immune'
+  /** 宝物「强击」：普攻不触发反击 */
+  | 'no_retaliate'
+  /** 宝物「不屈」/「破浪」：受击叠层（每回合清零） */
+  | 'hurt_stack'
+  /** 宝物「避险」：首次受击后进入规避 */
+  | 'hurt_evade_once'
+  /** 宝物「蓄锐」/「选锋」/「破障」：普攻命中后钩子 */
+  | 'treasure_basic_count'
+  | 'treasure_basic_next'
+  | 'treasure_basic_purge'
+  /** 宝物「仁心」/「矜节」：造成的恢复效果提高 */
+  | 'heal_out_boost'
+  /** 宝物「济世」：造成恢复 → 目标受伤降低 */
+  | 'heal_trigger_reduce'
+  /** 宝物「鸠佑」/「归心」/「阵舞」：主战法发动后钩子 */
+  | 'treasure_after_main'
+  | 'treasure_ally_active_heal'
+  | 'treasure_control_amplify'
+  /** 宝物「燮理」：DoT 跳伤后恢复 */
+  | 'dot_tick_heal'
+  /** 宝物「谋断」：第 N 次准备战法跳过准备 */
+  | 'treasure_prepare_skip'
+  /** 宝物「艮止」：无法普通攻击 */
+  | 'no_attack'
+  /** 宝物「不懈」：兵力越低恢复越高 */
+  | 'heal_low_troops'
+  /** 宝物「迸发」：首次追击额外目标 */
+  | 'treasure_extra_pursuit_target'
+  /** 宝物「劲弩」：首次普攻横扫 */
+  | 'treasure_basic_sweep'
   | 'cowardice_immune'
   | 'siege'
   | 'sorcery'
@@ -1848,16 +1949,35 @@ export type Status =
   | { type: 'defense_buff'; amount: number; percent?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; baseAmount?: number; dealParts?: number; dealPartsBase?: number }
   | { type: 'strategy_buff'; amount: number; percent?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; /** 造成伤害衰减：满额数值（抚民励德 80） */ baseAmount?: number; /** 剩余份数（抚民励德 4→3→…）；无此字段则不按造成伤害衰减 */ dealParts?: number; /** 份数初始值（4），衰减公式分母 */ dealPartsBase?: number }
   | { type: 'speed_buff'; amount: number; percent?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; baseAmount?: number; dealParts?: number; dealPartsBase?: number }
-  | { type: 'damage_reduce'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; /** 每回合结束剩余份数（敛微穷极）；无此字段则不按回合衰减 */ roundParts?: number; /** 每回合份数初始值，衰减公式分母 */ roundPartsBase?: number; /** 当前剩余份数（谋议宏图 8→7→…）；无此字段则不按 1/8 衰减 */ eighths?: number; /** 8/8 时的满额减伤率，衰减时 rate = baseRate × eighths/8 */ baseRate?: number; /** 叠层计数（张昭 竭忠尽智「该效果可以叠加 1 次」= 2 层）：首层 1，同源重复施加累加 +1 */ stacks?: number; /** 同战法同过滤维叠层上限（2）：达到后同源重复施加被守卫拒绝，不再加 rate */ maxStacks?: number; /** 受击剩余份数（疮痍累身 12→11→…）；无此字段则不按受击衰减 */ fifths?: number; /** 受击份数初始值（疮痍累身 12） */ fifthsBase?: number; /** 造成伤害剩余份数（抚民励德 4→3→…）；无此字段则不按造成伤害衰减 */ dealParts?: number; /** 份数初始值（4） */ dealPartsBase?: number; /** 伤害来源过滤：basic=普攻（分类键小类「普通」）/ skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效（分类键小类「主动/追击/指挥」）；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省攻击+策略都吃（分类键「大类」，见 action.ts damageClassKey） */ damageType?: 'physical' | 'strategy'; /** 只对这些 DoT 类型生效（全主诿异：被施加的燃烧/恐慌/妖术诅咒伤害提升 20%）；缺省不限（非 DoT 伤害也吃） */ dotTypes?: DotType[]; /** 条件减伤（人公将军「敌方武将存在妖术效果时造成的攻击伤害降低 20%」）：仅当**携带者自身**带该状态时本减伤才生效 */ requireSelfStatus?: StatusType }
+  | { type: 'damage_reduce'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; /** 每回合结束剩余份数（敛微穷极）；无此字段则不按回合衰减 */ roundParts?: number; /** 每回合份数初始值，衰减公式分母 */ roundPartsBase?: number; /** 当前剩余份数（谋议宏图 8→7→…）；无此字段则不按 1/8 衰减 */ eighths?: number; /** 8/8 时的满额减伤率，衰减时 rate = baseRate × eighths/8 */ baseRate?: number; /** 叠层计数（张昭 竭忠尽智「该效果可以叠加 1 次」= 2 层）：首层 1，同源重复施加累加 +1 */ stacks?: number; /** 同战法同过滤维叠层上限（2）：达到后同源重复施加被守卫拒绝，不再加 rate */ maxStacks?: number; /** 受击剩余份数（疮痍累身 12→11→…）；无此字段则不按受击衰减 */ fifths?: number; /** 受击份数初始值（疮痍累身 12） */ fifthsBase?: number; /** 造成伤害剩余份数（抚民励德 4→3→…）；无此字段则不按造成伤害衰减 */ dealParts?: number; /** 份数初始值（4） */ dealPartsBase?: number; /** 伤害来源过滤：basic=普攻（分类键小类「普通」）/ skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效（分类键小类「主动/追击/指挥」）；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省攻击+策略都吃（分类键「大类」，见 action.ts damageClassKey） */ damageType?: 'physical' | 'strategy'; /** 只对这些 DoT 类型生效（全主诿异：被施加的燃烧/恐慌/妖术诅咒伤害提升 20%）；缺省不限（非 DoT 伤害也吃） */ dotTypes?: DotType[]; /** 条件减伤（人公将军「敌方武将存在妖术效果时造成的攻击伤害降低 20%」）：仅当**携带者自身**带该状态时本减伤才生效 */ requireSelfStatus?: StatusType | StatusType[]; /** 宝物「强固」：**每回合首次**受到的伤害降低（该回合第一次实际扣兵享受，其余不吃） */ firstHitPerRound?: boolean; /** 宝物「威势」：仅当**当前行动者（伤害来源）初始统率 < 携带者初始统率**时生效 */ enemyCostBelowSelf?: boolean }
   /**
    * 受到恢复效果提升（勇挚刚毅）：携带者受到的任何恢复（主动 heal / 休整 rest / 持续急救 first_aid /
    * 每回合恢复 recoverEachRound / 代打 healSource）统一提升 rate 比例——加成在 `recoverTroops` 唯一收口处结算。
    * rate<0 时为「受到恢复效果降低」（isBeneficialStatus 据此分正负）。
    */
   | { type: 'heal_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
-  | { type: 'damage_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; direction: 'caused' | 'taken'; sourceUnitId?: string; /** 消耗于携带者**本次行动结束**（尽言直谏）：行动末清除，不按回合递减 */ expireAfterOwnAct?: boolean; /** 叠层计数（带上限的增减伤，银龙冲阵最多 3 层）；无上限时不设置 */ stacks?: number; /** 次数型下一次攻击（青丘媚祸） */ charges?: number; /** 每回合结束剩余份数（敛微穷极 6→5→…）；无此字段则不按回合衰减 */ roundParts?: number; /** 每回合份数初始值（6），衰减公式分母 */ roundPartsBase?: number; /** 当前剩余份数（恃强淬锋 5→4→…）；无此字段则不按 1/5 衰减 */ fifths?: number; /** fifths 满额时的 rate，衰减时 rate = baseRate × fifths / 初始份数 */ baseRate?: number; /** decayFifths 挂上时的满额份数（恃强 5），衰减公式分母 */ fifthsBase?: number; /** 当前剩余份数（虎豹督军 8→7→…，每回合前 −1；与 fifths 互斥） */ eighths?: number; /** 只对**指定战法**造成的伤害生效（守静却敌「造成【守静却敌】的策略伤害时」）：按伤害事件的 skillId 过滤；缺省不限 */ skillIds?: string[]; /** 只对**非自身阵营**的伤害目标生效（合纵连横）：按携带者与受击者阵营比较 */ targetFactionNotSelf?: boolean; /** 伤害来源过滤：basic=普攻（分类键小类「普通」）/ skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效（分类键小类「主动/追击/指挥」）；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省攻击+策略都吃（分类键「大类」，见 action.ts damageClassKey） */ damageType?: 'physical' | 'strategy'; /** 只对这些 DoT 类型生效（全主诿异：被施加的燃烧/恐慌/妖术诅咒伤害提升 20%）；缺省不限（非 DoT 伤害也吃） */ dotTypes?: DotType[]; /** 仅「进行攻击」（普攻/物理主动/追击，口径见 action.isAttackHitForProc；不含分兵溅射/反击/指挥代打/DoT）——缚父临危「下两次攻击造成的伤害提升 30%」 */ attackOnly?: boolean }
-  | { type: 'trigger_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; skillTypes?: SkillType[]; additive?: boolean; attackSkillsOnly?: boolean; mainSkillOnly?: boolean; damageSkillsOnly?: boolean; expireAfterOwnAct?: boolean }
+  | { type: 'damage_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; direction: 'caused' | 'taken'; sourceUnitId?: string; /** 消耗于携带者**本次行动结束**（尽言直谏）：行动末清除，不按回合递减 */ expireAfterOwnAct?: boolean; /** 叠层计数（带上限的增减伤，银龙冲阵最多 3 层）；无上限时不设置 */ stacks?: number; /** 次数型下一次攻击（青丘媚祸） */ charges?: number; /** 每回合结束剩余份数（敛微穷极 6→5→…）；无此字段则不按回合衰减 */ roundParts?: number; /** 每回合份数初始值（6），衰减公式分母 */ roundPartsBase?: number; /** 当前剩余份数（恃强淬锋 5→4→…）；无此字段则不按 1/5 衰减 */ fifths?: number; /** fifths 满额时的 rate，衰减时 rate = baseRate × fifths / 初始份数 */ baseRate?: number; /** decayFifths 挂上时的满额份数（恃强 5），衰减公式分母 */ fifthsBase?: number; /** 当前剩余份数（虎豹督军 8→7→…，每回合前 −1；与 fifths 互斥） */ eighths?: number; /** 只对**指定战法**造成的伤害生效（守静却敌「造成【守静却敌】的策略伤害时」）：按伤害事件的 skillId 过滤；缺省不限 */ skillIds?: string[]; /** 只对**非自身阵营**的伤害目标生效（合纵连横）：按携带者与受击者阵营比较 */ targetFactionNotSelf?: boolean; /** 伤害来源过滤：basic=普攻（分类键小类「普通」）/ skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效（分类键小类「主动/追击/指挥」）；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省攻击+策略都吃（分类键「大类」，见 action.ts damageClassKey） */ damageType?: 'physical' | 'strategy'; /** 只对这些 DoT 类型生效（全主诿异：被施加的燃烧/恐慌/妖术诅咒伤害提升 20%）；缺省不限（非 DoT 伤害也吃） */ dotTypes?: DotType[]; /** 仅「进行攻击」（普攻/物理主动/追击，口径见 action.isAttackHitForProc；不含分兵溅射/反击/指挥代打/DoT）——缚父临危「下两次攻击造成的伤害提升 30%」 */ attackOnly?: boolean; /** 条件增伤（宝物「迅猛」：处于连击状态时普通攻击伤害提高）：仅当**携带者自身**带该状态时才生效（可多值，任一命中） */ requireSelfStatus?: StatusType | StatusType[]; /** 宝物「奇袭」：按**与目标距离**逐点增伤（rate × 距离） */ perDistance?: boolean; /** 宝物「击虚」：按**目标身上持续性伤害/控制的状态种类数**增伤（rate × 种类数，上限 5） */ perTargetStatusCount?: boolean }
+  | { type: 'trigger_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; skillTypes?: SkillType[]; additive?: boolean; attackSkillsOnly?: boolean; mainSkillOnly?: boolean; damageSkillsOnly?: boolean; strategySkillsOnly?: boolean; preparedOnly?: boolean; expireAfterOwnAct?: boolean }
   | { type: 'insight'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'control_extend'; charges: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; mainSkillOnly?: boolean; skillTypes?: SkillType[] }
+  | { type: 'control_immune'; types: StatusType[]; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'no_retaliate'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'hurt_stack'; mode: 'reduce' | 'boost'; perStack: number; maxStacks: number; stacks: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'hurt_evade_once'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'treasure_basic_count'; every: number; perStack: number; skillTypes?: SkillType[]; maxStacks: number; stacks: number; counter: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'treasure_basic_next'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'treasure_basic_purge'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'heal_out_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'heal_trigger_reduce'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'treasure_after_main'; perStack: number; maxStacks: number; stacks: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'treasure_ally_active_heal'; every: number; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'treasure_control_amplify'; rate: number; mainSkillOnly?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'dot_tick_heal'; rate: number; dotTypes?: DotType[]; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'treasure_prepare_skip'; atCast: number; mainSkillOnly?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'no_attack'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'heal_low_troops'; perStep: number; stepPct?: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'treasure_extra_pursuit_target'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
+  | { type: 'treasure_basic_sweep'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'cowardice_immune'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'siege'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   /**
@@ -1928,7 +2048,7 @@ export type Status =
    * 覆盖**任意伤害类型**（攻击/策略），由携带者下一次造成伤害时消耗（consumeEvasion 内统一处理，
    * 携带者自己带此标记则跳过规避判定）；不按回合递减（两个 tick 函数显式跳过）。
    */
-  | { type: 'ignore_evasion'; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
+  | { type: 'ignore_evasion'; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; /** 宝物「识破」：只在前 N 回合有效（不消耗） */ throughRound?: number }
   /** 控制效果额外 +1 目标（鸾凤和鸣）：消耗制，不按回合递减（两个 tick 函数显式跳过） */
   | { type: 'control_spread'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string };
 
@@ -1965,7 +2085,7 @@ export interface UnitState {
 
 export type BattleEvent =
   | { type: 'battle_start'; turnOrder: string[]; seed: number }
-  | { type: 'prep_phase'; phase: 'formation' | 'troop' | 'skill' }
+  | { type: 'prep_phase'; phase: 'formation' | 'troop' | 'treasure' | 'skill' }
   | {
       type: 'formation_bonus';
       unitId: string;
@@ -2180,6 +2300,10 @@ export type BattleEvent =
       afterTroops?: number;
     }
   | { type: 'cowardice_immune_blocked'; unitId: string; statusType: StatusType }
+  /** 宝物「坚毅」：携带者免疫的控制被拦截 */
+  | { type: 'control_immune_blocked'; unitId: string; statusType: StatusType }
+  /** 宝物「避险」：首次受击触发规避 */
+  | { type: 'treasure_evade_triggered'; unitId: string; skillId: string }
   | {
       type: 'split_damage';
       sourceId: string;

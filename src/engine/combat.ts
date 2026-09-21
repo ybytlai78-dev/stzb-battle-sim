@@ -12,6 +12,7 @@ import { computeStats } from './stats';
 import { SKILL_REGISTRY } from '../data/skills';
 import { validateMutualExclusion } from '../data/hero-utils';
 import { computeTroopBonuses } from './troopBonus';
+import { applyTreasureEffects, triggerTreasureRoundStart } from './treasure';
 
 const POSITION_PRIORITY: Record<string, number> = { 前锋: 0, 中军: 1, 大营: 2 };
 
@@ -84,6 +85,12 @@ export function runBattle(config: BattleConfig): BattleReport {
   // 二级兵种专属/通用特性的**状态类**效果：重骑兵「重骑冲阵」（前 2 回合反击 75%）、
   // 通用特性「散射」（首次普攻附带分兵 40%）——准备阶段一次性授予，走状态冲突闸门
   for (const unit of turnOrder) grantSecondaryTroopStatuses(ctx, unit);
+  // 【宝物】佩戴宝物的单位先在宝物阶段结算（纯提升、与其他来源不冲突），再走 battle_start 被动 / 一类指挥
+  const treasureUnits = turnOrder.filter((u) => u.general.treasure);
+  if (treasureUnits.length > 0) {
+    events.push({ type: 'prep_phase', phase: 'treasure' });
+    for (const unit of treasureUnits) applyTreasureEffects(ctx, unit);
+  }
   events.push({ type: 'prep_phase', phase: 'skill' });
   // 【战法】先判定全部 battle_start 被动（百战精兵等加属性），再判定一类指挥（持节镇西等读生效属性）
   for (const unit of turnOrder) {
@@ -109,6 +116,8 @@ export function runBattle(config: BattleConfig): BattleReport {
 
     // 一类指挥回合前准备阶段（谋议宏图）：减伤按 1/8 衰减 + 士气叠层，再进入 delayedOutput / 单位行动
     tickRoundStartStatuses(ctx);
+    // 宝物·回合窗口效果（再战 第 5 回合连击 / 清毅 第 N 回合洞察）——无宝物时零开销、不发事件
+    triggerTreasureRoundStart(ctx);
     triggerImperialDecrees(ctx);
     // 一类指挥·每回合开始前几率判定（锦车持节）：命中则挂本回合状态，并登记待回合末的附加恢复
     triggerRoundStartChance(ctx);

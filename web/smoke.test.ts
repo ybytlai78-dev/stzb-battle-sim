@@ -606,6 +606,99 @@ describe('Web 战斗模拟器冒烟', () => {
     expect((redPanel.querySelectorAll('.slot')[2] as HTMLElement).textContent).toContain('兵力11000');
   });
 
+
+  it('宝物：详情页「宝物」区 → 三步弹窗（选宝物 / 选词条 / 选数值 滑杆+蓝粉红）→ 透传到引擎', async () => {
+    await boot();
+    pickHeroIntoSlot('red', 2, '太史慈');
+    const redPanel = document.querySelector('.team-panel.red') as HTMLElement;
+    const slotEl = redPanel.querySelectorAll('.slot')[2] as HTMLElement;
+    slotEl.click();
+    const detail = document.querySelector('.modal') as HTMLElement;
+    // 详情页有「宝物」区，初始为未佩戴
+    expect(detail.querySelector('.hd-treasure')).toBeTruthy();
+    expect(detail.querySelector('.hd-treasure')!.textContent).toContain('未佩戴');
+
+    // 打开三步弹窗：第一步是 36 件稀世网格
+    (detail.querySelector('.hd-treasure') as HTMLElement).click();
+    const picker = document.querySelectorAll('.modal')[1] as HTMLElement;
+    expect(picker.classList.contains('treasure-modal')).toBe(true);
+    expect(picker.querySelectorAll('.tp-card').length).toBe(36);
+    // 选中「屈卢」→ 详情显示自带特效
+    (picker.querySelector('.tp-card[data-tid="1012"]') as HTMLElement).click();
+    expect(picker.querySelector('.tp-detail')!.textContent).toContain('破敌');
+
+    // 第二步：词条池 6 条（官方该系列确为 6 条）
+    (picker.querySelector('.tp-next') as HTMLElement).click();
+    const affixRows = picker.querySelectorAll('.tp-affix');
+    expect(affixRows.length).toBe(6);
+    expect(picker.textContent).toContain('骁锐');
+
+    // 第三步：滑杆区间取官方 [5,15]，默认红档（上限）
+    (picker.querySelector('.tp-affix[data-affix="骁锐"]') as HTMLElement).click();
+    const range = picker.querySelector('.tp-range') as HTMLInputElement;
+    expect(range.min).toBe('5');
+    expect(range.max).toBe('15');
+    expect(range.value).toBe('15');
+    expect(picker.querySelector('.tp-legend')!.textContent).toContain('蓝');
+    expect(picker.querySelector('.tp-legend')!.textContent).toContain('粉');
+    expect(picker.querySelector('.tp-legend')!.textContent).toContain('红');
+    // 拖到 10
+    range.value = '10';
+    range.dispatchEvent(new Event('input'));
+    expect(picker.querySelector('.tp-value b')!.textContent).toContain('10');
+    (picker.querySelector('.tp-ok') as HTMLElement).click();
+
+    // 详情页刷新出宝物 + 词条 + 数值
+    const refreshed = document.querySelector('.modal') as HTMLElement;
+    const box = refreshed.querySelector('.hd-treasure')!;
+    expect(box.textContent).toContain('屈卢');
+    expect(box.textContent).toContain('骁锐');
+    expect(box.textContent).toContain('10');
+
+    // 词条标签按数值自动档位色：10 → 蓝（骁锐 蓝 ≤10）… 拖到 15 → 红
+    const tag = refreshed.querySelector('.hd-treasure .ts-affix')!;
+    expect(tag.classList.contains('blue')).toBe(true);
+    // 再次点击宝物图片：直接进第 2 步（选第 4 条锻造词条），滑杆调到上限 → 自动变红
+    (refreshed.querySelector('.hd-treasure') as HTMLElement).click();
+    const picker2 = document.querySelectorAll('.modal')[1] as HTMLElement;
+    expect(picker2.querySelector('.tp-steps')!.textContent).toContain('② 选词条');
+    expect(picker2.querySelectorAll('.tp-affix').length).toBe(6);
+    (picker2.querySelector('.tp-affix[data-affix="骁锐"]') as HTMLElement).click();
+    const range2 = picker2.querySelector('.tp-range') as HTMLInputElement;
+    range2.value = '15';
+    range2.dispatchEvent(new Event('input'));
+    expect(picker2.querySelector('.tp-tier')!.textContent).toContain('红');
+    expect(picker2.querySelector('.tp-tier')!.classList.contains('red')).toBe(true);
+    (picker2.querySelector('.tp-ok') as HTMLElement).click();
+    const after = document.querySelector('.modal') as HTMLElement;
+    const tag2 = after.querySelector('.hd-treasure .ts-affix')!;
+    expect(tag2.classList.contains('red')).toBe(true);
+    expect(tag2.textContent).toContain('15');
+
+    // 档位函数单元校验（蓝 ≤ 蓝区上限 / 粉 = 高于蓝区 / 红 = 上限档）
+    const { affixTier } = await import('./teamEditor');
+    const { AFFIXES } = await import('../src/data/treasures');
+    const xiaorui = AFFIXES['骁锐'];
+    expect(affixTier(xiaorui, 5)).toBe('blue');
+    expect(affixTier(xiaorui, 10)).toBe('blue');
+    expect(affixTier(xiaorui, 13)).toBe('pink');
+    expect(affixTier(xiaorui, 15)).toBe('red');
+    const zhice = AFFIXES['至策'];
+    expect(affixTier(zhice, 16)).toBe('blue');
+    expect(affixTier(zhice, 17)).toBe('pink');
+    expect(affixTier(zhice, 20)).toBe('red');
+
+    // 引擎透传：buildGeneral 收下宝物载荷（默认 10 级）
+    const { buildGeneral, HEROES } = await import('./heroes');
+    const heroId = HEROES.find((h) => h.name === '太史慈')!.id;
+    const g = buildGeneral(heroId, [], {}, '前锋', 0, 40, 120, undefined, undefined, {
+      treasureId: 1012,
+      level: 10,
+      affix: { name: '骁锐', value: 10 },
+    });
+    expect(g.treasure).toEqual({ treasureId: 1012, level: 10, affix: { name: '骁锐', value: 10 } });
+  });
+
   it('互斥校验：关羽（魏）+ 关羽（蜀）同队**不再被拒**（2026-09-16 互斥改白名单制）', async () => {
     await boot();
     pickHeroIntoSlot('red', 0, '关羽', { skill: '千里单骑' });

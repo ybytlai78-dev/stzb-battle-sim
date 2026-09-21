@@ -2850,3 +2850,102 @@ main {
 .sd-desc-title { font-size: 11.5px; color: var(--gold); letter-spacing: 2px; margin-bottom: 4px; }
 .sd-desc-title.lv1 { margin-top: 10px; }
 .sd-desc p { font-size: 13px; color: var(--text); line-height: 1.9; }
+
+/* ── 宝物（P4/P4.1）：武将详情左栏宝物槽（游戏卡面）+ 三步选择弹窗 ── */
+.hd-side-col { display: flex; flex-direction: column; gap: 8px; }
+.hd-treasure {
+  position: relative; width: 156px; height: 208px; box-sizing: border-box;
+  border: 1px solid var(--line-strong); background: #0d0b09; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  overflow: hidden; transition: border-color .12s;
+}
+.hd-treasure:hover { border-color: var(--gold-2, #d9c07a); }
+.hd-treasure.empty { border-style: dashed; color: var(--text-dim); gap: 4px; }
+.hd-treasure.empty .ts-plus { font-size: 26px; color: var(--gold-2, #d9c07a); line-height: 1; }
+.hd-treasure.empty .ts-tip { font-size: 13px; }
+.hd-treasure.empty .ts-sub { font-size: 11px; color: var(--text-dim); }
+.hd-treasure.filled .ts-img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: .92; }
+.hd-treasure .ts-rarity {
+  position: absolute; top: 4px; left: 4px; z-index: 2;
+  font-size: 11px; padding: 1px 5px; color: #f0d9a0; background: rgba(20, 14, 8, .82);
+  border: 1px solid #c9a45c; letter-spacing: 1px;
+}
+.hd-treasure .ts-affix {
+  position: absolute; z-index: 2; bottom: 30px; left: 50%; transform: translateX(-50%);
+  white-space: nowrap; font-size: 12px; padding: 2px 8px; letter-spacing: 1px;
+}
+.hd-treasure .ts-affix b { margin-left: 4px; font-size: 13px; }
+.hd-treasure .ts-affix.blue { background: rgba(28, 66, 110, .92); border: 1px solid #4d86c0; color: #cfe6ff; }
+.hd-treasure .ts-affix.pink { background: rgba(120, 36, 86, .92); border: 1px solid #d0559b; color: #ffd9ee; }
+.hd-treasure .ts-affix.red { background: rgba(130, 32, 24, .94); border: 1px solid #d94b3a; color: #ffe0d8; }
+.hd-treasure .ts-affix.none { background: rgba(40, 40, 40, .9); border: 1px solid #6a6a6a; color: #b5b5b5; }
+.hd-treasure .ts-name {
+  position: absolute; z-index: 2; bottom: 0; left: 0; right: 0; text-align: center;
+  font-size: 14px; letter-spacing: 2px; color: #f3e3bd; font-family: var(--font-kai);
+  background: linear-gradient(180deg, rgba(0, 0, 0, .12), rgba(0, 0, 0, .88));
+  padding: 3px 0 4px;
+}
+.hd-treasure .ts-remove { position: absolute; top: 3px; right: 6px; z-index: 3; font-size: 15px; color: #e8bfae; }
+
+.treasure-modal { width: min(880px, 94vw); max-height: 88vh; overflow: hidden; }
+.treasure-modal .tp-body { padding: 12px 14px 14px; display: flex; flex-direction: column; max-height: 84vh; }
+.tp-steps { display: flex; gap: 14px; font-size: 12px; color: var(--text-dim); margin-bottom: 10px; }
+.tp-steps .on { color: var(--gold-2, #d9c07a); font-weight: 700; }
+.tp-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px; overflow-y: auto; max-height: 44vh; padding-right: 4px;
+}
+.tp-card {
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  background: var(--panel-2); border: 1px solid var(--line); cursor: pointer; padding: 6px 4px;
+}
+.tp-card:hover { border-color: var(--line-strong); }
+.tp-card.on { border-color: var(--gold-2, #d9c07a); box-shadow: 0 0 0 1px var(--gold-2, #d9c07a) inset; }
+.tp-card img { width: 52px; height: 52px; object-fit: cover; border-radius: 4px; }
+.tp-name { font-size: 12px; color: var(--text); }
+.tp-type { font-size: 11px; color: var(--text-dim); }
+.tp-detail { margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; font-size: 12px; line-height: 1.6; }
+.tp-detail-name { color: var(--gold-2, #d9c07a); margin-bottom: 4px; }
+.tp-hint { margin-top: 6px; color: var(--text-dim); font-size: 11px; }
+.tp-affixes { display: flex; flex-direction: column; gap: 6px; overflow-y: auto; max-height: 52vh; }
+.tp-affix {
+  display: grid; grid-template-columns: 64px 1fr; gap: 4px 10px; align-items: center; text-align: left;
+  background: var(--panel-2); border: 1px solid var(--line); padding: 7px 10px; cursor: pointer; color: var(--text);
+}
+.tp-affix:hover { border-color: var(--line-strong); }
+.tp-affix.on { border-color: var(--gold-2, #d9c07a); }
+.tp-affix-name { font-size: 14px; color: var(--gold-2, #d9c07a); grid-row: span 2; }
+.tp-affix-desc { font-size: 12px; line-height: 1.5; }
+.tp-affix-color { font-size: 11px; color: var(--text-dim); }
+.tp-sub { font-size: 13px; color: var(--text); margin-bottom: 8px; line-height: 1.5; }
+.tp-slider { display: flex; flex-direction: column; gap: 8px; padding: 10px 2px; }
+.tp-range { width: 100%; }
+.tp-value { display: flex; align-items: baseline; gap: 10px; }
+.tp-value b { font-size: 22px; color: var(--gold-2, #d9c07a); }
+.tp-range-text { font-size: 12px; color: var(--text-dim); }
+.tp-legend { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.tp-legend .dot { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.tp-legend .dot.blue { background: #6f9ee0; }
+.tp-legend .dot.pink { background: #e07ab0; }
+.tp-legend .dot.red { background: #d94b3a; }
+.tp-legend .blue { color: #6f9ee0; }
+.tp-legend .pink { color: #e07ab0; }
+.tp-legend .red { color: #d94b3a; }
+.tp-legend-text { margin-left: 8px; color: var(--text-dim); }
+.tp-foot { display: flex; gap: 10px; justify-content: flex-end; margin-top: 12px; }
+.tp-foot button {
+  font-size: 13px; padding: 6px 16px; cursor: pointer;
+  background: var(--panel); color: var(--text); border: 1px solid var(--line-strong);
+}
+.tp-foot .tp-ok, .tp-foot .tp-next { border-color: var(--gold-2, #d9c07a); color: var(--gold-2, #d9c07a); }
+
+/* 词条档位色（滑杆随数值自动蓝/粉/红） */
+.tp-value b.blue { color: #6f9ee0; }
+.tp-value b.pink { color: #e07ab0; }
+.tp-value b.red { color: #d94b3a; }
+.tp-tier { font-size: 12px; padding: 1px 8px; border: 1px solid var(--line-strong); }
+.tp-tier.blue { color: #6f9ee0; border-color: #4d86c0; }
+.tp-tier.pink { color: #e07ab0; border-color: #d0559b; }
+.tp-tier.red { color: #d94b3a; border-color: #d94b3a; }
+.tp-legend .dot { opacity: .35; }
+.tp-legend .dot.on { opacity: 1; box-shadow: 0 0 0 2px rgba(255, 255, 255, .28); }

@@ -2,7 +2,7 @@
  * Web 端数据层：加载导出的武将 JSON + SKILL_REGISTRY，构建可战斗的 General。
  * 与 Node 端 heroes.ts（MySQL）解耦；引擎纯函数（hero-utils）直接复用。
  */
-import type { General, HeroRecord } from '../src/engine/types';
+import type { General, HeroRecord, TreasureLoadout } from '../src/engine/types';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import { recordToGeneral, leveledFromRecord } from '../src/data/hero-utils';
 import { isHeroListed, isLearnableSkillListed, OFFLINE_MAIN_SKILLS } from '../src/data/listing';
@@ -265,7 +265,9 @@ export function buildGeneral(
   /** 二级兵种转换（可选）：见 docs/兵种转换调研.md */
   secondaryTroop?: General['secondaryTroop'],
   /** 已学兵系通用特性（0~2 个） */
-  secondaryTraits?: General['secondaryTraits']
+  secondaryTraits?: General['secondaryTraits'],
+  /** 佩戴的宝物（缺省不佩戴）；由武将详情「宝物」区写入 */
+  treasure?: TreasureLoadout | null
 ): General {
   const rec = HERO_RECORDS[heroId];
   if (!rec) throw new Error(`武将不存在：${heroId}`);
@@ -274,6 +276,6 @@ export function buildGeneral(
   const troops = troopCapacity(lv, red);
   const g1 = recordToGeneral(rec); // level-1，主战法挂槽
   const leveled = leveledFromRecord(g1, rec, lv, freePoints, troops);
-  const placed = { ...leveled, position, morale, level: lv, redness: red, secondaryTroop, secondaryTraits };
+  const placed = { ...leveled, position, morale, level: lv, redness: red, secondaryTroop, secondaryTraits, ...(treasure ? { treasure } : {}) };
   return attachSkills(placed, extraSkillIds);
 }

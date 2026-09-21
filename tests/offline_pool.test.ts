@@ -33,6 +33,7 @@ function makeHandlers(state: EditorState): EditorHandlers {
     onSetLevel() {},
   onSetSecondaryTroop() {},
   onSetSecondaryTrait() {},
+  onSetTreasure() {},
     onRemoveHero(team, idx) {
       state[team][idx] = emptySlot();
     },
