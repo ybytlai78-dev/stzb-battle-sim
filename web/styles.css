@@ -567,15 +567,81 @@ main {
   object-position: 50% 18%;
   flex-shrink: 0;
 }
-.slot .hero-meta {
-  font-size: 10.5px;
-  color: var(--text-dim);
-  margin-top: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* 配将槽位「宝物条」（用户 2026-09-21 口径）：取代原「阵营 · 兵种 · 距离 · 兵力」小字 ——
+   宝物图 + 宝物名/稀有度等级 + 锻造词条（词条按选定数值自动蓝/粉/红，与详情页宝物卡同色板）。
+   未佩戴 → 灰字占位，占位高度 = 宝物图高度，避免各槽位高低不一。 */
+.slot .slot-treasure {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
   flex: 1;
+}
+.slot .slot-treasure .st-img {
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+  border: 1px solid var(--line-strong);
+  border-radius: 2px;
+  background: #000;
+}
+.slot .slot-treasure .st-info {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.slot .slot-treasure .st-name {
+  font-family: var(--font-kai);
+  font-size: 10.5px;
+  line-height: 1.2;
+  letter-spacing: .5px;
+  color: #f3e3bd;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+.slot .slot-treasure .st-name i {
+  font-style: normal;
+  margin-left: 4px;
+  font-size: 9px;
+  letter-spacing: 0;
+  color: #8fa6bd;
+  white-space: nowrap;
+}
+.slot .slot-treasure .st-affix {
+  align-self: flex-start;
+  max-width: 100%;
+  font-size: 10px;
+  line-height: 1.4;
+  padding: 0 4px;
+  border-radius: 2px;
+  letter-spacing: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.slot .slot-treasure .st-affix b { margin-left: 2px; font-size: 1em; font-variant-numeric: tabular-nums; }
+.slot .slot-treasure .st-affix.blue { background: rgba(28, 66, 110, .92); border: 1px solid #4d86c0; color: #cfe6ff; }
+.slot .slot-treasure .st-affix.pink { background: rgba(120, 36, 86, .92); border: 1px solid #d0559b; color: #ffd9ee; }
+.slot .slot-treasure .st-affix.red { background: rgba(130, 32, 24, .94); border: 1px solid #d94b3a; color: #ffe0d8; }
+.slot .slot-treasure .st-affix.none { background: rgba(40, 40, 40, .9); border: 1px solid #6a6a6a; color: #b5b5b5; }
+.slot .slot-treasure.empty {
+  align-items: center;
+  min-height: 28px;
+  font-size: 10.5px;
+  color: var(--text-dim);
+}
+/* 窄槽位（≤250px）：宝物名 + 稀有度会折成多行 → 只留宝物名与词条（稀有度/等级看 tooltip）。
+   槽位宽度随配将面板宽度变化，媒体查询测不到，故用容器查询（Chrome 105+；不支持时优雅退回多行展示）。 */
+.slot { container-type: inline-size; }
+@container (max-width: 250px) {
+  .slot .slot-treasure { gap: 4px; }
+  .slot .slot-treasure .st-img { width: 20px; height: 20px; }
+  .slot .slot-treasure.empty { min-height: 20px; }
+  .slot .slot-treasure .st-name i { display: none; }
 }
 .slot .hero-skills {
   --sslot-size: 48px;
@@ -601,18 +667,19 @@ main {
   width: var(--sslot-size);
   height: var(--sslot-size);
 }
-/* 战法名：仿率土战法条（参考图「运筹决胜」）——加粗衬线 + 近白字 + 暗色描影，压在品级板上 */
+/* 战法名：仿率土战法条（参考图「运筹决胜」）——加粗衬线 + 近白字 + 暗色描影，压在品级板上。
+   用户 2026-09-21：战法名必须完整展示 → 去掉省略号截断；列宽不足时换行（不裁切、不省略）。 */
 .slot-skill-name {
   font-size: 10.5px;
-  line-height: 1.35;
+  line-height: 1.2;
   font-weight: 700;
   color: #f7f3ea;
   text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   max-width: 100%;
-  padding: 0 5px 1px;
+  padding: 0 6px 1px;
   background: rgba(8, 6, 3, .45);
   border-radius: 8px;
   font-family: var(--font-kai);
@@ -627,7 +694,7 @@ main {
   background-position: center;
   background-size: 100% 100%;
   border-radius: 0;
-  padding: 0 10px;
+  padding: 0 6px;
 }
 .slot .hint { font-size: 10px; color: var(--text-weak); margin-top: 5px; }
 .slot .tip { font-size: 10px; color: var(--text-weak); }

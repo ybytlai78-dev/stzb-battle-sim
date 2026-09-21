@@ -571,9 +571,10 @@ describe('Web 战斗模拟器冒烟', () => {
     pickHeroIntoSlot('red', 2, '太史慈');
     let redPanel = document.querySelector('.team-panel.red') as HTMLElement;
     const slotEl = redPanel.querySelectorAll('.slot')[2] as HTMLElement;
-    // 槽位展示默认 40 级（卡面底部栏 Lv.）、兵力 9000
+    // 槽位卡面底部栏展示 Lv.40；原「阵营·兵种·距离·兵力」小字已按用户口径删除（2026-09-21）→ 改在详情页展示
     expect(slotEl.textContent).toContain('Lv.40');
-    expect(slotEl.textContent).toContain('兵力9000');
+    expect(slotEl.querySelector('.hero-meta'), '旧小字行应已删除').toBeFalsy();
+    expect(slotEl.textContent).not.toContain('兵力9000');
     // 打开详情页
     slotEl.click();
     let modal = document.querySelector('.modal') as HTMLElement;
@@ -600,10 +601,9 @@ describe('Web 战斗模拟器冒烟', () => {
     modal = document.querySelector('.modal') as HTMLElement;
     expect(modal.textContent).toContain('11000');
     expect(modal.textContent).toContain('/ 100 点');
-    // 槽位同步显示 50 级 兵力 11000
+    // 槽位同步显示 50 级（兵力仍在详情页展示，槽位不再放兵力小字）
     redPanel = document.querySelector('.team-panel.red') as HTMLElement;
     expect((redPanel.querySelectorAll('.slot')[2] as HTMLElement).textContent).toContain('Lv.50');
-    expect((redPanel.querySelectorAll('.slot')[2] as HTMLElement).textContent).toContain('兵力11000');
   });
 
 
@@ -697,6 +697,61 @@ describe('Web 战斗模拟器冒烟', () => {
       affix: { name: '骁锐', value: 10 },
     });
     expect(g.treasure).toEqual({ treasureId: 1012, level: 10, affix: { name: '骁锐', value: 10 } });
+  });
+
+  it('配将槽位宝物条：宝物图 + 宝物名 + 词条名/数值（按数值蓝/粉/红），未佩戴为灰字占位', async () => {
+    await boot();
+    pickHeroIntoSlot('red', 2, '太史慈');
+    // 每次 refresh() 会重建面板 → 每次重新查询（不要缓存节点）
+    const slotEl = (): HTMLElement =>
+      (document.querySelector('.team-panel.red') as HTMLElement).querySelectorAll('.slot')[2] as HTMLElement;
+
+    // 未佩戴：灰字占位；原「阵营 · 兵种 · 距离 · 兵力」小字已删除（用户 2026-09-21 口径）
+    expect(slotEl().querySelector('.hero-meta')).toBeFalsy();
+    const emptyBar = slotEl().querySelector('.slot-treasure')!;
+    expect(emptyBar.classList.contains('empty')).toBe(true);
+    expect(emptyBar.textContent).toContain('未佩戴宝物');
+
+    // 详情页佩戴「屈卢」+ 锻造词条「骁锐」（默认上限 15 → 红档）
+    slotEl().click();
+    const detail = document.querySelector('.modal') as HTMLElement;
+    (detail.querySelector('.hd-treasure') as HTMLElement).click();
+    const picker = document.querySelectorAll('.modal')[1] as HTMLElement;
+    (picker.querySelector('.tp-card[data-tid="1012"]') as HTMLElement).click();
+    (picker.querySelector('.tp-next') as HTMLElement).click();
+    (picker.querySelector('.tp-affix[data-affix="骁锐"]') as HTMLElement).click();
+    (picker.querySelector('.tp-ok') as HTMLElement).click();
+    (document.querySelector('.modal .m-close') as HTMLElement).click();
+
+    // 槽位同步出现宝物条：宝物图 + 宝物名 + 词条名与数值 + 词条配色（红）
+    const bar = slotEl().querySelector('.slot-treasure')!;
+    expect(bar.classList.contains('empty')).toBe(false);
+    expect((bar.querySelector('.st-img') as HTMLImageElement).getAttribute('src')).toContain('gear_1012_s');
+    expect(bar.querySelector('.st-name')!.textContent).toContain('屈卢');
+    expect(bar.querySelector('.st-name')!.textContent).toContain('稀世');
+    const affix = bar.querySelector('.st-affix')!;
+    expect(affix.textContent).toContain('骁锐');
+    expect(affix.textContent).toContain('15');
+    expect(affix.classList.contains('red')).toBe(true);
+
+    // 词条可换（再次进详情 → 直接第 2 步）→ 降到 10 → 蓝档
+    slotEl().click();
+    (document.querySelector('.hd-treasure') as HTMLElement).click();
+    const picker2 = document.querySelectorAll('.modal')[1] as HTMLElement;
+    (picker2.querySelector('.tp-affix[data-affix="骁锐"]') as HTMLElement).click();
+    const range2 = picker2.querySelector('.tp-range') as HTMLInputElement;
+    range2.value = '10';
+    range2.dispatchEvent(new Event('input'));
+    (picker2.querySelector('.tp-ok') as HTMLElement).click();
+    (document.querySelector('.modal .m-close') as HTMLElement).click();
+    const affix2 = slotEl().querySelector('.slot-treasure .st-affix')!;
+    expect(affix2.textContent).toContain('10');
+    expect(affix2.classList.contains('blue')).toBe(true);
+    // 卸下宝物 → 回到灰字占位
+    slotEl().click();
+    (document.querySelector('.hd-treasure .ts-remove') as HTMLElement).click();
+    (document.querySelector('.modal .m-close') as HTMLElement).click();
+    expect(slotEl().querySelector('.slot-treasure')!.classList.contains('empty')).toBe(true);
   });
 
   it('互斥校验：关羽（魏）+ 关羽（蜀）同队**不再被拒**（2026-09-16 互斥改白名单制）', async () => {

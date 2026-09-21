@@ -563,6 +563,36 @@ function statCell(key: string, v: number): string {
   return `<span class="bm-stat${on ? ' on' : ''}" title="${STAT_CN[key]}">${BM_STAT_ICONS[key]}<i>${v > 0 ? '+' + v : v}</i></span>`;
 }
 
+/**
+ * 配将槽位「宝物条」（用户 2026-09-21 口径：取代原「阵营 · 兵种 · 距离 · 兵力」小字）：
+ * 宝物图 + 宝物名/稀有度等级 + 锻造词条（词条按选定数值自动 蓝/粉/红 着色）。
+ * 未佩戴 → 灰字占位（宝物在「武将详情」左栏佩戴）。
+ */
+export function slotTreasureHtml(slot: SlotState): string {
+  const cur = slot.treasure;
+  const t = cur ? TREASURES_BY_ID[cur.treasureId] : null;
+  if (!cur || !t) return `<span class="slot-treasure empty" title="在武将详情中佩戴宝物">未佩戴宝物</span>`;
+  const level = cur.level ?? 10;
+  const affix = cur.affix ? AFFIXES[cur.affix.name] : null;
+  const value = cur.affix && affix ? `${cur.affix.value}${affix.unit === 'percent' ? '%' : ''}` : '';
+  const tier = affix && cur.affix ? affixTier(affix, cur.affix.value) : 'none';
+  const effText = t.effects.map((e) => `${e.name}：${e.desc}`).join('\n');
+  const tip = `${t.name}（${t.type}）· 稀世 ${level} 级\n【自带特效】\n${effText}\n【锻造词条】${
+    affix && cur.affix ? `${affix.name} ${value}（区间 ${affix.min}~${affix.max}）` : '未锻造'
+  }`;
+  const affixHtml =
+    affix && cur.affix
+      ? `<span class="st-affix ${tier}">${affix.name}<b>${value}</b></span>`
+      : `<span class="st-affix none">未锻造</span>`;
+  return `<span class="slot-treasure" title="${tip}">
+      <img class="st-img" src="${asset(t.icon)}" alt="${t.name}" onerror="this.style.display='none'" />
+      <span class="st-info">
+        <span class="st-name">${t.name}<i>稀世 ${level} 级</i></span>
+        ${affixHtml}
+      </span>
+    </span>`;
+}
+
 /** 槽位卡（左画像右信息）。主站红蓝配将区与伤害测试实验室共用；同时是 Drop-Zone：
  *  武将池卡 → 空槽放入 / 已选槽替换（onPickHero）；已入队卡可再拖：队内换位、跨队移动（onMoveSlot）。 */
 export function renderSlot(team: 'red' | 'blue', i: number, slot: SlotState, label: string, h: EditorHandlers): HTMLElement {
@@ -602,7 +632,7 @@ export function renderSlot(team: 'red' | 'blue', i: number, slot: SlotState, lab
   const div = document.createElement('div');
   div.className = 'slot-inner';
   /* 左＝官方卡面（wujiang5 卡框：画像铺满 / 左上势力图标 + 竖排名 / 右上红度 / 底部 Lv·兵种），
-     右＝配将信息列（站位、头像、属性概览、三战法位）。名称只画一次（在卡面竖排，类名仍是 .hero-name）。 */
+     右＝配将信息列（站位、头像、宝物条、三战法位）。名称只画一次（在卡面竖排，类名仍是 .hero-name）。 */
   div.innerHTML = `
     <div class="slot-card">
       <div class="slot-art" style="background-image:url('${portrait}')"></div>
@@ -622,7 +652,7 @@ export function renderSlot(team: 'red' | 'blue', i: number, slot: SlotState, lab
       <div class="hero-line">
         <span class="slot-label">${label}</span>
         <img class="slot-avatar" src="${avatar}" alt="" onerror="this.style.display='none'" />
-        <span class="hero-meta">${hero.faction} · ${TYPE_NAME[hero.troopType] ?? ''} · 距离${hero.attackRange} · 兵力${troopCapacity(slot.level, slot.redness)}</span>
+        ${slotTreasureHtml(slot)}
       </div>
       <div class="hero-skills"></div>
     </div>
