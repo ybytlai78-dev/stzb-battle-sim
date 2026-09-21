@@ -935,9 +935,10 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
   const hdTreasureSlotHtml = (): string => {
     const cur = slot.treasure;
     if (!cur) {
-      return `<div class="hd-treasure empty" ${editable ? 'data-treasure-open="1"' : ''} title="${editable ? '点击选择宝物' : '放入阵容后可佩戴宝物'}">
+      // 外层 wrapper 高度由 flex 决定（不参与内容撑高），卡绝对定位填满 → 卡底边自动与右栏战法栏齐平
+      return `<div class="hd-treasure-wrap"><div class="hd-treasure empty" ${editable ? 'data-treasure-open="1"' : ''} title="${editable ? '点击选择宝物' : '放入阵容后可佩戴宝物'}">
         <span class="ts-plus">＋</span><span class="ts-tip">选择宝物</span><span class="ts-sub">未佩戴</span>
-      </div>`;
+      </div></div>`;
     }
     const t = TREASURES_BY_ID[cur.treasureId];
     if (!t) return '';
@@ -953,13 +954,17 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
         ? `\n【锻造词条】${affix.name} ${cur.affix.value}${affix.unit === 'percent' ? '%' : ''}（区间 ${affix.min}~${affix.max}）`
         : '\n【锻造词条】未选择（点击图片可选）'
     }`;
-    return `<div class="hd-treasure filled" ${editable ? 'data-treasure-open="1"' : ''} title="${tip}">
-      <span class="ts-rarity">稀世</span>
+    // 横版卡面（用户 2026-09-21 口径）：左侧宝物图，右侧竖排「稀有度 / 锻造词条 / 宝物名」；
+    // 卡宽 = 左栏宽（与画像同宽 156），高度自适应到与右栏战法栏底部齐平。
+    return `<div class="hd-treasure-wrap"><div class="hd-treasure filled" ${editable ? 'data-treasure-open="1"' : ''} title="${tip}">
       <img class="ts-img" src="${asset(t.image)}" alt="${t.name}" onerror="this.style.display='none'" />
-      ${affixLine}
-      <span class="ts-name">${t.name}</span>
+      <div class="ts-info">
+        <span class="ts-rarity">稀世<i>${cur.level ?? 10} 级</i></span>
+        ${affixLine}
+        <span class="ts-name">${t.name}</span>
+      </div>
       ${editable ? '<span class="ts-remove" title="卸下宝物">×</span>' : ''}
-    </div>`;
+    </div></div>`;
   };
 
   /** 板块切换条（详情 / 配点 / 兵种） */
