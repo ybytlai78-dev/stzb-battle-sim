@@ -557,8 +557,8 @@ export interface CombatContext {
   /** 持续型急救计数器（皇裔流离）：战法级共享触发率与总生效次数（全队合计，每达到 N 次提升）。
    *  可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化 */
   firstAidCounters?: FirstAidCounter[];
-  /** 伤兵死亡机制配置（可选）：缺省 = 机制关闭（单元测试直接构造 ctx 时不受影响）。
-   *  runBattle 总是注入（默认 { base: 5, perRound: 14 }），引擎战斗默认启用。 */
+  /** 伤兵机制配置（可选）：缺省 = 机制关闭（单元测试直接构造 ctx 时不受影响）。
+   *  runBattle 总是注入（默认 { deathRate: 5, woundedDecayRate: 14 }），引擎战斗默认启用。 */
   woundedMortality?: WoundedMortalityConfig;
   /** 受击触发「每单位每回合首次」（陷储立齐）：key = `${round}:${skillId}:${casterId}:${victimId}` */
   hurtOnceKeys?: Set<string>;
@@ -8417,12 +8417,30 @@ function triggerFirstAidOnHurt(ctx: CombatContext, target: UnitState): void {
   }
 }
 
-/** 伤兵死亡机制：当前回合死亡率（%）= base + perRound×(回合-1)，封顶 100%。
- *  未配置机制（直接构造 ctx 的单元测试）返回 0 = 不启用。 */
-function mortalityRate(ctx: CombatContext, round: number): number {
-  const c = ctx.woundedMortality;
-  if (!c) return 0;
-  return Math.max(0, Math.min(100, c.base + c.perRound * (round - 1)));
+/** 百分比钳制到 [0, 100]（伤兵机制的两个固定率共用） */
+function clampPercent(rate: number): number {
+  return Math.max(0, Math.min(100, rate));
+}
+
+/** 回合开始：累计伤兵池按固定死亡率 `woundedDecayRate`（%）阵亡——由 runBattle 每回合开始时调用一次。
+ *  只把池中兵力转入 totalDead（永久损失），`troops` 不变；返回本次**全队阵亡合计**（测试用）。
+ *  阵亡按 `Math.round` 取整；未配置机制 / 阵亡率为 0 / 池为空时不做任何事。
+ *  例：池 950、14% → 阵亡 round(133) = 133，剩 817（用户示例）。 */
+export function decayWoundedPool(ctx: CombatContext): number {
+  const cfg = ctx.woundedMortality;
+  if (!cfg) return 0;
+  const rate = clampPercent(cfg.woundedDecayRate);
+  if (rate <= 0) return 0;
+  let total = 0;
+  for (const u of [...ctx.myTeam, ...ctx.enemyTeam]) {
+    if (u.wounded <= 0) continue;
+    const dead = Math.round((u.wounded * rate) / 100);
+    if (dead <= 0) continue;
+    u.wounded -= dead;
+    u.totalDead += dead;
+    total += dead;
+  }
+  return total;
 }
 
 /** 受恢复触发：被恢复者是否匹配战法 victim 侧（self=施法者自身 / ally=同侧含自己） */
@@ -9174,13 +9192,14 @@ export function applyDamage(
   // 补在受击钩子之前 → 该值=本次伤害结算后的兵力，不含随之触发的急救恢复
   annotateAfterTroops(ctx, target);
   const lethal = target.troops <= 0;
-  // 伤兵死亡机制：损失按「当回合死亡率」即时拆分为死亡（永久损失，不可恢复）与伤兵（入池，可恢复）。
+  // 伤兵机制（v0.15 修正）：受击损失按**固定**直接死亡率即时拆分——每 100 点伤害直接死亡 `deathRate`
+  // （默认 5）点（永久损失，不可恢复），其余入伤兵池（可恢复，池跨回合累计）。
   // 死亡按受伤量结算，治疗不冲减死亡（避免高恢复队伍在战场上太过逆天）。
-  // 配置了机制即入池（base=0 时全部为伤兵）；未配置（直接构造 ctx）不启用。
+  // 配置了机制即入池（deathRate=0 时全部为伤兵）；未配置（直接构造 ctx）不启用。
   // 按实际扣减量拆分（溢出伤害不入池），避免致死溢出把伤兵池撑爆后再被急救拉回。
+  // 池的每回合阵亡（默认 14%）不在受击时结算，由 `decayWoundedPool` 在每回合开始时统一结算。
   if (ctx.woundedMortality && actual > 0) {
-    const rate = mortalityRate(ctx, ctx.currentRound);
-    const dead = Math.round((actual * rate) / 100);
+    const dead = Math.round((actual * clampPercent(ctx.woundedMortality.deathRate)) / 100);
     const wounded = actual - dead;
     if (wounded > 0) target.wounded += wounded;
     target.totalDead += dead;

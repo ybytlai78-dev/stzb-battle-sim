@@ -74,7 +74,7 @@ function run(team: General[], seed = 1, maxRounds = 8) {
     maxRounds,
     myTeam: team,
     enemyTeam: enemyTeam(),
-    woundedMortality: { base: 0, perRound: 0 },
+    woundedMortality: { deathRate: 0, woundedDecayRate: 0 },
   });
 }
 

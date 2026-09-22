@@ -7,7 +7,7 @@
  */
 import type { BattleConfig, BattleEvent, BattleReport, General, Side, Skill, UnitState } from './types';
 import { Rng } from './rng';
-import { actUnit, triggerCommandSkills, triggerPassiveSkills, triggerDelayedOutputs, triggerRangeDecayPassives, triggerRoundEndCommands, triggerImperialDecrees, triggerRoundStartChance, triggerRoundEndChanceOutputs, tickStatuses, tickRoundStartStatuses, effectiveStat, grantSecondaryTroopStatuses, type CombatContext } from './action';
+import { actUnit, triggerCommandSkills, triggerPassiveSkills, triggerDelayedOutputs, triggerRangeDecayPassives, triggerRoundEndCommands, triggerImperialDecrees, triggerRoundStartChance, triggerRoundEndChanceOutputs, tickStatuses, tickRoundStartStatuses, effectiveStat, grantSecondaryTroopStatuses, decayWoundedPool, type CombatContext } from './action';
 import { computeStats } from './stats';
 import { SKILL_REGISTRY } from '../data/skills';
 import { validateMutualExclusion } from '../data/hero-utils';
@@ -39,8 +39,8 @@ export function runBattle(config: BattleConfig): BattleReport {
     currentRound: 0,
     defenderSide: config.defenderSide,
     actLayerCounters: new Map(),
-    // 伤兵死亡机制：默认启用（第 1 回合 5%，每回合 +14%，封顶 100%）
-    woundedMortality: config.woundedMortality ?? { base: 5, perRound: 14 },
+    // 伤兵机制：默认启用（受击损失固定 5% 直接死亡 + 95% 入伤兵池；每回合开始池阵亡 14%）
+    woundedMortality: config.woundedMortality ?? { deathRate: 5, woundedDecayRate: 14 },
   };
 
   // ── 准备阶段：阵容加成写入（mutate ctx 内同一 team 引用）→ 速度重排 → 三段事件 → 被动/指挥 ──
@@ -109,6 +109,9 @@ export function runBattle(config: BattleConfig): BattleReport {
     const roundStartEv: BattleEvent = { type: 'round_start', round };
     events.push(roundStartEv);
     ctx.currentRound = round;
+    // 伤兵机制：回合开始时先结算累计伤兵池阵亡（固定 14%）——先于本回合任何行动/恢复，
+    // 故本回合的恢复只能使用阵亡结算后的剩余伤兵（有伤兵才能恢复）。
+    decayWoundedPool(ctx);
     for (const u of [...myTeam, ...enemyTeam]) {
       u.hasActedThisRound = false;
       u.firstActiveSucceededThisRound = false;

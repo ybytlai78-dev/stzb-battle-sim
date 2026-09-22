@@ -162,14 +162,18 @@ npx tsc --noEmit                    # 类型检查（strict）
 - **金匮要略**（张机 h526·一类指挥 prep·友军全体·前 3 回合）：减伤 20.4% 成长率 0.13/点（受谋略，1% 八舍九入，`damage_reduce` 新增 `strategyScaled` 支持）+ 受击急救恢复率 80% 成长率 0.75/点、触发率 50% 固定（无递增）、`duration: 3` 前 3 回合（到期与减伤同步移除）；tags `['damage_reduce','first_aid','heal']`。已修正其误挂的 `priorityRounds: 3`（金匮要略无先手效果，仅先驱突击有）。
 - 关键文件：`src/engine/types.ts`（first_aid 状态/`grant_first_aid` 输出）、`src/engine/action.ts`（`triggerFirstAidOnHurt` / `applyDamage` / `inflictStatus`）、`src/engine/stats.ts`；测试 `tests/first_aid.test.ts`（机制 8 个，含时限到期）+ `tests/main_skills_b11.test.ts`（皇裔流离 3 个）+ `tests/main_skills_b2.test.ts`（金匮要略 5 个，含谋略缩放/到期移除）。
 
-### 本会话新增机制（伤兵死亡，v0.13，用户确认）
+### 伤兵机制（v0.15 修正，用户 2026-09-22 口径；原 v0.13「当回合死亡率」已废止）
 
-- **伤兵死亡**：每回合损失按「当回合死亡率」**即时**拆分为死亡（永久损失，不可恢复）+ 伤兵（入池，可恢复）。死亡率 = `base + perRound×(回合-1)`，封顶 100%（默认 5/14：第 1 回合 5%、第 2 回合 19%、第 3 回合 33%…第 8 回合 100%）。例：第 1 回合受伤 100 → 死 5 伤 95；第 2 回合再受伤 100 → 死 19 伤 81。
-- **死亡按受伤量（cap 后实际扣减）即时结算，治疗不冲减死亡**（用户确认，避免高恢复队伍太逆天）；恢复（`case 'heal'` 主动恢复 + `triggerFirstAidOnHurt` 持续急救统一走 `recoverTroops(ctx, unit, amount)`）只能从伤兵池扣除，池跨回合累计；恒等式 `troops + wounded + totalDead = maxTroops` 恒成立。
-- **配置**：`BattleConfig.woundedMortality?: { base, perRound }` 缺省 `{ base: 5, perRound: 14 }`（runBattle 默认启用；`{0,0}` = 无死亡、损失全部入池）。`CombatContext.woundedMortality` 可选：**直接构造 ctx 的单元测试缺省不启用**（旧行为、恢复不受池限制），现有测试零影响。
-- **数据出口**：`UnitState` 新增 `wounded`（伤兵池）/ `totalDead`（累计死亡）；`round_end` 事件新增 `myWounded/enemyWounded/myDead/enemyDead`（与 troops 同序，每回合兵力条三段：主色=当前兵力、浅色=伤兵、灰/黑=死亡，供 Web 兵力条渲染）；`BattleReport` 新增 `finalMyWounded/finalEnemyWounded/finalMyDead/finalEnemyDead`；`report.ts` 回合末文本行补「伤兵 X 阵亡 Y」。
-- 关键文件：`src/engine/types.ts`（`WoundedMortalityConfig`/UnitState/round_end）、`src/engine/action.ts`（`mortalityRate`/`recoverTroops`/`applyDamage`，后两者已导出供确定性断言）、`src/engine/combat.ts`（默认注入 + 输出）；测试 `tests/wounded.test.ts`（12 个：死亡率/封顶/池累计/恢复限制/恒等式/配置）。
-- **golden 已重新生成**（round_end 结构变化为预期变更；无治疗战斗数值不变，仅事件增字段）。
+- **规则（用户口径，勿再询问）**：
+  ① **伤兵率固定 5%**：每受到 100 兵力伤害 → **5 直接死亡**（永久损失，不可恢复）+ **95 伤兵入池**（可恢复）；该拆分比例**固定不随回合变化**。
+  ② **伤兵死亡率固定 14%**：**每回合开始时**，累计伤兵池按 14% 阵亡（`伤兵池 × 0.14` 转入永久死亡，不改变当前兵力）。
+  例：第 1 回合受伤 1000 → 死 50 / 伤 950；第 2 回合开始 → 950×(1−0.14) = 817（再阵亡 133）。
+- **恢复**：有伤兵才能恢复，恢复量从伤兵池中减（`recoverTroops` 仍为唯一入口，请求量 = `min(请求量, 伤兵池, 兵力缺口)`）；死亡兵力（totalDead）不可恢复、治疗不冲减死亡；恒等式 `troops + wounded + totalDead = maxTroops` 恒成立。
+- **实现**：`src/engine/action.ts` `applyDamage` 内按 `deathRate`（默认 5）即时拆分（`Math.round`）；新增导出 `decayWoundedPool(ctx)` 在 `combat.ts` 每回合 `ctx.currentRound = round` 之后、任何行动/恢复之前调用一次（`Math.round` 取整，含第 1 回合；池为空/率为 0 时 no-op）。
+- **配置**：`BattleConfig.woundedMortality?: { deathRate, woundedDecayRate }` 缺省 `{ deathRate: 5, woundedDecayRate: 14 }`（runBattle 默认启用；`{0,0}` = 无死亡、损失全部入池且池不阵亡）。`CombatContext.woundedMortality` 可选：**直接构造 ctx 的单元测试缺省不启用**（旧行为、恢复不受池限制）。
+- **数据出口**：`UnitState` 的 `wounded`（伤兵池）/ `totalDead`（累计死亡）；`round_end` 事件 `myWounded/enemyWounded/myDead/enemyDead`（与 troops 同序，供 Web 兵力条三段渲染）；`BattleReport` 的 `finalMyWounded/finalEnemyWounded/finalMyDead/finalEnemyDead`；`report.ts` 回合末文本行「伤兵 X 阵亡 Y」。
+- 关键文件：`src/engine/types.ts`（`WoundedMortalityConfig`/UnitState/round_end）、`src/engine/action.ts`（`clampPercent`/`decayWoundedPool`/`recoverTroops`/`applyDamage`）、`src/engine/combat.ts`（默认注入 + 回合开始调用 + 输出）；测试 `tests/wounded.test.ts`（15 个：固定 5% 拆分/固定 14% 池阵亡/取整/池累计/恢复限制/恒等式/配置）。
+- **golden 已重新生成**（用户 2026-09-22 变更）：全部固定测试集仅 `events[].{my,enemy}{Wounded,Dead}` 变化，`finalMyTroops/finalEnemyTroops`、事件数、胜负均不变（已用逐字段 diff 脚本核对：532 处叶子差异全部为伤/亡数组）。
 
 ### 本会话新增机制（S2 三将战法 + 新 hook，v0.13，用户确认）
 
