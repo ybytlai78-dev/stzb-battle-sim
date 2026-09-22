@@ -10036,4 +10036,304 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+  // ─────────── 典藏战法 · 第二批（5 个，2026-09-21 批次）───────────
+
+  /**
+   * 威震逍遥（典藏 A 主动）：距离 4，发动率 30%，目标「敌军群体（有效距离内 2 个目标）」。
+   * 官方【常规】使敌军群体陷入动摇状态，发动或受到普通攻击后产生一定逃兵（伤害率 125.0%），
+   *   该效果最多生效 2 次，持续 2 回合。同时使其受到的攻击伤害提升 24.0%（受速度属性影响），
+   *   持续 2 回合。以上效果无法被移除。
+   *   【追加】张辽发动此战法时，动摇效果无视规避。
+   *   来源 https://stzb.163.com/m/skilllist/200926.html（id 200926；1 级 62.5% / 12%）。
+   * 口径（用户 2026-09-21 确认）：动摇按**官方描述**落为 `panic{ triggerOnBasic: true }`——
+   *   携带者**发动或受到普通攻击后**各跳 1 次逃兵（`charges: 2` 用尽即移除），与仓库既有
+   *   「行动时每回合跳伤」动摇（险途暗渡 / 游击 / 浴血）互不影响；该口径的动摇**可被规避**
+   *   （张辽【追加】`ignoresEvasionOnTick` 豁免）。
+   *   受伤提升 = `damage_boost`（direction:'taken'、damageType:'physical'、speedScaled、无 growthRate）。
+   *   「以上效果无法被移除」→ 两条状态均带 `undispellable`（remove_buffs / remove_debuffs /
+   *   remove_by_source_skill_type 均跳过）。
+   * 成长率未确认：24%「受速度属性影响」官方未给系数、动摇 125% 未写受属性 → 按基值（DoT 必填给 0）
+   *   → 登记 `OFFLINE_LEARNABLE_SKILLS`（下架）。
+   */
+  weizhen_xiaoyao: {
+    id: 'weizhen_xiaoyao',
+    name: '威震逍遥',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.3,
+    targetMode: 'group',
+    groupCount: 2,
+    tags: ['panic', 'damage_boost'],
+    output: [
+      // ① 动摇（普攻触发，最多 2 次、持续 2 回合，不可移除）；【追加】张辽：无视规避
+      {
+        kind: 'conditional',
+        require: { casterNames: ['张辽'] },
+        outputs: [
+          {
+            kind: 'inflict_status',
+            status: {
+              type: 'panic',
+              rate: 125,
+              growthRate: 0,
+              duration: 2,
+              triggerOnBasic: true,
+              charges: 2,
+              ignoresEvasionOnTick: true,
+              undispellable: true,
+            },
+          },
+        ],
+      },
+      {
+        kind: 'conditional',
+        unless: { casterNames: ['张辽'] },
+        outputs: [
+          {
+            kind: 'inflict_status',
+            status: {
+              type: 'panic',
+              rate: 125,
+              growthRate: 0,
+              duration: 2,
+              triggerOnBasic: true,
+              charges: 2,
+              undispellable: true,
+            },
+          },
+        ],
+      },
+      // ② 受到的攻击伤害提高 24%（受速度，成长率未确认 → 基值）持续 2 回合，不可移除
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'damage_boost',
+          rate: 0.24,
+          duration: 2,
+          direction: 'taken',
+          damageType: 'physical',
+          speedScaled: true,
+          undispellable: true,
+        },
+      },
+    ],
+  },
+
+  /**
+   * 当阳桥（典藏 S 主动·1 回合准备）：距离 4，发动率 25%~40%，目标「敌军单体」。
+   * 官方【常规】1 回合准备，使敌军单体陷入混乱状态，持续 1~2 回合；使敌军群体 1 回合后陷入犹豫状态，
+   *   持续 1 回合；使敌军群体 2 回合后陷入怯战状态，持续 1 回合。
+   *   【追加】张飞发动此战法后，自身造成的主动战法伤害提升 10.0%，持续 3 回合。
+   *   来源 https://stzb.163.com/m/skilllist/200888.html（id 200888；1 级 5%）。
+   * 口径：① 混乱 = `confusion`（duration 区间 [1,2]，施加时掷）；② 追加（张飞）= `damage_boost`
+   *   caused + `skillTypes:['active']` 持续 3 回合；
+   *   ③ 「1 回合后 / 2 回合后」= 新增 `delayedRoundOutputs`：施法时按距离**锁定敌军群体**（用户
+   *   2026-09-21 口径：锁定后阵亡跳过），到「当前回合 + N」的回合开始时由 `triggerPendingRoundOutputs`
+   *   对尚存活锁定目标结算（犹豫 / 怯战各 1 回合）。
+   */
+  dangyangqiao: {
+    id: 'dangyangqiao',
+    name: '当阳桥',
+    type: 'active',
+    prepare: true,
+    range: 4,
+    triggerRate: [0.25, 0.4],
+    targetMode: 'random_single',
+    tags: ['confusion', 'hesitation', 'cowardice', 'damage_boost'],
+    output: [
+      // ① 敌军单体混乱 1~2 回合
+      { kind: 'inflict_status', status: { type: 'confusion', duration: [1, 2] } },
+      // ②【追加】张飞：自身造成的主动战法伤害提升 10%，持续 3 回合
+      {
+        kind: 'conditional',
+        require: { casterNames: ['张飞'] },
+        outputs: [
+          {
+            kind: 'inflict_status',
+            target: 'self',
+            status: { type: 'damage_boost', rate: 0.1, duration: 3, direction: 'caused', skillTypes: ['active'] },
+          },
+        ],
+      },
+    ],
+    delayedRoundOutputs: [
+      // ③ 1 回合后：敌军群体（施法时锁定 2 目标）犹豫 1 回合
+      {
+        afterRounds: 1,
+        targetSide: 'enemy',
+        targetMode: 'group',
+        groupCount: 2,
+        output: [{ kind: 'inflict_status', status: { type: 'hesitation', duration: 1 } }],
+      },
+      // ④ 2 回合后：敌军群体（施法时锁定 2 目标）怯战 1 回合
+      {
+        afterRounds: 2,
+        targetSide: 'enemy',
+        targetMode: 'group',
+        groupCount: 2,
+        output: [{ kind: 'inflict_status', status: { type: 'cowardice', duration: 1 } }],
+      },
+    ],
+  },
+
+  /**
+   * 正始之变（典藏 S 指挥·一类）：距离 5，目标「自己」。
+   * 官方【常规】战斗开始后，敌军全体累计造成 15 次伤害后，下回合自身发动以下两种效果：
+   *   令敌军群体陷入犹豫状态，持续 1 回合；我军全体成功发动主动或追击战法后，有 100.0% 几率再次发动
+   *   （跳过准备），持续 1 回合。
+   *   【追加】司马懿、司马师或司马昭发动此战法时，犹豫效果生效后自身恢复一定兵力（恢复率 300.0%）。
+   *   来源 https://stzb.163.com/m/skilllist/200244.html（id 200244；1 级 50% 发动 / 恢复 150%）。
+   * 口径：① 计数 = `enemyDamageThreshold`（`applyDamage` 内按「伤害来源属于施法者对侧、实际扣兵 > 0」
+   *   累计 15 次）→ 登记**下一回合开始**的 output（目标到点时重选敌军群体 2 目标）并开启 allyRecast
+   *   窗口 1 回合；② 犹豫 = `inflict_status.hesitation` duration 1；
+   *   ③ 追加（司马懿 / 司马师 / 司马昭，同名多张卡都算）= `conditional.casterNames` + `heal` 300% 自身
+   *   （官方未写受属性 → `strategyScaled: false`、growthRate 0）；
+   *   ④「再次发动」= `allyRecast` 扩展：`skillTypes:['active','pursuit']` + `everyCast`（每次成功释放都判）
+   *   + 门槛窗口（未达标不生效）；再次发动跳过准备段、按同一战法再打一次（factor 1 = 不缩放）。
+   */
+  zhengshi_zhibian: {
+    id: 'zhengshi_zhibian',
+    name: '正始之变',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['hesitation', 'heal'],
+    output: [],
+    enemyDamageThreshold: {
+      count: 15,
+      windowRounds: 1,
+      targetSide: 'enemy',
+      targetMode: 'group',
+      output: [
+        // 敌军群体犹豫 1 回合
+        { kind: 'inflict_status', status: { type: 'hesitation', duration: 1 } },
+        // 【追加】司马家：犹豫效果生效后自身恢复一定兵力（恢复率 300%）
+        {
+          kind: 'conditional',
+          require: { casterNames: ['司马懿', '司马师', '司马昭'] },
+          outputs: [{ kind: 'heal', rate: 300, strategyScaled: false, growthRate: 0, target: 'self' }],
+        },
+      ],
+    },
+    // 我军全体成功发动主动 / 追击战法后 100% 再次发动（跳过准备），仅门槛达标后的那一回合生效
+    allyRecast: { rate: 100, factor: 1, skillTypes: ['active', 'pursuit'], everyCast: true },
+  },
+
+  /**
+   * 定军山（典藏 S 指挥·一类）：距离 5，目标「敌军群体（有效距离内 2 个目标）」。
+   * 官方【常规】使敌军群体各自首个主动或追击战法的造成的伤害大幅降低。第四回合自身行动时，
+   *   使我军攻击属性最高单体下 1 次攻击类主动或追击战法发动率提升 100.0%，同时使其主动战法的
+   *   首次伤害或首次普通攻击有 40.0% 几率选中敌军大营。
+   *   【追加】黄忠发动此战法时，选中敌军大营的几率提升至 50.0%。
+   *   来源 https://stzb.163.com/m/skilllist/200293.html（id 200293；1 级 50% / 20%）。
+   * 口径：①「各自首个主动或追击战法伤害大幅降低」= `damage_boost` caused −99.99（仓库「大幅度」
+   *   极大值口径）+ `skillTypes:['active','pursuit']` + `charges: 1`（每个目标各 1 次次数制，
+   *   出伤害即消耗），duration 999 占位；
+   *   ② 第 4 回合 = `onActSegments`（一类指挥行动时分段）：`trigger_boost`（rate 1 = +100 个百分点、
+   *   `attackSkillsOnly`、`charges: 1` 下 1 次）+ `mark_position_snipe`（首次主动伤害 / 首次普攻按
+   *   40%（黄忠 50%）选中敌军大营），受标者 = `targetPick:'highest_attack_ally'`。
+   */
+  dingjunshan: {
+    id: 'dingjunshan',
+    name: '定军山',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage_boost', 'trigger_boost'],
+    output: [
+      // ① 敌军群体各自首个主动 / 追击战法伤害大幅降低（每目标 1 次次数制）
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'damage_boost',
+          rate: -99.99,
+          duration: 999,
+          direction: 'caused',
+          skillTypes: ['active', 'pursuit'],
+          charges: 1,
+        },
+      },
+    ],
+    onActSegments: [
+      {
+        startRound: 4,
+        endRound: 4,
+        output: [
+          // ② 我军攻击属性最高单体：下 1 次攻击类主动 / 追击战法发动率 +100%
+          {
+            kind: 'inflict_status',
+            targetSide: 'ally',
+            targetPick: 'highest_attack_ally',
+            status: { type: 'trigger_boost', rate: 1, duration: 999, attackSkillsOnly: true, charges: 1 },
+          },
+          // ③ 其首次伤害 / 首次普攻选中敌军大营（40%；【追加】黄忠 50%）
+          {
+            kind: 'conditional',
+            unless: { casterNames: ['黄忠'] },
+            outputs: [
+              { kind: 'mark_position_snipe', position: '大营', snipeChance: 0.4, targetPick: 'highest_attack_ally' },
+            ],
+          },
+          {
+            kind: 'conditional',
+            require: { casterNames: ['黄忠'] },
+            outputs: [
+              { kind: 'mark_position_snipe', position: '大营', snipeChance: 0.5, targetPick: 'highest_attack_ally' },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+
+  /**
+   * 七擒七纵（典藏 S 指挥·一类）：距离 5，目标「我军群体」。
+   * 官方【常规】正式回合后，我军群体受到的前 7 次伤害或控制效果，每次都有 50.0% 几率规避或抵御，
+   *   7 次结束后，有 100.0% 几率使造成伤害累计最高的敌军单体下回合造成所有伤害大幅降低。
+   *   【追加】蜀阵营武将发动此战法时，7 次结束后，使造成累计伤害最高的敌军单体下 1 回合防御属性降低 10.0%。
+   *   来源 https://stzb.163.com/m/skilllist/200298.html（id 200298；1 级 25% / 50% / 5%）。
+   * 口径：① `instanceGuard`（我军**共享**计数 7 次：受到伤害实例 + 将被施加控制效果各计 1 次，
+   *   无论判定成败；每次 50%（走携带者士气修正）——伤害命中 = 完全规避、控制命中 = 抵御不落状态）；
+   *   ② 第 7 次计满立即惩罚「造成伤害累计最高的敌军单体」（`ctx.damageDealtTotals`）：
+   *   下回合造成伤害大幅降低（caused −99.99，duration 1）；
+   *   ③ 追加（蜀阵营）= `conditional.casterFactions:['蜀']` 追加防御 −10% 同回合。
+   * 推定：① 「前 7 次」按**全队共享**计数（官方「我军群体受到的前 7 次」）；② 「控制效果」取引擎
+   *   控制四类（混乱 / 暴走 / 怯战 / 犹豫）。
+   */
+  qiqin_qizong: {
+    id: 'qiqin_qizong',
+    name: '七擒七纵',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['evasion', 'damage_reduce', 'damage_boost'],
+    output: [],
+    instanceGuard: {
+      count: 7,
+      rate: 0.5,
+      punish: [
+        // 下回合造成所有伤害大幅降低（极大值口径）
+        {
+          kind: 'inflict_status',
+          status: { type: 'damage_boost', rate: -99.99, duration: 1, direction: 'caused' },
+        },
+        // 【追加】蜀阵营武将：同时使其防御属性降低 10%（持续 1 回合）
+        {
+          kind: 'conditional',
+          require: { casterFactions: ['蜀'] },
+          outputs: [{ kind: 'inflict_status', status: { type: 'defense_buff', amount: -10, duration: 1 } }],
+        },
+      ],
+    },
+  },
 };

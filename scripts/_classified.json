@@ -2715,5 +2715,70 @@
     "status": "implemented",
     "missingMechanics": "",
     "note": "典藏战法批 1 dot_formula,dot_boost_stack,siege"
+  },
+  {
+    "name": "威震逍遥",
+    "quality": "A",
+    "type": "active",
+    "range": 4,
+    "triggerRate": "30%",
+    "targetDesc": "敌军群体（有效距离内2个目标）",
+    "effectDesc": "【常规】使敌军群体陷入动摇状态，发动或受到普通攻击后产生一定逃兵（伤害率125.0%），该效果最多生效2次，持续2回合。同时使其受到的攻击伤害提升24.0%（受速度属性影响），持续2回合。以上效果无法被移除  【追加】张辽发动此战法时，动摇效果无视规避",
+    "sources": "【魏·张辽·骑】、2个WEI4星武将",
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "典藏战法批 2 basic_trigger_dot,undispellable,speed_scaled"
+  },
+  {
+    "name": "当阳桥",
+    "quality": "S",
+    "type": "active",
+    "range": 4,
+    "triggerRate": "25%-40%",
+    "targetDesc": "敌军单体 ",
+    "effectDesc": "【常规】1回合准备，使敌军单体陷入混乱状态，持续1~2回合；使敌军群体1回合后陷入犹豫状态，持续1回合；使敌军群体2回合后陷入怯战状态，持续1回合  【追加】张飞发动此战法后，自身造成的主动战法伤害提升10.0%，持续3回合",
+    "sources": "【蜀·张飞·骑】、【汉·曹操·骑】、【汉·刘备·步】",
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "典藏战法批 2 delayed_round_control"
+  },
+  {
+    "name": "正始之变",
+    "quality": "S",
+    "type": "command",
+    "range": 5,
+    "triggerRate": null,
+    "targetDesc": "自己 ",
+    "effectDesc": "【常规】战斗开始后，敌军全体累计造成15次伤害后，下回合自身发动以下两种效果：令敌军群体陷入犹豫状态，持续1回合；我军全体成功发动主动或追击战法后，有100.0%几率再次发动（跳过准备），持续1回合 【追加】司马懿、司马师或司马昭发动此战法时，犹豫效果生效后自身恢复一定兵力（恢复率300.0%）",
+    "sources": "【晋·司马师·骑】、1个WEI4星武将、1个JIN4星武将",
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "典藏战法批 2 enemy_damage_threshold,ally_recast"
+  },
+  {
+    "name": "定军山",
+    "quality": "S",
+    "type": "command",
+    "range": 5,
+    "triggerRate": null,
+    "targetDesc": "敌军群体（有效距离内2个目标）",
+    "effectDesc": "【常规】使敌军群体各自首个主动或追击战法的造成的伤害大幅降低。第四回合自身行动时，使我军攻击属性最高单体下1次攻击类主动或追击战法发动率提升100.0%，同时使其主动战法的首次伤害或首次普通攻击有40.0%几率选中敌军大营 【追加】黄忠发动此战法时，选中敌军大营的几率提升至50.0%",
+    "sources": "【蜀·黄忠·弓】、1个WEI4星武将、1个SHU4星武将",
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "典藏战法批 2 first_skill_reduce,trigger_boost_charges,position_snipe"
+  },
+  {
+    "name": "七擒七纵",
+    "quality": "S",
+    "type": "command",
+    "range": 5,
+    "triggerRate": null,
+    "targetDesc": "我军群体",
+    "effectDesc": "【常规】正式回合后，我军群体受到的前7次伤害或控制效果，每次都有50.0%几率规避或抵御，7次结束后，有100.0%几率使造成伤害累计最高的敌军单体下回合造成所有伤害大幅降低 【追加】蜀阵营武将发动此战法时，7次结束后，使造成累计伤害最高的敌军单体下1回合防御属性降低10.0%",
+    "sources": "【群·孟获·步】、1个SHU4星武将、1个QUN4星武将",
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "典藏战法批 2 instance_guard,punish_highest_damage"
   }
 ]

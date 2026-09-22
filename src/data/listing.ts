@@ -154,6 +154,7 @@ export const OFFLINE_LEARNABLE_SKILLS: Record<string, string> = {
   dingzujiangdong: '恢复 75% / 休整 75% / 增伤 17% 受谋略成长未确认（按基值不缩放）',
   danqijiuzhu: '造成伤害降低 25% 受防御成长未确认（按基值不缩放）',
   huoshaolianying: '火攻 50% / 受伤提升 5% / 燃烧 120% 受谋略成长未确认（按基值不缩放）',
+  weizhen_xiaoyao: '受伤提升 24% 受速度成长未确认（动摇 125% 描述未写受属性，均按基值不缩放）',
 };
 
 /**

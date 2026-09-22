@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 战斗主循环（v0.2）
  *   准备阶段：速度排序、battle_start 被动、一类指挥战法（一次）→ 8 回合逐个行动 → 胜负判定
  *   行动阶段（被动 → 指挥预备/二类 → 主动 → 普攻 → 追击）
@@ -7,7 +7,7 @@
  */
 import type { BattleConfig, BattleEvent, BattleReport, General, Side, Skill, UnitState } from './types';
 import { Rng } from './rng';
-import { actUnit, triggerCommandSkills, triggerPassiveSkills, triggerDelayedOutputs, triggerRangeDecayPassives, triggerRoundEndCommands, triggerImperialDecrees, triggerRoundStartChance, triggerRoundEndChanceOutputs, tickStatuses, tickRoundStartStatuses, effectiveStat, grantSecondaryTroopStatuses, type CombatContext } from './action';
+import { actUnit, triggerCommandSkills, triggerPassiveSkills, triggerDelayedOutputs, triggerPendingRoundOutputs, triggerRangeDecayPassives, triggerRoundEndCommands, triggerImperialDecrees, triggerRoundStartChance, triggerRoundEndChanceOutputs, tickStatuses, tickRoundStartStatuses, effectiveStat, grantSecondaryTroopStatuses, type CombatContext } from './action';
 import { computeStats } from './stats';
 import { SKILL_REGISTRY } from '../data/skills';
 import { validateMutualExclusion } from '../data/hero-utils';
@@ -124,6 +124,8 @@ export function runBattle(config: BattleConfig): BattleReport {
 
     // 一类指挥 delayedOutput：白衣渡江第 3 回合自动结算（无视规避，预先结算的伤害）
     triggerDelayedOutputs(ctx, round);
+    // 延迟到回合开始的 output（当阳桥 1/2 回合后控制、正始之变达标后的下回合效果）
+    triggerPendingRoundOutputs(ctx, round);
 
     // 每回合按当前生效速度重排（含加点、部队加成、速度增益/减益）；先手组（priorityRounds）仍优先
     const roundOrder = buildPriorityOrder([...myTeam, ...enemyTeam], round, skills, config.defenderSide);

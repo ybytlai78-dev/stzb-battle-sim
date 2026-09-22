@@ -18,6 +18,7 @@ import type {
   OnHurtConfig,
   OutputCondition,
   PassiveSkill,
+  PendingRoundOutput,
   Position,
   Skill,
   SkillOutput,
@@ -508,6 +509,8 @@ function isStrategyClassSkill(skill: Skill): boolean {
 
 function boostedBaseRate(unit: UnitState, skillType: SkillType, baseRate: number, skill?: Skill): number {
   let rate = baseRate;
+  /** 次数型发动率提升（定军山「下 1 次攻击类主动或追击战法发动率提升 100%」）本次是否命中 */
+  const used: Extract<Status, { type: 'trigger_boost' }>[] = [];
   for (const s of unit.statuses) {
     if (s.type !== 'trigger_boost') continue;
     if (s.skillTypes && s.skillTypes.length > 0 && !s.skillTypes.includes(skillType)) continue;
@@ -523,6 +526,12 @@ function boostedBaseRate(unit: UnitState, skillType: SkillType, baseRate: number
     if (s.preparedOnly && (!skill || !('prepare' in skill) || skill.prepare !== true)) continue;
     if (s.additive === false) rate *= 1 + s.rate;
     else rate += s.rate;
+    if (s.charges != null) used.push(s);
+  }
+  // 次数型：本次生效即消耗 1 次（无论发动率判定成败，官方「下 1 次…发动率提升」消耗于该次尝试）
+  for (const s of used) {
+    s.charges = (s.charges ?? 1) - 1;
+    if (s.charges <= 0) unit.statuses = unit.statuses.filter((x) => x !== s);
   }
   return rate;
 }
@@ -623,6 +632,36 @@ export interface CombatContext {
   hurtEveryCounters?: Map<string, number>;
   /** 受击 hook 重入保护：反击/引爆等二次 applyDamage 不再触发 onHurt（防盲侯循环） */
   resolvingHurtHooks?: boolean;
+  /**
+   * 延迟到指定回合开始的 output（当阳桥 / 正始之变）：发动时锁定目标存入，到点由
+   * `triggerPendingRoundOutputs` 在回合开始（单位行动前）结算。可选字段：单元测试可省略。
+   */
+  pendingRoundOutputs?: PendingRoundOutput[];
+  /**
+   * 敌军伤害计数（正始之变）：key `${casterId}:${skillId}` → 已累计的「施法者对侧单位打出伤害」次数。
+   * 可选字段：单元测试可省略，执行时惰性初始化。
+   */
+  enemyDamageCounters?: Map<string, number>;
+  /**
+   * 友军再次发动生效窗口（正始之变）：key `${casterId}:${skillId}` → 生效至第 N 回合（含）。
+   * 缺省无窗口 = 赐剑长驱整场生效。可选字段：单元测试可省略。
+   */
+  skillRecastWindows?: Map<string, number>;
+  /**
+   * 首次伤害 / 首次普通攻击强制选靶标记（定军山）：按**受标单位**记录，下一次匹配时判定并消耗。
+   * 可选字段：单元测试可省略，执行时惰性初始化。
+   */
+  positionSnipes?: Array<{ unitId: string; casterId: string; skillId: string; position: Position; chance: number }>;
+  /**
+   * 前 N 次伤害 / 控制抵挡（七擒七纵）：key `${casterId}:${skillId}` → { used, fired }。
+   * 可选字段：单元测试可省略，执行时惰性初始化。
+   */
+  instanceGuards?: Map<string, { used: number; fired: boolean }>;
+  /**
+   * 单位累计造成伤害（实际扣兵）总计（七擒七纵「造成伤害累计最高的敌军单体」）：
+   * key = 单位 id → 累计值。可选字段：单元测试可省略，执行时惰性初始化。
+   */
+  damageDealtTotals?: Map<string, number>;
   /** 受恢复 hook 重入保护：赏顺伐逆群体奶不再触发 onHeal */
   resolvingHealHooks?: boolean;
   /**
@@ -1221,9 +1260,101 @@ export function triggerDelayedOutputs(ctx: CombatContext, round: number): void {
   }
 }
 
+/**
+ * 延迟到指定回合开始的 output（当阳桥「使敌军群体 1 回合后陷入犹豫、2 回合后陷入怯战」；
+ * 正始之变「敌军全体累计造成 15 次伤害后，下回合自身发动」）：到 `atRound` 的**回合开始**
+ * （单位行动前）对尚存活的锁定目标结算；`targetIds` 为空则按登记的目标口径重选。
+ */
+export function triggerPendingRoundOutputs(ctx: CombatContext, round: number): void {
+  const due = ctx.pendingRoundOutputs?.filter((p) => p.atRound === round) ?? [];
+  if (due.length === 0) return;
+  ctx.pendingRoundOutputs = ctx.pendingRoundOutputs!.filter((p) => p.atRound !== round);
+  for (const p of due) {
+    const caster = castUnit(ctx, p.casterId);
+    const skill = resolveSkill(ctx, p.skillId);
+    if (!caster || !caster.alive || !skill) continue;
+    const all = ctx.myTeam.concat(ctx.enemyTeam);
+    let targets: UnitState[];
+    if (p.targetIds.length > 0) {
+      targets = all.filter((u) => u.alive && p.targetIds.includes(u.general.id));
+    } else {
+      const side = p.targetSide ?? 'enemy';
+      const source = (side === 'ally' ? all.filter((u) => u.side === caster.side) : all.filter((u) => u.side !== caster.side)).filter((u) => u.alive);
+      const mode = p.targetMode ?? 'group';
+      targets = mode === 'all' ? source : skillTargets(ctx, caster, source, skill.range, mode, p.groupCount ?? 2);
+    }
+    if (targets.length === 0) continue;
+    executeSkillOutputs(ctx, caster, skill, targets, p.output);
+  }
+}
+
+/**
+ * 延迟回合 output 的登记（`BaseSkill.delayedRoundOutputs`）：最外层发动时按各段口径**锁定目标**
+ * （用户 2026-09-21 口径：施法时按距离锁定，阵亡跳过），存入 `ctx.pendingRoundOutputs`。
+ */
+function scheduleDelayedRoundOutputs(ctx: CombatContext, caster: UnitState, skill: Skill): void {
+  const entries = 'delayedRoundOutputs' in skill ? skill.delayedRoundOutputs : undefined;
+  if (!entries || entries.length === 0) return;
+  const allies = caster.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+  const enemies = caster.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
+  ctx.pendingRoundOutputs ??= [];
+  for (const e of entries) {
+    const source = (e.targetSide === 'ally' ? allies : enemies).filter((u) => u.alive);
+    if (source.length === 0) continue;
+    const mode = e.targetMode ?? 'group';
+    const targets =
+      mode === 'all' ? source : skillTargets(ctx, caster, source, skill.range, mode, e.groupCount ?? 2);
+    if (targets.length === 0) continue;
+    ctx.pendingRoundOutputs.push({
+      atRound: ctx.currentRound + e.afterRounds,
+      casterId: caster.general.id,
+      skillId: skill.id,
+      targetIds: targets.map((t) => t.general.id),
+      output: e.output,
+    });
+  }
+}
+
+/**
+ * 首次伤害 / 首次普通攻击强制选靶（定军山）：受标单位下一次「主动战法伤害段」或「普通攻击」时，
+ * 由标记施法者按 `chance`（走士气修正）判定——命中则改为选中指定站位的存活敌军（区别于 skillTargets，
+ * 不按距离）；判定后标记消耗（无论成败）。无可选目标（该站位阵亡）时标记照常消耗、不改选靶。
+ */
+function consumePositionSnipe(
+  ctx: CombatContext,
+  unit: UnitState,
+  kind: 'damage' | 'basic'
+): UnitState | undefined {
+  void kind;
+  const snipes = ctx.positionSnipes?.filter((s) => s.unitId === unit.general.id) ?? [];
+  if (snipes.length === 0) return undefined;
+  ctx.positionSnipes = ctx.positionSnipes!.filter((s) => s.unitId !== unit.general.id);
+  const enemies = unit.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
+  for (const s of snipes) {
+    const caster = castUnit(ctx, s.casterId);
+    const skill = resolveSkill(ctx, s.skillId);
+    if (!caster || !caster.alive || !skill) continue;
+    const rate = moraleTriggerRate(effectiveMorale(unit), s.chance);
+    const success = ctx.rng.chance(rate);
+    ctx.events.push({
+      type: 'skill_trigger',
+      unitId: unit.general.id,
+      skillId: skill.id,
+      skillName: skill.name,
+      success,
+      rate: Math.round(rate * 100),
+      baseRate: Math.round(s.chance * 100),
+      morale: effectiveMorale(unit),
+    });
+    if (!success) continue;
+    const target = enemies.find((e) => e.alive && e.general.position === s.position);
+    return target;
+  }
+  return undefined;
+}
+
 /** 二类指挥（奇兵拒北）：武将行动时判定。动态发动率：未生效+increment，生效重置为 base。施法者兵力为 0 后无法生效 */
-export function triggerRoundCommandOnAct(ctx: CombatContext, unit: UnitState): void {
-  if (!unit.alive) return; // 二类指挥看实时数据，施法者兵力为 0 后无法生效
+export function triggerRoundCommandOnAct(ctx: CombatContext, unit: UnitState): void {  if (!unit.alive) return; // 二类指挥看实时数据，施法者兵力为 0 后无法生效
   const enemies = unit.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
   const allies = unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
   for (const id of unit.general.commandSkillIds) {
@@ -2908,6 +3039,13 @@ function inflictStatusCore(
     }
   }
 
+  // 七擒七纵：我方单位**被施加控制效果**时计入共享抵挡计数（敌对来源、且未被洞察 / 免控拦截的才计；
+  // 命中则整段抵御不落状态）
+  if (CONTROL_STATUS_TYPES.includes(type) && casterId) {
+    const src = castUnit(ctx, casterId);
+    if (src && src.side !== target.side && resolveInstanceGuard(ctx, target, 'control', type)) return;
+  }
+
   // 控制时长 +1（宝物「惑言」/「慑心」）：施法者匹配的延时状态消耗 1 次，令本次控制 +1 回合
   if (CONTROL_STATUS_TYPES.includes(type) && casterId) {
     const caster = castUnit(ctx, casterId);
@@ -3383,6 +3521,137 @@ function triggerSpecialDebuffBefore(ctx: CombatContext, target: UnitState, statu
  * 且本次状态在 `statuses` 清单内时，按 `rate` 判定（士气修正）；命中则该次施加**整段取消**并返回 true
  * （调用方直接 return，不落状态、不刷新、不叠加）。
  */
+/**
+ * 「我军群体受到的前 N 次伤害或控制效果，每次有 rate 几率规避 / 抵御，N 次结束后惩罚造成伤害最高者」
+ * （七擒七纵）：我军**共享**一个计数，`kind:'damage'` = 受到伤害实例、`kind:'control'` = 将被施加控制。
+ * 每次判定都消耗 1 次计数（无论成败）——官方「前 7 次…每次都有 50% 几率」，7 次结束后立即惩罚。
+ * 返回 true = 本次整段化解（伤害 = 完全规避 / 控制 = 抵御不落状态）。
+ */
+function resolveInstanceGuard(
+  ctx: CombatContext,
+  victim: UnitState,
+  kind: 'damage' | 'control',
+  statusType?: StatusType
+): boolean {
+  const team = victim.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+  for (const caster of team) {
+    if (!caster.alive) continue;
+    for (const id of caster.general.commandSkillIds) {
+      const skill = resolveSkill(ctx, id);
+      const cfg = skill?.type === 'command' ? skill.instanceGuard : undefined;
+      if (!skill || !cfg) continue;
+      ctx.instanceGuards ??= new Map();
+      const key = `${caster.general.id}:${skill.id}`;
+      const state = ctx.instanceGuards.get(key) ?? { used: 0, fired: false };
+      if (state.used >= cfg.count || state.fired) continue;
+      const morale = effectiveMorale(caster);
+      const rate = moraleTriggerRate(morale, cfg.rate);
+      const success = ctx.rng.chance(rate);
+      state.used += 1;
+      if (state.used >= cfg.count) state.fired = true;
+      ctx.instanceGuards.set(key, state);
+      ctx.events.push({
+        type: 'skill_trigger',
+        unitId: caster.general.id,
+        targetId: victim.general.id,
+        skillId: skill.id,
+        skillName: skill.name,
+        success,
+        rate: Math.round(rate * 100),
+        baseRate: Math.round(cfg.rate * 100),
+        morale,
+      });
+      if (success) {
+        // 化解：伤害 = 完全规避（evasion_blocked）/ 控制 = 抵御不落状态（status_resisted）
+        if (kind === 'control' && statusType) {
+          ctx.events.push({ type: 'status_resisted', unitId: victim.general.id, skillId: skill.id, statusType });
+        } else {
+          ctx.events.push({
+            type: 'evasion_blocked',
+            unitId: victim.general.id,
+            sourceId: '',
+            remainingStacks: Math.max(0, cfg.count - state.used),
+          });
+        }
+      }
+      // 第 N 次计满 → 立即惩罚「造成伤害累计最高的敌方单体」
+      if (state.fired) fireInstanceGuardPunish(ctx, caster, skill, cfg.punish);
+      return success;
+    }
+  }
+  return false;
+}
+
+/** 七擒七纵：对**造成伤害累计最高**的敌方单体结算惩罚 output（同战法距离内任意，不按距离筛选） */
+function fireInstanceGuardPunish(
+  ctx: CombatContext,
+  caster: UnitState,
+  skill: Skill,
+  punish: SkillOutput[]
+): void {
+  const enemies = (caster.side === 'my' ? ctx.enemyTeam : ctx.myTeam).filter((u) => u.alive);
+  if (enemies.length === 0) return;
+  const totals = ctx.damageDealtTotals ?? new Map<string, number>();
+  const target = enemies.reduce((best, u) =>
+    (totals.get(u.general.id) ?? 0) > (totals.get(best.general.id) ?? 0) ? u : best
+  );
+  executeSkillOutputs(ctx, caster, skill, [target], punish);
+}
+
+/**
+ * 敌军全体累计造成 N 次伤害后置位（正始之变）：`applyDamage` 内按「伤害来源属于施法者对侧」计数；
+ * 达到 `count` 后登记**下一回合开始**的 output（目标到点时重选）并开启 allyRecast 窗口。
+ * 计数走 `ctx.enemyDamageCounters`（键 `${casterId}:${skillId}`），每场战斗只触发一次。
+ */
+function noteEnemyDamageThreshold(ctx: CombatContext, source?: UnitState): void {
+  if (!source) return;
+  for (const side of [ctx.myTeam, ctx.enemyTeam]) {
+    for (const caster of side) {
+      for (const id of caster.general.commandSkillIds) {
+        const skill = resolveSkill(ctx, id);
+        const cfg = skill?.type === 'command' ? skill.enemyDamageThreshold : undefined;
+        if (!skill || !cfg) continue;
+        // 「敌军全体」= 施法者对侧单位打出的伤害
+        if (source.side === caster.side) continue;
+        ctx.enemyDamageCounters ??= new Map();
+        const key = `${caster.general.id}:${skill.id}`;
+        const count = (ctx.enemyDamageCounters.get(key) ?? 0) + 1;
+        if (count > cfg.count) continue;
+        ctx.enemyDamageCounters.set(key, count);
+        if (count < cfg.count || !caster.alive) continue;
+        // 达标：下回合开始由施法者发动（目标到点时重选）
+        ctx.pendingRoundOutputs ??= [];
+        ctx.pendingRoundOutputs.push({
+          atRound: ctx.currentRound + 1,
+          casterId: caster.general.id,
+          skillId: skill.id,
+          targetIds: [],
+          targetSide: cfg.targetSide ?? 'enemy',
+          targetMode: cfg.targetMode ?? 'group',
+          groupCount: 2,
+          output: cfg.output,
+        });
+        ctx.skillRecastWindows ??= new Map();
+        ctx.skillRecastWindows.set(key, ctx.currentRound + cfg.windowRounds);
+      }
+    }
+  }
+}
+
+/**
+ * 友军「再次发动」窗口判定（正始之变）：带 `enemyDamageThreshold` 的战法只在门槛达标后开启的窗口内生效
+ * （未达标 = 不生效）；无门槛战法（赐剑长驱）整场生效。
+ */
+function recastWindowActive(
+  ctx: CombatContext,
+  caster: UnitState,
+  skill: Extract<Skill, { type: 'command' }>
+): boolean {
+  if (!skill.enemyDamageThreshold) return true;
+  const until = ctx.skillRecastWindows?.get(`${caster.general.id}:${skill.id}`);
+  return until != null && ctx.currentRound <= until;
+}
+
 function triggerDebuffResist(ctx: CombatContext, target: UnitState, statusType: StatusType): boolean {
   const team = target.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
   for (const caster of team) {
@@ -4024,6 +4293,10 @@ function pushStatus(
     }
     if (type === 'trigger_boost' && 'preparedOnly' in create && create.preparedOnly) {
       (push as { preparedOnly?: boolean }).preparedOnly = true;
+    }
+    // 次数型发动率提升（定军山：下 1 次攻击类主动/追击战法）
+    if (type === 'trigger_boost' && 'charges' in create && create.charges != null) {
+      (push as { charges?: number }).charges = create.charges;
     }
     if (
       (type === 'trigger_boost' || type === 'damage_boost') &&
@@ -6613,6 +6886,8 @@ function executeSkillOutputs(
   if (!outputs) runChainSkills(ctx, caster, skill, targets);
   // 随机战法组（河内世泽）：同样仅最外层执行
   if (!outputs) runChainSkillPickGroups(ctx, caster, skill);
+  // 延迟到后续回合开始的 output（当阳桥 / 正始之变）：仅最外层登记
+  if (!outputs) scheduleDelayedRoundOutputs(ctx, caster, skill);
   // 随机复制发动（奇门遁甲）：同样仅最外层执行；显式 outputs 传入被复制战法 → 其自身 chain/copy 不递归
   if (!outputs) runCopyRandomActive(ctx, caster, skill, targets);
   /** 属性/兵力/增减伤的读取来源；缺省与施法者同体（旧口径） */
@@ -6704,7 +6979,7 @@ function executeSkillOutputs(
     // 单输出目标池：target:'self' → 施法者；targetMode 覆盖 → 按战法距离重新选敌/友军目标
     const enemies = caster.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
     const allies = caster.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
-    const outTarget = out.kind === 'positional_physical_damage' || out.kind === 'morale_branch' || out.kind === 'detonate_sorcery_marks' || out.kind === 'grant_cover' || out.kind === 'mark_deal_punish' || out.kind === 'schedule_strike' ? undefined : out.target;
+    const outTarget = out.kind === 'positional_physical_damage' || out.kind === 'morale_branch' || out.kind === 'detonate_sorcery_marks' || out.kind === 'grant_cover' || out.kind === 'mark_deal_punish' || out.kind === 'mark_position_snipe' || out.kind === 'schedule_strike' ? undefined : out.target;
     const outMode =
       out.kind === 'physical_damage' || out.kind === 'strategy_damage' ? out.targetMode : undefined;
     const outIgnoreRange =
@@ -6717,8 +6992,14 @@ function executeSkillOutputs(
     // 属性吸取（黄天余音）/ 分流治疗（合流、三军之众、利兵谋胜）/ 段级阵营伤害（自擅江表：友军段 + 敌军段）：
     // inflict_status / heal / physical_damage / strategy_damage 可带 targetSide/targetMode 单输出目标池覆盖
     const isDamageOut = out.kind === 'physical_damage' || out.kind === 'strategy_damage';
-    const outSide = out.kind === 'inflict_status' || out.kind === 'heal' || isDamageOut ? out.targetSide : undefined;
-    const outSideMode = out.kind === 'inflict_status' || out.kind === 'heal' ? out.targetMode : undefined;
+    const outSide =
+      out.kind === 'inflict_status' || out.kind === 'heal' || out.kind === 'mark_position_snipe' || isDamageOut
+        ? out.targetSide
+        : undefined;
+    const outSideMode =
+      out.kind === 'inflict_status' || out.kind === 'heal' || out.kind === 'mark_position_snipe'
+        ? out.targetMode
+        : undefined;
     // 伤害段的「段级阵营」用伤害段自己的 range/targetMode（outRange / outMode）
     const sideRange = isDamageOut ? outRange : skill.range;
     const sideMode = outSideMode ?? (isDamageOut ? outMode : undefined) ?? 'random_single';
@@ -6820,6 +7101,11 @@ function executeSkillOutputs(
     }
     // 状态段的目标选取覆盖（缚父临危 / 举抑臧否）：
     // ① 按武将名匹配「吕布」等；② 我军某属性最高单体（含施法者自身）；③ 敌军某属性最低单体（无视距离）
+    // 定军山：受标者 = 我军攻击属性最高单体（含施法者自身）
+    if (out.kind === 'mark_position_snipe' && out.targetPick === 'highest_attack_ally') {
+      const best = highestStatAlly(allies, 'attack');
+      pool = best ? [best] : [];
+    }
     if (out.kind === 'inflict_status' && out.targetPick) {
       const pick = out.targetPick;
       if (pick === 'ally_named') {
@@ -6930,6 +7216,22 @@ function executeSkillOutputs(
               dealDotDamage(ctx, foe, mark);
             }
           }
+        }
+        break;
+      }
+      case 'mark_position_snipe': {
+        // 定军山：给本段目标池（我军攻击属性最高单体）注册「首次伤害 / 首次普攻 40% 选中敌军大营」标记
+        ctx.positionSnipes ??= [];
+        for (const t of pool) {
+          if (!t.alive) continue;
+          ctx.positionSnipes = ctx.positionSnipes.filter((s) => s.unitId !== t.general.id);
+          ctx.positionSnipes.push({
+            unitId: t.general.id,
+            casterId: caster.general.id,
+            skillId: skill.id,
+            position: out.position,
+            chance: out.snipeChance,
+          });
         }
         break;
       }
@@ -7060,7 +7362,9 @@ function executeSkillOutputs(
         // 单独结算并 break，故此处只需判战法类型（不会消耗代打者的首击判定）
         if (skill.type === 'active') {
           const decreeT = decreeForceTarget(ctx, caster);
-          if (decreeT) pool = [decreeT];
+          const snipeT = consumePositionSnipe(ctx, caster, 'damage');
+          const forcedT = decreeT ?? snipeT;
+          if (forcedT) pool = [forcedT];
         }
         const times = Array.isArray(out.repeats)
           ? ctx.rng.intInclusive(out.repeats[0], out.repeats[1])
@@ -7200,7 +7504,9 @@ function executeSkillOutputs(
         // 天子诏令：主动战法本回合首次伤害强制选中点名目标（无视距离）
         if (skill.type === 'active' && out.attacker !== 'recipient') {
           const decreeT = decreeForceTarget(ctx, caster);
-          if (decreeT) pool = [decreeT];
+          const snipeT = consumePositionSnipe(ctx, caster, 'damage');
+          const forcedT = decreeT ?? snipeT;
+          if (forcedT) pool = [forcedT];
         }
         // 代打者（西陵克晋）：我军当前谋略属性最高者出手；缺省 = statU（既有口径零回归）
         const stratRider =
@@ -7965,8 +8271,14 @@ function scaleDamageHealOutputs(outputs: SkillOutput[], factor: number): SkillOu
  * 重新选目标，但只造成原战法 `factor` 倍的伤害与恢复效果（见 scaleDamageHealOutputs）。
  * 逐「友军 × 每回合首次成功主动」只判定一次；再次发动走 executeSkillWithTargets（不会再触发本监听）。
  */
-export function triggerAllyRecastCommands(ctx: CombatContext, actor: UnitState, cast: Skill): void {
-  if (cast.type !== 'active') return; // 官方：「每回合首次成功释放**主动战法**后」
+export function triggerAllyRecastCommands(
+  ctx: CombatContext,
+  actor: UnitState,
+  cast: Skill,
+  /** 追击战法再次发动的目标（追击由普攻命中触发，`executeSkillWithTargets` 不处理追击） */
+  castTarget?: UnitState
+): void {
+  if (cast.type !== 'active' && cast.type !== 'pursuit') return; // 缺省只认主动（赐剑长驱）；正始之变含追击
   const team = actor.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
   const enemies = actor.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
   for (const caster of team) {
@@ -7974,12 +8286,19 @@ export function triggerAllyRecastCommands(ctx: CombatContext, actor: UnitState, 
     for (const id of caster.general.commandSkillIds) {
       const skill = resolveSkill(ctx, id);
       if (skill?.type !== 'command' || !skill.allyRecast) continue;
-      ctx.allyRecastOnceKeys ??= new Set();
-      const onceKey = `${ctx.currentRound}:${skill.id}:${caster.general.id}:${actor.general.id}`;
-      if (ctx.allyRecastOnceKeys.has(onceKey)) continue;
-      ctx.allyRecastOnceKeys.add(onceKey);
-
       const cfg = skill.allyRecast;
+      // 来源战法类型过滤（正始之变：主动 + 追击；缺省仅主动 = 赐剑长驱口径）
+      const allowed = cfg.skillTypes ?? ['active'];
+      if (!allowed.includes(cast.type)) continue;
+      // 生效窗口（正始之变：敌军伤害达标后的那一回合内才生效；赐剑长驱未登记窗口 = 整场）
+      if (!recastWindowActive(ctx, caster, skill)) continue;
+      if (!cfg.everyCast) {
+        ctx.allyRecastOnceKeys ??= new Set();
+        const onceKey = `${ctx.currentRound}:${skill.id}:${caster.general.id}:${actor.general.id}`;
+        if (ctx.allyRecastOnceKeys.has(onceKey)) continue;
+        ctx.allyRecastOnceKeys.add(onceKey);
+      }
+
       const base = roundRate(scaledValue(cfg.rate, cfg.growthRate ?? 0, effectiveStat(caster, 'strategy'))) / 100;
       const morale = effectiveMorale(caster);
       const rate = moraleTriggerRate(morale, base);
@@ -8001,6 +8320,12 @@ export function triggerAllyRecastCommands(ctx: CombatContext, actor: UnitState, 
         ...(structuredClone(cast) as Skill),
         output: scaleDamageHealOutputs(cast.output, cfg.factor),
       } as Skill;
+      if (cast.type === 'pursuit') {
+        // 追击：重打同一目标（不重走普攻命中链）
+        if (!castTarget || !castTarget.alive) continue;
+        executeSkillOutputs(ctx, actor, recast, [castTarget], recast.output);
+        continue;
+      }
       executeSkillWithTargets(
         ctx,
         actor,
@@ -8282,6 +8607,7 @@ function executeSkillWithTargets(
         o.kind !== 'detonate_sorcery_marks' &&
         o.kind !== 'grant_cover' &&
         o.kind !== 'mark_deal_punish' &&
+        o.kind !== 'mark_position_snipe' &&
         o.kind !== 'schedule_strike' &&
         o.target !== 'self' &&
         // 单输出已覆盖目标池的 heal/inflict 不决定战法整体目标（利兵谋胜：伤敌 + 治友）
@@ -8411,6 +8737,8 @@ function triggerPursuitSkill(
     skillName: skill.name,
   });
   executeSkillOutputs(ctx, unit, skill, targets);
+  // 正始之变：友军「再次发动」监听同样覆盖追击战法（重打同一目标）
+  triggerAllyRecastCommands(ctx, unit, skill, targets[0]);
   // 三军夺帅：成功发动追击战法后触发；奉令护蜀：本侧友军行动叠层
   triggerActHooks(ctx, unit);
   // 乘间击隙 / 勠力同心：追击战法成功发动后钩子
@@ -8516,8 +8844,8 @@ function normalAttack(
 
 /** 计算并结算一次攻击伤害普攻（含连击的追击加成待做） */
 function dealAttack(ctx: CombatContext, unit: UnitState, target: UnitState, distance: number): void {
-  // 天子诏令：本回合首次伤害/普攻强制选中点名目标（无视距离）
-  target = decreeForceTarget(ctx, unit) ?? target;
+  // 天子诏令：本回合首次伤害/普攻强制选中点名目标（无视距离）；定军山：首次普攻按几率选中敌军指定站位
+  target = decreeForceTarget(ctx, unit) ?? consumePositionSnipe(ctx, unit, 'basic') ?? target;
   const hit = redirectPhysicalHit(ctx, target);
   if (!hit.alive) return;
   // 常驻伤害前叠层（持节镇西）：攻击方叠攻击、受击者叠防御
@@ -9296,6 +9624,8 @@ export function applyDamage(
   damageSource?: 'basic' | 'skill'
 ): void {  // 已阵亡单位不再吃伤害、不再走急救（阻止伤兵池膨胀后被救回）
   if (!target.alive) return;
+  // 七擒七纵：我军前 N 次受到伤害实例的规避判定（共享计数；判定成败都消耗 1 次，第 N 次后惩罚）
+  if (source && source.side !== target.side && resolveInstanceGuard(ctx, target, 'damage')) return;
   // 援护代受：被援护者的普攻转由援护者承接（战报记 cover 事件，原目标本次不受伤害）。
   // 嵌套结算（反击/引爆）不再次转移，避免与 ctx.resolvingHurtHooks 下的二次 applyDamage 打架。
   if (damageSource === 'basic' && !ctx.resolvingHurtHooks) {
@@ -9434,6 +9764,12 @@ export function applyDamage(
     // 天子诏令：点名目标回合内累计受击达阈值 → 追加受伤提升 + 全属性下降
     decreePunish(ctx, target);
     const hit: DamageHitContext = { damageSource, damageType };
+    // 单位累计造成伤害（七擒七纵「造成伤害累计最高的敌军单体」）与敌军伤害计数（正始之变）
+    if (source) {
+      ctx.damageDealtTotals ??= new Map();
+      ctx.damageDealtTotals.set(source.general.id, (ctx.damageDealtTotals.get(source.general.id) ?? 0) + actual);
+      noteEnemyDamageThreshold(ctx, source);
+    }
     // 全队累计伤害门槛（徽言龙凤）：本侧造成伤害即计数，达到门槛激活光环
     if (source) noteTeamDamage(ctx, source);
     // 攻心 / 士气降低（心战为上）：我军对敌军造成伤害后的监听（伤害值 = 本次实际扣兵）

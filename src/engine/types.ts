@@ -498,6 +498,23 @@ export type SkillOutput =
    */
   | { kind: 'mark_deal_punish'; rate: number; strategyScaled?: boolean; growthRate?: number; groupCount?: number | [number, number] }
   /**
+   * 首次伤害 / 首次普通攻击强制选靶（定军山「使其主动战法的首次伤害或首次普通攻击有 40.0% 几率
+   * 选中敌军大营」）：对本段目标池（可配 `targetPick:'highest_attack_ally'` 选出我军攻击最高单体）
+   * 注册标记；该单位的下一次「主动战法伤害段」或「普通攻击」按 `chance` 判定选中指定站位的存活敌军，
+   * 判定后标记消耗（无论是否命中）。标记不可移除、不随时间递减（窗口到该单位出手为止）。
+   */
+  | {
+      kind: 'mark_position_snipe';
+      /** 目标站位（定军山 = 大营） */
+      position: Position;
+      /** 强制选中几率（0~1，走士气修正）；字段名避开通用 output.chance（发动率）语义 */
+      snipeChance: number;
+      /** 受标者选取覆盖（定军山 = 我军攻击属性最高单体） */
+      targetPick?: 'highest_attack_ally';
+      targetSide?: 'ally';
+      targetMode?: 'single' | 'random_single' | 'group' | 'all';
+    }
+  /**
    * 「在目标**下一次行动前**」结算（道行险阻「同时在目标下一次行动前对其发动一次策略攻击和一次攻击」）：
    * 把后续 `output` 排入 `ctx.pendingStrikes` 延迟队列，目标下次行动**开始前**（行动阶段之前）
    * 由**原施法者**对其结算这些段；目标或施法者已阵亡则跳过。
@@ -700,7 +717,7 @@ export type CreateStatus =
    * 超过 100% 由发动率判定封顶为必定发动。
    * additive：仅 `false` 有意义——显式退回乘算 基础率 × (1+rate)。
    */
-  | { type: 'trigger_boost'; rate: number; duration: number; skillTypes?: SkillType[]; /** 仅 false 生效：退回乘算；缺省加法 */ additive?: boolean; /** 只对「攻击类」战法生效（输出段含物理伤害）——侵掠如火「攻击类主动战法发动率提升 20%」 */ attackSkillsOnly?: boolean; /** 显式「可叠加」：同源重复施加累加 rate；缺省刷新 */ stack?: true; /** 只对**携带者的主战法**生效（甚陷不惧「武将主战法发动率提高」） */ mainSkillOnly?: boolean; /** 只对「可造成攻击伤害或策略伤害的战法」生效（甚陷不惧；物理/策略输出段任一即可） */ damageSkillsOnly?: boolean; /** 只对「会造成策略伤害的战法」生效（宝物「筹算」：造成策略伤害的武将主战法发动率提高） */ strategySkillsOnly?: boolean; /** 只对**需要准备的主动战法**生效（宝物「熟虑」） */ preparedOnly?: boolean; /** 消耗于携带者**本次行动结束**（甚陷不惧「下次行动时」）——行动末清除，不按回合递减 */ expireAfterOwnAct?: boolean }
+  | { type: 'trigger_boost'; rate: number; duration: number; skillTypes?: SkillType[]; /** 仅 false 生效：退回乘算；缺省加法 */ additive?: boolean; /** 只对「攻击类」战法生效（输出段含物理伤害）——侵掠如火「攻击类主动战法发动率提升 20%」 */ attackSkillsOnly?: boolean; /** 显式「可叠加」：同源重复施加累加 rate；缺省刷新 */ stack?: true; /** 只对**携带者的主战法**生效（甚陷不惧「武将主战法发动率提高」） */ mainSkillOnly?: boolean; /** 只对「可造成攻击伤害或策略伤害的战法」生效（甚陷不惧；物理/策略输出段任一即可） */ damageSkillsOnly?: boolean; /** 只对「会造成策略伤害的战法」生效（宝物「筹算」：造成策略伤害的武将主战法发动率提高） */ strategySkillsOnly?: boolean; /** 只对**需要准备的主动战法**生效（宝物「熟虑」） */ preparedOnly?: boolean; /** 消耗于携带者**本次行动结束**（甚陷不惧「下次行动时」）——行动末清除，不按回合递减 */ expireAfterOwnAct?: boolean; /** 次数型：剩余生效次数（定军山「下 1 次攻击类主动或追击战法发动率提升 100%」）；用尽即移除 */ charges?: number }
   | { type: 'insight'; duration: number }
   /**
    * 控制时长 +1（宝物「惑言」/「慑心」）：携带者用匹配战法施加控制时，该次控制 duration +1，
@@ -963,6 +980,38 @@ interface BaseSkill {
    */
   chainSkillPickGroups?: Array<{ skillIds: string[] }>;
   /**
+   * 延迟到后续回合开始的 output（当阳桥「使敌军群体 1 回合后陷入犹豫、2 回合后陷入怯战」）：
+   * 发动时按本段目标口径**锁定目标**（用户 2026-09-21 口径：按距离锁定，阵亡跳过），
+   * 存 `ctx.pendingRoundOutputs`，到 `当前回合 + afterRounds` 的回合开始时结算。
+   */
+  delayedRoundOutputs?: Array<{
+    /** 施放后第 N 个回合开始结算（1 = 下一回合开始，2 = 下下回合开始） */
+    afterRounds: number;
+    /** 锁定目标口径（缺省 group = 2 目标）；按本战法 range 选靶 */
+    targetMode?: 'single' | 'random_single' | 'group' | 'all';
+    /** 群体目标数（仅 targetMode:'group'；缺省 2） */
+    groupCount?: number | [number, number];
+    /** 锁定目标阵营（缺省 enemy） */
+    targetSide?: 'enemy' | 'ally';
+    output: SkillOutput[];
+  }>;
+  /**
+   * 敌军全体累计造成 N 次伤害后，**下一回合开始**由施法者发动（正始之变）：
+   * 计数在 `applyDamage` 内按「伤害来源属于施法者对侧」逐次累加（实际扣兵 > 0）；
+   * 达到 `count` 后置位，下一回合回合开始结算 `output`（目标到点时重选，缺省敌军群体 2 目标），
+   * 并开启本战法 `allyRecast` 的生效窗口 `windowRounds` 回合（正始之变「持续 1 回合」）。
+   */
+  enemyDamageThreshold?: {
+    count: number;
+    output: SkillOutput[];
+    /** 达标后 allyRecast 的生效回合数（1 = 达标后的那一回合） */
+    windowRounds: number;
+    /** 结算段目标口径（缺省 group 2 目标） */
+    targetMode?: 'single' | 'random_single' | 'group' | 'all';
+    /** 结算段阵营（缺省 enemy） */
+    targetSide?: 'enemy' | 'ally' | 'self';
+  };
+  /**
    * 战法链（连环计「依次发动下列战法…每个战法的效果与原战法在同等级下效果相同」）：
    * 最外层发动时按顺序把**其他已注册战法**（`SKILL_REGISTRY`）的 `output` 当作本战法效果执行，
    * 事件 / 统计归属**被引用战法**（战报显示「发动了一次伐谋」）。
@@ -1003,6 +1052,22 @@ interface BaseSkill {
    * 官方未给上限 → 概率封顶 100%。仅被动 / 非 before_active 指挥的输出段走此口径（同 `chance`）。
    */
   roundRampingChance?: { base: number; increment: number };
+}
+
+/**
+ * 延迟到指定回合开始的 output（当阳桥「1 回合后 / 2 回合后陷入犹豫 / 怯战」；正始之变「下回合自身发动」）：
+ * 在 `ctx.pendingRoundOutputs` 中登记，到 `atRound` 的**回合开始**（单位行动前）对尚存活的锁定目标结算。
+ * `targetIds` 非空 = 发动时已锁定（阵亡者跳过）；为空 = 到点时按 `targetSide` / `targetMode` 重选。
+ */
+export interface PendingRoundOutput {
+  atRound: number;
+  casterId: string;
+  skillId: string;
+  targetIds: string[];
+  targetSide?: 'enemy' | 'ally' | 'self';
+  targetMode?: 'single' | 'random_single' | 'group' | 'all';
+  groupCount?: number | [number, number];
+  output: SkillOutput[];
 }
 
 /**
@@ -1153,6 +1218,14 @@ export interface CommandSkill extends BaseSkill {
     /** 只在锁定目标处于这些站位时判定（美人计「中军每回合行动前」） */
     onlyPositions?: Position[];
   };
+  /**
+   * 「我军群体受到的前 N 次伤害或控制效果，每次有 rate 几率规避/抵御，N 次结束后惩罚造成伤害最高者」
+   * （七擒七纵，2026-09-21 典藏批次）：我军**共享**一个计数——每次我方单位**受到伤害实例**或
+   * **将被施加控制效果**时计 1 次（无论判定成败，共 `count` 次），每次按 `rate`（走携带者士气修正）判定：
+   * 命中则整段化解（伤害 = 完全规避、控制 = 抵御不落状态），失败照常结算；
+   * 第 `count` 次计满后立即对**造成伤害累计最高**的敌方单体结算 `punish`（下回合造成伤害大幅降低）。
+   */
+  instanceGuard?: { count: number; rate: number; punish: SkillOutput[] };
   /** 二类指挥动态发动率：初始 base，未生效每回合 +increment，生效后重置（奇兵拒北 30% 起始，未生效+5%） */
   dynamicTriggerRate?: { base: number; increment: number };
   /**
@@ -1219,8 +1292,19 @@ export interface CommandSkill extends BaseSkill {
    * 再次发动同一战法（**跳过所有准备回合**），但只造成原战法 `factor` 倍的伤害与恢复效果。
    * 逐「友军 × 每回合首次成功主动」判定一次（同回合内每名友军最多 1 次）；`rate` 为谋略 80 时的
    * 基础几率（%），`growthRate` 缺省 = 不缩放（按基值，待反解）；施法者阵亡后不再生效。
+   * 扩展（正始之变）：`skillTypes` 限定来源战法类型（主动 / 追击）；`everyCast` = 不做「每回合首次」
+   * 去重（每次成功释放都判定）；`enemyDamageThreshold` 达标后由 `ctx.skillRecastWindows` 开启窗口，
+   * 窗口内才生效（缺省无窗口限制 = 赐剑长驱整场生效）。
    */
-  allyRecast?: { rate: number; growthRate?: number; factor: number };
+  allyRecast?: {
+    rate: number;
+    growthRate?: number;
+    factor: number;
+    /** 只对这些来源战法类型生效（缺省仅主动——赐剑长驱口径） */
+    skillTypes?: SkillType[];
+    /** 每次成功释放都判定（缺省每回合每名友军仅首次） */
+    everyCast?: boolean;
+  };
   /**
    * 二类指挥·附加「本回合首次主动战法实际释放成功后」段（鸾凤和鸣）：
    * 与 `roundTrigger` 解耦——主判定时机走 on_act / after_first_active 时，本段仍会在携带者本回合
@@ -2039,7 +2123,7 @@ export type Status =
    */
   | { type: 'heal_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   | { type: 'damage_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; direction: 'caused' | 'taken'; sourceUnitId?: string; /** 消耗于携带者**本次行动结束**（尽言直谏）：行动末清除，不按回合递减 */ expireAfterOwnAct?: boolean; /** 叠层计数（带上限的增减伤，银龙冲阵最多 3 层）；无上限时不设置 */ stacks?: number; /** 叠层上限（凤仪亭受击叠层 4；文德椒房 3） */ maxStacks?: number; /** 次数型下一次攻击（青丘媚祸） */ charges?: number; /** 每回合结束剩余份数（敛微穷极 6→5→…）；无此字段则不按回合衰减 */ roundParts?: number; /** 每回合份数初始值（6），衰减公式分母 */ roundPartsBase?: number; /** 当前剩余份数（恃强淬锋 5→4→…）；无此字段则不按 1/5 衰减 */ fifths?: number; /** fifths 满额时的 rate，衰减时 rate = baseRate × fifths / 初始份数 */ baseRate?: number; /** 每层增量（凤仪亭受击叠层：hurtStackPer 冻结值，受击 +1 层时 rate += perStack） */ perStack?: number; /** 不可被移除（威震逍遥） */ undispellable?: boolean; /** decayFifths 挂上时的满额份数（恃强 5），衰减公式分母 */ fifthsBase?: number; /** 当前剩余份数（虎豹督军 8→7→…，每回合前 −1；与 fifths 互斥） */ eighths?: number; /** 只对**指定战法**造成的伤害生效（守静却敌「造成【守静却敌】的策略伤害时」）：按伤害事件的 skillId 过滤；缺省不限 */ skillIds?: string[]; /** 只对**非自身阵营**的伤害目标生效（合纵连横）：按携带者与受击者阵营比较 */ targetFactionNotSelf?: boolean; /** 伤害来源过滤：basic=普攻（分类键小类「普通」）/ skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效（分类键小类「主动/追击/指挥」）；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省攻击+策略都吃（分类键「大类」，见 action.ts damageClassKey） */ damageType?: 'physical' | 'strategy'; /** 只对这些 DoT 类型生效（全主诿异：被施加的燃烧/恐慌/妖术诅咒伤害提升 20%）；缺省不限（非 DoT 伤害也吃） */ dotTypes?: DotType[]; /** 仅「进行攻击」（普攻/物理主动/追击，口径见 action.isAttackHitForProc；不含分兵溅射/反击/指挥代打/DoT）——缚父临危「下两次攻击造成的伤害提升 30%」 */ attackOnly?: boolean; /** 条件增伤（宝物「迅猛」：处于连击状态时普通攻击伤害提高）：仅当**携带者自身**带该状态时才生效（可多值，任一命中） */ requireSelfStatus?: StatusType | StatusType[]; /** 宝物「奇袭」：按**与目标距离**逐点增伤（rate × 距离） */ perDistance?: boolean; /** 宝物「击虚」：按**目标身上持续性伤害/控制的状态种类数**增伤（rate × 种类数，上限 5） */ perTargetStatusCount?: boolean }
-  | { type: 'trigger_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; skillTypes?: SkillType[]; additive?: boolean; attackSkillsOnly?: boolean; mainSkillOnly?: boolean; damageSkillsOnly?: boolean; strategySkillsOnly?: boolean; preparedOnly?: boolean; expireAfterOwnAct?: boolean }
+  | { type: 'trigger_boost'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; skillTypes?: SkillType[]; additive?: boolean; attackSkillsOnly?: boolean; mainSkillOnly?: boolean; damageSkillsOnly?: boolean; strategySkillsOnly?: boolean; preparedOnly?: boolean; expireAfterOwnAct?: boolean; /** 次数型：剩余生效次数（定军山「下 1 次」） */ charges?: number }
   | { type: 'insight'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'control_extend'; charges: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; mainSkillOnly?: boolean; skillTypes?: SkillType[] }
   | { type: 'control_immune'; types: StatusType[]; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }

@@ -65,6 +65,12 @@ const MECHANISM_TAGS = {
   '人中吕布': 'active,troop_type_debuff', '鼎足江东': 'active,heal,rest,team_troop_same',
   '单骑救主': 'command,on_hurt,evasion,defense_scaled',
   '火烧连营': 'active,dot_formula,dot_boost_stack,siege',
+  // ── 典藏战法批 2（2026-09-21）──
+  '威震逍遥': 'active,basic_trigger_dot,undispellable,speed_scaled',
+  '当阳桥': 'active,delayed_round_control',
+  '正始之变': 'command,enemy_damage_threshold,ally_recast',
+  '定军山': 'command,first_skill_reduce,trigger_boost_charges,position_snipe',
+  '七擒七纵': 'command,instance_guard,punish_highest_damage',
 };
 
 /**
