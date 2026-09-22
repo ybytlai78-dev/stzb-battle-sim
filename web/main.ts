@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 战斗模拟器入口：选将 → 配战法 → 运行引擎 → 逐回合可视化战报
  * 布局：100% 固定单屏 —— 顶栏（战报/战法） / 中间配将区 / 底栏（开始模拟）
  */
@@ -23,6 +23,23 @@ import {
   type SlotState,
 } from './teamEditor';
 import { showNotice } from './notice';
+import { openPresetNameDialog, openPresetPanel, type PresetActionResult } from './presetPanel';
+import {
+  PRESET_MAX,
+  SIDE_LABEL,
+  addPreset,
+  cloneSlots,
+  heroCount,
+  nameError,
+  overwritePreset,
+  readPresetFile,
+  removePreset,
+  renamePreset,
+  writePresetFile,
+  type PresetFile,
+  type TeamPreset,
+  type TeamSide,
+} from './presetStore';
 import { TRAIT_SLOTS_MAX, traitsFor } from '../src/engine/secondaryTroop';
 import { HERO_SECONDARY_TROOPS } from '../src/data/secondaryTroops';
 import { asset } from './assets';
@@ -98,6 +115,99 @@ function recordBattle(report: BattleReport, my: General[], enemy: General[]): vo
   });
   history.splice(20);
   saveHistory();
+}
+
+// ─── 阵容预设（localStorage 持久化，单队快照；见 web/presetStore.ts）───
+
+/** 存档：list 为编号升序，`maxNo` 记编号水位（删除后不重号） */
+let presetFile: PresetFile = readPresetFile();
+
+function persistPresets(): void {
+  if (!writePresetFile(presetFile)) showNotice('本机存储不可用，预设仅在本次会话内有效');
+}
+
+/**
+ * 预设队内合法性（防手改存档造出重复/互斥队伍）：返回错误文案（null = 可上场）。
+ * 与 `onPickHero` 同口径：同名/SP 互斥、同一武将不得重复。
+ */
+function presetTeamError(slots: SlotState[]): string | null {
+  const seen = new Set<string>();
+  const acc: SlotState[] = [];
+  for (const s of slots) {
+    if (!s.heroId) continue;
+    const name = getHeroById(s.heroId)?.name ?? s.heroId;
+    if (seen.has(s.heroId)) return `队内重复武将（${name}）`;
+    seen.add(s.heroId);
+    const conflict = mutualConflict(acc, s.heroId);
+    if (conflict) return `队内互斥：「${conflict}」与「${name}」不能同队`;
+    acc.push(s);
+  }
+  return null;
+}
+
+/** 保存当前某边队伍为预设（同边同名 = 覆盖，编号不变） */
+function saveCurrentAsPreset(side: TeamSide, name: string): PresetActionResult {
+  if (heroCount(state[side]) === 0) return { error: `${SIDE_LABEL[side]}还没有武将，先配置队伍再保存` };
+  const result = addPreset(presetFile, { name, side, slots: state[side] });
+  if (!result) {
+    return { error: presetFile.list.length >= PRESET_MAX ? `预设已达 ${PRESET_MAX} 条上限，请先删除不用的预设` : '预设名不能为空' };
+  }
+  presetFile = result.file;
+  persistPresets();
+  const label = `#${result.preset.no}「${result.preset.name}」`;
+  showNotice(result.replaced ? `已覆盖预设 ${label}（${SIDE_LABEL[side]}）` : `已保存预设 ${label}（${SIDE_LABEL[side]}）`);
+  return { presetId: result.preset.id };
+}
+
+/** 预设上场：整边替换（含空槽原样）；对面若已上阵同一武将则先清空（上场方优先） */
+function applyPresetToSide(preset: TeamPreset, side: TeamSide): void {
+  const slots = cloneSlots(preset.slots);
+  const invalid = presetTeamError(slots);
+  if (invalid) {
+    showNotice(`预设 #${preset.no} 无法上场：${invalid}`);
+    return;
+  }
+  const other: TeamSide = side === 'red' ? 'blue' : 'red';
+  const ids = new Set(slots.map((s) => s.heroId).filter((id): id is string => Boolean(id)));
+  let cleared = 0;
+  state[other].forEach((s, i) => {
+    if (s.heroId && ids.has(s.heroId)) {
+      state[other][i] = emptySlot();
+      cleared += 1;
+    }
+  });
+  state[side] = slots;
+  refresh();
+  showNotice(`已上场预设 #${preset.no}「${preset.name}」→ ${SIDE_LABEL[side]}${cleared ? `（对面 ${cleared} 个同武将槽位已清空）` : ''}`);
+}
+
+/** 用当前配将区该边配置覆盖预设（编号/名字不变） */
+function overwritePresetFromCurrent(id: string, side: TeamSide): PresetActionResult {
+  const preset = presetFile.list.find((p) => p.id === id);
+  if (!preset) return { error: '预设不存在（可能已被删除）' };
+  if (heroCount(state[side]) === 0) return { error: `${SIDE_LABEL[side]}还没有武将，无法覆盖预设` };
+  presetFile = overwritePreset(presetFile, id, state[side]);
+  persistPresets();
+  showNotice(`已用当前${SIDE_LABEL[side]}配置覆盖预设 #${preset.no}「${preset.name}」`);
+  return { presetId: id };
+}
+
+function renamePresetById(id: string, name: string): PresetActionResult {
+  const preset = presetFile.list.find((p) => p.id === id);
+  if (!preset) return { error: '预设不存在（可能已被删除）' };
+  const bad = nameError(name, presetFile, preset.side, id);
+  if (bad) return { error: bad };
+  presetFile = renamePreset(presetFile, id, name);
+  persistPresets();
+  return { presetId: id };
+}
+
+function removePresetById(id: string): void {
+  const preset = presetFile.list.find((p) => p.id === id);
+  if (!preset) return;
+  presetFile = removePreset(presetFile, id);
+  persistPresets();
+  showNotice(`已删除预设 #${preset.no}「${preset.name}」（编号不再复用）`);
 }
 
 // ─── 处理 ───
@@ -221,6 +331,19 @@ const handlers: EditorHandlers = {
       used -= cut;
     }
     refresh();
+  },
+  onSavePreset(team) {
+    const side: TeamSide = team;
+    if (heroCount(state[side]) === 0) {
+      showNotice(`${SIDE_LABEL[side]}还没有武将，先配置队伍再保存预设`);
+      return;
+    }
+    openPresetNameDialog({
+      title: `保存预设 · ${SIDE_LABEL[side]}`,
+      hint: `把当前${SIDE_LABEL[side]}的三将配置（战法 / 兵种转换 / 宝物 / 属性加点）存为预设，下次一键上场`,
+      placeholder: '如：双减魏智',
+      onSubmit: (name) => saveCurrentAsPreset(side, name).error ?? null,
+    });
   },
   onRemoveHero(team, idx) {
     state[team][idx] = emptySlot();
@@ -414,6 +537,7 @@ function reuseTeamFromReport(report: BattleReport): void {
 export function initApp(root?: HTMLElement): void {
   // 重置配将状态（支持重复初始化/测试隔离）
   Object.assign(state, emptyEditor());
+  presetFile = readPresetFile();
   redMorale = 120;
   blueMorale = 120;
   seed = Math.floor(Math.random() * 1000000);
@@ -431,6 +555,7 @@ export function initApp(root?: HTMLElement): void {
     <div class="pool-search" id="pool-search-slot"></div>
     <nav class="app-nav" aria-label="功能">
       <button type="button" class="nav-link" data-nav="history">战报</button>
+      <button type="button" class="nav-link" data-nav="presets" title="阵容预设：保存、搜索、一键上场">预设</button>
       <button type="button" class="nav-link" data-nav="skills">战法</button>
       <button type="button" class="nav-link" data-nav="lab">伤害测试</button>
       <button type="button" class="nav-link" data-nav="tutorial">教程</button>
@@ -478,6 +603,16 @@ export function initApp(root?: HTMLElement): void {
     openHistoryPanel(history, () => saveHistory(), reuseTeamFromReport);
   });
   header.querySelector('[data-nav="skills"]')!.addEventListener('click', () => openSkillBag());
+  header.querySelector('[data-nav="presets"]')!.addEventListener('click', () => {
+    openPresetPanel({
+      getPresets: () => presetFile.list,
+      saveCurrent: saveCurrentAsPreset,
+      apply: applyPresetToSide,
+      overwrite: overwritePresetFromCurrent,
+      rename: renamePresetById,
+      remove: removePresetById,
+    });
+  });
   header.querySelector('[data-nav="lab"]')!.addEventListener('click', () => {
     labVisible ? exitLab() : enterLab();
   });

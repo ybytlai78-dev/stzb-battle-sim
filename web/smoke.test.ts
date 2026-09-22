@@ -110,7 +110,7 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(document.querySelector('.hero-pool .filter-tag')).toBeTruthy();
     expect(document.querySelector('.team-panel.red h2')!.textContent).toBe('红队');
     expect(document.querySelector('.team-panel.blue h2')!.textContent).toBe('蓝队');
-    expect(document.querySelectorAll('.nav-link').length).toBe(4); // 战报 / 战法 / 伤害测试 / 教程
+    expect(document.querySelectorAll('.nav-link').length).toBe(5); // 战报 / 预设 / 战法 / 伤害测试 / 教程
     expect(document.querySelectorAll('.team-panel.red .slot').length).toBe(3);
     expect(document.querySelectorAll('.team-panel.blue .slot').length).toBe(3);
     expect(document.querySelectorAll('.hero-card').length).toBeGreaterThan(20);
@@ -1171,5 +1171,185 @@ describe('兵种转换（武将详情页「兵种」板块）', () => {
     const pop = document.querySelector('.dmg-popup') as HTMLElement;
     expect(pop, '点击百分比应弹出增减伤明细').toBeTruthy();
     expect(pop.textContent).toContain('兵种特性');
+  });
+});
+
+/**
+ * 阵容预设主链路（用户 2026-09-21 需求）：
+ * 一边队伍配置完毕 → 「保存预设」取名 → 顶栏「预设」里按编号列出、可搜索 → 一键上场；
+ * 存档走 localStorage，退出重进仍在。编号不复用、同边同名覆盖等细节在 web/presetStore.test.ts。
+ */
+describe('Web 阵容预设（保存 / 编号 / 搜索 / 一键上场 / 持久化）', () => {
+  beforeEach(() => {
+    document.body.innerHTML = '';
+    localStorage.clear();
+  });
+
+  const openPresetModal = (): HTMLElement => {
+    (document.querySelector('.nav-link[data-nav="presets"]') as HTMLElement).click();
+    const modal = document.querySelector('.preset-modal') as HTMLElement;
+    expect(modal, '预设面板应打开').toBeTruthy();
+    return modal;
+  };
+
+  /** 点某队标题行的「保存预设」→ 命名弹窗 → 输入名字 → 提交 */
+  const savePresetFromTeam = (side: 'red' | 'blue', name: string): void => {
+    (document.querySelector(`.team-panel.${side} .team-save-preset`) as HTMLElement).click();
+    const input = document.querySelector('.preset-name-modal .pn-input') as HTMLInputElement;
+    expect(input, '应弹出预设命名弹窗').toBeTruthy();
+    input.value = name;
+    (document.querySelector('.preset-name-modal .pn-ok') as HTMLElement).click();
+  };
+
+  const slotHeroIds = (side: 'red' | 'blue'): string[] =>
+    Array.from(document.querySelectorAll(`.team-panel.${side} .slot`)).map(
+      (s) => (s as HTMLElement).dataset.heroId ?? ''
+    );
+
+  const presetNames = (modal: HTMLElement): string[] =>
+    Array.from(modal.querySelectorAll('.preset-item .pi-name')).map((e) => e.textContent ?? '');
+
+  it('每队标题行都有「保存预设」；空队点它只提示、不弹命名框', async () => {
+    await boot();
+    expect(document.querySelectorAll('.team-panel .team-save-preset').length).toBe(2);
+    (document.querySelector('.team-panel.red .team-save-preset') as HTMLElement).click();
+    expect(document.querySelector('.preset-name-modal')).toBeNull();
+    expect(document.querySelector('.app-notice')!.textContent).toContain('还没有武将');
+    // 顶栏第 5 个导航「预设」
+    const nav = document.querySelector('.nav-link[data-nav="presets"]') as HTMLElement;
+    expect(nav.textContent).toBe('预设');
+    expect(nav.title).toContain('阵容预设');
+  });
+
+  it('保存一边队伍 → 通知带编号；编号 #1 出现在预设面板，且写入 localStorage', async () => {
+    await boot();
+    pickHeroIntoSlot('red', 0, '孙权');
+    pickHeroIntoSlot('red', 1, '周瑜');
+    savePresetFromTeam('red', '双减魏智');
+
+    expect(document.querySelector('.preset-name-modal')).toBeNull();
+    expect(document.querySelector('.app-notice')!.textContent).toContain('已保存预设 #1「双减魏智」（红队）');
+    const raw = JSON.parse(localStorage.getItem('stzb_team_presets')!) as {
+      maxNo: number;
+      list: Array<{ no: number; name: string; side: string; slots: Array<{ heroId: string | null }> }>;
+    };
+    expect(raw.maxNo).toBe(1);
+    expect(raw.list[0]).toMatchObject({ no: 1, name: '双减魏智', side: 'red' });
+    expect(raw.list[0].slots.map((s) => s.heroId).filter(Boolean).length).toBe(2);
+
+    const modal = openPresetModal();
+    expect(modal.querySelectorAll('.preset-item')).toHaveLength(1);
+    expect(modal.querySelector('.pi-no')!.textContent).toBe('#1');
+    expect(modal.querySelector('.pi-name')!.textContent).toBe('双减魏智');
+    expect(modal.querySelector('.pi-side')!.textContent).toBe('红队');
+    expect(modal.querySelector('.preset-count')!.textContent).toBe('共 1 条 · 上限 50 条');
+  });
+
+  it('搜索：同名套路不同配置的两支队伍，搜「魏智」两支都出来（用户场景）', async () => {
+    await boot();
+    pickHeroIntoSlot('red', 0, '孙权');
+    pickHeroIntoSlot('red', 1, '周瑜');
+    savePresetFromTeam('red', '双减魏智');
+    pickHeroIntoSlot('blue', 0, '魏延');
+    pickHeroIntoSlot('blue', 1, '太史慈');
+    savePresetFromTeam('blue', '战磐魏智');
+
+    const modal = openPresetModal();
+    const search = modal.querySelector('.preset-search') as HTMLInputElement;
+    search.value = '魏智';
+    search.dispatchEvent(new Event('input'));
+    expect(presetNames(modal)).toEqual(['双减魏智', '战磐魏智']);
+    expect(Array.from(modal.querySelectorAll('.preset-item .pi-no')).map((e) => e.textContent)).toEqual(['#1', '#2']);
+    expect(modal.querySelector('.preset-count')!.textContent).toBe('筛选出 2 / 2 条');
+
+    // 无命中 → 提示；清空 → 恢复全部
+    search.value = '不存在的队';
+    search.dispatchEvent(new Event('input'));
+    expect(modal.querySelectorAll('.preset-item')).toHaveLength(0);
+    expect(modal.querySelector('.preset-empty')!.textContent).toContain('没有匹配');
+    search.value = '';
+    search.dispatchEvent(new Event('input'));
+    expect(presetNames(modal)).toEqual(['双减魏智', '战磐魏智']);
+  });
+
+  it('一键上场：清空本队后从预设恢复三将；上场后面板自动关闭', async () => {
+    await boot();
+    pickHeroIntoSlot('red', 0, '孙权');
+    pickHeroIntoSlot('red', 1, '周瑜');
+    pickHeroIntoSlot('red', 2, '太史慈');
+    const before = slotHeroIds('red');
+    expect(before.filter(Boolean).length).toBe(3);
+    savePresetFromTeam('red', '双减魏智');
+
+    (document.querySelector('.team-panel.red .team-clear') as HTMLElement).click();
+    expect(slotHeroIds('red')).toEqual(['', '', '']);
+
+    const modal = openPresetModal();
+    (modal.querySelector('[data-act="apply-red"]') as HTMLElement).click();
+    expect(document.querySelector('.preset-modal')).toBeNull();
+    expect(document.querySelector('.app-notice')!.textContent).toContain('已上场预设 #1「双减魏智」→ 红队');
+    expect(slotHeroIds('red')).toEqual(before);
+  });
+
+  it('预设上场到另一边：对面同武将槽位被清空（全局唯一）', async () => {
+    await boot();
+    pickHeroIntoSlot('red', 0, '孙权');
+    pickHeroIntoSlot('red', 1, '周瑜');
+    savePresetFromTeam('red', '双减魏智');
+
+    const modal = openPresetModal();
+    (modal.querySelector('[data-act="apply-blue"]') as HTMLElement).click();
+    expect(slotHeroIds('blue').filter(Boolean).length).toBe(2);
+    expect(slotHeroIds('red')).toEqual(['', '', '']);
+    expect(document.querySelector('.app-notice')!.textContent).toContain('→ 蓝队');
+  });
+
+  it('退出重进仍在：重新 initApp（等价重开页面）后预设可上场', async () => {
+    await boot();
+    pickHeroIntoSlot('red', 0, '孙权');
+    pickHeroIntoSlot('red', 1, '周瑜');
+    const before = slotHeroIds('red');
+    savePresetFromTeam('red', '双减魏智');
+
+    // 模拟用户退出后重进：清空 DOM → 重新初始化（presetStore 从 localStorage 读回）
+    document.body.innerHTML = '';
+    await boot();
+    expect(slotHeroIds('red')).toEqual(['', '', '']); // 配将区本身不保存，只有预设存档持久
+    const modal = openPresetModal();
+    expect(presetNames(modal)).toEqual(['双减魏智']);
+    (modal.querySelector('[data-act="apply-red"]') as HTMLElement).click();
+    expect(slotHeroIds('red')).toEqual(before);
+  });
+
+  it('同边同名再次保存 → 覆盖同一编号（列表不增条），并提示已覆盖', async () => {
+    await boot();
+    pickHeroIntoSlot('red', 0, '孙权');
+    savePresetFromTeam('red', '双减魏智');
+    pickHeroIntoSlot('red', 2, '太史慈');
+    savePresetFromTeam('red', '双减魏智');
+
+    expect(document.querySelector('.preset-name-modal')).toBeNull();
+    expect(document.querySelector('.app-notice')!.textContent).toContain('已覆盖预设 #1「双减魏智」');
+    const modal = openPresetModal();
+    expect(modal.querySelectorAll('.preset-item')).toHaveLength(1);
+    expect(presetNames(modal)).toEqual(['双减魏智']);
+    // 覆盖后的详情是 3 槽里的新配置（含后加的太史慈）
+    expect(modal.querySelectorAll('.pd-slot')).toHaveLength(3);
+    expect(modal.textContent).toContain('太史慈');
+  });
+
+  it('编号不复用：删掉 #1 后再存新预设得 #2（面板里编号递增）', async () => {
+    await boot();
+    pickHeroIntoSlot('red', 0, '孙权');
+    savePresetFromTeam('red', '双减魏智');
+    let modal = openPresetModal();
+    (modal.querySelector('[data-act="remove"]') as HTMLElement).click();
+    (modal.querySelector('[data-act="remove"]') as HTMLElement).click(); // 二次确认
+    expect(modal.querySelector('.preset-count')!.textContent).toBe('共 0 条 · 上限 50 条');
+    (modal.querySelector('.done') as HTMLElement).click();
+
+    savePresetFromTeam('red', '战磐魏智');
+    modal = openPresetModal();
+    expect(modal.querySelector('.pi-no')!.textContent).toBe('#2');
   });
 });

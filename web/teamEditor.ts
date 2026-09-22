@@ -87,6 +87,11 @@ export interface EditorHandlers {
   onSetSecondaryTrait: (team: 'red' | 'blue', slotIndex: number, slot: number, trait: GeneralTrait | undefined) => void;
   /** 写入/清除佩戴的宝物（null = 卸下） */
   onSetTreasure: (team: 'red' | 'blue', slotIndex: number, treasure: TreasureLoadout | null) => void;
+  /**
+   * 保存本队为阵容预设（可选：未提供时不渲染「保存预设」按钮）。
+   * 由上层（main.ts）打开命名弹窗并写入 localStorage 存档；见 `web/presetStore.ts`。
+   */
+  onSavePreset?: (team: 'red' | 'blue') => void;
   onRemoveHero: (team: 'red' | 'blue', slotIndex: number) => void;
   onClearTeam: (team: 'red' | 'blue') => void;
 }
@@ -428,7 +433,17 @@ function renderTeamPanel(
   clear.type = 'button';
   clear.textContent = '清空本队';
   clear.onclick = () => h.onClearTeam(team);
-  actions.append(bonus, clear);
+  if (h.onSavePreset) {
+    const savePreset = document.createElement('button');
+    savePreset.className = 'btn ghost team-save-preset';
+    savePreset.type = 'button';
+    savePreset.textContent = '保存预设';
+    savePreset.title = '把本队三将（战法/兵种/宝物/加点）存为阵容预设，下次可一键上场';
+    savePreset.onclick = () => h.onSavePreset?.(team);
+    actions.append(bonus, savePreset, clear);
+  } else {
+    actions.append(bonus, clear);
+  }
   head.appendChild(hd);
   head.appendChild(actions);
   panel.appendChild(head);

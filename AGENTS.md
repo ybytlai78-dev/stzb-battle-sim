@@ -690,3 +690,31 @@ npx tsc --noEmit                    # 类型检查（strict）
 
 - 宝物系统在 Web 端已可佩戴并参与模拟；若要做**宝物锻造/进阶/淬火**等养成过程（材料经济），属新玩法，需另行立项。
 - 强化等级目前固定 10 级（UI 未开放调节）：如需可调，扩 `SlotState.treasure.level` + 滑杆即可（引擎已支持任意等级）。
+
+---
+
+## 会话交接（阵容预设会话 · 2026-09-21）
+
+### 新功能：阵容预设（单队存档 · 编号 + 搜索）
+
+- **用户口径**：一边队伍（红/蓝任一，3 将）配置完毕 →「保存预设」取名 → 记住战法/兵种转换+特性/宝物/属性加点/全队组成；
+  退出后仍在，下次一键上场；预设按**编号**列出，可按**预设名**搜索（「双减魏智」「战磐魏智」搜「魏智」两条都出）。
+- **存档**（`web/presetStore.ts`，纯逻辑无 DOM）：一条预设 = 一边 3 槽 `SlotState` 深拷贝 + 名字 + `side`（= 上场默认边）+ 编号；
+  localStorage key `stzb_team_presets`，结构 `{ maxNo, list }`。
+  - **编号全局单调递增**（水位 `maxNo`）→ 删除后不重号；**同边同名 = 覆盖**（编号/创建时间不变）；**异边同名 = 两条**；
+  - 上限 `PRESET_MAX = 50`；读取逐条校验（坏条目丢弃、redness/level/战法数校正、不足 3 槽补齐）；写盘失败降级为「仅本次会话有效」；
+  - 搜索 = 预设名子串（忽略大小写/空白）+ `#编号` + 武将名（面板把 heroId 解析成名字后传入）。
+- **UI**（`web/presetPanel.ts`）：
+  - 每队标题行「保存预设」（`EditorHandlers.onSavePreset?` 可选，未提供不渲染 → 伤害实验室不受影响）→ 命名弹窗 `openPresetNameDialog`；
+  - 顶栏第 5 项 nav「**预设**」（2 字，窄屏不挤）→ `openPresetPanel`：左列表（`#编号` 徽章 / 预设名 / 红蓝标签 / 三将名 / 时间 / 搜索框）+ 右详情（三将明细）；
+  - 动作：上场到红队 / 上场到蓝队（主按钮 = 保存边，**上场后自动关面板**）、覆盖为当前配置（按预设自己的边）、重命名、删除（**二次确认**）。
+- **上场语义**（`web/main.ts` `applyPresetToSide`）：整边替换（含空槽原样）；先校验队内合法性（重复武将 / 同名 SP 互斥 → 拒绝）；
+  **对面**已有同一武将的槽位先清空（上场方优先，与「点选武将」同口径）。
+- **测试**：`web/presetStore.test.ts`(20) / `web/presetPanel.test.ts`(19, jsdom) / `web/smoke.test.ts` 追加 8 个（含「退出重进仍在」= 重新 `initApp` 后预设可上场）+ nav-link 断言 4→5。
+  全量 `npm test` **190 files / 1880 passed**；`npx tsc --noEmit` + `npx tsc -p web --noEmit` clean；引擎零改动、golden 未动。
+- 未做（YAGNI）：整套红蓝存一条、存士气、导入导出、跨设备同步。
+- **按钮样式（用户 2026-09-22 口径）**：「保存预设」是按钮 → 与队头另两个按钮**同款**：三者共用
+  `.btn.ghost.team-bonus / .btn.ghost.team-save-preset / .btn.ghost.team-clear` 这一组米黄实心样式（含 hover），
+  **不要**再给它单独加金色描边之类的特例（`web/presetPanel.test.ts` 有 CSS 源断言守住这条）。
+- 踩坑：`web/styles.css` 用 `Get-Content -Raw | Set-Content` 改一行 CSS 会把**整文件中文变乱码**（PowerShell 按 ANSI 读 UTF-8）——
+  改这类文件只用 `edit`/`write` 工具（与宝物会话同一条教训）。
