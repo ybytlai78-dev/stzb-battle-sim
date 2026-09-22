@@ -1,5 +1,5 @@
 /**
- * 阵容预设面板（jsdom）：列表/编号/搜索/详情/上场/覆盖/重命名/删除二次确认/命名弹窗。
+ * 阵容预设面板（jsdom）：列表/编号/搜索/详情/上场/木桩队伍占位/重命名/删除二次确认/命名弹窗/按键标准。
  * 数据用 presetStore 真实构造 + 真实武将数据（HEROES / SKILL_REGISTRY），只把「副作用」替换成 spy。
  */
 // @vitest-environment jsdom
@@ -48,13 +48,12 @@ function makeFile(): { file: PresetFile; weiA: TeamPreset; weiB: TeamPreset; oth
 function mount(getPresets: () => TeamPreset[]) {
   // 每个动作都是 spy，返回类型显式声明 → 既能被 openPresetPanel 接受，也能用 mockReturnValueOnce 注入错误分支
   const saveCurrent = vi.fn<(side: TeamSide, name: string) => PresetActionResult>(() => ({ presetId: 'new_id' }));
-  const overwrite = vi.fn<(id: string, side: TeamSide) => PresetActionResult>(() => ({ presetId: 'x' }));
   const rename = vi.fn<(id: string, name: string) => PresetActionResult>(() => ({ presetId: 'x' }));
   const deps = {
     getPresets,
     saveCurrent,
     apply: vi.fn<(preset: TeamPreset, side: TeamSide) => void>(),
-    overwrite,
+    useAsDummy: vi.fn<(preset: TeamPreset) => void>(),
     rename,
     remove: vi.fn<(id: string) => void>(),
     onClose: vi.fn<() => void>(),
@@ -169,8 +168,8 @@ describe('presetPanel · 详情与动作', () => {
     const { file, weiA } = makeFile();
     const { deps } = mount(() => file.list);
     const actions = document.querySelector('.pd-actions')!;
-    expect((actions.querySelector('[data-act="apply-red"]') as HTMLElement).className).not.toContain('ghost');
-    expect((actions.querySelector('[data-act="apply-blue"]') as HTMLElement).className).toContain('ghost');
+    expect((actions.querySelector('[data-act="apply-red"]') as HTMLElement).className).not.toContain('beige');
+    expect((actions.querySelector('[data-act="apply-blue"]') as HTMLElement).className).toContain('beige');
     clickByText(actions, '上场到蓝队');
     expect(deps.apply).toHaveBeenCalledWith(expect.objectContaining({ id: weiA.id, no: 1 }), 'blue');
     expect(document.querySelector('.preset-modal')).toBeNull();
@@ -180,14 +179,17 @@ describe('presetPanel · 详情与动作', () => {
     expect(document.querySelector('.preset-modal')).toBeNull();
   });
 
-  it('覆盖为当前配置：按预设自己的边调用 overwrite', () => {
+  it('木桩队伍（占位）：点击把预设交给上层，面板不关；原有的「覆盖为当前配置」按钮已撤', () => {
     const { file, weiB } = makeFile();
     const { deps } = mount(() => file.list);
     (items()[1] as HTMLElement).click();
-    const btn = document.querySelector('[data-act="overwrite"]') as HTMLElement;
-    expect(btn.textContent).toBe('覆盖为当前蓝队配置');
+    // 用户 2026-09-22：「上场到红队」本身就是覆盖红队 → 那个按钮改成「木桩队伍」占位
+    expect(document.querySelector('[data-act="overwrite"]')).toBeNull();
+    const btn = document.querySelector('[data-act="dummy"]') as HTMLElement;
+    expect(btn.textContent).toBe('木桩队伍');
     btn.click();
-    expect(deps.overwrite).toHaveBeenCalledWith(weiB.id, 'blue');
+    expect(deps.useAsDummy).toHaveBeenCalledWith(expect.objectContaining({ id: weiB.id, no: 2 }));
+    expect(document.querySelector('.preset-modal')).not.toBeNull(); // 占位动作不关面板
   });
 
   it('重命名：弹窗预填原名，提交把新名字交给上层；失败时弹窗保留并显示错误', () => {
@@ -305,6 +307,30 @@ describe('presetPanel · 工具函数', () => {
     // 不得再单独给「保存预设」改色（曾误加金色描边，与左右两个米黄按钮不一致）
     expect(/\.team-save-preset\s*\{/.test(css)).toBe(false);
   });
+
+  it('面板 / 命名弹窗的按键都走「项目按键标准」（.btn.beige 米黄实心），不再有裸文字 .btn.ghost', () => {
+    const { file } = makeFile();
+    mount(() => file.list);
+    const modal = document.querySelector('.preset-modal')!;
+    const keys = [
+      ...Array.from(modal.querySelectorAll<HTMLElement>('.pd-actions .btn')),
+      ...Array.from(modal.querySelectorAll<HTMLElement>('.preset-foot .btn')),
+    ];
+    expect(keys.map((k) => k.textContent)).toEqual(['上场到红队', '上场到蓝队', '木桩队伍', '重命名', '删除', '保存红队', '保存蓝队', '完成']);
+    for (const k of keys) {
+      expect(k.classList.contains('btn'), `${k.textContent} 应是按钮`).toBe(true);
+      expect(k.classList.contains('ghost'), `${k.textContent} 不该是裸文字按钮`).toBe(false);
+      expect(k.classList.contains('done'), `${k.textContent} 不该是裸文字按钮`).toBe(false);
+    }
+    // 5 个动作里 4 个米黄（当前预设的保存边那个是金色主按钮）＋ 底栏 3 个米黄
+    expect(modal.querySelectorAll('.pd-actions .btn.beige').length).toBe(4);
+    expect(modal.querySelectorAll('.preset-foot .btn.beige').length).toBe(3);
+    // 命名弹窗同样：取消也应该是米黄实心按钮
+    openPresetNameDialog({ title: '保存预设 · 红队', onSubmit: () => null });
+    const cancel = document.querySelector('.preset-name-modal .pn-cancel') as HTMLElement;
+    expect(cancel.classList.contains('beige')).toBe(true);
+    expect(cancel.classList.contains('ghost')).toBe(false);
+  });
 });
 
 describe('presetPanel · 边与数据契约', () => {
@@ -313,8 +339,8 @@ describe('presetPanel · 边与数据契约', () => {
     mount(() => file.list);
     (items()[1] as HTMLElement).click();
     const actions = document.querySelector('.pd-actions')!;
-    expect((actions.querySelector('[data-act="apply-blue"]') as HTMLElement).className).not.toContain('ghost');
-    expect((actions.querySelector('[data-act="apply-red"]') as HTMLElement).className).toContain('ghost');
+    expect((actions.querySelector('[data-act="apply-blue"]') as HTMLElement).className).not.toContain('beige');
+    expect((actions.querySelector('[data-act="apply-red"]') as HTMLElement).className).toContain('beige');
     const side: TeamSide = 'blue';
     expect(side).toBe('blue');
   });

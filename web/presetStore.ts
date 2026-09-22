@@ -296,7 +296,12 @@ export function renamePreset(file: PresetFile, id: string, name: string, now = D
   };
 }
 
-/** 用当前配将区的该边配置覆盖预设（编号/名字/创建时间不变） */
+/**
+ * 用当前配将区的该边配置覆盖预设（编号/名字/创建时间不变）。
+ *
+ * 注意（用户 2026-09-22 口径）：面板上的「覆盖为当前配置」按钮已撤掉 ——「上场到红队」本身就是覆盖红队，
+ * 那个按钮改成了「木桩队伍」占位。同边同名保存仍会走 `addPreset` 的覆盖分支，所以数据层保留这个能力。
+ */
 export function overwritePreset(file: PresetFile, id: string, slots: SlotState[], now = Date.now()): PresetFile {
   const slotsCopy = cloneSlots(slots).slice(0, 3);
   return {

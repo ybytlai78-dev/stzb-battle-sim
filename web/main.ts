@@ -31,7 +31,6 @@ import {
   cloneSlots,
   heroCount,
   nameError,
-  overwritePreset,
   readPresetFile,
   removePreset,
   renamePreset,
@@ -181,15 +180,12 @@ function applyPresetToSide(preset: TeamPreset, side: TeamSide): void {
   showNotice(`已上场预设 #${preset.no}「${preset.name}」→ ${SIDE_LABEL[side]}${cleared ? `（对面 ${cleared} 个同武将槽位已清空）` : ''}`);
 }
 
-/** 用当前配将区该边配置覆盖预设（编号/名字不变） */
-function overwritePresetFromCurrent(id: string, side: TeamSide): PresetActionResult {
-  const preset = presetFile.list.find((p) => p.id === id);
-  if (!preset) return { error: '预设不存在（可能已被删除）' };
-  if (heroCount(state[side]) === 0) return { error: `${SIDE_LABEL[side]}还没有武将，无法覆盖预设` };
-  presetFile = overwritePreset(presetFile, id, state[side]);
-  persistPresets();
-  showNotice(`已用当前${SIDE_LABEL[side]}配置覆盖预设 #${preset.no}「${preset.name}」`);
-  return { presetId: id };
+/**
+ * 木桩队伍（**占位**）：把预设阵容送进伤害测试实验室当靶子 —— 功能未实装，先只给提示。
+ * 实装时在这里接实验室（写进 lab 的侍卫/我方队伍 + enterLab），面板侧 `deps.useAsDummy` 不用改。
+ */
+function usePresetAsDummy(preset: TeamPreset): void {
+  showNotice(`木桩队伍尚未实装，敬请期待（预设 #${preset.no}「${preset.name}」）`);
 }
 
 function renamePresetById(id: string, name: string): PresetActionResult {
@@ -608,7 +604,7 @@ export function initApp(root?: HTMLElement): void {
       getPresets: () => presetFile.list,
       saveCurrent: saveCurrentAsPreset,
       apply: applyPresetToSide,
-      overwrite: overwritePresetFromCurrent,
+      useAsDummy: usePresetAsDummy,
       rename: renamePresetById,
       remove: removePresetById,
     });

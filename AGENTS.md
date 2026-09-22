@@ -711,14 +711,24 @@ npx tsc --noEmit                    # 类型检查（strict）
 - **UI**（`web/presetPanel.ts`）：
   - 每队标题行「保存预设」（`EditorHandlers.onSavePreset?` 可选，未提供不渲染 → 伤害实验室不受影响）→ 命名弹窗 `openPresetNameDialog`；
   - 顶栏第 5 项 nav「**预设**」（2 字，窄屏不挤）→ `openPresetPanel`：左列表（`#编号` 徽章 / 预设名 / 红蓝标签 / 三将名 / 时间 / 搜索框）+ 右详情（三将明细）；
-  - 动作：上场到红队 / 上场到蓝队（主按钮 = 保存边，**上场后自动关面板**）、覆盖为当前配置（按预设自己的边）、重命名、删除（**二次确认**）。
+  - 动作：上场到红队 / 上场到蓝队（主按钮 = 保存边，**上场后自动关面板**）、**木桩队伍（占位）**、重命名、删除（**二次确认**）。
 - **上场语义**（`web/main.ts` `applyPresetToSide`）：整边替换（含空槽原样）；先校验队内合法性（重复武将 / 同名 SP 互斥 → 拒绝）；
   **对面**已有同一武将的槽位先清空（上场方优先，与「点选武将」同口径）。
-- **测试**：`web/presetStore.test.ts`(20) / `web/presetPanel.test.ts`(19, jsdom) / `web/smoke.test.ts` 追加 8 个（含「退出重进仍在」= 重新 `initApp` 后预设可上场）+ nav-link 断言 4→5。
+- **测试**：`web/presetStore.test.ts`(20) / `web/presetPanel.test.ts`(21, jsdom，含按键标准 + 木桩队伍占位) / `web/smoke.test.ts` 追加 9 个（含「退出重进仍在」= 重新 `initApp` 后预设可上场、木桩队伍占位提示）+ nav-link 断言 4→5。
   全量 `npm test` **190 files / 1880 passed**；`npx tsc --noEmit` + `npx tsc -p web --noEmit` clean；引擎零改动、golden 未动。
 - 未做（YAGNI）：整套红蓝存一条、存士气、导入导出、跨设备同步。
 - **按钮样式（用户 2026-09-22 口径）**：「保存预设」是按钮 → 与队头另两个按钮**同款**：三者共用
   `.btn.ghost.team-bonus / .btn.ghost.team-save-preset / .btn.ghost.team-clear` 这一组米黄实心样式（含 hover），
   **不要**再给它单独加金色描边之类的特例（`web/presetPanel.test.ts` 有 CSS 源断言守住这条）。
+- **面板按键统一为「项目按键标准」+ 木桩队伍占位（用户 2026-09-22 追加口径）**：
+  ① 面板里**所有**动作按键都改成 `class="btn beige"`（styles.css「项目按键标准」= 米黄实心，看得出是按钮），
+     不再用裸文字 `.btn.ghost` / `.btn.done` —— 覆盖 5 个详情动作（当前预设的保存边那个仍是金色主按钮 `.btn`）
+     + 底栏 保存红队 / 保存蓝队 / 完成 + 命名弹窗「取消」；底栏「完成」的 hook 类由 `.done` 改名 `.preset-done`
+     （`.done` 与 `.btn.ghost` 同为裸文字组，留着会撞样式）；`web/presetPanel.test.ts` 有 DOM 断言守住。
+  ② 「覆盖为当前配置」按钮**撤掉**（用户：「上阵红队本质就是覆盖红队」），原位换成「**木桩队伍**」**占位**：
+     功能未实装 → 点击走 `deps.useAsDummy` → `main.ts usePresetAsDummy` 弹一句「尚未实装」提示（**面板不关**）；
+     实装后 = 把该预设阵容送进伤害测试实验室当靶子（届时只改 `usePresetAsDummy`，面板不用动）。
+     `PresetPanelDeps.overwrite` 与 `main.ts overwritePresetFromCurrent` 随之删除；
+     `presetStore.overwritePreset` **保留**（同名保存仍走 `addPreset` 的覆盖分支，数据层能力不失）。
 - 踩坑：`web/styles.css` 用 `Get-Content -Raw | Set-Content` 改一行 CSS 会把**整文件中文变乱码**（PowerShell 按 ANSI 读 UTF-8）——
   改这类文件只用 `edit`/`write` 工具（与宝物会话同一条教训）。
