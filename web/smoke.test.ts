@@ -1346,10 +1346,21 @@ describe('Web 阵容预设（保存 / 编号 / 搜索 / 一键上场 / 持久化
     (modal.querySelector('[data-act="remove"]') as HTMLElement).click();
     (modal.querySelector('[data-act="remove"]') as HTMLElement).click(); // 二次确认
     expect(modal.querySelector('.preset-count')!.textContent).toBe('共 0 条 · 上限 50 条');
-    (modal.querySelector('.done') as HTMLElement).click();
+    (modal.querySelector('.preset-done') as HTMLElement).click();
 
     savePresetFromTeam('red', '战磐魏智');
     modal = openPresetModal();
     expect(modal.querySelector('.pi-no')!.textContent).toBe('#2');
+  });
+
+  it('木桩队伍（占位）：未实装 → 只给提示、面板不关；「覆盖为当前配置」按钮已撤', async () => {
+    await boot();
+    pickHeroIntoSlot('red', 0, '孙权');
+    savePresetFromTeam('red', '双减魏智');
+    const modal = openPresetModal();
+    expect(modal.querySelector('[data-act="overwrite"]')).toBeNull();
+    (modal.querySelector('[data-act="dummy"]') as HTMLElement).click();
+    expect(document.querySelector('.preset-modal')).not.toBeNull();
+    expect(document.querySelector('.app-notice')!.textContent).toContain('木桩队伍尚未实装');
   });
 });

@@ -3,9 +3,11 @@
  *
  * 左列表：搜索框（预设名 / 武将名 / #编号）+ 编号升序列表（#编号 · 预设名 · 红/蓝标签 · 三将 · 更新时间）；
  * 右详情：三将配置明细（战法 / 兵种转换 + 兵系特性 / 宝物 + 词条 / 加点 / 红度 / 等级）
- *         + 动作（上场到红/蓝队、覆盖为当前配置、重命名、删除[二次确认]）。
+ *         + 动作（上场到红/蓝队、木桩队伍[占位]、重命名、删除[二次确认]）。
  *
  * 面板只负责展示与转发：存档读写、配将区改动都由调用方（main.ts）注入，便于单测直接喂假数据。
+ * 按钮一律走项目按键标准 `class="btn beige"`（见 styles.css「项目按键标准」），不用裸文字 .btn.ghost
+ * —— 用户 2026-09-22：「所有的按键都为按钮，用按钮的统一 UI 设计」。
  */
 import { SIDE_LABEL, searchPresets, type TeamPreset, type TeamSide } from './presetStore';
 import { getHeroById, avatarSrc, rednessStars, skillGrade } from './heroes';
@@ -27,8 +29,11 @@ export interface PresetPanelDeps {
   saveCurrent: (side: TeamSide, name: string) => PresetActionResult;
   /** 用预设替换该边队伍 */
   apply: (preset: TeamPreset, side: TeamSide) => void;
-  /** 用当前该边队伍配置覆盖预设 */
-  overwrite: (id: string, side: TeamSide) => PresetActionResult;
+  /**
+   * 木桩队伍（**占位**：功能未实装，上层目前只给一句提示）。
+   * 实装后 = 把这条预设的阵容送去伤害测试实验室当木桩靶子；届时在此接实验室入口即可，面板不用改。
+   */
+  useAsDummy?: (preset: TeamPreset) => void;
   rename: (id: string, name: string) => PresetActionResult;
   remove: (id: string) => void;
   /** 关闭面板（可选） */
@@ -157,7 +162,7 @@ export function openPresetNameDialog(opts: {
       <div class="pn-error"></div>
     </div>
     <div class="m-foot">
-      <button class="btn ghost pn-cancel" type="button">取消</button>
+      <button class="btn beige pn-cancel" type="button">取消</button>
       <button class="btn pn-ok" type="button">${opts.confirmText ?? '保存预设'}</button>
     </div>
   `;
@@ -218,9 +223,9 @@ export function openPresetPanel(deps: PresetPanelDeps): PresetPanelHandle {
     <div class="m-foot preset-foot">
       <span class="preset-count"></span>
       <span class="spacer"></span>
-      <button class="btn ghost preset-save" data-side="red" type="button">保存红队</button>
-      <button class="btn ghost preset-save" data-side="blue" type="button">保存蓝队</button>
-      <button class="btn done" type="button">完成</button>
+      <button class="btn beige preset-save" data-side="red" type="button">保存红队</button>
+      <button class="btn beige preset-save" data-side="blue" type="button">保存蓝队</button>
+      <button class="btn beige preset-done" type="button">完成</button>
     </div>
   `;
   const listBox = modal.querySelector('.preset-list') as HTMLElement;
@@ -273,13 +278,6 @@ export function openPresetPanel(deps: PresetPanelDeps): PresetPanelHandle {
     }
   };
 
-  const act = (result: PresetActionResult): void => {
-    if (result.error) return; // 错误提示由实现方（main）统一 showNotice
-    if (result.presetId) selectedId = result.presetId;
-    renderList();
-    renderDetail();
-  };
-
   const renderDetail = (): void => {
     const preset = deps.getPresets().find((p) => p.id === selectedId);
     detailBox.innerHTML = '';
@@ -301,11 +299,11 @@ export function openPresetPanel(deps: PresetPanelDeps): PresetPanelHandle {
     const actions = document.createElement('div');
     actions.className = 'pd-actions';
     actions.innerHTML = `
-      <button class="btn${preset.side === 'red' ? '' : ' ghost'}" data-act="apply-red" type="button">上场到红队</button>
-      <button class="btn${preset.side === 'blue' ? '' : ' ghost'}" data-act="apply-blue" type="button">上场到蓝队</button>
-      <button class="btn ghost" data-act="overwrite" type="button" title="用配将区当前${SIDE_LABEL[preset.side]}的配置替换这条预设（编号与名字不变）">覆盖为当前${SIDE_LABEL[preset.side]}配置</button>
-      <button class="btn ghost" data-act="rename" type="button">重命名</button>
-      <button class="btn ghost danger" data-act="remove" type="button">${armedDelete ? '再点一次确认删除' : '删除'}</button>
+      <button class="btn${preset.side === 'red' ? '' : ' beige'}" data-act="apply-red" type="button">上场到红队</button>
+      <button class="btn${preset.side === 'blue' ? '' : ' beige'}" data-act="apply-blue" type="button">上场到蓝队</button>
+      <button class="btn beige" data-act="dummy" type="button" title="木桩队伍：把这条预设的阵容送去伤害测试实验室当靶子（功能未实装）">木桩队伍</button>
+      <button class="btn beige" data-act="rename" type="button">重命名</button>
+      <button class="btn beige danger" data-act="remove" type="button">${armedDelete ? '再点一次确认删除' : '删除'}</button>
     `;
     // 上场 = 整边替换 + 关面板（「快速上场」的主路径）
     actions.querySelector('[data-act="apply-red"]')!.addEventListener('click', () => {
@@ -316,8 +314,9 @@ export function openPresetPanel(deps: PresetPanelDeps): PresetPanelHandle {
       deps.apply(preset, 'blue');
       close();
     });
-    actions.querySelector('[data-act="overwrite"]')!.addEventListener('click', () => {
-      act(deps.overwrite(preset.id, preset.side));
+    // 木桩队伍：占位（未实装）—— 面板只转发，提示由 main 给；实装后在这里接实验室入口
+    actions.querySelector('[data-act="dummy"]')!.addEventListener('click', () => {
+      deps.useAsDummy?.(preset);
     });
     actions.querySelector('[data-act="rename"]')!.addEventListener('click', () => {
       openPresetNameDialog({
@@ -379,7 +378,7 @@ export function openPresetPanel(deps: PresetPanelDeps): PresetPanelHandle {
     deps.onClose?.();
   };
   (modal.querySelector('.m-close') as HTMLElement).addEventListener('click', close);
-  (modal.querySelector('.done') as HTMLElement).addEventListener('click', close);
+  (modal.querySelector('.preset-done') as HTMLElement).addEventListener('click', close);
   mask.addEventListener('click', (e) => {
     if (e.target === mask) close();
   });
