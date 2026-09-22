@@ -651,10 +651,18 @@ export function renderSlot(team: 'red' | 'blue', i: number, slot: SlotState, lab
   const hero = getHeroById(slot.heroId)!;
   const portrait = portraitSrc(hero.id);
   const avatar = avatarSrc(hero.id);
+  /* 槽位信息行（宝物条与战法栏之间，用户 2026-09-22 口径）：
+     等级 + 当前兵种（二级兵种转换后显示转换兵种；已学兵系特性写在括号里，如「弩兵（疾行 + 难测）」）。 */
+  const traits = (slot.secondaryTraits ?? []).filter(Boolean);
+  const troopName = slot.secondaryTroop ?? TYPE_NAME[hero.troopType] ?? '兵种';
+  const troopFamily = slot.secondaryTroop ? SECONDARY_TROOPS[slot.secondaryTroop]?.family : '';
+  const metaTip = `等级 ${slot.level} · ${troopName}${troopFamily ? `（${troopFamily}）` : ''}${
+    traits.length ? ` · 特性 ${traits.join('、')}` : ''
+  }`;
   const div = document.createElement('div');
   div.className = 'slot-inner';
   /* 左＝官方卡面（wujiang5 卡框：画像铺满 / 左上势力图标 + 竖排名 / 右上红度 / 底部 Lv·兵种），
-     右＝配将信息列（站位、头像、宝物条、三战法位）。名称只画一次（在卡面竖排，类名仍是 .hero-name）。 */
+     右＝配将信息列（站位、头像、宝物条、等级兵种行、三战法位）。名称只画一次（在卡面竖排，类名仍是 .hero-name）。 */
   div.innerHTML = `
     <div class="slot-card">
       <div class="slot-art" style="background-image:url('${portrait}')"></div>
@@ -675,6 +683,11 @@ export function renderSlot(team: 'red' | 'blue', i: number, slot: SlotState, lab
         <span class="slot-label">${label}</span>
         <img class="slot-avatar" src="${avatar}" alt="" onerror="this.style.display='none'" />
         ${slotTreasureHtml(slot)}
+      </div>
+      <div class="slot-meta" title="${metaTip}">
+        <span class="sm-lv">Lv.${slot.level}</span>
+        <span class="sm-sep">·</span>
+        <span class="sm-troop">${troopName}${traits.length ? `<i>（${traits.join(' + ')}）</i>` : ''}</span>
       </div>
       <div class="hero-skills"></div>
     </div>

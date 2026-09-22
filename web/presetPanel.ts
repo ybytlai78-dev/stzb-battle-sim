@@ -31,6 +31,10 @@ export interface PresetPanelDeps {
   overwrite: (id: string, side: TeamSide) => PresetActionResult;
   rename: (id: string, name: string) => PresetActionResult;
   remove: (id: string) => void;
+  /** 把这支预设设为伤害测试的「木桩队伍」并跳转实验室（不提供则不显示该动作） */
+  useAsDummy?: (preset: TeamPreset) => void;
+  /** 木桩模式（从伤害测试实验室打开）：把「设为木桩队伍」做成主按钮，上场按钮退成 ghost */
+  dummyMode?: boolean;
   /** 关闭面板（可选） */
   onClose?: () => void;
 }
@@ -104,8 +108,8 @@ function troopText(slot: SlotState, heroTroop: string | undefined): string {
   return TYPE_NAME[heroTroop ?? ''] ?? '—';
 }
 
-/** 单槽明细（空槽 → 一行占位） */
-function slotDetailHtml(slot: SlotState, i: number): string {
+/** 单槽明细（空槽 → 一行占位）。导出给伤害测试实验室的「木桩队伍」面板复用（用户 2026-09-22）。 */
+export function slotDetailHtml(slot: SlotState, i: number): string {
   const pos = POS_LABEL[i] ?? '';
   const hero = slot.heroId ? getHeroById(slot.heroId) : undefined;
   if (!slot.heroId || !hero) {
@@ -300,9 +304,15 @@ export function openPresetPanel(deps: PresetPanelDeps): PresetPanelHandle {
     slots.innerHTML = preset.slots.map((s, i) => slotDetailHtml(s, i)).join('');
     const actions = document.createElement('div');
     actions.className = 'pd-actions';
+    // 木桩模式（从实验室打开）＝主按钮是「设为木桩队伍」，上场退成 ghost（用户 2026-09-22）
+    const primary = (side: TeamSide): string => (preset.side === side && !deps.dummyMode ? '' : ' ghost');
+    const dummyBtn = deps.useAsDummy
+      ? `<button class="btn${deps.dummyMode ? '' : ' ghost'}" data-act="dummy" type="button" title="把这支队伍设为伤害测试的木桩对手，并直接进入伤害测试实验室（可随时「切回侍卫」）">设为木桩队伍</button>`
+      : '';
     actions.innerHTML = `
-      <button class="btn${preset.side === 'red' ? '' : ' ghost'}" data-act="apply-red" type="button">上场到红队</button>
-      <button class="btn${preset.side === 'blue' ? '' : ' ghost'}" data-act="apply-blue" type="button">上场到蓝队</button>
+      <button class="btn${primary('red')}" data-act="apply-red" type="button">上场到红队</button>
+      <button class="btn${primary('blue')}" data-act="apply-blue" type="button">上场到蓝队</button>
+      ${dummyBtn}
       <button class="btn ghost" data-act="overwrite" type="button" title="用配将区当前${SIDE_LABEL[preset.side]}的配置替换这条预设（编号与名字不变）">覆盖为当前${SIDE_LABEL[preset.side]}配置</button>
       <button class="btn ghost" data-act="rename" type="button">重命名</button>
       <button class="btn ghost danger" data-act="remove" type="button">${armedDelete ? '再点一次确认删除' : '删除'}</button>
@@ -314,6 +324,11 @@ export function openPresetPanel(deps: PresetPanelDeps): PresetPanelHandle {
     });
     actions.querySelector('[data-act="apply-blue"]')!.addEventListener('click', () => {
       deps.apply(preset, 'blue');
+      close();
+    });
+    // 木桩队伍：设为伤害测试的敌方并直接进实验室（与「上场」同口径：动作后关面板）
+    actions.querySelector('[data-act="dummy"]')?.addEventListener('click', () => {
+      deps.useAsDummy!(preset);
       close();
     });
     actions.querySelector('[data-act="overwrite"]')!.addEventListener('click', () => {

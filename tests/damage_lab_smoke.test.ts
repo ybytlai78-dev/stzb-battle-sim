@@ -6,15 +6,19 @@
  */
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { emptyEditor, emptySlot, skillMeta, resetHeroPoolView, type EditorHandlers, type EditorState } from '../web/teamEditor';
+import { emptyEditor, emptySlot, skillMeta, resetHeroPoolView, type EditorHandlers, type EditorState, type SlotState } from '../web/teamEditor';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import { HEROES, avatarSrc, portraitSrc } from '../web/heroes';
 import {
   mountDamageLab,
   simulate,
+  runOne,
   getGuard,
   setGuard,
   setMorale,
+  setDummyPreset,
+  getDummyPreset,
+  buildDummyTeam,
   buildGuardTeam,
   type GuardConfig,
 } from '../web/damageLab';
@@ -445,5 +449,141 @@ describe('伤害测试实验室（主站模块 v2）', () => {
     expect(skillMeta(SKILL_REGISTRY.changban_zhihou)).toContain('2回合准备');
     expect(skillMeta(SKILL_REGISTRY.changban_zhihou)).not.toContain('1回合准备');
     expect(skillMeta(SKILL_REGISTRY.xuanwu_fuliu)).toContain('1回合准备');
+  });
+});
+
+/**
+ * 木桩队伍（用户 2026-09-22）：把一支阵容预设当靶子 ——
+ * 右栏从「木桩侍卫」四维表单换成该预设三将详情，模拟敌方＝预设三将（士气 120）；
+ * 「切回侍卫」随时退回。模拟十次/五十次两档与侍卫模式完全一致。
+ */
+describe('伤害测试实验室 · 木桩队伍（预设）', () => {
+  /** 三将木桩预设（真实武将、含等级/战法/兵种转换特性） */
+  function dummyPreset(): { no: number; name: string; slots: SlotState[] } {
+    const heroes = HEROES.filter((h) => h.mainSkillId).slice(0, 3);
+    const slots = heroes.map((h, i) => ({
+      ...emptySlot(),
+      heroId: h.id,
+      level: 45,
+      extraSkillIds: i === 0 ? ['tujin'] : [],
+      ...(i === 2 ? { secondaryTroop: '弩兵' as const, secondaryTraits: ['齐射', '地利'] as const } : {}),
+    })) as SlotState[];
+    return { no: 3, name: '双减魏智', slots };
+  }
+  const presetNames = () => dummyPreset().slots.map((s) => HEROES.find((h) => h.id === s.heroId)!.name);
+
+  beforeEach(() => {
+    resetHeroPoolView();
+    resetGuard();
+    setMorale(120);
+    setDummyPreset(null); // 木桩队伍是模块级状态：每个用例从「侍卫」开始
+  });
+
+  it('设为木桩 → 右栏变预设三将详情（编号/名字/等级/兵种特性/战法），敌方＝预设三将', () => {
+    setDummyPreset(dummyPreset());
+    const { state } = boot();
+    fillRedTeam(state, 2);
+
+    const panel = document.querySelector('#guard-panel')!;
+    expect(panel.querySelector('h2')!.textContent).toBe('木桩队伍');
+    expect(panel.querySelector('.pi-no')!.textContent).toBe('#3');
+    expect(panel.querySelector('.gd-name')!.textContent).toBe('双减魏智');
+    // 侍卫四维表单已让位
+    expect(panel.querySelector('#g-attack')).toBeNull();
+    expect(panel.querySelector('.g-grid')).toBeNull();
+    expect(panel.querySelector('.gd-switch')!.textContent).toBe('切回侍卫');
+    // 三将明细＝预设面板同一套渲染（.pd-slot：站位/头像/等级/兵种特性/战法/加点宝物）
+    const rows = Array.from(panel.querySelectorAll('.pd-slot')) as HTMLElement[];
+    expect(rows.length).toBe(3);
+    expect(rows.map((r) => r.querySelector('.pd-hero-name')!.textContent)).toEqual(presetNames());
+    expect(rows[0].querySelector('.pd-lv')!.textContent).toBe('Lv.45');
+    expect(rows[2].querySelector('.pd-troop')!.textContent).toContain('弩兵');
+    expect(rows[2].querySelector('.pd-troop')!.textContent).toContain('齐射');
+    expect(panel.textContent).toContain('士气 120');
+
+    // 敌方＝预设三将（不是侍卫）
+    const report = runOne(1);
+    expect(report.enemyTeam.map((g) => g.name)).toEqual(presetNames());
+    expect(buildDummyTeam().map((g) => g.morale)).toEqual([120, 120, 120]);
+  });
+
+  it('木桩模式照常模拟十次 / 五十次：分析页敌方标签＝「木桩·预设名」', () => {
+    setDummyPreset(dummyPreset());
+    const { state } = boot();
+    fillRedTeam(state, 3);
+
+    (document.querySelector('#sim-10') as HTMLElement).click();
+    let analysis = document.querySelector('.lab-analysis') as HTMLElement;
+    expect(analysis.querySelector('.la-count')!.textContent).toBe('共 10 场');
+    // 敌方统计块：标题是木桩预设名，行是预设三将（不是「侍卫」）
+    expect(analysis.querySelector('.guard-stats summary')!.textContent).toContain('木桩队伍「双减魏智」');
+    const rows = Array.from(analysis.querySelectorAll('.guard-stats tbody tr')).map((r) => r.textContent);
+    expect(rows.length).toBe(3);
+    expect(rows.join('|')).toContain(presetNames()[0]);
+    expect(rows.join('|')).not.toContain('侍卫');
+    // 简略战报：右侧标签＝木桩·预设名
+    (Array.from(analysis.querySelectorAll('.la-tabs .btn')) as HTMLElement[]).find((b) => b.textContent === '简略战报')!.click();
+    analysis = document.querySelector('.lab-analysis') as HTMLElement;
+    const titles = Array.from(analysis.querySelectorAll('.ss-title')).map((el) => el.textContent);
+    expect(titles[0]).toContain('我方');
+    expect(titles[1]).toContain('木桩·双减魏智');
+    // 五十次同样可用
+    (document.querySelector('.la-head .btn') as HTMLElement).click(); // ← 返回实验室
+    (document.querySelector('#sim-50') as HTMLElement).click();
+    expect(document.querySelector('.lab-analysis .la-count')!.textContent).toBe('共 50 场');
+  });
+
+  it('「切回侍卫」：右栏恢复四维表单，敌方回到侍卫三将', () => {
+    setDummyPreset(dummyPreset());
+    const { state } = boot();
+    fillRedTeam(state, 1);
+
+    (document.querySelector('#guard-panel .gd-switch') as HTMLElement).click();
+    const panel = document.querySelector('#guard-panel')!;
+    expect(panel.querySelector('h2')!.textContent).toBe('木桩侍卫');
+    expect(panel.querySelector('#g-attack')).toBeTruthy();
+    expect(panel.querySelectorAll('.g-grid .g-row').length).toBe(4);
+    expect(panel.querySelector('.pd-slot')).toBeNull();
+    expect(getDummyPreset()).toBeNull();
+    expect(runOne(1).enemyTeam.every((g) => g.name === '侍卫')).toBe(true);
+  });
+
+  it('右栏「选木桩队伍」入口：主站注入 onPickDummy 后才出现，点击回调上层打开预设面板', () => {
+    // 实验室自身挂载（未注入）→ 无入口
+    boot();
+    expect(document.querySelector('#guard-panel .gd-pick')).toBeNull();
+
+    const onPickDummy = vi.fn();
+    document.body.innerHTML = '';
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    const state = emptyEditor();
+    mountDamageLab(root, { state, handlers: makeHandlers(state), onExit: vi.fn(), onPickDummy });
+    const pick = document.querySelector('#guard-panel .gd-pick') as HTMLElement;
+    expect(pick.textContent).toBe('选木桩队伍');
+    pick.click();
+    expect(onPickDummy).toHaveBeenCalledTimes(1);
+    // 未选木桩前仍是侍卫表单
+    expect(document.querySelector('#guard-panel #g-attack')).toBeTruthy();
+
+    // 木桩模式下同一个入口变「换一支」（不用先切回侍卫）
+    setDummyPreset(dummyPreset());
+    mountDamageLab(root, { state, handlers: makeHandlers(state), onExit: vi.fn(), onPickDummy });
+    const swap = document.querySelector('#guard-panel .gd-pick') as HTMLElement;
+    expect(swap.textContent).toBe('换一支');
+    swap.click();
+    expect(onPickDummy).toHaveBeenCalledTimes(2);
+    // 木桩模式下也有「切回侍卫」
+    expect(document.querySelector('#guard-panel .gd-switch')).toBeTruthy();
+  });
+
+  it('木桩是快照：选完再改原预设，实验室里的木桩不受影响', () => {
+    const preset = dummyPreset();
+    setDummyPreset(preset);
+    boot();
+    preset.name = '改过的名字';
+    preset.slots[0].level = 50;
+    expect(getDummyPreset()!.name).toBe('双减魏智');
+    expect(getDummyPreset()!.slots[0].level).toBe(45);
   });
 });

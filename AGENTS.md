@@ -744,3 +744,42 @@ npx tsc --noEmit                    # 类型检查（strict）
 - `web/smoke.test.ts` 追加 1 个端到端用例：真实 `dragstart → dragover → drop` 拖张辽入红队大营 → chip 仍高亮、网格仍是重建前那批魏骑；
   `tests/offline_pool.test.ts` / `tests/damage_lab_smoke.test.ts` 的 `beforeEach` 加 `resetHeroPoolView()`。
 - 全量 `npm test` **191 files / 1886 passed**；`npx tsc --noEmit` + `npx tsc -p web --noEmit` clean；引擎零改动、golden 未动。
+
+---
+
+## 会话交接（槽位信息行 + 木桩队伍 · 2026-09-22）
+
+### 用户口径
+
+1. **配将槽位**：在「前锋 + 宝物」与「战法栏」中间加一行「等级 + 当前兵种（括号内为已选兵系特性，如 疾行 + 难测）」（用户给了红框标注）。
+2. **伤害测试新增「木桩队伍」**：把一条阵容预设设为木桩 → 跳进伤害测试实验室，右栏「木桩侍卫」面板换成该预设队伍详情，模拟十次/五十次照常。
+
+### 1) 槽位「等级 · 兵种（特性）」行（`web/teamEditor.ts` + `web/styles.css`）
+
+- DOM：`.slot-main` 的 `.hero-line`（宝物条）与 `.hero-skills` 之间插 `.slot-meta` →
+  `Lv.45 · 弩兵（齐射 + 地利）`（`.sm-lv` / `.sm-sep` / `.sm-troop`；无二级兵种时不带括号）。
+- 文案来源：`slot.level` / `slot.secondaryTroop ?? TYPE_NAME[hero.troopType]` / `slot.secondaryTraits`；tooltip 带兵系（`SECONDARY_TROOPS[troop].family`）。
+- **横屏手机槽位＝纯立绘**（`web/mobile.css` 的 landscape 块）必须把 `.slot .slot-meta` 一起 `display:none`，否则字压在立绘上（smoke 测试有 CSS 源断言守住）。
+  ⚠️ `web/mobile.css` 里有一段历史 GBK 注释（文件非法 UTF-8，`read`/`edit` 工具打不开）→ 改它要用**字节级 Buffer 插入**
+  （本次做法：临时 .mjs 脚本 `readFileSync` → `Buffer.indexOf(anchor)` → `Buffer.concat` → `writeFileSync`，跑完即删；`git diff --numstat` 验证只有 1 行新增），
+  别用 PowerShell 读写（会把整文件中文变乱码）。
+
+### 2) 木桩队伍（`web/damageLab.ts` / `web/presetPanel.ts` / `web/main.ts`）
+
+- **入口**：预设详情新增「设为木桩队伍」（`deps.useAsDummy` 提供时才渲染）→ `main.ts` `usePresetAsDummy` = `setDummyPreset(preset)` + `enterLab()`。
+- **实验室右栏**（`#guard-panel`）：默认「木桩侍卫」四维表单；有木桩时换成「木桩队伍」= `#编号 + 预设名 + 三将明细 + 切回侍卫`；
+  三将明细**复用预设面板的 `slotDetailHtml`（本次改为导出）**，`.pd-slot` 系列视觉一致。
+  右栏入口按钮：侍卫态「选木桩队伍」、木桩态「换一支」→ `mountDamageLab({ onPickDummy })`（`main.ts` 注入，复用预设面板 `dummyMode:true`：主按钮变「设为木桩队伍」、上场按钮退 ghost）。
+- **战斗**：`dummyTeam` 模块级状态（`cloneSlots` 深拷快照 —— 之后改预设不影响已选木桩；退出/重进实验室保留，直到「切回侍卫」）→
+  `runOne` 敌方 = `buildDummyTeam()`（站位 大营/中军/前锋、士气 120）或 `buildGuardTeam()`；`collectMyTeam` 与木桩共用 `buildTeamFromSlots()`。
+  敌方标签统一走 `enemyLabel()` = `木桩·{预设名}` / `侍卫`（简略战报 myLabel/enemyLabel、统计行、分析页「敌方木桩队伍『名』」折叠块）。
+- **顺带修复**：`initApp` 现在一并重置 `labRoot = null` / `labVisible = false` —— 重复初始化后旧实验室根节点已脱离文档，
+  否则下次 `enterLab()` 挂到幽灵节点上（界面空白、DOM 查不到）；本次由全量跑该用例时暴露。
+
+### 测试
+
+- `tests/damage_lab_smoke.test.ts` 新增 5 个（`setDummyPreset(null)` 进 beforeEach 隔离模块级状态）：右栏换详情 + 敌方＝预设三将 / 十次五十次照常且标签「木桩·名」/ 切回侍卫 / onPickDummy 入口与「换一支」/ 快照隔离。
+- `web/presetPanel.test.ts` 新增 3 个：未提供 useAsDummy 不渲染、点击回调并关面板 / dummyMode 主按钮换位 / `slotDetailHtml` 导出契约。
+- `web/smoke.test.ts` 新增 2 个：槽位「等级 · 兵种（特性）」行（DOM 位置 + 等级/兵种转换同步 + mobile.css 隐藏契约）/
+  预设→「设为木桩队伍」→实验室右栏详情→模拟十次→切回侍卫（端到端）。
+- 全量 `npm test` **191 files / 1896 passed**；`npx tsc --noEmit` + `npx tsc -p web --noEmit` clean；引擎零改动、golden 未动。

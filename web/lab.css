@@ -95,6 +95,49 @@
   color: var(--gold);
   letter-spacing: 2px;
 }
+/* 右栏标题行（用户 2026-09-22）：h2 + 右侧小按钮（「选木桩队伍」/「切回侍卫」） */
+.gd-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 6px;
+}
+.gd-head h2 { margin: 0; flex: 1; }
+.gd-head .btn {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  font-size: 11px;
+  letter-spacing: 0;
+}
+/* 木桩队伍模式：预设编号 + 名字（与「预设」面板详情同一套 .pi-no / .pd-slot 视觉） */
+.gd-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.gd-title .gd-name {
+  font-family: var(--font-kai);
+  font-size: 14px;
+  color: var(--ink);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lab-guard .pd-slots { margin-top: 6px; }
+.lab-guard .pd-slot { gap: 6px; padding: 5px 2px; }
+.lab-guard .pd-slot .pd-av { width: 30px; height: 30px; }
+.lab-guard .pd-slot .pd-hero-name { font-size: 13px; }
+.lab-guard .pd-skill { font-size: 10.5px; padding: 0 6px; }
+.lab-guard .gd-note {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
 /* 两列字段网格：攻击/防御、谋略/速度 各一行；兵力 .g-row-full 独占一行。
    列宽用 auto + space-between（内容自适应）——之前用 1fr 1fr，输入框 flex:1 撑满半列，
    会把右侧「防御/速度」挤出面板（用户 2026-09-19 反馈「输入框太长」）。 */

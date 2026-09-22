@@ -7,7 +7,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { addPreset, type PresetFile, type TeamPreset, type TeamSide } from './presetStore';
-import { openPresetPanel, openPresetNameDialog, fmtTime, slotsSummary, type PresetActionResult } from './presetPanel';
+import { openPresetPanel, openPresetNameDialog, fmtTime, slotsSummary, type PresetActionResult, type PresetPanelDeps } from './presetPanel';
 import { HEROES, SLOTTED_HEROES } from './heroes';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import type { SlotState } from './teamEditor';
@@ -45,7 +45,11 @@ function makeFile(): { file: PresetFile; weiA: TeamPreset; weiB: TeamPreset; oth
   return { file, weiA: a.preset, weiB: b.preset, other: c.preset };
 }
 
-function mount(getPresets: () => TeamPreset[]) {
+/** 额外依赖：木桩动作（useAsDummy）/ 木桩模式（dummyMode）；其余动作都是 spy */
+function mount(
+  getPresets: () => TeamPreset[],
+  extra: { useAsDummy?: PresetPanelDeps['useAsDummy']; dummyMode?: boolean } = {}
+) {
   // 每个动作都是 spy，返回类型显式声明 → 既能被 openPresetPanel 接受，也能用 mockReturnValueOnce 注入错误分支
   const saveCurrent = vi.fn<(side: TeamSide, name: string) => PresetActionResult>(() => ({ presetId: 'new_id' }));
   const overwrite = vi.fn<(id: string, side: TeamSide) => PresetActionResult>(() => ({ presetId: 'x' }));
@@ -58,6 +62,8 @@ function mount(getPresets: () => TeamPreset[]) {
     rename,
     remove: vi.fn<(id: string) => void>(),
     onClose: vi.fn<() => void>(),
+    ...(extra.useAsDummy ? { useAsDummy: extra.useAsDummy } : {}),
+    ...(extra.dummyMode ? { dummyMode: true } : {}),
   };
   const handle = openPresetPanel(deps);
   return { deps, handle, modal: document.querySelector('.preset-modal') as HTMLElement };
@@ -317,5 +323,51 @@ describe('presetPanel · 边与数据契约', () => {
     expect((actions.querySelector('[data-act="apply-red"]') as HTMLElement).className).toContain('ghost');
     const side: TeamSide = 'blue';
     expect(side).toBe('blue');
+  });
+});
+
+/**
+ * 木桩队伍（用户 2026-09-22）：预设详情多一个「设为木桩队伍」动作 ——
+ * 交给上层（main）设成伤害测试敌方并跳转实验室；从实验室打开时这个按钮是主按钮。
+ */
+describe('presetPanel · 木桩队伍动作', () => {
+  it('提供 useAsDummy 时出现按钮：点击把预设交给上层并关面板；未提供则不渲染', () => {
+    const { file, weiA } = makeFile();
+    const plain = mount(() => file.list);
+    expect(plain.modal.querySelector('[data-act="dummy"]')).toBeNull();
+    plain.handle.close();
+
+    const useAsDummy = vi.fn<(preset: TeamPreset) => void>();
+    const { modal } = mount(() => file.list, { useAsDummy });
+    const btn = modal.querySelector('[data-act="dummy"]') as HTMLElement;
+    expect(btn.textContent).toBe('设为木桩队伍');
+    expect(btn.title).toContain('伤害测试');
+    btn.click();
+    expect(useAsDummy).toHaveBeenCalledWith(expect.objectContaining({ id: weiA.id, no: 1, name: '双减魏智' }));
+    expect(document.querySelector('.preset-modal')).toBeNull(); // 与「上场」同口径：动作后关面板
+  });
+
+  it('木桩模式（dummyMode）：主按钮变「设为木桩队伍」，上场按钮退成 ghost', () => {
+    const { file } = makeFile();
+    const { modal } = mount(() => file.list, { useAsDummy: vi.fn(), dummyMode: true });
+    const actions = modal.querySelector('.pd-actions')!;
+    expect((actions.querySelector('[data-act="dummy"]') as HTMLElement).className).not.toContain('ghost');
+    expect((actions.querySelector('[data-act="apply-red"]') as HTMLElement).className).toContain('ghost');
+    expect((actions.querySelector('[data-act="apply-blue"]') as HTMLElement).className).toContain('ghost');
+    // 其余动作不受影响
+    expect(actions.querySelector('[data-act="overwrite"]')).toBeTruthy();
+    expect(actions.querySelector('[data-act="remove"]')).toBeTruthy();
+  });
+
+  it('slotDetailHtml 导出：给实验室「木桩队伍」面板复用（含站位/等级/兵种特性/战法）', async () => {
+    const { slotDetailHtml } = await import('./presetPanel');
+    const html = slotDetailHtml(
+      slot(SLOTTED_HEROES[0].id, [sampleSkill], { level: 45, secondaryTroop: '弩兵', secondaryTraits: ['齐射', '地利'] }),
+      0
+    );
+    expect(html).toContain('大营');
+    expect(html).toContain('Lv.45');
+    expect(html).toContain('弩兵');
+    expect(html).toContain('齐射');
   });
 });
