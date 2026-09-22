@@ -149,6 +149,11 @@ export const OFFLINE_LEARNABLE_SKILLS: Record<string, string> = {
   quanjun_tuji: '受谋略成长未确认（按基值不缩放）',
   sata_ruxing: '受谋略成长未确认（按基值不缩放）',
   bugong: '受谋略成长未确认（按基值不缩放）',
+  // ─── 2026-09-21 典藏战法批次：官方写「受X属性影响」但未给成长系数 → growthRate 留空（必填给 0）、下架 ───
+  taoyuanjieyi: '恢复 160% / 策略 120% 受谋略成长未确认（按基值不缩放）',
+  dingzujiangdong: '恢复 75% / 休整 75% / 增伤 17% 受谋略成长未确认（按基值不缩放）',
+  danqijiuzhu: '造成伤害降低 25% 受防御成长未确认（按基值不缩放）',
+  huoshaolianying: '火攻 50% / 受伤提升 5% / 燃烧 120% 受谋略成长未确认（按基值不缩放）',
 };
 
 /**
