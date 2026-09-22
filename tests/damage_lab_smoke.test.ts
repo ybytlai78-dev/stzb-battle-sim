@@ -6,7 +6,7 @@
  */
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { emptyEditor, emptySlot, skillMeta, type EditorHandlers, type EditorState } from '../web/teamEditor';
+import { emptyEditor, emptySlot, skillMeta, resetHeroPoolView, type EditorHandlers, type EditorState } from '../web/teamEditor';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import { HEROES, avatarSrc, portraitSrc } from '../web/heroes';
 import {
@@ -185,6 +185,7 @@ function dragFromPoolToSlot(heroId: string, slotIdx: number): void {
 
 describe('伤害测试实验室（主站模块 v2）', () => {
   beforeEach(() => {
+    resetHeroPoolView(); // 池子筛选/搜索词是模块级状态（跨重渲染保持），用例间显式清空
     resetGuard();
     setMorale(120);
   });

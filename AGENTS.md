@@ -718,3 +718,29 @@ npx tsc --noEmit                    # 类型检查（strict）
   **不要**再给它单独加金色描边之类的特例（`web/presetPanel.test.ts` 有 CSS 源断言守住这条）。
 - 踩坑：`web/styles.css` 用 `Get-Content -Raw | Set-Content` 改一行 CSS 会把**整文件中文变乱码**（PowerShell 按 ANSI 读 UTF-8）——
   改这类文件只用 `edit`/`write` 工具（与宝物会话同一条教训）。
+
+---
+
+## 会话交接（武将池筛选状态保持 · 2026-09-22）
+
+### 用户口径
+
+- 「筛选 → 拖动武将以后应该保存筛选的状态」：筛出「魏 + 骑」→ 拖张辽入队 → 回来仍是「魏 + 骑」（不用重筛）。
+
+### 根因与实现（`web/teamEditor.ts`）
+
+- **根因**：拖拽入队 / 换位 / 卸下都会 `refresh()` 重建整个配将区（主站 `main.ts` `renderTeamEditor`；实验室走 `damageLab.ts` `refreshPool`），
+  池子节点连同筛选栏一起换新——筛选与搜索词原本是 `renderHeroPool` 里的**局部变量**，随节点一起丢。
+- **实现**：`poolFilter`（势力/兵种 Set）+ `poolQuery`（搜索词）提为**模块级状态**（与既有 `poolShowOffline` 同口径）；
+  `renderHeroPool` 重建时按状态反显 `.filter-tag.on`、回填 `input.value`；`bindHeroFilter` 新增可选 `onReset`。
+- **「重置」**（池内 `.hf-reset`）语义扩大为**清空整套池子视图**：势力 + 兵种 + 搜索词（原来只清势力/兵种）。
+- `openHeroPicker`（选择武将弹窗）**不受影响**：每次打开仍是全新的空筛选（局部 `sel`，不传 `onReset`）。
+- 导出 `resetHeroPoolView()`：清空上述模块级状态（「重置」按钮复用；测试隔离用）——
+  `web/smoke.test.ts` 的 `boot()` 每个用例先调它，避免用例间互相影响。
+
+### 测试
+
+- 新增 `tests/hero_pool_view.test.ts`（3 个，jsdom）：魏+骑跨重渲染保持（含重建后卡集合逐 id 一致）/ 搜索词保持且与筛选取交集 / 重置清空且不留残留。
+- `web/smoke.test.ts` 追加 1 个端到端用例：真实 `dragstart → dragover → drop` 拖张辽入红队大营 → chip 仍高亮、网格仍是重建前那批魏骑；
+  `tests/offline_pool.test.ts` / `tests/damage_lab_smoke.test.ts` 的 `beforeEach` 加 `resetHeroPoolView()`。
+- 全量 `npm test` **191 files / 1886 passed**；`npx tsc --noEmit` + `npx tsc -p web --noEmit` clean；引擎零改动、golden 未动。

@@ -7,8 +7,12 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { TUTORIAL_STEPS } from './tutorial';
+import { resetHeroPoolView } from './teamEditor';
 
 async function boot(): Promise<typeof import('./main')> {
+  // 武将池筛选/搜索词是模块级状态（跨重渲染保持，见 tests/hero_pool_view.test.ts）：
+  // 每个用例从「未筛选 + 空搜索」的干净池子开始，避免用例之间互相影响
+  resetHeroPoolView();
   const el = document.createElement('div');
   el.id = 'app';
   document.body.appendChild(el);
@@ -917,6 +921,61 @@ describe('Web 战斗模拟器冒烟', () => {
     // 重置 → 全部恢复
     (document.querySelector('.hero-pool .hf-reset') as HTMLElement).click();
     expect(cards().length).toBeGreaterThan(20);
+  });
+
+  it('筛选状态在拖拽入队后保持：筛「魏 + 骑」→ 拖张辽 → 仍是魏 + 骑（用户 2026-09-22）', async () => {
+    await boot();
+    const cards = () => Array.from(document.querySelectorAll('.hero-pool .hero-card')) as HTMLElement[];
+    const onTags = () =>
+      Array.from(document.querySelectorAll('.hero-pool .filter-tag.on')).map((t) => (t as HTMLElement).dataset.v);
+    const clickTag = (v: string) => {
+      const tag = Array.from(document.querySelectorAll('.hero-pool .filter-tag')).find(
+        (t) => (t as HTMLElement).dataset.v === v
+      ) as HTMLElement;
+      expect(tag, `筛选 tag「${v}」应存在`).toBeTruthy();
+      tag.click();
+    };
+
+    clickTag('魏');
+    clickTag('骑');
+    const weiCav = cards();
+    expect(onTags().sort()).toEqual(['骑', '魏']);
+    expect(weiCav.length).toBeGreaterThan(0);
+    expect(weiCav.every((c) => (c.querySelector('img.fac') as HTMLElement).dataset.faction === '魏')).toBe(true);
+    expect(weiCav.every((c) => c.querySelector('.bar .troop')!.textContent === '骑')).toBe(true);
+
+    // 从筛选结果里拖张辽入红队大营（投放触发 refresh，整个配将区重建）
+    const card = weiCav.find((c) => c.querySelector('.n')!.textContent!.trim() === '张辽');
+    expect(card, '「魏 + 骑」结果里应有张辽').toBeTruthy();
+    const heroId = card!.dataset.heroId!;
+    const dt = {
+      getData: (t: string) => (t === 'text/plain' ? heroId : ''),
+      setData: () => {},
+      dropEffect: 'copy',
+      effectAllowed: 'copy',
+    } as unknown as DataTransfer;
+    const start = new Event('dragstart', { bubbles: true, cancelable: true });
+    Object.defineProperty(start, 'dataTransfer', { value: dt });
+    card!.dispatchEvent(start);
+    const slot = document.querySelector('.team-panel.red .slots .slot') as HTMLElement;
+    const over = new Event('dragover', { bubbles: true, cancelable: true });
+    Object.defineProperty(over, 'dataTransfer', { value: dt });
+    slot.dispatchEvent(over);
+    const drop = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, 'dataTransfer', { value: dt });
+    slot.dispatchEvent(drop);
+
+    // 入队成功（节点已重建，重新查询）
+    const slot2 = document.querySelector('.team-panel.red .slots .slot') as HTMLElement;
+    expect(slot2.querySelector('.hero-name')!.textContent).toContain('张辽');
+    // 筛选原样保持：chip 仍高亮、网格仍是重建前那批「魏 + 骑」
+    expect(onTags().sort()).toEqual(['骑', '魏']);
+    expect(cards().map((c) => c.dataset.heroId)).toEqual(weiCav.map((c) => c.dataset.heroId));
+
+    // 「重置」→ 筛选与搜索词一起清空，全量池子回来
+    (document.querySelector('.hero-pool .hf-reset') as HTMLElement).click();
+    expect(onTags()).toEqual([]);
+    expect(cards().length).toBeGreaterThan(weiCav.length);
   });
 
   it('顶栏「战报」：查看历史战斗并可查看详情', async () => {

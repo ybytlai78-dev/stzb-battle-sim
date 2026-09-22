@@ -257,16 +257,22 @@ function bindSkillFilter(host: HTMLElement, sel: SkillFilter, redraw: () => void
   });
 }
 
-/** 绑定筛选栏事件（多选 toggle + 重置） */
-function bindHeroFilter(host: HTMLElement, sel: HeroFilter, redraw: () => void): void {
+/**
+ * 绑定筛选栏事件（多选 toggle + 重置）。
+ * 初始高亮按 `sel` 反显：武将池的筛选是模块级状态（跨重渲染保持），重建后要能恢复「魏 + 骑」已选态。
+ * `onReset` 供调用方在「重置」时追加清理（武将池用来一并清空搜索词）。
+ */
+function bindHeroFilter(host: HTMLElement, sel: HeroFilter, redraw: () => void, onReset?: () => void): void {
   host.querySelectorAll('.filter-tag').forEach((el) => {
-    (el as HTMLElement).onclick = () => {
-      const dim = (el as HTMLElement).dataset.dim as 'faction' | 'type';
-      const v = (el as HTMLElement).dataset.v!;
+    const tag = el as HTMLElement;
+    const dim = tag.dataset.dim as 'faction' | 'type';
+    const v = tag.dataset.v!;
+    tag.classList.toggle('on', sel[dim].has(v));
+    tag.onclick = () => {
       const set = sel[dim];
       if (set.has(v)) set.delete(v);
       else set.add(v);
-      (el as HTMLElement).classList.toggle('on', set.has(v));
+      tag.classList.toggle('on', set.has(v));
       redraw();
     };
   });
@@ -274,6 +280,7 @@ function bindHeroFilter(host: HTMLElement, sel: HeroFilter, redraw: () => void):
     sel.faction.clear();
     sel.type.clear();
     host.querySelectorAll('.filter-tag').forEach((el) => el.classList.remove('on'));
+    onReset?.();
     redraw();
   });
 }
@@ -718,6 +725,19 @@ export function renderSlot(team: 'red' | 'blue', i: number, slot: SlotState, lab
  *  默认不进池；打开后可显示并配将，用于在 App 里验证这些武将的机制。 */
 let poolShowOffline = false;
 
+/** 武将池视图状态（跨重渲染保持）：势力/兵种筛选 + 搜索词。
+ *  拖拽入队 / 队内换位 / 卸下都会 refresh 重建池子，状态若随节点重建一起丢，
+ *  用户筛出「魏 + 骑」拖一个张辽就得重筛一遍（用户 2026-09-22 反馈）。 */
+const poolFilter: HeroFilter = { faction: new Set(), type: new Set() };
+let poolQuery = '';
+
+/** 清空武将池筛选与搜索词（池内「重置」按钮；测试用来隔离模块级状态） */
+export function resetHeroPoolView(): void {
+  poolFilter.faction.clear();
+  poolFilter.type.clear();
+  poolQuery = '';
+}
+
 /** 开关 HTML（勾选状态跟随 `poolShowOffline`）；也用于「选择武将」弹窗 */
 function offlineToggleHtml(): string {
   return `
@@ -763,7 +783,7 @@ export function renderHeroPool(state: EditorState, h: EditorHandlers, searchSlot
     // 整个 .toolbar 节点搬过去（不是复制）：已绑定的监听与输入内容都保留
     searchSlot.replaceChildren(toolbar);
   }
-  const selected: HeroFilter = { faction: new Set(), type: new Set() };
+  input.value = poolQuery; // 搜索词跨重渲染保持（拖拽入队后 refresh 重建池子不清空）
 
   const picked = new Set<string>();
   /** 已上阵武将的当前等级（卡底 Lv 显示；未上阵用引擎默认 40 级） */
@@ -798,7 +818,7 @@ export function renderHeroPool(state: EditorState, h: EditorHandlers, searchSlot
     grid.innerHTML = '';
     const q = input.value.trim().toLowerCase();
     for (const hero of poolHeroes()) {
-      if (!heroMatchesFilter(hero, selected, q)) continue;
+      if (!heroMatchesFilter(hero, poolFilter, q)) continue;
       const reason = offlineReason(hero);
       const card = document.createElement('div');
       card.className = 'hero-card' + (reason ? ' offline' : '') + (picked.has(hero.id) ? ' picked' : '');
@@ -819,8 +839,12 @@ export function renderHeroPool(state: EditorState, h: EditorHandlers, searchSlot
       grid.appendChild(card);
     }
   };
-  input.addEventListener('input', draw);
-  bindHeroFilter(pool, selected, draw);
+  input.addEventListener('input', () => { poolQuery = input.value; draw(); });
+  bindHeroFilter(pool, poolFilter, draw, () => {
+    // 「重置」= 清空整套池子视图（势力/兵种 + 搜索词），并写回模块级状态
+    resetHeroPoolView();
+    input.value = poolQuery;
+  });
   bindOfflineToggle(pool, draw);
   draw();
   return pool;
