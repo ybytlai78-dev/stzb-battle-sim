@@ -58,6 +58,19 @@ const MECHANISM_TAGS = {
   '奇术折冲': 'active,damage', '楚歌四起': 'active,dot', '洞察': 'active,insight',
   '浑水摸鱼': 'active,status', '焰焚箕轸': 'active,dot', '突进': 'active,damage',
   '温酒斩将': 'pursuit,damage',
+  // ── 典藏战法批 1（2026-09-21）：指定武将组合兑换，任意武将可学 ──
+  '河内世泽': 'random_skill_pick,active', '汜水关': 'dot_detonate,active',
+  '桃园结义': 'command,round_window,lowest_troops,alternating_cover',
+  '枭雄': 'passive,insight,self_lock', '凤仪亭': 'active,hurt_stack,pending_self_strike',
+  '人中吕布': 'active,troop_type_debuff', '鼎足江东': 'active,heal,rest,team_troop_same',
+  '单骑救主': 'command,on_hurt,evasion,defense_scaled',
+  '火烧连营': 'active,dot_formula,dot_boost_stack,siege',
+  // ── 典藏战法批 2（2026-09-21）──
+  '威震逍遥': 'active,basic_trigger_dot,undispellable,speed_scaled',
+  '当阳桥': 'active,delayed_round_control',
+  '正始之变': 'command,enemy_damage_threshold,ally_recast',
+  '定军山': 'command,first_skill_reduce,trigger_boost_charges,position_snipe',
+  '七擒七纵': 'command,instance_guard,punish_highest_damage',
 };
 
 /**

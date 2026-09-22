@@ -9455,4 +9455,885 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     // ④ 第 4 回合开始：自身造成攻击伤害时恢复伤害值 35% 的兵力（受谋略缩放但官方未给系数 → growthRate 0 基值）
     healOnDamage: { healRate: 35, selfOnly: true, startRound: 4 },
   },
+  // ─────────── 典藏战法 · 第一批（9 个，2026-09-21 批次）───────────
+
+  /**
+   * 河内世泽（典藏 S 主动）：距离 4，发动率 25%~35%，目标「敌军群体（有效距离内 1-2 个目标）」。
+   * 官方：随机发动落雷、迷阵、溃堤、夹攻中的一种，并再次随机发动伐谋、雀伏、火辎、毒泉中的一种。
+   *   发动的战法有效距离为 4，并跳过准备回合，每个战法的效果与原战法在同等级下效果相同。
+   *   来源 https://stzb.163.com/m/skilllist/200847.html（scripts/skill_extra.json id 200847）。
+   * 引擎配套：新增 `chainSkillPickGroups`（随机战法组）——每组随机取 1 个已注册主动战法，
+   *   按**被引用战法自身**的 targetSide / targetMode / groupCount 选靶（「效果与原战法同等级」），
+   *   选敌距离统一取本战法 range 4；准备段跳过（只执行 output）。
+   * 推定：本战法自身目标池（group 2）仅作发动门槛；「有效距离内 1-2 个目标」按各被随机战法自身口径结算
+   *   （落雷 / 迷阵 / 伐谋 / 雀伏 = 随机单体，溃堤 / 夹攻 / 火辎 / 毒泉 = 群体 2）。
+   */
+  heneishize: {
+    id: 'heneishize',
+    name: '河内世泽',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: [0.25, 0.35],
+    targetMode: 'group',
+    groupCount: 2,
+    tags: ['damage', 'confusion', 'rampage', 'debuff_attack', 'debuff_strategy', 'panic', 'burning'],
+    output: [],
+    chainSkillPickGroups: [
+      { skillIds: ['luolei', 'mizhen', 'kuidi', 'jiagong'] },
+      { skillIds: ['famou', 'quefu', 'huoozi', 'duquan'] },
+    ],
+  },
+
+  /**
+   * 汜水关（典藏 A 主动）：距离 5，发动率 30%，目标「敌军单体」。
+   * 官方【常规】立即触发目标敌军单体由汜水关带来的动摇效果。同时对其发动一次攻击（伤害率 180.0%），
+   *   并使其陷入动摇状态，每回合产生逃兵（伤害率 130.0%），可生效 3 次。
+   *   【追加】关羽发动此战法时，动摇生效时将同时移除目标的有益效果。
+   *   来源 https://stzb.163.com/m/skilllist/200814.html（id 200814；1 级 90% / 65%）。
+   * 口径：①「动摇」= 仓库既有口径映射 `panic` DoT（险途暗渡 / 游击 / 浴血同），
+   *   「可生效 3 次」= duration 3（3 次行动跳伤）；
+   *   ②「立即触发…动摇效果」复用 `inflict_status.detonate`（烈火焚舟同款：结算剩余次数 × 每次伤害后重挂）；
+   *   ③ 追加（关羽，同名多张卡都算）→ `conditional` 分支二选一，命中分支的动摇带 `clearBuffsOnTick`
+   *   （每次跳伤时按来源优先级移除目标有益效果，见 `removeBeneficialStatuses`）。
+   * 成长率：官方全文未写「受某属性影响」→ 无缩放段（DoT 必填字段给 0 = 按基值，与 youji 先例同口径）。
+   */
+  sishuiguan: {
+    id: 'sishuiguan',
+    name: '汜水关',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.3,
+    targetMode: 'random_single',
+    tags: ['damage', 'panic'],
+    output: [
+      // ① 立即触发（引爆）本战法此前施加的动摇 + 重新施加「3 次」动摇；【追加】关羽：动摇生效时移除有益
+      {
+        kind: 'conditional',
+        require: { casterNames: ['关羽'] },
+        outputs: [
+          {
+            kind: 'inflict_status',
+            status: { type: 'panic', rate: 130, growthRate: 0, duration: 3, clearBuffsOnTick: true },
+            detonate: { rate: 130, duration: 3, adjacent: false },
+          },
+        ],
+      },
+      {
+        kind: 'conditional',
+        unless: { casterNames: ['关羽'] },
+        outputs: [
+          {
+            kind: 'inflict_status',
+            status: { type: 'panic', rate: 130, growthRate: 0, duration: 3 },
+            detonate: { rate: 130, duration: 3, adjacent: false },
+          },
+        ],
+      },
+      // ② 同时对其发动一次攻击 180%（攻击伤害）
+      { kind: 'physical_damage', rate: 180 },
+    ],
+  },
+
+  /**
+   * 桃园结义（典藏 S 指挥·一类）：距离 3，目标「我军单体」。
+   * 官方【常规】战斗开始后前 4 回合，每回合为我军单体兵力最低的武将恢复一次伤兵
+   *   （恢复率 160.0%，受谋略属性影响）；第 5 回合起，每回合对距离 4 以内的敌军单体兵力最低的武将
+   *   发动一次策略攻击（伤害率 120.0%，受谋略属性影响）。
+   *   【追加】若我军 3 名武将阵营相同，第 5 回合起，前锋、中军会交替援护友军群体。
+   *   来源 https://stzb.163.com/m/skilllist/200784.html（id 200784；1 级 80% / 60%）。
+   * 口径：一类指挥 `roundStartRepeat`（每回合 `round_start` 后、单位行动前结算一次）；分回合窗口 /
+   *   奇偶交替由 `conditional` 段级条件表达——
+   *   ① 恢复 → `heal.targetPick:'lowest_troops_ally'`（我军当前兵力最低单体，含施法者自身）；
+   *   ② 策略攻击 → 段级 `range: 4` + `targetPick:'lowest_troops_in_range'`（距离 4 内兵力最低敌军）；
+   *   ③ 追加交替援护 → `teamFactionSame` + `parity`（0 = 第 5、7… 回合前锋，1 = 第 6、8… 回合中军），
+   *      用 `inflict_status.positions`（targetSide:'ally'）把 `cover` 挂到该站位友军（无 protectId = 援护友军全体）。
+   * 成长率未确认：恢复 160% / 策略 120%「受谋略」官方未给系数 → `strategyScaled` 标记在、
+   *   `heal.growthRate: 0`（必填字段取基值）→ 登记 `OFFLINE_LEARNABLE_SKILLS`（下架）。
+   */
+  taoyuanjieyi: {
+    id: 'taoyuanjieyi',
+    name: '桃园结义',
+    type: 'command',
+    phase: 'prep',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['heal', 'damage', 'cover'],
+    output: [],
+    roundStartRepeat: {
+      output: [
+        // ① 前 4 回合：我军兵力最低单体恢复一次伤兵（160% 受谋略，成长率未确认 → 基值）
+        {
+          kind: 'conditional',
+          require: { startRound: 1, endRound: 4 },
+          outputs: [
+            {
+              kind: 'heal',
+              rate: 160,
+              strategyScaled: true,
+              growthRate: 0,
+              targetSide: 'ally',
+              targetPick: 'lowest_troops_ally',
+            },
+          ],
+        },
+        // ② 第 5 回合起：距离 4 以内敌军兵力最低单体策略攻击 120%（受谋略，成长率未确认 → 留空基值）
+        {
+          kind: 'conditional',
+          require: { startRound: 5 },
+          outputs: [
+            {
+              kind: 'strategy_damage',
+              rate: 120,
+              strategyScaled: true,
+              range: 4,
+              targetPick: 'lowest_troops_in_range',
+            },
+          ],
+        },
+        // ③【追加】我军 3 将阵营相同：第 5 回合起前锋 / 中军交替援护友军群体（cover 挂该站位友军）
+        {
+          kind: 'conditional',
+          require: { teamFactionSame: true, startRound: 5, parity: 0 },
+          outputs: [
+            {
+              kind: 'inflict_status',
+              targetSide: 'ally',
+              positions: ['前锋'],
+              status: { type: 'cover', duration: 1 },
+            },
+          ],
+        },
+        {
+          kind: 'conditional',
+          require: { teamFactionSame: true, startRound: 5, parity: 1 },
+          outputs: [
+            {
+              kind: 'inflict_status',
+              targetSide: 'ally',
+              positions: ['中军'],
+              status: { type: 'cover', duration: 1 },
+            },
+          ],
+        },
+      ],
+    },
+  },
+
+  /**
+   * 枭雄（典藏 B 被动）：距离 1，目标「自己」。
+   * 官方【常规】战斗前 4 回合，每回合有 90.0% 的几率使自身处于洞察状态，免疫混乱、怯战、暴走和挑衅效果，
+   *   在此期间无法发动主动战法。【追加】曹操发动此战法时，自身攻击、防御、谋略属性提升 10.0%。
+   *   来源 https://stzb.163.com/m/skilllist/200788.html（id 200788；1 级 45% / 5%）。
+   * 口径：① 常规 = 被动 `roundStartRepeat`（前 4 回合）+ `chance_group` 0.9：命中后**先**施加自身犹豫
+   *   （= 无法发动主动战法）、**再**施加洞察——顺序不可颠倒（洞察会拦截其后施加的控制；
+   *   官方是「免疫控制但自缚主动」，不是把犹豫也免疫掉）；
+   *   ② 追加（曹操）= `timing:'battle_start'` 的 output + `conditional.require.casterNames`，
+   *   攻/防/谋 +10%（`percent:true`，按当前生效属性结算）；官方未写持续回合 → duration 999（整场，推定）。
+   * 引擎配套：`insight` 拦截清单补入 `taunt`（官方【洞察】原文即含「挑衅」，此前引擎只拦四类控制）。
+   */
+  xiaoxiong: {
+    id: 'xiaoxiong',
+    name: '枭雄',
+    type: 'passive',
+    triggerRate: 1,
+    timing: 'battle_start',
+    range: 1,
+    targetMode: 'self',
+    tags: ['insight', 'hesitation', 'attack_buff', 'defense_buff', 'strategy_buff'],
+    // 【追加】曹操：攻/防/谋 +10%（持续至战斗结束，推定）
+    output: [
+      {
+        kind: 'conditional',
+        require: { casterNames: ['曹操'] },
+        outputs: [
+          {
+            kind: 'inflict_status',
+            target: 'self',
+            applyAll: true,
+            status: [
+              { type: 'attack_buff', amount: 10, duration: 999, percent: true },
+              { type: 'defense_buff', amount: 10, duration: 999, percent: true },
+              { type: 'strategy_buff', amount: 10, duration: 999, percent: true },
+            ],
+          },
+        ],
+      },
+    ],
+    // 【常规】前 4 回合每回合 90%：先犹豫（自缚主动）再洞察（免疫控制）
+    roundStartRepeat: {
+      endRound: 4,
+      output: [
+        {
+          kind: 'chance_group',
+          chance: 0.9,
+          outputs: [
+            { kind: 'inflict_status', target: 'self', status: { type: 'hesitation', duration: 1 } },
+            { kind: 'inflict_status', target: 'self', status: { type: 'insight', duration: 1 } },
+          ],
+        },
+      ],
+    },
+  },
+
+  /**
+   * 凤仪亭（典藏 A 主动）：距离 4，发动率 40%，目标「自己」。
+   * 官方【常规】自身攻击造成的伤害提高 20.0%，受到伤害后可额外叠加 3 次，持续 2 回合，
+   *   下一回合行动前对距离 4 以内的敌方单体发动一次猛攻（伤害率 288.0%）。
+   *   【追加】若我军 3 名武将兵种相同，攻击伤害提高效果增加至 25.0%，在此期间自身无法恢复兵力。
+   *   来源 https://stzb.163.com/m/skilllist/200789.html（id 200789；1 级 10% / 144%）。
+   * 口径：① 增伤 = `damage_boost`（direction:'caused'、damageType:'physical'、持续 2 回合）
+   *   + 新增 `hurtStackPer`（每受到 1 次实际扣兵伤害 +1 层，上限 `maxStacks: 4` = 初始 1 层 + 额外 3 次）；
+   *   ②「下一回合行动前」= `schedule_strike`（战法 targetMode:'self' → 排入施法者自身的延迟队列，
+   *   下次行动开始前由本战法打出一段 `physical_damage`，段级 targetSide:'enemy' + targetMode:'random_single' 重选敌军）；
+   *   ③ 追加 = `teamTroopSame` 分支二选一：25% 增伤 + 自身 `siege`（无法恢复兵力）。
+   * 推定：每层 +20%（追加时 +25%），最多 4 层（1 + 额外 3）。
+   */
+  fengyiting: {
+    id: 'fengyiting',
+    name: '凤仪亭',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.4,
+    targetMode: 'self',
+    tags: ['damage_boost', 'damage', 'siege'],
+    output: [
+      // ①【常规】攻击伤害提高 20%：初始 1 层，受击可再叠 3 层
+      {
+        kind: 'conditional',
+        unless: { teamTroopSame: true },
+        outputs: [
+          {
+            kind: 'inflict_status',
+            target: 'self',
+            status: {
+              type: 'damage_boost',
+              rate: 0.2,
+              duration: 2,
+              direction: 'caused',
+              damageType: 'physical',
+              maxStacks: 4,
+              hurtStackPer: 0.2,
+            },
+          },
+        ],
+      },
+      // ①【追加】3 将兵种相同：每层 25%，且自身在此期间无法恢复兵力（围困）
+      {
+        kind: 'conditional',
+        require: { teamTroopSame: true },
+        outputs: [
+          {
+            kind: 'inflict_status',
+            target: 'self',
+            status: {
+              type: 'damage_boost',
+              rate: 0.25,
+              duration: 2,
+              direction: 'caused',
+              damageType: 'physical',
+              maxStacks: 4,
+              hurtStackPer: 0.25,
+            },
+          },
+          { kind: 'inflict_status', target: 'self', status: { type: 'siege', duration: 2 } },
+        ],
+      },
+      // ② 下一回合行动前：对距离 4 以内敌方单体猛攻 288%
+      {
+        kind: 'schedule_strike',
+        output: [
+          { kind: 'physical_damage', rate: 288, targetSide: 'enemy', targetMode: 'random_single' },
+        ],
+      },
+    ],
+  },
+
+  /**
+   * 人中吕布（典藏 A 主动·1 回合准备）：距离 5，发动率 35%，目标「敌军群体（有效距离内 2-3 个目标）」。
+   * 官方【常规】1 回合准备，对敌军群体发动一次猛烈攻击（伤害率 200.0%），并使敌军群体 2~3 目标
+   *   弓兵攻击距离 -2，骑兵发动主动战法造成的伤害降低 50.0%，步兵无法恢复兵力，效果持续 1 回合。
+   *   【追加】吕布发动此战法造成的伤害无视兵种相克。
+   *   来源 https://stzb.163.com/m/skilllist/200834.html（id 200834；1 级 100%）。
+   * 口径：① 目标数 `groupCount: [2,3]`（50/50，辕门射戟先例）；
+   *   ② 三条减益按**目标兵种**过滤（`inflict_status.troopTypes`）：弓兵攻击距离 −2 / 骑兵主动战法伤害 −50% /
+   *   步兵围困，均持续 1 回合；
+   *   ③ 追加（吕布，同名多张卡都算）→ `conditional` 二选一的 `ignoresTroopCounter`。
+   */
+  renzhonglvbu: {
+    id: 'renzhonglvbu',
+    name: '人中吕布',
+    type: 'active',
+    prepare: true,
+    range: 5,
+    triggerRate: 0.35,
+    targetMode: 'group',
+    groupCount: [2, 3],
+    tags: ['damage', 'debuff_speed', 'damage_boost', 'siege'],
+    output: [
+      // ① 猛烈攻击 200%（【追加】吕布：无视兵种相克）
+      {
+        kind: 'conditional',
+        require: { casterNames: ['吕布'] },
+        outputs: [{ kind: 'physical_damage', rate: 200, ignoresTroopCounter: true }],
+      },
+      {
+        kind: 'conditional',
+        unless: { casterNames: ['吕布'] },
+        outputs: [{ kind: 'physical_damage', rate: 200 }],
+      },
+      // ② 弓兵攻击距离 -2（1 回合）
+      {
+        kind: 'inflict_status',
+        troopTypes: ['archer'],
+        status: { type: 'range_buff', amount: -2, duration: 1 },
+      },
+      // ③ 骑兵发动主动战法造成的伤害降低 50%（1 回合）
+      {
+        kind: 'inflict_status',
+        troopTypes: ['cavalry'],
+        status: { type: 'damage_boost', rate: -0.5, duration: 1, direction: 'caused', skillTypes: ['active'] },
+      },
+      // ④ 步兵无法恢复兵力（围困，1 回合）
+      {
+        kind: 'inflict_status',
+        troopTypes: ['infantry'],
+        status: { type: 'siege', duration: 1 },
+      },
+    ],
+  },
+
+  /**
+   * 鼎足江东（典藏 A 主动）：距离 2，发动率 40%，目标「我军群体（有效距离内 2 个目标）」。
+   * 官方【常规】恢复我军群体一定兵力（恢复率 75.0%，受谋略属性影响），并使其进入休整状态每回合恢复
+   *   一定兵力（恢复率 75.0%，受谋略属性影响），持续 1 回合。同时我军群体进行攻击和策略攻击时的伤害提高
+   *   17.0%（受谋略属性影响），持续 2 回合。
+   *   【追加】若我军 3 名武将兵种相同，休整效果变为立即恢复一定兵力（恢复率 75.0%，受谋略属性影响）。
+   *   来源 https://stzb.163.com/m/skilllist/200844.html（id 200844；1 级 37.5% / 8.5%）。
+   * 口径：① 立即恢复 = `heal`；② 休整 = `rest`（挂上时冻结每次恢复值，与既有休整战法口径一致）；
+   *   ③ 增伤 = `damage_boost`（direction:'caused'，攻击 + 策略通类即不限 damageType）；
+   *   ④ 追加 = `teamTroopSame` 二选一：休整段 → 等额立即恢复段。
+   * 成长率未确认：三段「受谋略」官方均未给系数 → `strategyScaled` 标记在、`growthRate` 留空
+   *   （heal / rest 必填字段给 0 = 取基值）→ 登记 `OFFLINE_LEARNABLE_SKILLS`（下架）。
+   */
+  dingzujiangdong: {
+    id: 'dingzujiangdong',
+    name: '鼎足江东',
+    type: 'active',
+    prepare: false,
+    range: 2,
+    triggerRate: 0.4,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'ally',
+    tags: ['heal', 'rest', 'damage_boost'],
+    output: [
+      // ① 立即恢复 75%（受谋略，成长率未确认 → growthRate 0 基值）
+      { kind: 'heal', rate: 75, strategyScaled: true, growthRate: 0 },
+      // ② 休整 75%（受谋略，成长率未确认 → 0）持续 1 回合；【追加】3 将兵种相同 → 改为立即恢复同额
+      {
+        kind: 'conditional',
+        unless: { teamTroopSame: true },
+        outputs: [
+          {
+            kind: 'inflict_status',
+            status: { type: 'rest', rate: 75, growthRate: 0, duration: 1, strategyScaled: true },
+          },
+        ],
+      },
+      {
+        kind: 'conditional',
+        require: { teamTroopSame: true },
+        outputs: [{ kind: 'heal', rate: 75, strategyScaled: true, growthRate: 0 }],
+      },
+      // ③ 进行攻击和策略攻击时的伤害提高 17%（受谋略，成长率未确认 → 留空基值）持续 2 回合
+      {
+        kind: 'inflict_status',
+        status: { type: 'damage_boost', rate: 0.17, duration: 2, direction: 'caused', strategyScaled: true },
+      },
+    ],
+  },
+
+  /**
+   * 单骑救主（典藏 A 指挥·一类）：距离 5，目标「自己」。
+   * 官方【常规】每次受到伤害后，有 100.0% 几率使我军单体进入规避状态，免疫接下来受到的 1 次伤害，
+   *   同时使敌方单体造成的所有伤害下降 25.0%（受防御属性影响），持续 1 回合。该效果可触发 7 次。
+   *   【追加】赵云发动此战法时，战斗开始后前 2 回合免疫怯战效果。
+   *   来源 https://stzb.163.com/m/skilllist/200862.html（id 200862；1 级 50% / 12.5%）。
+   * 口径（用户 2026-09-21 确认）：触发者 = **施法者自身**受伤（目标栏「自己」）。
+   *   受击段 `onHurt{ victim:'self', maxTriggers: 7 }` → 随机我军单体 1 层规避（`evasion`）+ 随机敌军单体
+   *   「造成伤害降低 25%（受防御）」持续 1 回合；追加 = `initialOutput` + `conditional.require.casterNames:['赵云']`
+   *   + `cowardice_immune` duration 2（前 2 回合）。
+   * 成长率未确认：25%「受防御属性影响」官方未给系数 → `defenseScaled` 在、`growthRate` 留空 → 登记下架名单。
+   */
+  danqijiuzhu: {
+    id: 'danqijiuzhu',
+    name: '单骑救主',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['evasion', 'damage_reduce', 'cowardice_immune'],
+    output: [],
+    // 【追加】赵云：战斗开始后前 2 回合免疫怯战
+    initialOutput: [
+      {
+        kind: 'conditional',
+        require: { casterNames: ['赵云'] },
+        outputs: [
+          { kind: 'inflict_status', target: 'self', status: { type: 'cowardice_immune', duration: 2 } },
+        ],
+      },
+    ],
+    // 【常规】自身每次受到伤害后（100%，共 7 次）：随机我军单体规避 + 随机敌军单体造成伤害降低 25%
+    onHurt: {
+      victim: 'self',
+      rate: 1,
+      maxTriggers: 7,
+      applyTo: 'victim',
+      output: [
+        {
+          kind: 'inflict_status',
+          targetSide: 'ally',
+          targetMode: 'random_single',
+          status: { type: 'evasion', stacks: 1 },
+        },
+        {
+          kind: 'inflict_status',
+          targetSide: 'enemy',
+          targetMode: 'random_single',
+          status: {
+            type: 'damage_boost',
+            rate: -0.25,
+            duration: 1,
+            direction: 'caused',
+            defenseScaled: true,
+          },
+        },
+      ],
+    },
+  },
+
+  /**
+   * 火烧连营（典藏 S 主动·1 回合准备）：距离 5，发动率 35%，目标「敌军群体（有效距离内 3 个目标）」。
+   * 官方【常规】准备 1 回合，使敌军全体陷入 1 回合的围困状态，随后对敌军单体造成 3 次火攻
+   *   （伤害率 50.0%，受谋略属性影响），每次目标独立判定，火攻会使目标受到的火攻和持续性伤害提升 5.0%
+   *   （受谋略属性影响），可叠加，持续到战斗结束；随后使敌军全体陷入燃烧状态（伤害率 120.0%，受谋略属性影响），
+   *   持续 1 回合。
+   *   【追加】陆逊发动此战法时，陷入燃烧状态调整为陷入恐慌状态（伤害率 120.0%，受谋略属性影响），持续 1 回合。
+   *   来源 https://stzb.163.com/m/skilllist/200263.html（id 200263；1 级 25% / 2.5% / 60%）。
+   * 口径：① 围困 = `siege`（敌军全体，1 回合）；
+   *   ② 3 次火攻 = 3 条独立 `strategy_damage`，`dotFormula: true`（立即结算的火攻口径，火积先例，
+   *     命中上下文带 `dotType:'burning'` 参与「受到的燃烧/持续伤害提升」过滤），各带
+   *     `targetMode:'random_single'` → 每次目标独立判定；
+   *   ③ 每条火攻后紧跟一条 `sameTargetsAsLastDamage` 的受伤提升（火攻 + 持续性伤害 = `dotTypes` 全 5 类，
+   *     `stack: true` 同源可叠加、持续至战斗结束）；
+   *   ④ 燃烧 / 恐慌二选一（`conditional` 按陆逊）。
+   * 成长率未确认：三段「受谋略」官方均未给系数 → `growthRate` 留空（DoT 必填给 0 = 取基值）→ 登记下架名单。
+   */
+  huoshaolianying: {
+    id: 'huoshaolianying',
+    name: '火烧连营',
+    type: 'active',
+    prepare: true,
+    range: 5,
+    triggerRate: 0.35,
+    targetMode: 'group',
+    groupCount: 3,
+    tags: ['siege', 'damage', 'burning', 'panic', 'damage_boost'],
+    output: [
+      // ① 敌军全体围困 1 回合（无法恢复兵力）
+      { kind: 'inflict_status', targetSide: 'enemy', targetMode: 'all', status: { type: 'siege', duration: 1 } },
+      // ② 3 次火攻 50%（受谋略，成长率未确认 → 留空基值），每次目标独立判定 + 各自挂「受到火攻/持续伤害提升 5%」
+      {
+        kind: 'strategy_damage',
+        rate: 50,
+        strategyScaled: true,
+        dotFormula: true,
+        targetMode: 'random_single',
+      },
+      {
+        kind: 'inflict_status',
+        sameTargetsAsLastDamage: true,
+        status: {
+          type: 'damage_boost',
+          rate: 0.05,
+          duration: 999,
+          direction: 'taken',
+          strategyScaled: true,
+          dotTypes: ['burning', 'sorcery', 'panic', 'curse', 'ignite'],
+          stack: true,
+        },
+      },
+      {
+        kind: 'strategy_damage',
+        rate: 50,
+        strategyScaled: true,
+        dotFormula: true,
+        targetMode: 'random_single',
+      },
+      {
+        kind: 'inflict_status',
+        sameTargetsAsLastDamage: true,
+        status: {
+          type: 'damage_boost',
+          rate: 0.05,
+          duration: 999,
+          direction: 'taken',
+          strategyScaled: true,
+          dotTypes: ['burning', 'sorcery', 'panic', 'curse', 'ignite'],
+          stack: true,
+        },
+      },
+      {
+        kind: 'strategy_damage',
+        rate: 50,
+        strategyScaled: true,
+        dotFormula: true,
+        targetMode: 'random_single',
+      },
+      {
+        kind: 'inflict_status',
+        sameTargetsAsLastDamage: true,
+        status: {
+          type: 'damage_boost',
+          rate: 0.05,
+          duration: 999,
+          direction: 'taken',
+          strategyScaled: true,
+          dotTypes: ['burning', 'sorcery', 'panic', 'curse', 'ignite'],
+          stack: true,
+        },
+      },
+      // ③ 敌军全体燃烧 120%（受谋略，成长率未确认 → 0 基值）1 回合；【追加】陆逊 → 恐慌
+      {
+        kind: 'conditional',
+        require: { casterNames: ['陆逊'] },
+        outputs: [
+          {
+            kind: 'inflict_status',
+            targetSide: 'enemy',
+            targetMode: 'all',
+            status: { type: 'panic', rate: 120, growthRate: 0, duration: 1 },
+          },
+        ],
+      },
+      {
+        kind: 'conditional',
+        unless: { casterNames: ['陆逊'] },
+        outputs: [
+          {
+            kind: 'inflict_status',
+            targetSide: 'enemy',
+            targetMode: 'all',
+            status: { type: 'burning', rate: 120, growthRate: 0, duration: 1 },
+          },
+        ],
+      },
+    ],
+  },
+  // ─────────── 典藏战法 · 第二批（5 个，2026-09-21 批次）───────────
+
+  /**
+   * 威震逍遥（典藏 A 主动）：距离 4，发动率 30%，目标「敌军群体（有效距离内 2 个目标）」。
+   * 官方【常规】使敌军群体陷入动摇状态，发动或受到普通攻击后产生一定逃兵（伤害率 125.0%），
+   *   该效果最多生效 2 次，持续 2 回合。同时使其受到的攻击伤害提升 24.0%（受速度属性影响），
+   *   持续 2 回合。以上效果无法被移除。
+   *   【追加】张辽发动此战法时，动摇效果无视规避。
+   *   来源 https://stzb.163.com/m/skilllist/200926.html（id 200926；1 级 62.5% / 12%）。
+   * 口径（用户 2026-09-21 确认）：动摇按**官方描述**落为 `panic{ triggerOnBasic: true }`——
+   *   携带者**发动或受到普通攻击后**各跳 1 次逃兵（`charges: 2` 用尽即移除），与仓库既有
+   *   「行动时每回合跳伤」动摇（险途暗渡 / 游击 / 浴血）互不影响；该口径的动摇**可被规避**
+   *   （张辽【追加】`ignoresEvasionOnTick` 豁免）。
+   *   受伤提升 = `damage_boost`（direction:'taken'、damageType:'physical'、speedScaled、无 growthRate）。
+   *   「以上效果无法被移除」→ 两条状态均带 `undispellable`（remove_buffs / remove_debuffs /
+   *   remove_by_source_skill_type 均跳过）。
+   * 成长率未确认：24%「受速度属性影响」官方未给系数、动摇 125% 未写受属性 → 按基值（DoT 必填给 0）
+   *   → 登记 `OFFLINE_LEARNABLE_SKILLS`（下架）。
+   */
+  weizhen_xiaoyao: {
+    id: 'weizhen_xiaoyao',
+    name: '威震逍遥',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.3,
+    targetMode: 'group',
+    groupCount: 2,
+    tags: ['panic', 'damage_boost'],
+    output: [
+      // ① 动摇（普攻触发，最多 2 次、持续 2 回合，不可移除）；【追加】张辽：无视规避
+      {
+        kind: 'conditional',
+        require: { casterNames: ['张辽'] },
+        outputs: [
+          {
+            kind: 'inflict_status',
+            status: {
+              type: 'panic',
+              rate: 125,
+              growthRate: 0,
+              duration: 2,
+              triggerOnBasic: true,
+              charges: 2,
+              ignoresEvasionOnTick: true,
+              undispellable: true,
+            },
+          },
+        ],
+      },
+      {
+        kind: 'conditional',
+        unless: { casterNames: ['张辽'] },
+        outputs: [
+          {
+            kind: 'inflict_status',
+            status: {
+              type: 'panic',
+              rate: 125,
+              growthRate: 0,
+              duration: 2,
+              triggerOnBasic: true,
+              charges: 2,
+              undispellable: true,
+            },
+          },
+        ],
+      },
+      // ② 受到的攻击伤害提高 24%（受速度，成长率未确认 → 基值）持续 2 回合，不可移除
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'damage_boost',
+          rate: 0.24,
+          duration: 2,
+          direction: 'taken',
+          damageType: 'physical',
+          speedScaled: true,
+          undispellable: true,
+        },
+      },
+    ],
+  },
+
+  /**
+   * 当阳桥（典藏 S 主动·1 回合准备）：距离 4，发动率 25%~40%，目标「敌军单体」。
+   * 官方【常规】1 回合准备，使敌军单体陷入混乱状态，持续 1~2 回合；使敌军群体 1 回合后陷入犹豫状态，
+   *   持续 1 回合；使敌军群体 2 回合后陷入怯战状态，持续 1 回合。
+   *   【追加】张飞发动此战法后，自身造成的主动战法伤害提升 10.0%，持续 3 回合。
+   *   来源 https://stzb.163.com/m/skilllist/200888.html（id 200888；1 级 5%）。
+   * 口径：① 混乱 = `confusion`（duration 区间 [1,2]，施加时掷）；② 追加（张飞）= `damage_boost`
+   *   caused + `skillTypes:['active']` 持续 3 回合；
+   *   ③ 「1 回合后 / 2 回合后」= 新增 `delayedRoundOutputs`：施法时按距离**锁定敌军群体**（用户
+   *   2026-09-21 口径：锁定后阵亡跳过），到「当前回合 + N」的回合开始时由 `triggerPendingRoundOutputs`
+   *   对尚存活锁定目标结算（犹豫 / 怯战各 1 回合）。
+   */
+  dangyangqiao: {
+    id: 'dangyangqiao',
+    name: '当阳桥',
+    type: 'active',
+    prepare: true,
+    range: 4,
+    triggerRate: [0.25, 0.4],
+    targetMode: 'random_single',
+    tags: ['confusion', 'hesitation', 'cowardice', 'damage_boost'],
+    output: [
+      // ① 敌军单体混乱 1~2 回合
+      { kind: 'inflict_status', status: { type: 'confusion', duration: [1, 2] } },
+      // ②【追加】张飞：自身造成的主动战法伤害提升 10%，持续 3 回合
+      {
+        kind: 'conditional',
+        require: { casterNames: ['张飞'] },
+        outputs: [
+          {
+            kind: 'inflict_status',
+            target: 'self',
+            status: { type: 'damage_boost', rate: 0.1, duration: 3, direction: 'caused', skillTypes: ['active'] },
+          },
+        ],
+      },
+    ],
+    delayedRoundOutputs: [
+      // ③ 1 回合后：敌军群体（施法时锁定 2 目标）犹豫 1 回合
+      {
+        afterRounds: 1,
+        targetSide: 'enemy',
+        targetMode: 'group',
+        groupCount: 2,
+        output: [{ kind: 'inflict_status', status: { type: 'hesitation', duration: 1 } }],
+      },
+      // ④ 2 回合后：敌军群体（施法时锁定 2 目标）怯战 1 回合
+      {
+        afterRounds: 2,
+        targetSide: 'enemy',
+        targetMode: 'group',
+        groupCount: 2,
+        output: [{ kind: 'inflict_status', status: { type: 'cowardice', duration: 1 } }],
+      },
+    ],
+  },
+
+  /**
+   * 正始之变（典藏 S 指挥·一类）：距离 5，目标「自己」。
+   * 官方【常规】战斗开始后，敌军全体累计造成 15 次伤害后，下回合自身发动以下两种效果：
+   *   令敌军群体陷入犹豫状态，持续 1 回合；我军全体成功发动主动或追击战法后，有 100.0% 几率再次发动
+   *   （跳过准备），持续 1 回合。
+   *   【追加】司马懿、司马师或司马昭发动此战法时，犹豫效果生效后自身恢复一定兵力（恢复率 300.0%）。
+   *   来源 https://stzb.163.com/m/skilllist/200244.html（id 200244；1 级 50% 发动 / 恢复 150%）。
+   * 口径：① 计数 = `enemyDamageThreshold`（`applyDamage` 内按「伤害来源属于施法者对侧、实际扣兵 > 0」
+   *   累计 15 次）→ 登记**下一回合开始**的 output（目标到点时重选敌军群体 2 目标）并开启 allyRecast
+   *   窗口 1 回合；② 犹豫 = `inflict_status.hesitation` duration 1；
+   *   ③ 追加（司马懿 / 司马师 / 司马昭，同名多张卡都算）= `conditional.casterNames` + `heal` 300% 自身
+   *   （官方未写受属性 → `strategyScaled: false`、growthRate 0）；
+   *   ④「再次发动」= `allyRecast` 扩展：`skillTypes:['active','pursuit']` + `everyCast`（每次成功释放都判）
+   *   + 门槛窗口（未达标不生效）；再次发动跳过准备段、按同一战法再打一次（factor 1 = 不缩放）。
+   */
+  zhengshi_zhibian: {
+    id: 'zhengshi_zhibian',
+    name: '正始之变',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['hesitation', 'heal'],
+    output: [],
+    enemyDamageThreshold: {
+      count: 15,
+      windowRounds: 1,
+      targetSide: 'enemy',
+      targetMode: 'group',
+      output: [
+        // 敌军群体犹豫 1 回合
+        { kind: 'inflict_status', status: { type: 'hesitation', duration: 1 } },
+        // 【追加】司马家：犹豫效果生效后自身恢复一定兵力（恢复率 300%）
+        {
+          kind: 'conditional',
+          require: { casterNames: ['司马懿', '司马师', '司马昭'] },
+          outputs: [{ kind: 'heal', rate: 300, strategyScaled: false, growthRate: 0, target: 'self' }],
+        },
+      ],
+    },
+    // 我军全体成功发动主动 / 追击战法后 100% 再次发动（跳过准备），仅门槛达标后的那一回合生效
+    allyRecast: { rate: 100, factor: 1, skillTypes: ['active', 'pursuit'], everyCast: true },
+  },
+
+  /**
+   * 定军山（典藏 S 指挥·一类）：距离 5，目标「敌军群体（有效距离内 2 个目标）」。
+   * 官方【常规】使敌军群体各自首个主动或追击战法的造成的伤害大幅降低。第四回合自身行动时，
+   *   使我军攻击属性最高单体下 1 次攻击类主动或追击战法发动率提升 100.0%，同时使其主动战法的
+   *   首次伤害或首次普通攻击有 40.0% 几率选中敌军大营。
+   *   【追加】黄忠发动此战法时，选中敌军大营的几率提升至 50.0%。
+   *   来源 https://stzb.163.com/m/skilllist/200293.html（id 200293；1 级 50% / 20%）。
+   * 口径：①「各自首个主动或追击战法伤害大幅降低」= `damage_boost` caused −99.99（仓库「大幅度」
+   *   极大值口径）+ `skillTypes:['active','pursuit']` + `charges: 1`（每个目标各 1 次次数制，
+   *   出伤害即消耗），duration 999 占位；
+   *   ② 第 4 回合 = `onActSegments`（一类指挥行动时分段）：`trigger_boost`（rate 1 = +100 个百分点、
+   *   `attackSkillsOnly`、`charges: 1` 下 1 次）+ `mark_position_snipe`（首次主动伤害 / 首次普攻按
+   *   40%（黄忠 50%）选中敌军大营），受标者 = `targetPick:'highest_attack_ally'`。
+   */
+  dingjunshan: {
+    id: 'dingjunshan',
+    name: '定军山',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage_boost', 'trigger_boost'],
+    output: [
+      // ① 敌军群体各自首个主动 / 追击战法伤害大幅降低（每目标 1 次次数制）
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'damage_boost',
+          rate: -99.99,
+          duration: 999,
+          direction: 'caused',
+          skillTypes: ['active', 'pursuit'],
+          charges: 1,
+        },
+      },
+    ],
+    onActSegments: [
+      {
+        startRound: 4,
+        endRound: 4,
+        output: [
+          // ② 我军攻击属性最高单体：下 1 次攻击类主动 / 追击战法发动率 +100%
+          {
+            kind: 'inflict_status',
+            targetSide: 'ally',
+            targetPick: 'highest_attack_ally',
+            status: { type: 'trigger_boost', rate: 1, duration: 999, attackSkillsOnly: true, charges: 1 },
+          },
+          // ③ 其首次伤害 / 首次普攻选中敌军大营（40%；【追加】黄忠 50%）
+          {
+            kind: 'conditional',
+            unless: { casterNames: ['黄忠'] },
+            outputs: [
+              { kind: 'mark_position_snipe', position: '大营', snipeChance: 0.4, targetPick: 'highest_attack_ally' },
+            ],
+          },
+          {
+            kind: 'conditional',
+            require: { casterNames: ['黄忠'] },
+            outputs: [
+              { kind: 'mark_position_snipe', position: '大营', snipeChance: 0.5, targetPick: 'highest_attack_ally' },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+
+  /**
+   * 七擒七纵（典藏 S 指挥·一类）：距离 5，目标「我军群体」。
+   * 官方【常规】正式回合后，我军群体受到的前 7 次伤害或控制效果，每次都有 50.0% 几率规避或抵御，
+   *   7 次结束后，有 100.0% 几率使造成伤害累计最高的敌军单体下回合造成所有伤害大幅降低。
+   *   【追加】蜀阵营武将发动此战法时，7 次结束后，使造成累计伤害最高的敌军单体下 1 回合防御属性降低 10.0%。
+   *   来源 https://stzb.163.com/m/skilllist/200298.html（id 200298；1 级 25% / 50% / 5%）。
+   * 口径：① `instanceGuard`（我军**共享**计数 7 次：受到伤害实例 + 将被施加控制效果各计 1 次，
+   *   无论判定成败；每次 50%（走携带者士气修正）——伤害命中 = 完全规避、控制命中 = 抵御不落状态）；
+   *   ② 第 7 次计满立即惩罚「造成伤害累计最高的敌军单体」（`ctx.damageDealtTotals`）：
+   *   下回合造成伤害大幅降低（caused −99.99，duration 1）；
+   *   ③ 追加（蜀阵营）= `conditional.casterFactions:['蜀']` 追加防御 −10% 同回合。
+   * 推定：① 「前 7 次」按**全队共享**计数（官方「我军群体受到的前 7 次」）；② 「控制效果」取引擎
+   *   控制四类（混乱 / 暴走 / 怯战 / 犹豫）。
+   */
+  qiqin_qizong: {
+    id: 'qiqin_qizong',
+    name: '七擒七纵',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    tags: ['evasion', 'damage_reduce', 'damage_boost'],
+    output: [],
+    instanceGuard: {
+      count: 7,
+      rate: 0.5,
+      punish: [
+        // 下回合造成所有伤害大幅降低（极大值口径）
+        {
+          kind: 'inflict_status',
+          status: { type: 'damage_boost', rate: -99.99, duration: 1, direction: 'caused' },
+        },
+        // 【追加】蜀阵营武将：同时使其防御属性降低 10%（持续 1 回合）
+        {
+          kind: 'conditional',
+          require: { casterFactions: ['蜀'] },
+          outputs: [{ kind: 'inflict_status', status: { type: 'defense_buff', amount: -10, duration: 1 } }],
+        },
+      ],
+    },
+  },
 };
