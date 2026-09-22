@@ -4,11 +4,17 @@
  */
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach } from 'vitest';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { TUTORIAL_STEPS } from './tutorial';
+import { resetHeroPoolView } from './teamEditor';
+import { setDummyPreset } from './damageLab';
 
 async function boot(): Promise<typeof import('./main')> {
+  // 武将池筛选/搜索词是模块级状态（跨重渲染保持，见 tests/hero_pool_view.test.ts）：
+  // 每个用例从「未筛选 + 空搜索」的干净池子开始，避免用例之间互相影响
+  resetHeroPoolView();
+  setDummyPreset(null); // 木桩队伍同样是模块级状态 → 每个用例从「侍卫」开始
   const el = document.createElement('div');
   el.id = 'app';
   document.body.appendChild(el);
@@ -754,6 +760,54 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(slotEl().querySelector('.slot-treasure')!.classList.contains('empty')).toBe(true);
   });
 
+  it('配将槽位「等级 · 当前兵种（特性）」行：宝物条与战法栏之间，随等级/兵种转换同步（用户 2026-09-22）', async () => {
+    await boot();
+    pickHeroIntoSlot('red', 2, '太史慈');
+    const slotEl = (): HTMLElement =>
+      (document.querySelector('.team-panel.red') as HTMLElement).querySelectorAll('.slot')[2] as HTMLElement;
+    const meta = (): HTMLElement => slotEl().querySelector('.slot-meta') as HTMLElement;
+
+    // 位置：宝物条（.hero-line）之后、战法栏（.hero-skills）之前
+    const order = Array.from(slotEl().querySelector('.slot-main')!.children).map((e) => e.className);
+    expect(order).toEqual(['hero-line', 'slot-meta', 'hero-skills']);
+    // 未转换：等级 + 基础兵种，不加括号
+    expect(meta().querySelector('.sm-lv')!.textContent).toBe('Lv.40');
+    expect(meta().querySelector('.sm-troop')!.textContent).toBe('弓兵');
+
+    // 改等级 → 该行同步（详情页 40→45）
+    slotEl().click();
+    let modal = document.querySelector('.modal') as HTMLElement;
+    const levelInp = modal.querySelector('[data-level]') as HTMLInputElement;
+    levelInp.value = '45';
+    levelInp.dispatchEvent(new Event('change'));
+    (document.querySelector('.modal .m-close') as HTMLElement).click();
+    expect(meta().querySelector('.sm-lv')!.textContent).toBe('Lv.45');
+
+    // 兵种转换弩兵 + 学「齐射 / 地利」→ 兵种与特性都进这一行
+    slotEl().click();
+    modal = document.querySelector('.hero-detail-modal') as HTMLElement;
+    expect(modal).toBeTruthy();
+    (modal.querySelector('.hd-tab[data-tab="troop"]') as HTMLElement).click();
+    (modal.querySelector('.troop-card[data-troop="弩兵"]') as HTMLElement).click();
+    for (const name of ['齐射', '地利']) {
+      // 每次点选后弹窗重渲染 → 逐个重新查询
+      const opt = Array.from(modal.querySelectorAll('.trait-option')).find(
+        (o) => (o as HTMLElement).dataset.pick === name
+      ) as HTMLElement | undefined;
+      expect(opt, `特性「${name}」应可选`).toBeTruthy();
+      opt!.click();
+    }
+    (modal.querySelector('.m-close') as HTMLElement).click();
+    expect(meta().querySelector('.sm-troop')!.textContent).toBe('弩兵（齐射 + 地利）');
+    expect(meta().title).toContain('弓兵系');
+
+    // 样式契约：横屏手机槽位＝纯立绘，这一行必须跟旧信息列一起隐藏（否则字会压在立绘上）；
+    // 竖屏/桌面槽位才显示（styles.css 的 .slot .slot-meta）
+    const mobileCss = readFileSync(join('web', 'mobile.css'), 'utf8');
+    expect(/\.slot \.slot-meta,[\s\S]{0,120}\.slot \.hero-skills \{ display: none; \}/.test(mobileCss)).toBe(true);
+    expect(readFileSync(join('web', 'styles.css'), 'utf8')).toContain('.slot .slot-meta {');
+  });
+
   it('互斥校验：关羽（魏）+ 关羽（蜀）同队**不再被拒**（2026-09-16 互斥改白名单制）', async () => {
     await boot();
     pickHeroIntoSlot('red', 0, '关羽', { skill: '千里单骑' });
@@ -917,6 +971,61 @@ describe('Web 战斗模拟器冒烟', () => {
     // 重置 → 全部恢复
     (document.querySelector('.hero-pool .hf-reset') as HTMLElement).click();
     expect(cards().length).toBeGreaterThan(20);
+  });
+
+  it('筛选状态在拖拽入队后保持：筛「魏 + 骑」→ 拖张辽 → 仍是魏 + 骑（用户 2026-09-22）', async () => {
+    await boot();
+    const cards = () => Array.from(document.querySelectorAll('.hero-pool .hero-card')) as HTMLElement[];
+    const onTags = () =>
+      Array.from(document.querySelectorAll('.hero-pool .filter-tag.on')).map((t) => (t as HTMLElement).dataset.v);
+    const clickTag = (v: string) => {
+      const tag = Array.from(document.querySelectorAll('.hero-pool .filter-tag')).find(
+        (t) => (t as HTMLElement).dataset.v === v
+      ) as HTMLElement;
+      expect(tag, `筛选 tag「${v}」应存在`).toBeTruthy();
+      tag.click();
+    };
+
+    clickTag('魏');
+    clickTag('骑');
+    const weiCav = cards();
+    expect(onTags().sort()).toEqual(['骑', '魏']);
+    expect(weiCav.length).toBeGreaterThan(0);
+    expect(weiCav.every((c) => (c.querySelector('img.fac') as HTMLElement).dataset.faction === '魏')).toBe(true);
+    expect(weiCav.every((c) => c.querySelector('.bar .troop')!.textContent === '骑')).toBe(true);
+
+    // 从筛选结果里拖张辽入红队大营（投放触发 refresh，整个配将区重建）
+    const card = weiCav.find((c) => c.querySelector('.n')!.textContent!.trim() === '张辽');
+    expect(card, '「魏 + 骑」结果里应有张辽').toBeTruthy();
+    const heroId = card!.dataset.heroId!;
+    const dt = {
+      getData: (t: string) => (t === 'text/plain' ? heroId : ''),
+      setData: () => {},
+      dropEffect: 'copy',
+      effectAllowed: 'copy',
+    } as unknown as DataTransfer;
+    const start = new Event('dragstart', { bubbles: true, cancelable: true });
+    Object.defineProperty(start, 'dataTransfer', { value: dt });
+    card!.dispatchEvent(start);
+    const slot = document.querySelector('.team-panel.red .slots .slot') as HTMLElement;
+    const over = new Event('dragover', { bubbles: true, cancelable: true });
+    Object.defineProperty(over, 'dataTransfer', { value: dt });
+    slot.dispatchEvent(over);
+    const drop = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(drop, 'dataTransfer', { value: dt });
+    slot.dispatchEvent(drop);
+
+    // 入队成功（节点已重建，重新查询）
+    const slot2 = document.querySelector('.team-panel.red .slots .slot') as HTMLElement;
+    expect(slot2.querySelector('.hero-name')!.textContent).toContain('张辽');
+    // 筛选原样保持：chip 仍高亮、网格仍是重建前那批「魏 + 骑」
+    expect(onTags().sort()).toEqual(['骑', '魏']);
+    expect(cards().map((c) => c.dataset.heroId)).toEqual(weiCav.map((c) => c.dataset.heroId));
+
+    // 「重置」→ 筛选与搜索词一起清空，全量池子回来
+    (document.querySelector('.hero-pool .hf-reset') as HTMLElement).click();
+    expect(onTags()).toEqual([]);
+    expect(cards().length).toBeGreaterThan(weiCav.length);
   });
 
   it('顶栏「战报」：查看历史战斗并可查看详情', async () => {
@@ -1321,6 +1430,55 @@ describe('Web 阵容预设（保存 / 编号 / 搜索 / 一键上场 / 持久化
     expect(slotHeroIds('red')).toEqual(before);
   });
 
+  it('设为木桩队伍：跳进伤害测试实验室，右栏变该预设三将详情，模拟十次照常（用户 2026-09-22）', async () => {
+    await boot();
+    pickHeroIntoSlot('red', 0, '孙权');
+    pickHeroIntoSlot('red', 1, '周瑜');
+    savePresetFromTeam('red', '双减魏智');
+
+    // 顶栏「预设」→ 详情动作「设为木桩队伍」
+    const modal = openPresetModal();
+    const dummyBtn = modal.querySelector('[data-act="dummy"]') as HTMLElement;
+    expect(dummyBtn, '预设详情应有「设为木桩队伍」').toBeTruthy();
+    dummyBtn.click();
+
+    // 面板关闭 + 直接进实验室（顶栏导航变「返回配将」）
+    expect(document.querySelector('.preset-modal')).toBeNull();
+    expect((document.querySelector('.nav-link[data-nav="lab"]') as HTMLElement).textContent).toBe('返回配将');
+    expect((document.querySelector('.lab-shell') as HTMLElement).style.display).not.toBe('none');
+    expect(document.querySelector('.app-notice')!.textContent).toContain('设为木桩队伍');
+
+    // 右栏：从「木桩侍卫」四维表单变成该预设三将详情
+    const panel = document.querySelector('#guard-panel') as HTMLElement;
+    expect(panel.querySelector('h2')!.textContent).toBe('木桩队伍');
+    expect(panel.querySelector('.pi-no')!.textContent).toBe('#1');
+    expect(panel.querySelector('.gd-name')!.textContent).toBe('双减魏智');
+    expect(panel.querySelector('#g-attack')).toBeNull();
+    expect(panel.querySelectorAll('.pd-slot')).toHaveLength(3);
+    expect(Array.from(panel.querySelectorAll('.pd-slot .pd-hero-name')).map((e) => e.textContent)).toEqual(['孙权', '周瑜']);
+
+    // 模拟十次：敌方＝预设三将（只有 2 人，不是侍卫 ×3），标签带木桩名
+    (document.querySelector('#sim-10') as HTMLElement).click();
+    const analysis = document.querySelector('.lab-analysis') as HTMLElement;
+    expect(analysis.querySelector('.la-count')!.textContent).toBe('共 10 场');
+    const enemyRows = Array.from(analysis.querySelectorAll('.guard-stats tbody tr')).map((r) => r.textContent ?? '');
+    expect(enemyRows).toHaveLength(2);
+    expect(enemyRows.join('|')).toContain('孙权');
+    expect(enemyRows.join('|')).not.toContain('侍卫');
+    (Array.from(analysis.querySelectorAll('.la-tabs .btn')) as HTMLElement[]).find((b) => b.textContent === '简略战报')!.click();
+    const titles = Array.from(document.querySelectorAll('.lab-analysis .ss-title')).map((e) => e.textContent);
+    expect(titles[0]).toContain('我方');
+    expect(titles[1]).toContain('木桩·双减魏智');
+
+    // 返回实验室 → 「切回侍卫」：右栏恢复四维表单
+    (document.querySelector('.la-head .btn') as HTMLElement).click();
+    (document.querySelector('#guard-panel .gd-switch') as HTMLElement).click();
+    const back = document.querySelector('#guard-panel') as HTMLElement;
+    expect(back.querySelector('h2')!.textContent).toBe('木桩侍卫');
+    expect(back.querySelector('#g-attack')).toBeTruthy();
+    expect(back.querySelector('.pd-slot')).toBeNull();
+  });
+
   it('同边同名再次保存 → 覆盖同一编号（列表不增条），并提示已覆盖', async () => {
     await boot();
     pickHeroIntoSlot('red', 0, '孙权');
@@ -1353,14 +1511,13 @@ describe('Web 阵容预设（保存 / 编号 / 搜索 / 一键上场 / 持久化
     expect(modal.querySelector('.pi-no')!.textContent).toBe('#2');
   });
 
-  it('木桩队伍（占位）：未实装 → 只给提示、面板不关；「覆盖为当前配置」按钮已撤', async () => {
+  it('「覆盖为当前配置」按钮已撤：上阵红队本身就是覆盖（用户 2026-09-22 口径）', async () => {
     await boot();
     pickHeroIntoSlot('red', 0, '孙权');
     savePresetFromTeam('red', '双减魏智');
     const modal = openPresetModal();
     expect(modal.querySelector('[data-act="overwrite"]')).toBeNull();
-    (modal.querySelector('[data-act="dummy"]') as HTMLElement).click();
-    expect(document.querySelector('.preset-modal')).not.toBeNull();
-    expect(document.querySelector('.app-notice')!.textContent).toContain('木桩队伍尚未实装');
+    expect(modal.textContent).not.toContain('覆盖为当前配置');
+    expect((modal.querySelector('[data-act="dummy"]') as HTMLElement).textContent).toContain('设为木桩队伍');
   });
 });

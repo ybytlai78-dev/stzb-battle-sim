@@ -23,7 +23,7 @@ import {
   type SlotState,
 } from './teamEditor';
 import { showNotice } from './notice';
-import { openPresetNameDialog, openPresetPanel, type PresetActionResult } from './presetPanel';
+import { openPresetNameDialog, openPresetPanel, type PresetActionResult, type PresetPanelDeps } from './presetPanel';
 import {
   PRESET_MAX,
   SIDE_LABEL,
@@ -47,7 +47,7 @@ import { setupTouchDrag } from './touchDrag';
 import { setupBackButton } from './backButton';
 import { createBattleView } from './battleView';
 import { createBattleSummary, createStatsView } from './battleSummary';
-import { mountDamageLab } from './damageLab';
+import { mountDamageLab, setDummyPreset } from './damageLab';
 
 // ─── 状态 ───
 const state: EditorState = emptyEditor();
@@ -180,14 +180,6 @@ function applyPresetToSide(preset: TeamPreset, side: TeamSide): void {
   showNotice(`已上场预设 #${preset.no}「${preset.name}」→ ${SIDE_LABEL[side]}${cleared ? `（对面 ${cleared} 个同武将槽位已清空）` : ''}`);
 }
 
-/**
- * 木桩队伍（**占位**）：把预设阵容送进伤害测试实验室当靶子 —— 功能未实装，先只给提示。
- * 实装时在这里接实验室（写进 lab 的侍卫/我方队伍 + enterLab），面板侧 `deps.useAsDummy` 不用改。
- */
-function usePresetAsDummy(preset: TeamPreset): void {
-  showNotice(`木桩队伍尚未实装，敬请期待（预设 #${preset.no}「${preset.name}」）`);
-}
-
 function renamePresetById(id: string, name: string): PresetActionResult {
   const preset = presetFile.list.find((p) => p.id === id);
   if (!preset) return { error: '预设不存在（可能已被删除）' };
@@ -204,6 +196,27 @@ function removePresetById(id: string): void {
   presetFile = removePreset(presetFile, id);
   persistPresets();
   showNotice(`已删除预设 #${preset.no}「${preset.name}」（编号不再复用）`);
+}
+
+/** 预设 → 木桩队伍（用户 2026-09-22）：设为伤害测试的敌方后直接进实验室，右栏变成该预设三将详情 */
+function usePresetAsDummy(preset: TeamPreset): void {
+  setDummyPreset(preset);
+  showNotice(`已把预设 #${preset.no}「${preset.name}」设为木桩队伍（伤害测试敌方，实验室里可「切回侍卫」）`);
+  enterLab();
+}
+
+/** 「预设」面板依赖：主站顶栏与伤害测试实验室共用。
+ *  `dummyMode` = 从实验室里打开（主按钮变「设为木桩队伍」，上场按钮退成米黄 beige）。 */
+function presetPanelDeps(opts: { dummyMode?: boolean } = {}): PresetPanelDeps {
+  return {
+    getPresets: () => presetFile.list,
+    saveCurrent: saveCurrentAsPreset,
+    apply: applyPresetToSide,
+    rename: renamePresetById,
+    remove: removePresetById,
+    useAsDummy: usePresetAsDummy,
+    dummyMode: opts.dummyMode,
+  };
 }
 
 // ─── 处理 ───
@@ -537,6 +550,10 @@ export function initApp(root?: HTMLElement): void {
   redMorale = 120;
   blueMorale = 120;
   seed = Math.floor(Math.random() * 1000000);
+  // 重复初始化时旧的 #app 已被丢弃 → 实验室根节点引用必须一起作废，
+  // 否则下次 enterLab 会往已脱离文档的旧节点上挂载（界面空白、DOM 查不到）
+  labRoot = null;
+  labVisible = false;
   app = root ?? document.getElementById('app')!;
   app.innerHTML = '';
   app.className = 'app-shell';
@@ -600,14 +617,7 @@ export function initApp(root?: HTMLElement): void {
   });
   header.querySelector('[data-nav="skills"]')!.addEventListener('click', () => openSkillBag());
   header.querySelector('[data-nav="presets"]')!.addEventListener('click', () => {
-    openPresetPanel({
-      getPresets: () => presetFile.list,
-      saveCurrent: saveCurrentAsPreset,
-      apply: applyPresetToSide,
-      useAsDummy: usePresetAsDummy,
-      rename: renamePresetById,
-      remove: removePresetById,
-    });
+    openPresetPanel(presetPanelDeps());
   });
   header.querySelector('[data-nav="lab"]')!.addEventListener('click', () => {
     labVisible ? exitLab() : enterLab();
@@ -632,8 +642,14 @@ function enterLab(): void {
   battleRoot.style.display = 'none';
   editorRoot.style.display = 'none';
   controlBar.style.display = 'none';
-  // 每次进入重新挂载：编辑器/侍卫面板按当前 state 重建（guard 配置保留在模块内）
-  mountDamageLab(labRoot, { state, handlers, onExit: exitLab });
+  // 每次进入重新挂载：编辑器/木桩面板按当前 state 重建（guard 配置与已选木桩队伍保留在模块内）
+  mountDamageLab(labRoot, {
+    state,
+    handlers,
+    onExit: exitLab,
+    // 实验室右栏「选木桩队伍」：复用「预设」面板（木桩模式 = 主按钮变「设为木桩队伍」）
+    onPickDummy: () => openPresetPanel(presetPanelDeps({ dummyMode: true })),
+  });
   labRoot.style.display = '';
   labVisible = true;
   // 顶栏导航在实验室态变成「返回配将」（用户 2026-09-19：实验室内那行返回按钮已删，返回入口收到顶栏）

@@ -711,24 +711,90 @@ npx tsc --noEmit                    # 类型检查（strict）
 - **UI**（`web/presetPanel.ts`）：
   - 每队标题行「保存预设」（`EditorHandlers.onSavePreset?` 可选，未提供不渲染 → 伤害实验室不受影响）→ 命名弹窗 `openPresetNameDialog`；
   - 顶栏第 5 项 nav「**预设**」（2 字，窄屏不挤）→ `openPresetPanel`：左列表（`#编号` 徽章 / 预设名 / 红蓝标签 / 三将名 / 时间 / 搜索框）+ 右详情（三将明细）；
-  - 动作：上场到红队 / 上场到蓝队（主按钮 = 保存边，**上场后自动关面板**）、**木桩队伍（占位）**、重命名、删除（**二次确认**）。
+- 动作：上场到红队 / 上场到蓝队（主按钮 = 保存边，**上场后自动关面板**）、**设为木桩队伍**、重命名、删除（**二次确认**）。
 - **上场语义**（`web/main.ts` `applyPresetToSide`）：整边替换（含空槽原样）；先校验队内合法性（重复武将 / 同名 SP 互斥 → 拒绝）；
   **对面**已有同一武将的槽位先清空（上场方优先，与「点选武将」同口径）。
-- **测试**：`web/presetStore.test.ts`(20) / `web/presetPanel.test.ts`(21, jsdom，含按键标准 + 木桩队伍占位) / `web/smoke.test.ts` 追加 9 个（含「退出重进仍在」= 重新 `initApp` 后预设可上场、木桩队伍占位提示）+ nav-link 断言 4→5。
+- **测试**：`web/presetStore.test.ts`(20) / `web/presetPanel.test.ts`(21, jsdom，含按键标准 + 木桩队伍) / `web/smoke.test.ts` 追加 9 个（含「退出重进仍在」= 重新 `initApp` 后预设可上场、木桩队伍入口）+ nav-link 断言 4→5。
   全量 `npm test` **190 files / 1880 passed**；`npx tsc --noEmit` + `npx tsc -p web --noEmit` clean；引擎零改动、golden 未动。
 - 未做（YAGNI）：整套红蓝存一条、存士气、导入导出、跨设备同步。
 - **按钮样式（用户 2026-09-22 口径）**：「保存预设」是按钮 → 与队头另两个按钮**同款**：三者共用
   `.btn.ghost.team-bonus / .btn.ghost.team-save-preset / .btn.ghost.team-clear` 这一组米黄实心样式（含 hover），
   **不要**再给它单独加金色描边之类的特例（`web/presetPanel.test.ts` 有 CSS 源断言守住这条）。
-- **面板按键统一为「项目按键标准」+ 木桩队伍占位（用户 2026-09-22 追加口径）**：
+- **面板按键统一为「项目按键标准」+「木桩队伍」入口（用户 2026-09-22 追加口径）**：
   ① 面板里**所有**动作按键都改成 `class="btn beige"`（styles.css「项目按键标准」= 米黄实心，看得出是按钮），
      不再用裸文字 `.btn.ghost` / `.btn.done` —— 覆盖 5 个详情动作（当前预设的保存边那个仍是金色主按钮 `.btn`）
      + 底栏 保存红队 / 保存蓝队 / 完成 + 命名弹窗「取消」；底栏「完成」的 hook 类由 `.done` 改名 `.preset-done`
      （`.done` 与 `.btn.ghost` 同为裸文字组，留着会撞样式）；`web/presetPanel.test.ts` 有 DOM 断言守住。
-  ② 「覆盖为当前配置」按钮**撤掉**（用户：「上阵红队本质就是覆盖红队」），原位换成「**木桩队伍**」**占位**：
-     功能未实装 → 点击走 `deps.useAsDummy` → `main.ts usePresetAsDummy` 弹一句「尚未实装」提示（**面板不关**）；
-     实装后 = 把该预设阵容送进伤害测试实验室当靶子（届时只改 `usePresetAsDummy`，面板不用动）。
+  ② 「覆盖为当前配置」按钮**撤掉**（用户：「上阵红队本质就是覆盖红队」），原位换成「**设为木桩队伍**」入口：
+     实装于同日后续会话（见下节「槽位信息行 + 木桩队伍」）——点击走 `deps.useAsDummy` → `main.ts usePresetAsDummy`
+     = `setDummyPreset(preset)` + `enterLab()`（**动作后关面板**，与「上场」同口径）；
+     从实验室打开（`dummyMode:true`）时它是金色主按钮、上场按钮退成米黄 `beige`。
      `PresetPanelDeps.overwrite` 与 `main.ts overwritePresetFromCurrent` 随之删除；
      `presetStore.overwritePreset` **保留**（同名保存仍走 `addPreset` 的覆盖分支，数据层能力不失）。
 - 踩坑：`web/styles.css` 用 `Get-Content -Raw | Set-Content` 改一行 CSS 会把**整文件中文变乱码**（PowerShell 按 ANSI 读 UTF-8）——
   改这类文件只用 `edit`/`write` 工具（与宝物会话同一条教训）。
+
+---
+
+## 会话交接（武将池筛选状态保持 · 2026-09-22）
+
+### 用户口径
+
+- 「筛选 → 拖动武将以后应该保存筛选的状态」：筛出「魏 + 骑」→ 拖张辽入队 → 回来仍是「魏 + 骑」（不用重筛）。
+
+### 根因与实现（`web/teamEditor.ts`）
+
+- **根因**：拖拽入队 / 换位 / 卸下都会 `refresh()` 重建整个配将区（主站 `main.ts` `renderTeamEditor`；实验室走 `damageLab.ts` `refreshPool`），
+  池子节点连同筛选栏一起换新——筛选与搜索词原本是 `renderHeroPool` 里的**局部变量**，随节点一起丢。
+- **实现**：`poolFilter`（势力/兵种 Set）+ `poolQuery`（搜索词）提为**模块级状态**（与既有 `poolShowOffline` 同口径）；
+  `renderHeroPool` 重建时按状态反显 `.filter-tag.on`、回填 `input.value`；`bindHeroFilter` 新增可选 `onReset`。
+- **「重置」**（池内 `.hf-reset`）语义扩大为**清空整套池子视图**：势力 + 兵种 + 搜索词（原来只清势力/兵种）。
+- `openHeroPicker`（选择武将弹窗）**不受影响**：每次打开仍是全新的空筛选（局部 `sel`，不传 `onReset`）。
+- 导出 `resetHeroPoolView()`：清空上述模块级状态（「重置」按钮复用；测试隔离用）——
+  `web/smoke.test.ts` 的 `boot()` 每个用例先调它，避免用例间互相影响。
+
+### 测试
+
+- 新增 `tests/hero_pool_view.test.ts`（3 个，jsdom）：魏+骑跨重渲染保持（含重建后卡集合逐 id 一致）/ 搜索词保持且与筛选取交集 / 重置清空且不留残留。
+- `web/smoke.test.ts` 追加 1 个端到端用例：真实 `dragstart → dragover → drop` 拖张辽入红队大营 → chip 仍高亮、网格仍是重建前那批魏骑；
+  `tests/offline_pool.test.ts` / `tests/damage_lab_smoke.test.ts` 的 `beforeEach` 加 `resetHeroPoolView()`。
+- 全量 `npm test` **191 files / 1886 passed**；`npx tsc --noEmit` + `npx tsc -p web --noEmit` clean；引擎零改动、golden 未动。
+
+---
+
+## 会话交接（槽位信息行 + 木桩队伍 · 2026-09-22）
+
+### 用户口径
+
+1. **配将槽位**：在「前锋 + 宝物」与「战法栏」中间加一行「等级 + 当前兵种（括号内为已选兵系特性，如 疾行 + 难测）」（用户给了红框标注）。
+2. **伤害测试新增「木桩队伍」**：把一条阵容预设设为木桩 → 跳进伤害测试实验室，右栏「木桩侍卫」面板换成该预设队伍详情，模拟十次/五十次照常。
+
+### 1) 槽位「等级 · 兵种（特性）」行（`web/teamEditor.ts` + `web/styles.css`）
+
+- DOM：`.slot-main` 的 `.hero-line`（宝物条）与 `.hero-skills` 之间插 `.slot-meta` →
+  `Lv.45 · 弩兵（齐射 + 地利）`（`.sm-lv` / `.sm-sep` / `.sm-troop`；无二级兵种时不带括号）。
+- 文案来源：`slot.level` / `slot.secondaryTroop ?? TYPE_NAME[hero.troopType]` / `slot.secondaryTraits`；tooltip 带兵系（`SECONDARY_TROOPS[troop].family`）。
+- **横屏手机槽位＝纯立绘**（`web/mobile.css` 的 landscape 块）必须把 `.slot .slot-meta` 一起 `display:none`，否则字压在立绘上（smoke 测试有 CSS 源断言守住）。
+  ⚠️ `web/mobile.css` 里有一段历史 GBK 注释（文件非法 UTF-8，`read`/`edit` 工具打不开）→ 改它要用**字节级 Buffer 插入**
+  （本次做法：临时 .mjs 脚本 `readFileSync` → `Buffer.indexOf(anchor)` → `Buffer.concat` → `writeFileSync`，跑完即删；`git diff --numstat` 验证只有 1 行新增），
+  别用 PowerShell 读写（会把整文件中文变乱码）。
+
+### 2) 木桩队伍（`web/damageLab.ts` / `web/presetPanel.ts` / `web/main.ts`）
+
+- **入口**：预设详情新增「设为木桩队伍」（`deps.useAsDummy` 提供时才渲染）→ `main.ts` `usePresetAsDummy` = `setDummyPreset(preset)` + `enterLab()`。
+- **实验室右栏**（`#guard-panel`）：默认「木桩侍卫」四维表单；有木桩时换成「木桩队伍」= `#编号 + 预设名 + 三将明细 + 切回侍卫`；
+  三将明细**复用预设面板的 `slotDetailHtml`（本次改为导出）**，`.pd-slot` 系列视觉一致。
+- 右栏入口按钮：侍卫态「选木桩队伍」、木桩态「换一支」→ `mountDamageLab({ onPickDummy })`（`main.ts` 注入，复用预设面板 `dummyMode:true`：主按钮变「设为木桩队伍」、上场按钮退成米黄 `beige`）。
+- **战斗**：`dummyTeam` 模块级状态（`cloneSlots` 深拷快照 —— 之后改预设不影响已选木桩；退出/重进实验室保留，直到「切回侍卫」）→
+  `runOne` 敌方 = `buildDummyTeam()`（站位 大营/中军/前锋、士气 120）或 `buildGuardTeam()`；`collectMyTeam` 与木桩共用 `buildTeamFromSlots()`。
+  敌方标签统一走 `enemyLabel()` = `木桩·{预设名}` / `侍卫`（简略战报 myLabel/enemyLabel、统计行、分析页「敌方木桩队伍『名』」折叠块）。
+- **顺带修复**：`initApp` 现在一并重置 `labRoot = null` / `labVisible = false` —— 重复初始化后旧实验室根节点已脱离文档，
+  否则下次 `enterLab()` 挂到幽灵节点上（界面空白、DOM 查不到）；本次由全量跑该用例时暴露。
+
+### 测试
+
+- `tests/damage_lab_smoke.test.ts` 新增 5 个（`setDummyPreset(null)` 进 beforeEach 隔离模块级状态）：右栏换详情 + 敌方＝预设三将 / 十次五十次照常且标签「木桩·名」/ 切回侍卫 / onPickDummy 入口与「换一支」/ 快照隔离。
+- `web/presetPanel.test.ts` 新增 3 个：未提供 useAsDummy 不渲染、点击回调并关面板 / dummyMode 主按钮换位 / `slotDetailHtml` 导出契约。
+- `web/smoke.test.ts` 新增 2 个：槽位「等级 · 兵种（特性）」行（DOM 位置 + 等级/兵种转换同步 + mobile.css 隐藏契约）/
+  预设→「设为木桩队伍」→实验室右栏详情→模拟十次→切回侍卫（端到端）。
+- 全量 `npm test` **191 files / 1896 passed**；`npx tsc --noEmit` + `npx tsc -p web --noEmit` clean；引擎零改动、golden 未动。

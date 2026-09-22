@@ -106,6 +106,7 @@
   .slot-card { position: absolute; inset: 0; width: auto; }
   .slot-art { width: 100%; height: 100%; border: none; border-radius: 0; }
   .slot-main { position: absolute; inset: 0; display: block; }
+  .slot .slot-meta,
   .slot .hero-line,
   .slot .slot-sub,
   .slot .hero-skills { display: none; }

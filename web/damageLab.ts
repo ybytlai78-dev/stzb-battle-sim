@@ -1,9 +1,11 @@
-﻿/**
+/**
  * 伤害测试实验室（并入主站版 v2，按用户反馈重构）
- *  - 布局：三栏分割（左：我方测试队伍配置，不分红蓝，竖排上中下画像卡 ｜ 中：可滚动武将池 ｜ 右：侍卫靶子面板）
+ *  - 布局：三栏分割（左：我方测试队伍配置，不分红蓝，竖排上中下画像卡 ｜ 中：可滚动武将池 ｜ 右：木桩面板）
+ *  - 木桩：默认「木桩侍卫」（四维/兵力/兵种可调）；也可把一条阵容预设设为「木桩队伍」——
+ *    右栏换成该预设三将详情、模拟敌方＝预设三将（用户 2026-09-22）
  *  - 交互：底部「模拟十次/五十次」→ 进入独立「伤害分析」页（与实验室分离），可返回继续调整
  *    （用户 2026-09-20：十次样本浮动仍大 → 去掉「模拟一次」，改为十次 / 五十次两档）
- *  - 分析页：伤害分析（每将场均伤害 + SVG 饼图占比 + 数学统计）/ 简略战报（我方在左、侍卫在右，带画像）/ 统计 / 战报详情
+ *  - 分析页：伤害分析（每将场均伤害 + SVG 饼图占比 + 数学统计）/ 简略战报（我方在左、木桩在右，带画像）/ 统计 / 战报详情
  *  - 兵种相克（引擎）：骑克步、步克弓、弓克骑；被克制方攻击克制方时伤害 -30%
  */
 import { runBattle } from '../src/engine/combat';
@@ -15,7 +17,10 @@ import {
   openTroopBonusPanel,
   type EditorHandlers,
   type EditorState,
+  type SlotState,
 } from './teamEditor';
+import { cloneSlots } from './presetStore';
+import { slotDetailHtml } from './presetPanel';
 import { createBattleView, type BattleViewOpts } from './battleView';
 import { createBattleSummary, createStatsView, type SummaryOpts } from './battleSummary';
 import { SKILL_REGISTRY } from '../src/data/skills';
@@ -49,6 +54,29 @@ export interface GuardConfig {
 let guard: GuardConfig = { ...GUARD_DEFAULT, skillIds: [] };
 let myMorale = 120;
 
+/**
+ * 木桩队伍（用户 2026-09-22 需求）：把一支阵容预设当靶子。
+ * 非空时右栏从「木桩侍卫」表单换成预设队伍详情，模拟的敌方＝该预设三将（士气 120）；
+ * 空 = 回到侍卫木桩。模块级状态：退出/重进实验室仍保留，直到「切回侍卫」。
+ */
+export interface DummyTeam {
+  /** 预设编号（面板展示用） */
+  no: number;
+  name: string;
+  slots: SlotState[];
+}
+
+let dummyTeam: DummyTeam | null = null;
+
+/** 设为木桩队伍（传 null = 切回侍卫）。入参按预设快照深拷，之后改预设不影响已选的木桩。 */
+export function setDummyPreset(preset: { no: number; name: string; slots: SlotState[] } | null): void {
+  dummyTeam = preset ? { no: preset.no, name: preset.name, slots: cloneSlots(preset.slots) } : null;
+}
+
+export function getDummyPreset(): DummyTeam | null {
+  return dummyTeam ? { no: dummyTeam.no, name: dummyTeam.name, slots: cloneSlots(dummyTeam.slots) } : null;
+}
+
 /** D 级可学习战法池（排除主战法与暂时下架） */
 const D_SKILLS: string[] = Object.keys(SKILL_REGISTRY).filter(
   (id) => SKILL_GRADES[id] === 'D' && !isMainSkill(id) && isLearnableSkillListed(id)
@@ -76,8 +104,10 @@ let app: HTMLElement;
 let state: EditorState;
 let handlers: EditorHandlers;
 let onExit: () => void;
+/** 打开「预设」面板挑一条当木桩（主站注入；不注入则右栏不显示入口） */
+let pickDummy: (() => void) | undefined;
 let teamRoot: HTMLElement; // 左栏：我方队伍
-let guardPanel: HTMLElement; // 右栏：侍卫
+let guardPanel: HTMLElement; // 右栏：侍卫 / 木桩队伍
 let labMain: HTMLElement; // 三栏主体
 let controlBar: HTMLElement; // 底部操作栏
 let analysisRoot: HTMLElement; // 分析页容器
@@ -135,6 +165,35 @@ export function setGuard(g: Partial<GuardConfig>): void {
 
 export function setMorale(m: number): void {
   myMorale = Math.max(80, Math.min(140, Math.round(m) || 120));
+}
+
+// ─── 队伍构建（我方测试队伍 / 木桩队伍共用一套槽位 → 引擎队伍转换）───
+
+/** 槽位配置 → 引擎队伍（站位固定大营/中军/前锋，空槽跳过） */
+function buildTeamFromSlots(slots: SlotState[], morale: number): General[] {
+  return slots
+    .map((s, i) =>
+      s.heroId
+        ? buildGeneral(
+            s.heroId,
+            s.extraSkillIds,
+            s.freePoints,
+            RED_POSITIONS[i],
+            s.redness,
+            s.level,
+            morale,
+            s.secondaryTroop,
+            s.secondaryTraits,
+            s.treasure
+          )
+        : null
+    )
+    .filter((g): g is General => g !== null);
+}
+
+/** 木桩队伍 → 引擎队伍（士气 120，与侍卫一致） */
+export function buildDummyTeam(): General[] {
+  return dummyTeam ? buildTeamFromSlots(dummyTeam.slots, 120) : [];
 }
 
 // ─── 左栏：我方队伍（槽位卡复用主站 renderSlot：左画像右信息；Drop-Zone 拖拽投放由 renderSlot 内建）───
@@ -196,7 +255,12 @@ function refreshPool(): void {
   poolRoot = next;
 }
 
-// ─── 侍卫面板 ───
+// ─── 右栏：木桩侍卫 ／ 木桩队伍（预设）───
+
+/** 敌方名称：木桩队伍模式下是预设名，否则「侍卫」（战报/分析页标签共用） */
+function enemyLabel(): string {
+  return dummyTeam ? `木桩·${dummyTeam.name}` : '侍卫';
+}
 
 function bindGuardPanel(): void {
   const num = (id: string, apply: (v: number) => void) => {
@@ -220,7 +284,61 @@ function bindGuardPanel(): void {
       guard.troopType = b.dataset.troop as TroopType;
     });
   });
+}
 
+/** 右栏重画：木桩队伍＝预设三将详情；否则＝木桩侍卫表单 */
+function renderRightPanel(): void {
+  if (!guardPanel) return;
+  if (dummyTeam) {
+    const team = dummyTeam;
+    const count = team.slots.filter((s) => s.heroId).length;
+    const swapBtn = pickDummy
+      ? `<button class="btn ghost gd-pick" type="button" title="从阵容预设里换一支队伍当木桩">换一支</button>`
+      : '';
+    guardPanel.innerHTML = `
+      <div class="gd-head">
+        <h2>木桩队伍</h2>
+        ${swapBtn}
+        <button class="btn ghost gd-switch" type="button" title="改用可自由调四维的侍卫木桩">切回侍卫</button>
+      </div>
+      <div class="gd-title">
+        <span class="pi-no">#${team.no}</span>
+        <span class="gd-name" title="${team.name}">${team.name}</span>
+      </div>
+      <div class="pd-slots">${team.slots.map((s, i) => slotDetailHtml(s, i)).join('')}</div>
+      <div class="gd-note">模拟时敌方＝该预设 ${count} 将（士气 120）</div>
+    `;
+    guardPanel.querySelector('.gd-switch')!.addEventListener('click', () => {
+      setDummyPreset(null);
+      renderRightPanel();
+    });
+    guardPanel.querySelector('.gd-pick')?.addEventListener('click', () => pickDummy?.());
+    return;
+  }
+  const troopOn = (t: TroopType) => (guard.troopType === t ? ' class="on"' : '');
+  const pickBtn = pickDummy
+    ? `<button class="btn ghost gd-pick" type="button" title="从阵容预设里挑一支队伍当木桩（也可以在主站「预设」里点「设为木桩队伍」）">选木桩队伍</button>`
+    : '';
+  guardPanel.innerHTML = `
+    <div class="gd-head">
+      <h2>木桩侍卫</h2>
+      ${pickBtn}
+    </div>
+    <div class="g-row"><label>兵种</label><div class="g-troops">
+      <button type="button" data-troop="cavalry"${troopOn('cavalry')}>骑</button>
+      <button type="button" data-troop="infantry"${troopOn('infantry')}>步</button>
+      <button type="button" data-troop="archer"${troopOn('archer')}>弓</button>
+    </div></div>
+    <div class="g-grid">
+      <div class="g-row"><label>攻击</label><input type="number" id="g-attack" value="${guard.attack}" min="0" /></div>
+      <div class="g-row"><label>防御</label><input type="number" id="g-defense" value="${guard.defense}" min="0" /></div>
+      <div class="g-row"><label>谋略</label><input type="number" id="g-strategy" value="${guard.strategy}" min="0" /></div>
+      <div class="g-row"><label>速度</label><input type="number" id="g-speed" value="${guard.speed}" min="0" /></div>
+    </div>
+    <div class="g-row g-row-full"><label>兵力</label><input type="number" id="g-troops" value="${guard.troops}" min="0" step="100" /></div>
+  `;
+  bindGuardPanel();
+  guardPanel.querySelector('.gd-pick')?.addEventListener('click', () => pickDummy?.());
 }
 
 /** 侍卫战法只在后台随机（C/D 级，见 guard.skillIds 初始化），前端不展示
@@ -343,19 +461,14 @@ function fmt(n: number): string {
 // ─── 模拟 ───
 
 function collectMyTeam(): General[] {
-  return state.red
-    .map((s, i) =>
-      s.heroId
-        ? buildGeneral(s.heroId, s.extraSkillIds, s.freePoints, RED_POSITIONS[i], s.redness, s.level, myMorale, s.secondaryTroop, s.secondaryTraits, s.treasure)
-        : null
-    )
-    .filter((g): g is General => g !== null);
+  return buildTeamFromSlots(state.red, myMorale);
 }
 
 export function runOne(seed: number): BattleReport {
   const my = collectMyTeam();
   if (my.length === 0) throw new Error('我方至少需要 1 名武将');
-  return runBattle({ myTeam: my, enemyTeam: buildGuardTeam(), seed, maxRounds: MAX_ROUNDS });
+  const enemy = dummyTeam ? buildDummyTeam() : buildGuardTeam();
+  return runBattle({ myTeam: my, enemyTeam: enemy, seed, maxRounds: MAX_ROUNDS });
 }
 
 let lastReports: BattleReport[] = [];
@@ -367,8 +480,8 @@ export type SimRunCount = 10 | 50;
 export function simulate(count: SimRunCount): void {
   const errBox = app.querySelector<HTMLElement>('.lab-err');
   if (errBox) errBox.textContent = '';
-  if (guard.skillIds.length === 0) {
-    // 侍卫战法只在后台随机（D/C 级），前端不展示
+  if (!dummyTeam && guard.skillIds.length === 0) {
+    // 侍卫战法只在后台随机（D/C 级），前端不展示；木桩队伍用预设自己的战法
     guard.skillIds = randomDSkills(3);
   }
   try {
@@ -469,11 +582,13 @@ function renderAnalysis(): void {
 }
 
 function summaryOpts(): SummaryOpts {
-  return { myLeft: true, myLabel: '我方', enemyLabel: '侍卫', resultLabels: { win: '我方胜利', loss: '侍卫胜利' } };
+  const e = enemyLabel();
+  return { myLeft: true, myLabel: '我方', enemyLabel: e, resultLabels: { win: '我方胜利', loss: `${e}胜利` } };
 }
 
 function viewOpts(): BattleViewOpts {
-  return { myLabel: '我方', enemyLabel: '侍卫', resultWin: '我方胜利', resultLoss: '侍卫胜利' };
+  const e = enemyLabel();
+  return { myLabel: '我方', enemyLabel: e, resultWin: '我方胜利', resultLoss: `${e}胜利` };
 }
 
 function resultName(r: BattleReport['result']): string {
@@ -547,11 +662,11 @@ function renderDamageAnalysis(container: HTMLElement): void {
   }
   container.appendChild(cards);
 
-  // ── 敌方（侍卫）统计：折叠展开 ──
+  // ── 敌方统计：侍卫（三只同面板）或木桩队伍（预设三将），折叠展开 ──
   const gs = document.createElement('details');
   gs.className = 'guard-stats';
-  const guardTeam = reports[0].enemyTeam;
-  const guardRows = guardTeam
+  const enemyTeam = reports[0].enemyTeam;
+  const enemyRows = enemyTeam
     .map((g) => {
       let d = 0;
       let t = 0;
@@ -559,12 +674,15 @@ function renderDamageAnalysis(container: HTMLElement): void {
         d += dealtDamage(r, g.id);
         t += takenDamage(r, g.id);
       }
-      return `<tr><td>${g.position} 侍卫</td><td>${fmt(d / n)}</td><td>${fmt(t / n)}</td></tr>`;
+      return `<tr><td>${g.position} ${g.name}</td><td>${fmt(d / n)}</td><td>${fmt(t / n)}</td></tr>`;
     })
     .join('');
+  const enemySummary = dummyTeam
+    ? `敌方木桩队伍「${dummyTeam.name}」场均 造成 / 受到 伤害`
+    : `敌方侍卫（${typeName(guard.troopType)} ×3）场均 造成 / 受到 伤害`;
   gs.innerHTML = `
-    <summary>敌方侍卫（${typeName(guard.troopType)} ×3）场均 造成 / 受到 伤害</summary>
-    <table><thead><tr><th>单位</th><th>场均造成</th><th>场均受到</th></tr></thead><tbody>${guardRows}</tbody></table>
+    <summary>${enemySummary}</summary>
+    <table><thead><tr><th>单位</th><th>场均造成</th><th>场均受到</th></tr></thead><tbody>${enemyRows}</tbody></table>
   `;
   container.appendChild(gs);
 }
@@ -576,13 +694,16 @@ export interface DamageLabOptions {
   handlers: EditorHandlers;
   /** 返回配将（由主站提供：隐藏 lab、恢复配将区） */
   onExit: () => void;
+  /** 打开「预设」面板选木桩队伍（可选；不传则右栏不显示「选木桩队伍」入口） */
+  onPickDummy?: () => void;
 }
 
-/** 挂载伤害测试实验室到容器。重复调用会重建内部视图（保留侍卫配置与队伍引用）。 */
+/** 挂载伤害测试实验室到容器。重复调用会重建内部视图（保留侍卫配置、队伍引用与已选木桩队伍）。 */
 export function mountDamageLab(root: HTMLElement, opts: DamageLabOptions): void {
   state = opts.state;
   handlers = opts.handlers;
   onExit = opts.onExit;
+  pickDummy = opts.onPickDummy;
   app = root;
   app.innerHTML = '';
   app.className = 'lab-shell';
@@ -606,28 +727,12 @@ export function mountDamageLab(root: HTMLElement, opts: DamageLabOptions): void 
   poolRoot.classList.add('lab-pool');
   labMain.appendChild(poolRoot);
 
-  // 右栏：侍卫面板
+  // 右栏：木桩侍卫 / 木桩队伍（预设）
   guardPanel = document.createElement('aside');
   guardPanel.id = 'guard-panel';
   guardPanel.className = 'lab-guard';
   labMain.appendChild(guardPanel);
-  const troopOn = (t: TroopType) => (guard.troopType === t ? ' class="on"' : '');
-  guardPanel.innerHTML = `
-    <h2>木桩侍卫</h2>
-    <div class="g-row"><label>兵种</label><div class="g-troops">
-      <button type="button" data-troop="cavalry"${troopOn('cavalry')}>骑</button>
-      <button type="button" data-troop="infantry"${troopOn('infantry')}>步</button>
-      <button type="button" data-troop="archer"${troopOn('archer')}>弓</button>
-    </div></div>
-    <div class="g-grid">
-      <div class="g-row"><label>攻击</label><input type="number" id="g-attack" value="${guard.attack}" min="0" /></div>
-      <div class="g-row"><label>防御</label><input type="number" id="g-defense" value="${guard.defense}" min="0" /></div>
-      <div class="g-row"><label>谋略</label><input type="number" id="g-strategy" value="${guard.strategy}" min="0" /></div>
-      <div class="g-row"><label>速度</label><input type="number" id="g-speed" value="${guard.speed}" min="0" /></div>
-    </div>
-    <div class="g-row g-row-full"><label>兵力</label><input type="number" id="g-troops" value="${guard.troops}" min="0" step="100" /></div>
-  `;
-  bindGuardPanel();
+  renderRightPanel();
 
   // ── 底部操作栏：种子 + 士气 + 模拟按钮（模拟后进入伤害分析页）──
   controlBar = document.createElement('footer');

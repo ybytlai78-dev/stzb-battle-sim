@@ -1,5 +1,5 @@
 /**
- * 阵容预设面板（jsdom）：列表/编号/搜索/详情/上场/木桩队伍占位/重命名/删除二次确认/命名弹窗/按键标准。
+ * 阵容预设面板（jsdom）：列表/编号/搜索/详情/上场/木桩队伍/重命名/删除二次确认/命名弹窗/按键标准。
  * 数据用 presetStore 真实构造 + 真实武将数据（HEROES / SKILL_REGISTRY），只把「副作用」替换成 spy。
  */
 // @vitest-environment jsdom
@@ -7,7 +7,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { addPreset, type PresetFile, type TeamPreset, type TeamSide } from './presetStore';
-import { openPresetPanel, openPresetNameDialog, fmtTime, slotsSummary, type PresetActionResult } from './presetPanel';
+import { openPresetPanel, openPresetNameDialog, fmtTime, slotsSummary, type PresetActionResult, type PresetPanelDeps } from './presetPanel';
 import { HEROES, SLOTTED_HEROES } from './heroes';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import type { SlotState } from './teamEditor';
@@ -45,7 +45,11 @@ function makeFile(): { file: PresetFile; weiA: TeamPreset; weiB: TeamPreset; oth
   return { file, weiA: a.preset, weiB: b.preset, other: c.preset };
 }
 
-function mount(getPresets: () => TeamPreset[]) {
+/** 额外依赖：木桩动作（useAsDummy）/ 木桩模式（dummyMode）；其余动作都是 spy */
+function mount(
+  getPresets: () => TeamPreset[],
+  extra: { useAsDummy?: PresetPanelDeps['useAsDummy']; dummyMode?: boolean; omitUseAsDummy?: boolean } = {}
+) {
   // 每个动作都是 spy，返回类型显式声明 → 既能被 openPresetPanel 接受，也能用 mockReturnValueOnce 注入错误分支
   const saveCurrent = vi.fn<(side: TeamSide, name: string) => PresetActionResult>(() => ({ presetId: 'new_id' }));
   const rename = vi.fn<(id: string, name: string) => PresetActionResult>(() => ({ presetId: 'x' }));
@@ -53,10 +57,11 @@ function mount(getPresets: () => TeamPreset[]) {
     getPresets,
     saveCurrent,
     apply: vi.fn<(preset: TeamPreset, side: TeamSide) => void>(),
-    useAsDummy: vi.fn<(preset: TeamPreset) => void>(),
     rename,
     remove: vi.fn<(id: string) => void>(),
     onClose: vi.fn<() => void>(),
+    ...(extra.omitUseAsDummy ? {} : { useAsDummy: extra.useAsDummy ?? vi.fn<(preset: TeamPreset) => void>() }),
+    ...(extra.dummyMode ? { dummyMode: true } : {}),
   };
   const handle = openPresetPanel(deps);
   return { deps, handle, modal: document.querySelector('.preset-modal') as HTMLElement };
@@ -179,17 +184,17 @@ describe('presetPanel · 详情与动作', () => {
     expect(document.querySelector('.preset-modal')).toBeNull();
   });
 
-  it('木桩队伍（占位）：点击把预设交给上层，面板不关；原有的「覆盖为当前配置」按钮已撤', () => {
+  it('木桩队伍：点击把预设交给上层并关面板；原有的「覆盖为当前配置」按钮已撤', () => {
     const { file, weiB } = makeFile();
     const { deps } = mount(() => file.list);
     (items()[1] as HTMLElement).click();
-    // 用户 2026-09-22：「上场到红队」本身就是覆盖红队 → 那个按钮改成「木桩队伍」占位
+    // 用户 2026-09-22：「上场到红队」本身就是覆盖红队 → 原「覆盖为当前配置」按钮已撤，原位改「设为木桩队伍」
     expect(document.querySelector('[data-act="overwrite"]')).toBeNull();
     const btn = document.querySelector('[data-act="dummy"]') as HTMLElement;
-    expect(btn.textContent).toBe('木桩队伍');
+    expect(btn.textContent).toBe('设为木桩队伍');
     btn.click();
     expect(deps.useAsDummy).toHaveBeenCalledWith(expect.objectContaining({ id: weiB.id, no: 2 }));
-    expect(document.querySelector('.preset-modal')).not.toBeNull(); // 占位动作不关面板
+    expect(document.querySelector('.preset-modal')).toBeNull(); // 与「上场」同口径：动作后关面板
   });
 
   it('重命名：弹窗预填原名，提交把新名字交给上层；失败时弹窗保留并显示错误', () => {
@@ -316,7 +321,7 @@ describe('presetPanel · 工具函数', () => {
       ...Array.from(modal.querySelectorAll<HTMLElement>('.pd-actions .btn')),
       ...Array.from(modal.querySelectorAll<HTMLElement>('.preset-foot .btn')),
     ];
-    expect(keys.map((k) => k.textContent)).toEqual(['上场到红队', '上场到蓝队', '木桩队伍', '重命名', '删除', '保存红队', '保存蓝队', '完成']);
+    expect(keys.map((k) => k.textContent)).toEqual(['上场到红队', '上场到蓝队', '设为木桩队伍', '重命名', '删除', '保存红队', '保存蓝队', '完成']);
     for (const k of keys) {
       expect(k.classList.contains('btn'), `${k.textContent} 应是按钮`).toBe(true);
       expect(k.classList.contains('ghost'), `${k.textContent} 不该是裸文字按钮`).toBe(false);
@@ -343,5 +348,51 @@ describe('presetPanel · 边与数据契约', () => {
     expect((actions.querySelector('[data-act="apply-red"]') as HTMLElement).className).toContain('beige');
     const side: TeamSide = 'blue';
     expect(side).toBe('blue');
+  });
+});
+
+/**
+ * 木桩队伍（用户 2026-09-22）：预设详情多一个「设为木桩队伍」动作 ——
+ * 交给上层（main）设成伤害测试敌方并跳转实验室；从实验室打开时这个按钮是主按钮。
+ */
+describe('presetPanel · 木桩队伍动作', () => {
+  it('提供 useAsDummy 时出现按钮：点击把预设交给上层并关面板；未提供则不渲染', () => {
+    const { file, weiA } = makeFile();
+    const plain = mount(() => file.list, { omitUseAsDummy: true });
+    expect(plain.modal.querySelector('[data-act="dummy"]')).toBeNull();
+    plain.handle.close();
+
+    const useAsDummy = vi.fn<(preset: TeamPreset) => void>();
+    const { modal } = mount(() => file.list, { useAsDummy });
+    const btn = modal.querySelector('[data-act="dummy"]') as HTMLElement;
+    expect(btn.textContent).toBe('设为木桩队伍');
+    expect(btn.title).toContain('伤害测试');
+    btn.click();
+    expect(useAsDummy).toHaveBeenCalledWith(expect.objectContaining({ id: weiA.id, no: 1, name: '双减魏智' }));
+    expect(document.querySelector('.preset-modal')).toBeNull(); // 与「上场」同口径：动作后关面板
+  });
+
+  it('木桩模式（dummyMode）：主按钮变「设为木桩队伍」，上场按钮退成米黄 beige', () => {
+    const { file } = makeFile();
+    const { modal } = mount(() => file.list, { useAsDummy: vi.fn(), dummyMode: true });
+    const actions = modal.querySelector('.pd-actions')!;
+    expect((actions.querySelector('[data-act="dummy"]') as HTMLElement).className).not.toContain('beige'); // 主按钮＝金色
+    expect((actions.querySelector('[data-act="apply-red"]') as HTMLElement).className).toContain('beige');
+    expect((actions.querySelector('[data-act="apply-blue"]') as HTMLElement).className).toContain('beige');
+    // 其余动作不受影响（「覆盖为当前配置」已撤）
+    expect(actions.querySelector('[data-act="overwrite"]')).toBeNull();
+    expect(actions.querySelector('[data-act="remove"]')).toBeTruthy();
+  });
+
+  it('slotDetailHtml 导出：给实验室「木桩队伍」面板复用（含站位/等级/兵种特性/战法）', async () => {
+    const { slotDetailHtml } = await import('./presetPanel');
+    const html = slotDetailHtml(
+      slot(SLOTTED_HEROES[0].id, [sampleSkill], { level: 45, secondaryTroop: '弩兵', secondaryTraits: ['齐射', '地利'] }),
+      0
+    );
+    expect(html).toContain('大营');
+    expect(html).toContain('Lv.45');
+    expect(html).toContain('弩兵');
+    expect(html).toContain('齐射');
   });
 });

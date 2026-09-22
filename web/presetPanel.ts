@@ -30,12 +30,14 @@ export interface PresetPanelDeps {
   /** 用预设替换该边队伍 */
   apply: (preset: TeamPreset, side: TeamSide) => void;
   /**
-   * 木桩队伍（**占位**：功能未实装，上层目前只给一句提示）。
-   * 实装后 = 把这条预设的阵容送去伤害测试实验室当木桩靶子；届时在此接实验室入口即可，面板不用改。
+   * 木桩队伍：把这支预设的阵容设为伤害测试的「木桩队伍」并跳转实验室（实验室里可「切回侍卫」）。
+   * 面板只转发；不提供则不显示该动作。
    */
   useAsDummy?: (preset: TeamPreset) => void;
   rename: (id: string, name: string) => PresetActionResult;
   remove: (id: string) => void;
+  /** 木桩模式（从伤害测试实验室打开）：「设为木桩队伍」当主按钮，上场按钮退成米黄 beige */
+  dummyMode?: boolean;
   /** 关闭面板（可选） */
   onClose?: () => void;
 }
@@ -109,8 +111,8 @@ function troopText(slot: SlotState, heroTroop: string | undefined): string {
   return TYPE_NAME[heroTroop ?? ''] ?? '—';
 }
 
-/** 单槽明细（空槽 → 一行占位） */
-function slotDetailHtml(slot: SlotState, i: number): string {
+/** 单槽明细（空槽 → 一行占位）。导出给伤害测试实验室的「木桩队伍」面板复用（用户 2026-09-22）。 */
+export function slotDetailHtml(slot: SlotState, i: number): string {
   const pos = POS_LABEL[i] ?? '';
   const hero = slot.heroId ? getHeroById(slot.heroId) : undefined;
   if (!slot.heroId || !hero) {
@@ -298,10 +300,15 @@ export function openPresetPanel(deps: PresetPanelDeps): PresetPanelHandle {
     slots.innerHTML = preset.slots.map((s, i) => slotDetailHtml(s, i)).join('');
     const actions = document.createElement('div');
     actions.className = 'pd-actions';
+    // 木桩模式（从实验室打开）＝「设为木桩队伍」当主按钮（金色 btn），上场按钮退成米黄 beige（用户 2026-09-22 按键标准）
+    const primaryApply = (side: TeamSide): string => (preset.side === side && !deps.dummyMode ? '' : ' beige');
+    const dummyBtn = deps.useAsDummy
+      ? `<button class="btn${deps.dummyMode ? '' : ' beige'}" data-act="dummy" type="button" title="把这支队伍设为伤害测试的木桩对手，并直接进入伤害测试实验室（可随时「切回侍卫」）">设为木桩队伍</button>`
+      : '';
     actions.innerHTML = `
-      <button class="btn${preset.side === 'red' ? '' : ' beige'}" data-act="apply-red" type="button">上场到红队</button>
-      <button class="btn${preset.side === 'blue' ? '' : ' beige'}" data-act="apply-blue" type="button">上场到蓝队</button>
-      <button class="btn beige" data-act="dummy" type="button" title="木桩队伍：把这条预设的阵容送去伤害测试实验室当靶子（功能未实装）">木桩队伍</button>
+      <button class="btn${primaryApply('red')}" data-act="apply-red" type="button">上场到红队</button>
+      <button class="btn${primaryApply('blue')}" data-act="apply-blue" type="button">上场到蓝队</button>
+      ${dummyBtn}
       <button class="btn beige" data-act="rename" type="button">重命名</button>
       <button class="btn beige danger" data-act="remove" type="button">${armedDelete ? '再点一次确认删除' : '删除'}</button>
     `;
@@ -314,9 +321,10 @@ export function openPresetPanel(deps: PresetPanelDeps): PresetPanelHandle {
       deps.apply(preset, 'blue');
       close();
     });
-    // 木桩队伍：占位（未实装）—— 面板只转发，提示由 main 给；实装后在这里接实验室入口
-    actions.querySelector('[data-act="dummy"]')!.addEventListener('click', () => {
-      deps.useAsDummy?.(preset);
+    // 木桩队伍：设为伤害测试的敌方并直接进实验室（与「上场」同口径：动作后关面板）
+    actions.querySelector('[data-act="dummy"]')?.addEventListener('click', () => {
+      deps.useAsDummy!(preset);
+      close();
     });
     actions.querySelector('[data-act="rename"]')!.addEventListener('click', () => {
       openPresetNameDialog({
