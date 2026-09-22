@@ -59,8 +59,8 @@ function run(team: General[], seed = 1, maxRounds = 8) {
     maxRounds,
     myTeam: team,
     enemyTeam: enemyTeam(),
-    /** 无死亡：受伤全部入伤兵池，兵无常势恢复才有事件 */
-    woundedMortality: { base: 0, perRound: 0 },
+    /** 无死亡：受伤全部入伤兵池（池也不阵亡），兵无常势恢复才有事件 */
+    woundedMortality: { deathRate: 0, woundedDecayRate: 0 },
   });
 }
 

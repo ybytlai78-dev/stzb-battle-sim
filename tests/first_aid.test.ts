@@ -289,7 +289,7 @@ describe('持续型急救不得救回致死 / 不得复活阵亡单位', () => {
 
   it('兵力被打到 0：立即阵亡，急救不触发恢复，之后也不会复活', () => {
     const { ctx, u1 } = lethalField();
-    ctx.woundedMortality = { base: 5, perRound: 14 };
+    ctx.woundedMortality = { deathRate: 5, woundedDecayRate: 14 };
     u1.troops = 80;
     applyDamage(ctx, u1, 80);
 

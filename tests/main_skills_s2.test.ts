@@ -118,7 +118,7 @@ function makeCtx(): CombatContext {
     lockedCommands: [],
     stackBuffs: [],
     currentRound: 1,
-    woundedMortality: { base: 5, perRound: 14 },
+    woundedMortality: { deathRate: 5, woundedDecayRate: 14 },
   };
 }
 
