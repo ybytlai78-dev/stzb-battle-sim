@@ -214,6 +214,12 @@
   padding: 4px 8px;
   font-size: 12px;
 }
+/* 本次聚合场次（十次 / 五十次）提示 */
+.la-head .la-count {
+  color: var(--text-dim);
+  font-size: 12px;
+  white-space: nowrap;
+}
 .la-body {
   flex: 1;
   min-height: 0;

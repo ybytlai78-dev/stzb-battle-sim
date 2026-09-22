@@ -233,16 +233,30 @@ describe('伤害测试实验室（主站模块 v2）', () => {
     }
   });
 
-  it('模拟一次：实验室隐藏 → 伤害分析页（队伍统计 + 每将卡片饼图 + 数学统计）', () => {
+  it('底栏模拟次数只有两档：模拟十次 / 模拟五十次（原「模拟一次」已去掉）', () => {
     const { state } = boot();
     fillRedTeam(state, 3);
-    simulate(1);
+    const btns = Array.from(document.querySelectorAll('.lab-control .btn')) as HTMLElement[];
+    expect(btns.map((b) => b.textContent)).toEqual(['模拟十次', '模拟五十次']);
+    expect((btns[1] as HTMLButtonElement).id).toBe('sim-50');
+    // 点「模拟五十次」→ 50 场（按钮已接线）
+    btns[1].click();
+    expect(document.querySelector('.lab-analysis .la-count')!.textContent).toBe('共 50 场');
+    expect(document.querySelectorAll('.share-card').length).toBe(3);
+  });
+
+  it('模拟十次：实验室隐藏 → 伤害分析页（每将卡片饼图 + 数学统计 + 场次提示）', () => {
+    const { state } = boot();
+    fillRedTeam(state, 3);
+    simulate(10);
     // 实验室主体隐藏、分析页显示
     const labErr = (document.querySelector('.lab-err') as HTMLElement | null)?.textContent ?? '';
     expect(labErr, `模拟失败：${labErr}`).toBe('');
     expect((document.querySelector('.lab-main') as HTMLElement).style.display).toBe('none');
     const analysis = document.querySelector('.lab-analysis') as HTMLElement;
     expect(analysis.style.display).not.toBe('none');
+    // 场次提示：分析页看不到底栏种子信息，这里显示本次统计了几场
+    expect(analysis.querySelector('.la-count')!.textContent).toBe('共 10 场');
     // 队伍统计块已按用户要求删除（2026-09-19）
     expect(analysis.querySelector('.batch-stats')).toBeNull();
     expect(analysis.querySelector('.batch-stat')).toBeNull();
@@ -266,7 +280,7 @@ describe('伤害测试实验室（主站模块 v2）', () => {
   it('分析页 tab：简略战报我方在左侍卫在右（带画像）｜统计｜战报详情', () => {
     const { state } = boot();
     fillRedTeam(state, 1);
-    simulate(1);
+    simulate(10);
     const analysis = document.querySelector('.lab-analysis')!;
     const tabs = Array.from(analysis.querySelectorAll('.la-tabs .btn')) as HTMLElement[];
     expect(tabs.map((b) => b.textContent)).toEqual(['伤害分析', '简略战报', '统计', '战报详情']);
@@ -319,23 +333,26 @@ describe('伤害测试实验室（主站模块 v2）', () => {
   it('返回实验室按钮：分析页隐藏、实验室主体恢复', () => {
     const { state } = boot();
     fillRedTeam(state, 1);
-    simulate(1);
+    simulate(10);
     (document.querySelector('.la-head .btn') as HTMLElement).click(); // ← 返回实验室
     expect((document.querySelector('.lab-analysis') as HTMLElement).style.display).toBe('none');
     expect((document.querySelector('.lab-main') as HTMLElement).style.display).not.toBe('none');
   });
 
-  it('模拟十次：聚合 10 场（战报选场 10 个 + 每将卡片一行三张）', () => {
+  it('模拟十次 / 五十次：聚合场次与战报选场下拉一致（10 / 50 份战报）', () => {
     const { state } = boot();
     fillRedTeam(state, 3);
-    simulate(10);
-    const analysis = document.querySelector('.lab-analysis')!;
-    expect(analysis.querySelectorAll('.share-card').length).toBe(3);
-    // 切到战报类 tab：选场下拉应有 10 场，证明 10 份战报都聚合了（原「场次/胜率」统计块已删）
-    (Array.from(analysis.querySelectorAll('.la-tabs .btn')) as HTMLElement[])
-      .find((b) => b.textContent === '简略战报')!
-      .click();
-    expect(document.querySelectorAll('.la-head select option').length).toBe(10);
+    for (const n of [10, 50] as const) {
+      simulate(n);
+      const analysis = document.querySelector('.lab-analysis')!;
+      expect(analysis.querySelectorAll('.share-card').length).toBe(3); // 每将卡片一行三张
+      expect(analysis.querySelector('.la-count')!.textContent).toBe(`共 ${n} 场`);
+      // 切到战报类 tab：选场下拉应有 n 场，证明 n 份战报都聚合了（原「场次/胜率」统计块已删）
+      (Array.from(analysis.querySelectorAll('.la-tabs .btn')) as HTMLElement[])
+        .find((b) => b.textContent === '简略战报')!
+        .click();
+      expect(document.querySelectorAll('.la-head select option').length).toBe(n);
+    }
   });
 
   it('拖拽武将池卡牌到空槽位（Drop-Zone）：配将成功、槽位渲染、池子保留原卡', () => {

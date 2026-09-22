@@ -322,7 +322,7 @@ npx tsc --noEmit                    # 类型检查（strict）
 - **入口**：主站顶栏「伤害测试」导航（`web/main.ts` `enterLab/exitLab`，每次进入重新 mountDamageLab；lab 内「← 返回配将」调用 onExit 恢复）。`web/lab.css` 由 main.ts import（vite 打包）。
 - **布局（v2 三栏分割、单屏不整页滚动）**：左栏「我方测试队伍」（**不分红蓝**，槽位卡复用主站 `renderSlot`：左画像右信息，点击进详情弹窗）；中栏武将池（复用 `renderHeroPool`，内部 `.hero-grid` 滚动，仅此区域滚动）；右栏侍卫面板。池子与侍卫栏间距由 `grid-template-columns: 300px 1fr 330px` 固定。
 - **侍卫**：四维/兵力/兵种（骑步弓，弓距离 3、骑步 2）可自由调整；默认画像按亲卫 NPC 模板放大（攻 82/防 92/谋 78/速 58/兵 9000/步，来源 3DM 亲卫图鉴 + ali213 镜像，页面标注可调）；每侍卫随机 **3 个 D 级战法**（29 个 D 级全部已实现，`SKILL_GRADES[id]==='D'` 过滤，锁定后多次模拟不重随，「重新随机」按钮刷新）。
-- **交互（v2 分离）**：底部「模拟一次/十次」→ 模拟后进入**独立伤害分析页**（`.lab-analysis`，与实验室分离；顶部「← 返回实验室」+ tabs：伤害分析｜简略战报｜统计｜战报详情；十次时战报类 tab 可下拉选场）。
+- **交互（v2 分离）**：底部**两档模拟按钮「模拟十次」/「模拟五十次」**（用户 2026-09-20：十次样本浮动仍大，去掉原「模拟一次」，五十次为主按钮 `.btn.primary`）→ 模拟后进入**独立伤害分析页**（`.lab-analysis`，与实验室分离；顶部「← 返回实验室」+ tabs：伤害分析｜简略战报｜统计｜战报详情；**`共 N 场` 场次提示** + 多场时战报类 tab 可下拉选场）。`simulate(count: SimRunCount /* 10 | 50 */)`，50 场实测约 150–200ms（引擎 + 分析页渲染），无需加载态。
   - **伤害分析 tab**：队伍统计（场次/胜/负/平/胜率/平均回合）+ 每将卡片（头像 + 场均伤害 + SVG 饼图四类占比 + **数学统计表**：总伤害/单场最高/最低/标准差（总体）/变异系数/中位数/场均承伤/场均治疗，`mathStats`）+ 敌方侍卫场均造成/受到（折叠）。饼图占比 `computeShare` 按事件流分类（damage 归属 creditToId??sourceId、DoT 归属施法者）。
   - **战报**：简略战报 `createBattleSummary(report, { myLeft: true, myLabel: '我方', enemyLabel: '侍卫', resultLabels })`——**我方在左、侍卫在右，带画像**；详情 `createBattleView(report, { myLabel, enemyLabel, resultWin/resultLoss })`。
 - **共享组件参数化（默认行为不变，主站不受影响）**：`battleSummary.ts` `SummaryOpts`（myLeft/myLabel/enemyLabel/resultLabels，默认仍蓝左红右、红队胜利）；`battleView.ts` `BattleViewOpts`（myLabel/enemyLabel/resultWin/resultLoss，默认红队/蓝队）。`teamEditor.ts` 新增导出 `renderHeroPool`/`openHeroPicker`（实验室三栏复用）；实验室 handlers 包装（wrappedHandlers）在调用后刷新左栏与武将池。

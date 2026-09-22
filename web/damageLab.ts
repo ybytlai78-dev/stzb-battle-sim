@@ -1,7 +1,8 @@
 ﻿/**
  * 伤害测试实验室（并入主站版 v2，按用户反馈重构）
  *  - 布局：三栏分割（左：我方测试队伍配置，不分红蓝，竖排上中下画像卡 ｜ 中：可滚动武将池 ｜ 右：侍卫靶子面板）
- *  - 交互：底部「模拟一次/十次」→ 进入独立「伤害分析」页（与实验室分离），可返回继续调整
+ *  - 交互：底部「模拟十次/五十次」→ 进入独立「伤害分析」页（与实验室分离），可返回继续调整
+ *    （用户 2026-09-20：十次样本浮动仍大 → 去掉「模拟一次」，改为十次 / 五十次两档）
  *  - 分析页：伤害分析（每将场均伤害 + SVG 饼图占比 + 数学统计）/ 简略战报（我方在左、侍卫在右，带画像）/ 统计 / 战报详情
  *  - 兵种相克（引擎）：骑克步、步克弓、弓克骑；被克制方攻击克制方时伤害 -30%
  */
@@ -359,8 +360,11 @@ export function runOne(seed: number): BattleReport {
 
 let lastReports: BattleReport[] = [];
 
+/** 可选模拟场次：十次（快）/ 五十次（样本更稳，用户 2026-09-20 新增） */
+export type SimRunCount = 10 | 50;
+
 /** 模拟 count 场（每次新随机种子），进入伤害分析页 */
-export function simulate(count: 1 | 10): void {
+export function simulate(count: SimRunCount): void {
   const errBox = app.querySelector<HTMLElement>('.lab-err');
   if (errBox) errBox.textContent = '';
   if (guard.skillIds.length === 0) {
@@ -370,7 +374,7 @@ export function simulate(count: 1 | 10): void {
   try {
     const seeds: number[] = [];
     for (let i = 0; i < count; i++) seeds.push(Math.floor(Math.random() * 1000000));
-    seedInfo.textContent = count === 1 ? String(seeds[0]) : `${seeds[0]} …（共 ${count} 个种子）`;
+    seedInfo.textContent = `${seeds[0]} …（共 ${count} 个种子）`;
     lastReports = seeds.map((s) => runOne(s));
     showAnalysis();
   } catch (e) {
@@ -383,7 +387,7 @@ export function simulate(count: 1 | 10): void {
 type AnalysisTab = 'analysis' | 'summary' | 'stats' | 'detail';
 
 let analysisTab: AnalysisTab = 'analysis';
-let analysisPick = 0; // 十次时战报选场（0-based）
+let analysisPick = 0; // 多场时战报选场（0-based）
 
 function showAnalysis(): void {
   labMain.style.display = 'none';
@@ -429,7 +433,12 @@ function renderAnalysis(): void {
     tabBar.appendChild(b);
   }
   head.appendChild(tabBar);
-  // 十次：战报类 tab 提供选场
+  // 场次提示：分析页看不到底栏的种子信息，这里标出本次是十次还是五十次统计
+  const countTag = document.createElement('span');
+  countTag.className = 'la-count';
+  countTag.textContent = `共 ${lastReports.length} 场`;
+  head.appendChild(countTag);
+  // 多场：战报类 tab 提供选场
   if (lastReports.length > 1 && analysisTab !== 'analysis') {
     const sel = document.createElement('select');
     sel.innerHTML = lastReports
@@ -627,8 +636,8 @@ export function mountDamageLab(root: HTMLElement, opts: DamageLabOptions): void 
     <label title="随机种子由系统自动生成，每次模拟都会更换">随机种子 <span class="fixed" id="lab-seed">自动</span></label>
     <label>我方士气 <input type="number" id="lab-morale" value="${myMorale}" min="80" max="140" title="影响战法发动率：120 → 系数 1.12" /></label>
     <span class="spacer"></span>
-    <button id="sim-1" class="btn">模拟一次</button>
     <button id="sim-10" class="btn">模拟十次</button>
+    <button id="sim-50" class="btn primary">模拟五十次</button>
   `;
   app.appendChild(controlBar);
   seedInfo = controlBar.querySelector('#lab-seed')!;
@@ -636,8 +645,8 @@ export function mountDamageLab(root: HTMLElement, opts: DamageLabOptions): void 
     myMorale = Math.max(80, Math.min(140, Math.round(Number((e.target as HTMLInputElement).value) || 120)));
     (e.target as HTMLInputElement).value = String(myMorale);
   });
-  controlBar.querySelector('#sim-1')!.addEventListener('click', () => simulate(1));
   controlBar.querySelector('#sim-10')!.addEventListener('click', () => simulate(10));
+  controlBar.querySelector('#sim-50')!.addEventListener('click', () => simulate(50));
 
   // 错误提示 + 分析页容器
   const errBox = document.createElement('div');
