@@ -1,5 +1,9 @@
 # AGENTS.md
 
+> **活跃工具线（2026-09-22 起）**：伤害分析工具 L1~L4 —— 单次伤害数学模型 / 回合期望模型 / 组合优化器 / 实战胜率批量模拟。
+> 四个独立页（`damage-model.html`、`round-model.html`、`optimizer.html`、`battle-sim.html`）**未并入主站**；
+> 口径与待办见 **`docs/会话交接-伤害分析工具.md`**（新会话接活请先读它）。
+
 本文件为 Claude Code 在本仓库工作时提供指引。
 
 ## 项目性质
