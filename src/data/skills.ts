@@ -521,7 +521,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     timing: 'battle_start',
     targetMode: 'self',
     tags: ['damage_boost'],
-    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', rate: 1.2, duration: 999, direction: 'caused' }, target: 'self' }],
+    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', damageType: 'physical', rate: 1.2, duration: 999, direction: 'caused' }, target: 'self' }],
   },
 
   // ─── 批量2（v0.6.2）───
@@ -843,7 +843,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     output: [
       {
         kind: 'inflict_status',
-        status: { type: 'damage_boost', rate: 0.5, duration: 999, direction: 'caused', attackScaled: true, growthRate: 0.25, decayEighths: 8 },
+        status: { type: 'damage_boost', damageType: 'physical', rate: 0.5, duration: 999, direction: 'caused', attackScaled: true, growthRate: 0.25, decayEighths: 8 },
       },
     ],
   },
@@ -878,7 +878,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         kind: 'inflict_status',
         troopTypes: ['cavalry', 'infantry'],
         status: {
-          type: 'damage_boost',
+          type: 'damage_boost', damageType: 'physical',
           rate: 0.06,
           duration: 999,
           direction: 'caused',
@@ -1264,7 +1264,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     targetSide: 'enemy',
     tags: ['damage_boost', 'damage'],
     output: [
-      { kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.4, duration: 1, direction: 'caused' }, target: 'self' },
+      { kind: 'inflict_status', status: { type: 'damage_boost', damageType: 'physical', rate: 0.4, duration: 1, direction: 'caused' }, target: 'self' },
       { kind: 'physical_damage', rate: 120 },
     ],
   },
@@ -1634,7 +1634,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     retainAfterDeath: true,
     roundRepeat: { startRound: 1, endRound: 3, rate: 0.9 },
     initialOutput: [
-      { kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.25, duration: 3, direction: 'caused' }, target: 'self' },
+      { kind: 'inflict_status', status: { type: 'damage_boost', damageType: 'physical', rate: 0.25, duration: 3, direction: 'caused' }, target: 'self' },
     ],
     tags: ['insight', 'damage_boost'],
     output: [{ kind: 'inflict_status', status: { type: 'insight', duration: 1 } }],
@@ -1872,7 +1872,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     timing: 'round_start',
     targetMode: 'self',
     tags: ['damage_boost'],
-    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.1, duration: 999, direction: 'caused', stack: true }, target: 'self' }],
+    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', damageType: 'physical', rate: 0.1, duration: 999, direction: 'caused', stack: true }, target: 'self' }],
   },
   /** 擅兵不寡（A 被动·round_start）：每回合恢复兵力（180%，30% 额外 300% 近似为必恢复） */
   shanbing_bugua: {
@@ -1896,7 +1896,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     timing: 'round_start',
     targetMode: 'self',
     tags: ['damage_boost'],
-    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.11, duration: 999, direction: 'caused', stack: true }, target: 'self' }],
+    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', damageType: 'strategy', rate: 0.11, duration: 999, direction: 'caused', stack: true }, target: 'self' }],
   },
   /** 百战精兵（B 被动·battle_start）：使自身攻击、防御、谋略、速度属性全部提高 32 */
   baizhan_jingbing: {
@@ -2071,7 +2071,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       {
         kind: 'inflict_status',
         chance: 0.65,
-        status: { type: 'damage_boost', rate: 0.5, duration: 1, direction: 'caused' },
+        status: { type: 'damage_boost', damageType: 'physical', rate: 0.5, duration: 1, direction: 'caused' },
         target: 'self',
       },
       {
@@ -2293,7 +2293,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['panic', 'damage_boost'],
     output: [
       { kind: 'inflict_status', status: { type: 'panic', duration: 2, rate: 130, growthRate: 1.3 } },
-      { kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.12, duration: 2 } },
+      { kind: 'inflict_status', status: { type: 'damage_boost', damageType: 'strategy', rate: 0.12, duration: 2 } },
     ],
   },
   /** 危崖困军（B 主动）：1 回合准备，对敌军群体发动一次强力策略攻击 210%，并使其防御属性降低 7.2，持续 2 回合 */
@@ -2521,7 +2521,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     targetMode: 'random_single',
     tags: ['damage', 'damage_boost'],
     output: [
-      { kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.3, duration: 1, direction: 'caused' }, target: 'self' },
+      { kind: 'inflict_status', status: { type: 'damage_boost', damageType: 'physical', rate: 0.3, duration: 1, direction: 'caused' }, target: 'self' },
       { kind: 'physical_damage', rate: 180 },
     ],
   },
@@ -2572,7 +2572,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     triggerRate: 0.35,
     targetMode: 'group',
     tags: ['damage_boost'],
-    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.13, duration: 2 } }],
+    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', damageType: 'physical', rate: 0.13, duration: 2 } }],
   },
   /** 拒盾（C 主动）：使自身受到攻击和策略攻击的伤害降低 15%（受防御影响，取基值），持续 2 回合 */
   judun: {
@@ -2848,7 +2848,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     triggerRate: 0.3,
     targetMode: 'group',
     tags: ['damage_boost'],
-    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.13, duration: 2 } }],
+    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', damageType: 'physical', rate: 0.13, duration: 2 } }],
   },
   /** 劫粮（D 主动）：使敌军群体受到策略攻击时的伤害提高 13%（取基值），持续 2 回合 */
   jieliang: {
@@ -2860,7 +2860,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     triggerRate: 0.3,
     targetMode: 'group',
     tags: ['damage_boost'],
-    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.13, duration: 2 } }],
+    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', damageType: 'strategy', rate: 0.13, duration: 2 } }],
   },
   /** 固阵（D 主动）：使自身受到策略攻击的伤害降低 35%，持续 2 回合 */
   guzhen: {
@@ -2896,7 +2896,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     triggerRate: 0.3,
     targetMode: 'self',
     tags: ['damage_boost'],
-    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.35, duration: 2, direction: 'caused' }, target: 'self' }],
+    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', damageType: 'physical', rate: 0.35, duration: 2, direction: 'caused' }, target: 'self' }],
   },
   /** 威压（D 主动）：使敌军群体进行攻击时的伤害降低 15%（取基值），持续 2 回合 */
   weiya: {
@@ -2960,7 +2960,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     triggerRate: 0.3,
     targetMode: 'self',
     tags: ['damage_boost'],
-    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.35, duration: 2, direction: 'caused' }, target: 'self' }],
+    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', damageType: 'strategy', rate: 0.35, duration: 2, direction: 'caused' }, target: 'self' }],
   },
   /** 诱敌（D 主动）：挑衅敌军单体使其攻击自身，并使之攻击属性降低 39，持续 2 回合 */
   youdi: {
@@ -3728,7 +3728,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'physical_damage', rate: 160 },
       {
         kind: 'inflict_status',
-        status: { type: 'damage_boost', rate: 0.2, duration: 999, direction: 'caused', charges: 1 },
+        status: { type: 'damage_boost', damageType: 'physical', rate: 0.2, duration: 999, direction: 'caused', charges: 1 },
         target: 'self',
       },
     ],
@@ -4153,7 +4153,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       {
         kind: 'inflict_status',
         troopTypes: ['cavalry', 'infantry'],
-        status: { type: 'damage_boost', rate: 0.28, duration: 999, direction: 'caused', charges: 2, strategyScaled: true },
+        status: { type: 'damage_boost', damageType: 'physical', rate: 0.28, duration: 999, direction: 'caused', charges: 2, strategyScaled: true },
       },
     ],
   },
@@ -6885,7 +6885,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         targetSide: 'ally',
         targetPick: 'highest_attack_ally',
         status: {
-          type: 'damage_boost',
+          type: 'damage_boost', damageType: 'physical',
           rate: 0.3,
           duration: 999,
           direction: 'caused',
