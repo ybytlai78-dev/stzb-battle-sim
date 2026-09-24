@@ -1,0 +1,11 @@
+{
+  "source": { "file": "我方-太史慈曹植陆抗.png", "sha256": "ab743b4118189017e0bb01682099b3adb5a150e563ed463c7c6e7568cd9d1f39", "at": "2026-09-23" },
+  "label": "我方·SP太史慈曹植陆抗",
+  "side": "ally",
+  "slots": [
+    { "position": "大营", "heroName": "SP太史慈", "heroId": "h102003", "level": 28, "troopTrait": null, "skillNames": ["方阵掩杀", "连战", "疾击其后"], "treasure": null },
+    { "position": "中军", "heroName": "曹植", "heroId": "h672", "level": 27, "troopTrait": null, "skillNames": ["七步释嫌", "焰焚箕轸", "三术奇谋"], "treasure": null },
+    { "position": "前锋", "heroName": "陆抗", "heroId": "h574", "level": 27, "troopTrait": null, "skillNames": ["西陵克晋", "青囊秘要", "浑水摸鱼"], "treasure": null }
+  ],
+  "unrecognized": ["二级兵种（图标）", "兵种特性（未觉醒）", "宝物（未佩戴）"]
+}

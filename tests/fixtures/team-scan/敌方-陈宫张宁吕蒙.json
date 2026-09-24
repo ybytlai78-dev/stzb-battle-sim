@@ -1,0 +1,11 @@
+{
+  "source": { "file": "敌方-陈宫张宁吕蒙.png", "sha256": "dae9ec3f6bd62cfce390d7f78fdabc2c0e025d38f8069a39bdacfd76dbcc12d9", "at": "2026-09-23" },
+  "label": "敌方·陈宫张宁吕蒙",
+  "side": "enemy",
+  "slots": [
+    { "position": "大营", "heroName": "陈宫", "heroId": "h443", "level": 41, "troopTrait": "地利", "skillNames": ["迟智难酬", "神兵天降", "大赏三军"], "treasure": null, "treasureSeen": { "name": "白羽扇", "quality": "精品", "affix": null, "level": 9, "dropped": "非稀世" } },
+    { "position": "中军", "heroName": "张宁", "heroId": "h474", "level": 41, "troopTrait": "地利", "skillNames": ["黄天余音", "众谋不懈", "三术奇谋"], "treasure": null, "treasureSeen": { "name": "雕翎扇", "quality": "罕俦", "affix": null, "level": 9, "dropped": "非稀世" } },
+    { "position": "前锋", "heroName": "吕蒙", "heroId": "lvmeng", "level": 42, "troopTrait": "地利", "skillNames": ["白衣渡江", "反计之策", "道行险阻"], "treasure": null, "treasureSeen": { "name": "白羽扇", "quality": "精品", "affix": "颖悟", "level": 9, "dropped": "非稀世" } }
+  ],
+  "unrecognized": ["二级兵种（图标）"]
+}
