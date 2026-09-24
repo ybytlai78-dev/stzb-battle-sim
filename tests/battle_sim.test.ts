@@ -180,3 +180,56 @@ describe('页面（jsdom）', () => {
     root.remove();
   }, 120000);
 });
+
+describe('对手池：导入识别结果（截图 → 队伍集.json）', () => {
+  it('粘贴 队伍集.json → 两条进池，配置带特性（地利）', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    mountBattleSim(root);
+
+    const text = readFileSync(join(process.cwd(), '已识别敌对队伍集/队伍集.json'), 'utf8');
+    const box = root.querySelector<HTMLTextAreaElement>('#bs-import-text')!;
+    box.value = text;
+    root.querySelector<HTMLButtonElement>('#bs-import-apply')!.click();
+
+    const status = root.querySelector<HTMLElement>('#bs-import-status')!.textContent ?? '';
+    expect(status).toContain('导入 2 队');
+    // 备注名在输入框里（不是文本节点）
+    const notes = Array.from(root.querySelectorAll<HTMLInputElement>('#bs-pool [data-note]')).map((el) => el.value);
+    expect(notes).toContain('敌方·陈宫张宁吕蒙');
+    expect(notes).toContain('我方·SP太史慈曹植陆抗');
+    root.remove();
+  });
+
+  it('粘贴原始识别 JSON：非法主战法 → 报错不入池；合法 → 入库并显示特性/宝物', () => {
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    mountBattleSim(root);
+
+    const box = root.querySelector<HTMLTextAreaElement>('#bs-import-text')!;
+    const apply = root.querySelector<HTMLButtonElement>('#bs-import-apply')!;
+    const status = (): string => root.querySelector<HTMLElement>('#bs-import-status')!.textContent ?? '';
+
+    box.value = JSON.stringify({
+      label: '坏样本',
+      slots: [{ position: '大营', heroName: '陈宫', level: 41, troopTrait: null, skillNames: ['神兵天降', '大赏三军', '迟智难酬'] }],
+    });
+    apply.click();
+    expect(status()).toContain('没有导入');
+
+    box.value = JSON.stringify({
+      label: '好样本',
+      slots: [
+        { position: '大营', heroName: '陈宫', level: 41, troopTrait: '地利', skillNames: ['迟智难酬', '神兵天降', '大赏三军'] },
+        { position: '中军', heroName: '张宁', level: 41, troopTrait: '地利', skillNames: ['黄天余音', '众谋不懈', '三术奇谋'] },
+        { position: '前锋', heroName: '吕蒙', level: 42, troopTrait: '地利', skillNames: ['白衣渡江', '反计之策', '道行险阻'] },
+      ],
+    });
+    apply.click();
+    expect(status()).toContain('导入 1 队');
+    expect(root.querySelector('#bs-opponent')!.textContent).toContain('地利');
+    root.remove();
+  });
+});

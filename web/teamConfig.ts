@@ -5,7 +5,9 @@
  * 面板只负责编辑 `ViewCfg`；发什么战法、算什么，由调用方决定。
  */
 import { SKILL_REGISTRY } from '../src/data/skills';
-import type { TroopType } from '../src/engine/types';
+import { getTreasure } from '../src/data/treasures';
+import type { TreasureLoadout, TroopType } from '../src/engine/types';
+import type { GeneralTrait } from '../src/engine/secondaryTroop';
 import { baseStatsAt, freePointBudget, HERO_RECORDS, isFemale, isLearnableSkillListed, isMainSkill, SLOTTED_HEROES, SKILL_GRADES, TROOP_CHAR, troopCapacity } from './heroes';
 import { simulateRounds, skillById, SLOT_LABEL, type ParseContext, type RoundModelResult, type RoundUnit, type SkillSlot } from './roundModel';
 
@@ -15,6 +17,13 @@ export const TROOP_OPTIONS: Array<[TroopType, string]> = [
   ['archer', '弓兵'],
 ];
 
+/** 宝物展示名：`游飘（颖悟 10）· Lv10`（截图识别写入的宝物在槽位卡上可见） */
+function treasureLabel(t: TreasureLoadout): string {
+  const name = getTreasure(t.treasureId)?.name ?? `#${t.treasureId}`;
+  const affix = t.affix ? `（${t.affix.name} ${t.affix.value}）` : '';
+  return `${name}${affix} · Lv${t.level ?? 10}`;
+}
+
 export interface SlotCfg {
   heroId: string;
   level: number;
@@ -22,6 +31,10 @@ export interface SlotCfg {
   addStrategy: number;
   troopType: TroopType;
   skillIds: string[];
+  /** 兵系通用特性（截图识别写入；缺省 = 没学） */
+  traits?: GeneralTrait[];
+  /** 佩戴宝物（截图识别写入；缺省 = 没佩戴） */
+  treasure?: TreasureLoadout | null;
 }
 
 export interface ViewCfg {
@@ -239,6 +252,17 @@ export function renderConfigPanel(el: HTMLElement, cfg: ViewCfg, opts: ConfigPan
             <label>加点·谋<input type="number" min="0" max="${budget}" step="5" value="${s.addStrategy}" data-unit-str="${i}" /></label>
           </div>
           <div class="rm-points">加点预算 ${budget}（已用 ${s.addAttack + s.addStrategy}）· 主战法 ${rec?.mainSkillName ?? '无'}</div>
+        ${
+          s.traits?.length || s.treasure
+            ? `<div class="rm-points">${
+                s.traits?.length ? `兵系特性 ${s.traits.join(' / ')}` : ''
+              }${
+                s.treasure
+                  ? `${s.traits?.length ? ' · ' : ''}宝物 ${treasureLabel(s.treasure)}`
+                  : ''
+              }</div>`
+            : ''
+        }
           ${Array.from({ length: SKILL_SLOTS }, (_, k) => k)
             .map(
               (k) => `<select class="rm-skill" data-unit-skill="${i}-${k}">

@@ -7,6 +7,7 @@ import { buildGeneral, HERO_RECORDS, SLOTTED_HEROES, TROOP_CHAR } from './heroes
 import { DEFAULT_ENV, runBatchAsync, type BatchStats, type SimEnv } from './battleSim';
 import { fmt } from './roundChart';
 import { renderConfigPanel, unitTemplates, type ViewCfg } from './teamConfig';
+import { importScanEntries } from './teamScanBrowser';
 
 /** 对手池条目（可备注名） */
 export interface OpponentEntry {
@@ -40,7 +41,10 @@ export function generalsOf(cfg: ViewCfg, morale: number): General[] {
         POS[i] ?? '中军',
         0,
         s.level,
-        morale
+        morale,
+        undefined, // 二级兵种转换：截图暂不识别（见 docs/截图识别-敌对队伍集.md §八）
+        s.traits, // 兵系通用特性（如 地利）
+        s.treasure ?? null // 佩戴宝物（稀世 + 锻造词条）
       );
     })
     .filter((g): g is General => Boolean(g));
@@ -181,6 +185,15 @@ export function mountBattleSim(root: HTMLElement): void {
         <button class="rm-btn" type="button" id="bs-save-opp">把当前对手存入池子</button>
         <span class="rm-dim">当前对手：<b id="bs-cur-note">${escapeHtml(state.current.note)}</b></span>
       </div>
+      <details class="bs-import">
+        <summary>导入识别结果（截图 → 队伍集.json）</summary>
+        <textarea id="bs-import-text" spellcheck="false" placeholder='粘贴 已识别敌对队伍集/队伍集.json 全文，或单条识别 JSON'></textarea>
+        <div class="bs-poolbar">
+          <button class="rm-btn" type="button" id="bs-import-apply">导入</button>
+          <button class="rm-btn rm-btn-ghost" type="button" id="bs-import-fetch">从 已识别敌对队伍集/队伍集.json 读</button>
+          <span class="rm-dim" id="bs-import-status"></span>
+        </div>
+      </details>
       ${
         state.pool.length
           ? `<table class="rm-table op-table"><thead><tr><th>备注名</th><th>阵容</th><th></th><th></th></tr></thead><tbody>${rows}</tbody></table>`
@@ -225,6 +238,54 @@ export function mountBattleSim(root: HTMLElement): void {
       }
       savePool(state.pool);
       renderPool();
+    });
+
+    // 「导入识别结果」：粘贴 队伍集.json / 归档 JSON / 原始识别 JSON（口径见 docs/截图识别-敌对队伍集.md）
+    const applyImport = (raw: string): void => {
+      // 状态行每次重新查（导入成功会 renderPool() 换掉整块 DOM）
+      const show = (msg: string): void => {
+        const el = poolEl.querySelector<HTMLElement>('#bs-import-status');
+        if (el) el.textContent = msg;
+      };
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw);
+      } catch (err) {
+        show(`解析失败：${String(err).slice(0, 80)}`);
+        return;
+      }
+      const { entries, problems, notices } = importScanEntries(parsed);
+      let added = 0;
+      for (const e of entries) {
+        const exist = state.pool.find((p) => p.note === e.name);
+        if (exist) exist.cfg = e.cfg as typeof exist.cfg;
+        else state.pool.push({ id: `opp-${Date.now()}-${added}`, note: e.name, cfg: e.cfg as typeof state.current.cfg });
+        added += 1;
+      }
+      if (added) {
+        savePool(state.pool);
+        state.current = state.pool[state.pool.length - 1];
+        renderPanels();
+        renderResult();
+        renderPool();
+      }
+      const tail = [...problems, ...notices].slice(0, 1);
+      show(added ? `导入 ${added} 队${tail.length ? `（${tail[0]}）` : ''}` : `没有导入：${problems[0] ?? '内容为空'}`);
+    };
+    poolEl.querySelector<HTMLButtonElement>('#bs-import-apply')?.addEventListener('click', () => {
+      applyImport(poolEl.querySelector<HTMLTextAreaElement>('#bs-import-text')?.value ?? '');
+    });
+    poolEl.querySelector<HTMLButtonElement>('#bs-import-fetch')?.addEventListener('click', () => {
+      void (async () => {
+        try {
+          const res = await fetch(`/${encodeURIComponent('已识别敌对队伍集')}/${encodeURIComponent('队伍集.json')}`);
+          if (!res.ok) throw new Error(String(res.status));
+          applyImport(await res.text());
+        } catch (err) {
+          const el = poolEl.querySelector<HTMLElement>('#bs-import-status');
+          if (el) el.textContent = `读取失败：${String(err).slice(0, 80)}（该文件由 scripts/scan_team.mts 生成）`;
+        }
+      })();
     });
   }
 

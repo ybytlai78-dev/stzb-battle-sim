@@ -1,0 +1,145 @@
+{
+  "source": {
+    "file": "我方-太史慈曹植陆抗.png",
+    "sha256": "ab743b4118189017e0bb01682099b3adb5a150e563ed463c7c6e7568cd9d1f39",
+    "at": "2026-09-23"
+  },
+  "label": "我方·SP太史慈曹植陆抗",
+  "side": "ally",
+  "slots": [
+    {
+      "position": "大营",
+      "heroName": "SP太史慈",
+      "heroId": "h102003",
+      "level": 28,
+      "troopTrait": null,
+      "skillNames": [
+        "方阵掩杀",
+        "连战",
+        "疾击其后"
+      ],
+      "treasure": null
+    },
+    {
+      "position": "中军",
+      "heroName": "曹植",
+      "heroId": "h672",
+      "level": 27,
+      "troopTrait": null,
+      "skillNames": [
+        "七步释嫌",
+        "焰焚箕轸",
+        "三术奇谋"
+      ],
+      "treasure": null
+    },
+    {
+      "position": "前锋",
+      "heroName": "陆抗",
+      "heroId": "h574",
+      "level": 27,
+      "troopTrait": null,
+      "skillNames": [
+        "西陵克晋",
+        "青囊秘要",
+        "浑水摸鱼"
+      ],
+      "treasure": null
+    }
+  ],
+  "unrecognized": [
+    "二级兵种（图标）",
+    "兵种特性（未觉醒）",
+    "宝物（未佩戴）"
+  ],
+  "resolved": {
+    "slots": [
+      {
+        "position": "大营",
+        "heroId": "h102003",
+        "heroName": "SP太史慈",
+        "troopType": "archer",
+        "rawLevel": 28,
+        "level": 40,
+        "levelClampedTo40": true,
+        "troopTrait": null,
+        "skillNames": [
+          "方阵掩杀",
+          "连战",
+          "疾击其后"
+        ],
+        "skillIds": [
+          "fangzhen_yansha",
+          "lianzhan",
+          "jiji_qihou"
+        ],
+        "treasure": null,
+        "treasureSeen": null
+      },
+      {
+        "position": "中军",
+        "heroId": "h672",
+        "heroName": "曹植",
+        "troopType": "cavalry",
+        "rawLevel": 27,
+        "level": 40,
+        "levelClampedTo40": true,
+        "troopTrait": null,
+        "skillNames": [
+          "七步释嫌",
+          "焰焚箕轸",
+          "三术奇谋"
+        ],
+        "skillIds": [
+          "qibu_shixian",
+          "yanfen_jizhen",
+          "sanshu_qimou"
+        ],
+        "treasure": null,
+        "treasureSeen": null
+      },
+      {
+        "position": "前锋",
+        "heroId": "h574",
+        "heroName": "陆抗",
+        "troopType": "infantry",
+        "rawLevel": 27,
+        "level": 40,
+        "levelClampedTo40": true,
+        "troopTrait": null,
+        "skillNames": [
+          "西陵克晋",
+          "青囊秘要",
+          "浑水摸鱼"
+        ],
+        "skillIds": [
+          "xiling_kejin",
+          "qingnang_miyao",
+          "hunshui_moyu"
+        ],
+        "treasure": null,
+        "treasureSeen": null
+      }
+    ],
+    "issues": [
+      {
+        "level": "warn",
+        "rule": "level",
+        "message": "原图 Lv28 → 入库按 Lv40 跑（用户口径）",
+        "slot": 0
+      },
+      {
+        "level": "warn",
+        "rule": "level",
+        "message": "原图 Lv27 → 入库按 Lv40 跑（用户口径）",
+        "slot": 1
+      },
+      {
+        "level": "warn",
+        "rule": "level",
+        "message": "原图 Lv27 → 入库按 Lv40 跑（用户口径）",
+        "slot": 2
+      }
+    ]
+  }
+}
