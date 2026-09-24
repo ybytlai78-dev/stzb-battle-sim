@@ -1,0 +1,182 @@
+{
+  "source": {
+    "file": "敌方-陈宫张宁吕蒙.png",
+    "sha256": "dae9ec3f6bd62cfce390d7f78fdabc2c0e025d38f8069a39bdacfd76dbcc12d9",
+    "at": "2026-09-23"
+  },
+  "label": "敌方·陈宫张宁吕蒙",
+  "side": "enemy",
+  "slots": [
+    {
+      "position": "大营",
+      "heroName": "陈宫",
+      "heroId": "h443",
+      "level": 41,
+      "troopTrait": "地利",
+      "skillNames": [
+        "迟智难酬",
+        "神兵天降",
+        "大赏三军"
+      ],
+      "treasure": null,
+      "treasureSeen": {
+        "name": "白羽扇",
+        "quality": "精品",
+        "affix": null,
+        "level": 9,
+        "dropped": "非稀世"
+      }
+    },
+    {
+      "position": "中军",
+      "heroName": "张宁",
+      "heroId": "h474",
+      "level": 41,
+      "troopTrait": "地利",
+      "skillNames": [
+        "黄天余音",
+        "众谋不懈",
+        "三术奇谋"
+      ],
+      "treasure": null,
+      "treasureSeen": {
+        "name": "雕翎扇",
+        "quality": "罕俦",
+        "affix": null,
+        "level": 9,
+        "dropped": "非稀世"
+      }
+    },
+    {
+      "position": "前锋",
+      "heroName": "吕蒙",
+      "heroId": "lvmeng",
+      "level": 42,
+      "troopTrait": "地利",
+      "skillNames": [
+        "白衣渡江",
+        "反计之策",
+        "道行险阻"
+      ],
+      "treasure": null,
+      "treasureSeen": {
+        "name": "白羽扇",
+        "quality": "精品",
+        "affix": "颖悟",
+        "level": 9,
+        "dropped": "非稀世"
+      }
+    }
+  ],
+  "unrecognized": [
+    "二级兵种（图标）"
+  ],
+  "resolved": {
+    "slots": [
+      {
+        "position": "大营",
+        "heroId": "h443",
+        "heroName": "陈宫",
+        "troopType": "archer",
+        "rawLevel": 41,
+        "level": 41,
+        "levelClampedTo40": false,
+        "troopTrait": "地利",
+        "skillNames": [
+          "迟智难酬",
+          "神兵天降",
+          "大赏三军"
+        ],
+        "skillIds": [
+          "chizhi_nanchou",
+          "shenbing_tianjiang",
+          "dashang_sanjun"
+        ],
+        "treasure": null,
+        "treasureSeen": {
+          "name": "白羽扇",
+          "quality": "精品",
+          "affix": null,
+          "level": 9,
+          "dropped": "非稀世"
+        }
+      },
+      {
+        "position": "中军",
+        "heroId": "h474",
+        "heroName": "张宁",
+        "troopType": "infantry",
+        "rawLevel": 41,
+        "level": 41,
+        "levelClampedTo40": false,
+        "troopTrait": "地利",
+        "skillNames": [
+          "黄天余音",
+          "众谋不懈",
+          "三术奇谋"
+        ],
+        "skillIds": [
+          "huangtian_yuyin",
+          "zhongmou_buxie",
+          "sanshu_qimou"
+        ],
+        "treasure": null,
+        "treasureSeen": {
+          "name": "雕翎扇",
+          "quality": "罕俦",
+          "affix": null,
+          "level": 9,
+          "dropped": "非稀世"
+        }
+      },
+      {
+        "position": "前锋",
+        "heroId": "lvmeng",
+        "heroName": "吕蒙",
+        "troopType": "archer",
+        "rawLevel": 42,
+        "level": 42,
+        "levelClampedTo40": false,
+        "troopTrait": "地利",
+        "skillNames": [
+          "白衣渡江",
+          "反计之策",
+          "道行险阻"
+        ],
+        "skillIds": [
+          "baiyi_dujiang",
+          "fanji_zhence",
+          "daoxing_xianzu"
+        ],
+        "treasure": null,
+        "treasureSeen": {
+          "name": "白羽扇",
+          "quality": "精品",
+          "affix": "颖悟",
+          "level": 9,
+          "dropped": "非稀世"
+        }
+      }
+    ],
+    "issues": [
+      {
+        "level": "warn",
+        "rule": "treasure-quality",
+        "message": "宝物「白羽扇·精品」非稀世 → 不识别（留痕）",
+        "slot": 0
+      },
+      {
+        "level": "warn",
+        "rule": "treasure-quality",
+        "message": "宝物「雕翎扇·罕俦」非稀世 → 不识别（留痕）",
+        "slot": 1
+      },
+      {
+        "level": "warn",
+        "rule": "treasure-quality",
+        "message": "宝物「白羽扇·精品」非稀世 → 不识别（留痕）",
+        "slot": 2
+      }
+    ]
+  }
+}

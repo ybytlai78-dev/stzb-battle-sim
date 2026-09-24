@@ -1,0 +1,127 @@
+[
+  {
+    "name": "我方·SP太史慈曹植陆抗",
+    "cfg": {
+      "slots": [
+        {
+          "heroId": "h102003",
+          "level": 40,
+          "addAttack": 0,
+          "addStrategy": 0,
+          "troopType": "archer",
+          "skillIds": [
+            "fangzhen_yansha",
+            "lianzhan",
+            "jiji_qihou"
+          ],
+          "treasure": null
+        },
+        {
+          "heroId": "h672",
+          "level": 40,
+          "addAttack": 0,
+          "addStrategy": 0,
+          "troopType": "cavalry",
+          "skillIds": [
+            "qibu_shixian",
+            "yanfen_jizhen",
+            "sanshu_qimou"
+          ],
+          "treasure": null
+        },
+        {
+          "heroId": "h574",
+          "level": 40,
+          "addAttack": 0,
+          "addStrategy": 0,
+          "troopType": "infantry",
+          "skillIds": [
+            "xiling_kejin",
+            "qingnang_miyao",
+            "hunshui_moyu"
+          ],
+          "treasure": null
+        }
+      ],
+      "morale": 120,
+      "enemy": {
+        "defense": 150,
+        "strategy": 100,
+        "troopType": "infantry"
+      },
+      "rounds": 8,
+      "manual": {
+        "boostCaused": 0,
+        "boostTaken": 0,
+        "reduce": 0
+      }
+    }
+  },
+  {
+    "name": "敌方·陈宫张宁吕蒙",
+    "cfg": {
+      "slots": [
+        {
+          "heroId": "h443",
+          "level": 41,
+          "addAttack": 0,
+          "addStrategy": 0,
+          "troopType": "archer",
+          "skillIds": [
+            "chizhi_nanchou",
+            "shenbing_tianjiang",
+            "dashang_sanjun"
+          ],
+          "traits": [
+            "地利"
+          ],
+          "treasure": null
+        },
+        {
+          "heroId": "h474",
+          "level": 41,
+          "addAttack": 0,
+          "addStrategy": 0,
+          "troopType": "infantry",
+          "skillIds": [
+            "huangtian_yuyin",
+            "zhongmou_buxie",
+            "sanshu_qimou"
+          ],
+          "traits": [
+            "地利"
+          ],
+          "treasure": null
+        },
+        {
+          "heroId": "lvmeng",
+          "level": 42,
+          "addAttack": 0,
+          "addStrategy": 0,
+          "troopType": "archer",
+          "skillIds": [
+            "baiyi_dujiang",
+            "fanji_zhence",
+            "daoxing_xianzu"
+          ],
+          "traits": [
+            "地利"
+          ],
+          "treasure": null
+        }
+      ],
+      "morale": 120,
+      "enemy": {
+        "defense": 150,
+        "strategy": 100,
+        "troopType": "infantry"
+      },
+      "rounds": 8,
+      "manual": {
+        "boostCaused": 0,
+        "boostTaken": 0,
+        "reduce": 0
+      }
+    }
+  }
+]
