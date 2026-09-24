@@ -2,3 +2,13 @@ node_modules/
 dist/
 *.snap
 !__snapshots__/golden.json
+
+# 截图识别工作区：截图不入库（只入库识别结果 JSON）
+敌对队伍集/*.png
+敌对队伍集/*.jpg
+敌对队伍集/*.jpeg
+敌对队伍集/*.webp
+已识别敌对队伍集/*.png
+已识别敌对队伍集/*.jpg
+已识别敌对队伍集/*.jpeg
+已识别敌对队伍集/*.webp
