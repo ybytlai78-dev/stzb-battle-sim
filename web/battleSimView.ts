@@ -40,7 +40,10 @@ export function generalsOf(cfg: ViewCfg, morale: number): General[] {
         POS[i] ?? '中军',
         0,
         s.level,
-        morale
+        morale,
+        undefined, // 二级兵种转换：截图暂不识别（见 docs/截图识别-敌对队伍集.md §八）
+        s.traits, // 兵系通用特性（如 地利）
+        s.treasure ?? null // 佩戴宝物（稀世 + 锻造词条）
       );
     })
     .filter((g): g is General => Boolean(g));

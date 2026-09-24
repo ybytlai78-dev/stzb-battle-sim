@@ -6,7 +6,8 @@
  * （浏览器用 `web/teamScanBrowser.ts`；node 脚本用 `web/data/heroes.json` + `src/data/*.ts`），
  * 保证「一份实现三处调用」，校验口径不会漂移。
  */
-import type { GeneralTrait, TreasureLoadout, TroopType } from '../src/engine/types';
+import type { TreasureLoadout, TroopType } from '../src/engine/types';
+import type { GeneralTrait } from '../src/engine/secondaryTroop';
 
 export const SCAN_POSITIONS = ['大营', '中军', '前锋'] as const;
 export type ScanPosition = (typeof SCAN_POSITIONS)[number];

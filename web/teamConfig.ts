@@ -5,7 +5,8 @@
  * 面板只负责编辑 `ViewCfg`；发什么战法、算什么，由调用方决定。
  */
 import { SKILL_REGISTRY } from '../src/data/skills';
-import type { TroopType } from '../src/engine/types';
+import type { TreasureLoadout, TroopType } from '../src/engine/types';
+import type { GeneralTrait } from '../src/engine/secondaryTroop';
 import { baseStatsAt, freePointBudget, HERO_RECORDS, isFemale, isLearnableSkillListed, isMainSkill, SLOTTED_HEROES, SKILL_GRADES, TROOP_CHAR, troopCapacity } from './heroes';
 import { simulateRounds, skillById, SLOT_LABEL, type ParseContext, type RoundModelResult, type RoundUnit, type SkillSlot } from './roundModel';
 
@@ -22,6 +23,10 @@ export interface SlotCfg {
   addStrategy: number;
   troopType: TroopType;
   skillIds: string[];
+  /** 兵系通用特性（截图识别写入；缺省 = 没学） */
+  traits?: GeneralTrait[];
+  /** 佩戴宝物（截图识别写入；缺省 = 没佩戴） */
+  treasure?: TreasureLoadout | null;
 }
 
 export interface ViewCfg {

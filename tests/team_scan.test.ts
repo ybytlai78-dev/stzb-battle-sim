@@ -147,3 +147,32 @@ describe('反例：规则逐条拦截', () => {
     expect(res.issues.some((i) => i.rule === 'treasure-quality')).toBe(true);
   });
 });
+
+describe('L4 透传：特性与宝物', () => {
+  it('SlotCfg.traits → General.secondaryTraits，且引擎按站位算地利加成', async () => {
+    const { initHeroDB } = await import('../src/data/heroes');
+    await initHeroDB();
+    const { generalsOf } = await import('../web/battleSimView');
+    const { traitStatBonus } = await import('../src/engine/secondaryTroop');
+    const res = validateScan(fx('敌方-陈宫张宁吕蒙.json'), tables);
+    const [entry] = toOpponentEntries([{ label: res.label, slots: res.slots }]);
+    const gs = generalsOf(entry.cfg as never, 120);
+    expect(gs.length).toBe(3);
+    expect(gs[0].secondaryTraits).toContain('地利');
+    expect(gs[1].position).toBe('中军');
+    expect(traitStatBonus({ ...gs[1], position: '中军' } as never, 'defense')).toBe(10);
+  });
+
+  it('SlotCfg.treasure → General.treasure（宝物 id 与词条）', async () => {
+    const { initHeroDB } = await import('../src/data/heroes');
+    await initHeroDB();
+    const { generalsOf } = await import('../web/battleSimView');
+    const youpiao = TREASURES.find((t) => t.name === '游飘')!;
+    const res = validateScan(fx('敌方-陈宫张宁吕蒙.json'), tables);
+    res.slots[0].treasure = { treasureId: youpiao.id, level: 10, affix: { name: '颖悟', value: 10 } };
+    const [entry] = toOpponentEntries([{ label: res.label, slots: res.slots }]);
+    const gs = generalsOf(entry.cfg as never, 120);
+    expect(gs[0].treasure?.treasureId).toBe(youpiao.id);
+    expect(gs[0].treasure?.affix?.name).toBe('颖悟');
+  });
+});
