@@ -5,6 +5,7 @@
  * 面板只负责编辑 `ViewCfg`；发什么战法、算什么，由调用方决定。
  */
 import { SKILL_REGISTRY } from '../src/data/skills';
+import { getTreasure } from '../src/data/treasures';
 import type { TreasureLoadout, TroopType } from '../src/engine/types';
 import type { GeneralTrait } from '../src/engine/secondaryTroop';
 import { baseStatsAt, freePointBudget, HERO_RECORDS, isFemale, isLearnableSkillListed, isMainSkill, SLOTTED_HEROES, SKILL_GRADES, TROOP_CHAR, troopCapacity } from './heroes';
@@ -15,6 +16,13 @@ export const TROOP_OPTIONS: Array<[TroopType, string]> = [
   ['infantry', '步兵'],
   ['archer', '弓兵'],
 ];
+
+/** 宝物展示名：`游飘（颖悟 10）· Lv10`（截图识别写入的宝物在槽位卡上可见） */
+function treasureLabel(t: TreasureLoadout): string {
+  const name = getTreasure(t.treasureId)?.name ?? `#${t.treasureId}`;
+  const affix = t.affix ? `（${t.affix.name} ${t.affix.value}）` : '';
+  return `${name}${affix} · Lv${t.level ?? 10}`;
+}
 
 export interface SlotCfg {
   heroId: string;
@@ -244,6 +252,17 @@ export function renderConfigPanel(el: HTMLElement, cfg: ViewCfg, opts: ConfigPan
             <label>加点·谋<input type="number" min="0" max="${budget}" step="5" value="${s.addStrategy}" data-unit-str="${i}" /></label>
           </div>
           <div class="rm-points">加点预算 ${budget}（已用 ${s.addAttack + s.addStrategy}）· 主战法 ${rec?.mainSkillName ?? '无'}</div>
+        ${
+          s.traits?.length || s.treasure
+            ? `<div class="rm-points">${
+                s.traits?.length ? `兵系特性 ${s.traits.join(' / ')}` : ''
+              }${
+                s.treasure
+                  ? `${s.traits?.length ? ' · ' : ''}宝物 ${treasureLabel(s.treasure)}`
+                  : ''
+              }</div>`
+            : ''
+        }
           ${Array.from({ length: SKILL_SLOTS }, (_, k) => k)
             .map(
               (k) => `<select class="rm-skill" data-unit-skill="${i}-${k}">
