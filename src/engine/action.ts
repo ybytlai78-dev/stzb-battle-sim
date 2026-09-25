@@ -2814,7 +2814,9 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
   // 5+6. 主动战法阶段：
   //  - 准备中：prepareLeft > 1 则减 1 继续准备（仍普攻、不再判定其他主动）；
   //    prepareLeft === 1 则 prepare_end 并释放。缺省 1 回合准备与旧行为一致。
-  //  - 无准备战法：逐槽判定主动战法（含准备战法的发动率判定，判定成功即进入准备，本回合不再判定其他主动）
+  //  - 非准备中：逐槽判定主动战法（含准备战法的发动率判定，判定成功即进入准备）。
+  //    **进入准备不中断本回合其余主动的判定**（用户 2026-09-22）——瞬发主动照常逐槽判定；
+  //    仅「已进入准备时后续的准备战法不再判定」（引擎单一准备槽，避免覆盖已登记的准备）。
   const canCastActive = !hasStatus(unit, 'hesitation');
   if (unit.isPreparing && unit.preparingSkillId) {
     const left = unit.prepareLeft ?? 1;
@@ -2850,6 +2852,9 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
     for (const id of unit.general.activeSkillIds) {
       const active = resolveSkill(ctx, id);
       if (!active) continue;
+      // 本回合已进入准备（前一槽准备战法判定成功）：单一准备槽不能再登记第二段准备 ——
+      // 其余【准备战法】本回合不再判定；【瞬发主动】不受影响，照常进入发动率判定。
+      if (unit.isPreparing && active.type === 'active' && active.prepare) continue;
       // 运筹决胜等：判定该主动战法发动率之前先走二类指挥 before_active
       triggerBeforeActiveCommands(ctx, unit);
       if (!unit.alive) break;
@@ -2861,7 +2866,6 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
         phase: 'active_skill',
       });
       triggerActiveSkill(ctx, unit, active, enemies, allies, attackPool);
-      if (unit.isPreparing) break; // 已进入准备，本回合不再判定其他主动
     }
   }
 
