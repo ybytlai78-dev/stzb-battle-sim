@@ -76,8 +76,7 @@ function makeUnit(g: General, side: 'my' | 'enemy' = 'my', troops?: number): Uni
     totalDead: 0,
     alive: true,
     statuses: [],
-    isPreparing: false,
-    preparingSkillId: null,
+    preparations: [],
     hasActedThisRound: false,
   };
 }
@@ -208,7 +207,7 @@ describe('奇门遁甲（XP左慈 h802）', () => {
     expect(st[0]?.targetIds).toEqual(['foe-front']);
   });
 
-  it('机制·跳过准备：候选为准备型主动 → 左慈当回合直接打出其伤害，无准备事件 / isPreparing 不置位', () => {
+  it('机制·跳过准备：候选为准备型主动 → 左慈当回合直接打出其伤害，无准备事件 / 准备槽不置位', () => {
     const zuoci = heroUnit(HERO_ID, '中军', { activeSkillIds: [SKILL_ID] });
     const foe = makeUnit(dummy('foe-front', '前锋', { activeSkillIds: [COPIED_PREPARE_ID] }), 'enemy');
     const ctx = makeCtx([zuoci], [foe], 1);
@@ -221,8 +220,7 @@ describe('奇门遁甲（XP左慈 h802）', () => {
     expect(eventsOf(ctx, 'damage').some((e) => e.skillId === COPIED_PREPARE_ID)).toBe(true);
     expect(eventsOf(ctx, 'skill_cast').some((e) => e.skillId === COPIED_PREPARE_ID)).toBe(true);
     // 跳过全部准备回合：不进入准备、无 prepare_* 事件
-    expect(zuoci.isPreparing).toBe(false);
-    expect(zuoci.preparingSkillId).toBeNull();
+    expect(zuoci.preparations).toHaveLength(0);
     expect(eventsOf(ctx, 'prepare_start')).toHaveLength(0);
     expect(eventsOf(ctx, 'prepare_end')).toHaveLength(0);
   });

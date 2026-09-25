@@ -46,8 +46,8 @@ function dummy(id: string, position: Position): General {
 
 function statsOf(report: ReturnType<typeof runBattle>) {
   const units = [
-    ...report.myTeam.map((g) => ({ general: g, side: 'my' as const, troops: 0, wounded: 0, totalDead: 0, alive: true, statuses: [], isPreparing: false, preparingSkillId: null })),
-    ...report.enemyTeam.map((g) => ({ general: g, side: 'enemy' as const, troops: 0, wounded: 0, totalDead: 0, alive: true, statuses: [], isPreparing: false, preparingSkillId: null })),
+    ...report.myTeam.map((g) => ({ general: g, side: 'my' as const, troops: 0, wounded: 0, totalDead: 0, alive: true, statuses: [], preparations: [] })),
+    ...report.enemyTeam.map((g) => ({ general: g, side: 'enemy' as const, troops: 0, wounded: 0, totalDead: 0, alive: true, statuses: [], preparations: [] })),
   ];
   return computeDetailedStats(report.events, units);
 }

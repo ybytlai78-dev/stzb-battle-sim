@@ -18,7 +18,7 @@ function dummyUnit(id: string, position: Position, extra: Partial<General> = {},
   };
   return {
     general: g, side, troops: g.maxTroops, wounded: 0, totalDead: 0,
-    alive: true, statuses: [], isPreparing: false, preparingSkillId: null, hasActedThisRound: false,
+    alive: true, statuses: [], preparations: [], hasActedThisRound: false,
   };
 }
 

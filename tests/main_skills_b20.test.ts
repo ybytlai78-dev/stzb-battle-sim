@@ -27,7 +27,7 @@ function dummy(id: string, position: Position, extra: Partial<General> = {}): Ge
 function makeUnit(g: General, side: 'my' | 'enemy' = 'my'): UnitState {
   return {
     general: g, side, troops: g.maxTroops, wounded: 0, totalDead: 0, alive: true,
-    statuses: [], isPreparing: false, preparingSkillId: null, hasActedThisRound: false,
+    statuses: [], preparations: [], hasActedThisRound: false,
   };
 }
 
@@ -87,22 +87,19 @@ describe('2 回合准备', () => {
     expect(ctx.events.some((e) => e.type === 'prepare_start' && e.skillId === skill.id)).toBe(true);
     expect(ctx.events.some((e) => e.type === 'prepare_end')).toBe(false);
     expect(ctx.events.some((e) => e.type === 'damage' && e.skillId === skill.id)).toBe(false);
-    expect(me.isPreparing).toBe(true);
-    expect(me.prepareLeft).toBe(2);
+    expect(me.preparations).toEqual([{ skillId: 'test_prep2', left: 2 }]);
 
     ctx.currentRound = 2;
     actUnit(ctx, me); // 中间准备回合
     expect(ctx.events.some((e) => e.type === 'prepare_end')).toBe(false);
-    expect(me.isPreparing).toBe(true);
-    expect(me.prepareLeft).toBe(1);
+    expect(me.preparations).toEqual([{ skillId: 'test_prep2', left: 1 }]);
     expect(ctx.events.some((e) => e.type === 'damage' && e.skillId === skill.id)).toBe(false);
 
     ctx.currentRound = 3;
     actUnit(ctx, me); // 释放
     expect(ctx.events.some((e) => e.type === 'prepare_end' && e.skillId === skill.id)).toBe(true);
     expect(ctx.events.some((e) => e.type === 'damage' && e.skillId === skill.id)).toBe(true);
-    expect(me.isPreparing).toBe(false);
-    expect(me.prepareLeft == null || me.prepareLeft === 0).toBe(true);
+    expect(me.preparations).toHaveLength(0);
   });
 
   it('缺省 prepareTurns 的 1 回合准备：下一行动直接 prepare_end', () => {
@@ -112,12 +109,11 @@ describe('2 回合准备', () => {
     const ctx = makeCtx([me], [foe]);
     ctx.skills.set('test_prep1', skill);
     actUnit(ctx, me);
-    expect(me.isPreparing).toBe(true);
-    expect(me.prepareLeft).toBe(1);
+    expect(me.preparations).toEqual([{ skillId: 'test_prep1', left: 1 }]);
     ctx.currentRound = 2;
     actUnit(ctx, me);
     expect(ctx.events.some((e) => e.type === 'prepare_end' && e.skillId === 'test_prep1')).toBe(true);
-    expect(me.isPreparing).toBe(false);
+    expect(me.preparations).toHaveLength(0);
   });
 });
 
@@ -321,7 +317,7 @@ describe('after_first_active', () => {
     ctx.skills.set(active.id, active);
 
     actUnit(ctx, caster);
-    expect(caster.isPreparing).toBe(true);
+    expect(caster.preparations).toEqual([{ skillId: 'test_prep_afa', left: 1 }]);
     const stacked = () => [...ctx.myTeam].filter((u) => u.statuses.some((s) => s.type === 'damage_boost' && s.sourceSkillId === 'test_afa'));
     expect(stacked()).toHaveLength(0);
 
@@ -533,21 +529,19 @@ describe('长坂之吼（张飞 h22）', () => {
     expect(ctx.events.some((e) => e.type === 'prepare_start' && e.skillId === 'changban_zhihou')).toBe(true);
     expect(ctx.events.some((e) => e.type === 'prepare_end')).toBe(false);
     expect(skillDamage(ctx, 'changban_zhihou')).toHaveLength(0);
-    expect(me.isPreparing).toBe(true);
-    expect(me.prepareLeft).toBe(2);
+    expect(me.preparations).toEqual([{ skillId: 'changban_zhihou', left: 2 }]);
 
     ctx.currentRound += 1;
     actUnit(ctx, me);
     expect(ctx.events.some((e) => e.type === 'prepare_end')).toBe(false);
-    expect(me.isPreparing).toBe(true);
-    expect(me.prepareLeft).toBe(1);
+    expect(me.preparations).toEqual([{ skillId: 'changban_zhihou', left: 1 }]);
     expect(skillDamage(ctx, 'changban_zhihou')).toHaveLength(0);
 
     ctx.currentRound += 1;
     actUnit(ctx, me);
     expect(ctx.events.some((e) => e.type === 'prepare_end' && e.skillId === 'changban_zhihou')).toBe(true);
     expect(skillDamage(ctx, 'changban_zhihou').length).toBeGreaterThan(0);
-    expect(me.isPreparing).toBe(false);
+    expect(me.preparations).toHaveLength(0);
   });
 
   it('步兵打骑兵：伤害 modifiers.reduce 无 troop_counter', () => {
@@ -788,7 +782,7 @@ describe('文德椒房（郭皇后 h655）', () => {
     const ctxPrep = makeCtx([guoPrep, pa, pb], [foe]);
     ctxPrep.skills.set(prep.id, prep);
     actUnit(ctxPrep, guoPrep);
-    expect(guoPrep.isPreparing).toBe(true);
+    expect(guoPrep.preparations.map((p) => p.skillId)).toContain('test_prep_wende');
     const stackedPrep = () => [...ctxPrep.myTeam].filter((u) =>
       u.statuses.some((s) => s.type === 'damage_boost' && s.sourceSkillId === 'wende_jiaofang'),
     );

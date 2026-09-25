@@ -70,8 +70,7 @@ function makeUnit(g: General, side: 'my' | 'enemy' = 'my', troops?: number): Uni
     totalDead: 0,
     alive: true,
     statuses: [],
-    isPreparing: false,
-    preparingSkillId: null,
+    preparations: [],
     hasActedThisRound: false,
   };
 }

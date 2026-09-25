@@ -48,8 +48,7 @@ function makeUnit(id: string, side: 'my' | 'enemy' = 'my'): UnitState {
     wounded: 0,
     totalDead: 0,
     statuses: [],
-    isPreparing: false,
-    preparingSkillId: null,
+    preparations: [],
   } as unknown as UnitState;
 }
 

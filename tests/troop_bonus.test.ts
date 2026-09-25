@@ -132,8 +132,7 @@ function makeUnit(id: string, stats: Partial<Pick<General, 'attack' | 'defense' 
     wounded: 0,
     totalDead: 0,
     statuses: [],
-    isPreparing: false,
-    preparingSkillId: null,
+    preparations: [],
   };
 }
 

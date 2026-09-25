@@ -58,8 +58,7 @@ function makeUnit(g: General, side: 'my' | 'enemy' = 'my'): UnitState {
     totalDead: 0,
     alive: true,
     statuses: [],
-    isPreparing: false,
-    preparingSkillId: null,
+    preparations: [],
     hasActedThisRound: false,
   };
 }
@@ -240,8 +239,7 @@ describe('七步释嫌（曹植，二类指挥：友军普攻/试图主动或追
     // 准备完成自动释放：不做主动发动率判定，不触发
     const prepCaster = makeUnit(withSkills(dummy('caozhi4', '大营'), { commandSkillIds: ['qibu_shixian'] }));
     const prepAtk = makeUnit(withSkills(dummy('atk4', '前锋'), { activeSkillIds: ['test_prep_active'] }));
-    prepAtk.isPreparing = true;
-    prepAtk.preparingSkillId = 'test_prep_active';
+    prepAtk.preparations = [{ skillId: 'test_prep_active', left: 1 }];
     const prepEnemy = makeUnit(dummy('e4', '前锋'), 'enemy');
     const prepCtx = makeCtx([prepCaster, prepAtk], [prepEnemy]);
     prepCtx.skills.set('test_prep_active', PREP_ACTIVE);

@@ -61,8 +61,7 @@ function makeUnit(id: string, opts: { position?: Position; morale?: number; purs
     totalDead: 0,
     alive: true,
     statuses: [],
-    isPreparing: false,
-    preparingSkillId: null,
+    preparations: [],
   };
 }
 

@@ -67,8 +67,7 @@ function makeUnit(g: General, side: 'my' | 'enemy' = 'my'): UnitState {
     totalDead: 0,
     alive: true,
     statuses: [],
-    isPreparing: false,
-    preparingSkillId: null,
+    preparations: [],
     hasActedThisRound: false,
   };
 }
@@ -198,7 +197,7 @@ describe('赐剑长驱（刘禅 h689）', () => {
     // 直接打出伤害（不需要准备回合）
     expect(eventsOf(ctx, 'damage').filter((e) => e.skillId === 'xiongbing_podi').length).toBeGreaterThan(0);
     expect(eventsOf(ctx, 'prepare_start')).toHaveLength(0);
-    expect(ally.isPreparing).toBe(false);
+    expect(ally.preparations).toHaveLength(0);
     // 属性降低段同样落地（非伤害恢复段不缩放）
     expect(foes.some((f) => f.statuses.some((st) => st.type === 'defense_buff'))).toBe(true);
   });

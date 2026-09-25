@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 战斗主循环（v0.2）
  *   准备阶段：速度排序、battle_start 被动、一类指挥战法（一次）→ 8 回合逐个行动 → 胜负判定
  *   行动阶段（被动 → 指挥预备/二类 → 主动 → 普攻 → 追击）
@@ -206,10 +206,8 @@ function toUnitStates(generals: General[], side: 'my' | 'enemy'): UnitState[] {
     totalDead: 0,
     alive: true,
     statuses: [],
-    isPreparing: false,
-    preparingSkillId: null,
+    preparations: [],
     hasActedThisRound: false,
-    prepareLeft: null,
   }));
 }
 

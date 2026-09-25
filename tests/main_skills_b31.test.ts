@@ -59,8 +59,7 @@ function makeUnit(g: General, side: 'my' | 'enemy' = 'my'): UnitState {
     totalDead: 0,
     alive: true,
     statuses: [],
-    isPreparing: false,
-    preparingSkillId: null,
+    preparations: [],
     hasActedThisRound: false,
   };
 }
@@ -98,10 +97,10 @@ function heroUnit(
 /** 强制发动并等到释放：第 1 次行动进入准备，第 2 次行动（下一回合）释放。 */
 function castJiding(ctx: CombatContext, caster: UnitState): void {
   actUnit(ctx, caster);
-  expect(caster.isPreparing).toBe(true);
+  expect(caster.preparations.length).toBeGreaterThan(0);
   ctx.currentRound += 1;
   actUnit(ctx, caster);
-  expect(caster.isPreparing).toBe(false);
+  expect(caster.preparations).toHaveLength(0);
 }
 
 function healEvents(ctx: CombatContext): Extract<BattleEvent, { type: 'heal' }>[] {

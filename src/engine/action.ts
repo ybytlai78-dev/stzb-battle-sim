@@ -2811,50 +2811,49 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
   const combinedPool = [...allies, ...enemies].filter((t) => t.alive && t !== unit);
   const attackPool = rampage ? combinedPool : enemies;
 
-  // 5+6. 主动战法阶段：
-  //  - 准备中：prepareLeft > 1 则减 1 继续准备（仍普攻、不再判定其他主动）；
-  //    prepareLeft === 1 则 prepare_end 并释放。缺省 1 回合准备与旧行为一致。
-  //  - 非准备中：逐槽判定主动战法（含准备战法的发动率判定，判定成功即进入准备）。
-  //    **进入准备不中断本回合其余主动的判定**（用户 2026-09-22）——瞬发主动照常逐槽判定；
-  //    仅「已进入准备时后续的准备战法不再判定」（引擎单一准备槽，避免覆盖已登记的准备）。
+  // 5+6. 主动战法阶段（准备槽**按战法**记录，可同时多段准备）：
+  //  a) 先结算准备槽：left > 1 则 −1 继续准备；left === 1 则 prepare_end 并释放该战法。
+  //  b) 再逐槽判定主动战法：本回合刚释放的战法与仍在准备中的战法跳过判定，其余照常判定。
+  //     **进入准备不中断其他主动的判定**（用户 2026-09-22 口径）：
+  //     双准备 = 第 1 回合判 A 成功（登记 A 的准备槽）/ B 失败 → 第 2 回合释放 A + 继续判 B。
   const canCastActive = !hasStatus(unit, 'hesitation');
-  if (unit.isPreparing && unit.preparingSkillId) {
-    const left = unit.prepareLeft ?? 1;
-    if (left > 1) {
-      unit.prepareLeft = left - 1;
-      // 不释放、不判定其他主动；后面仍普攻
-    } else {
-      const prepared = resolveSkill(ctx, unit.preparingSkillId);
-      if (prepared) {
-        ctx.events.push({
-          type: 'prepare_end',
-          unitId: unit.general.id,
-          skillId: prepared.id,
-          skillName: prepared.name,
-          success: true,
-        });
-        executePreparedSkill(ctx, unit, prepared, enemies, attackPool);
-      } else {
-        ctx.events.push({
-          type: 'prepare_end',
-          unitId: unit.general.id,
-          skillId: unit.preparingSkillId,
-          skillName: unit.preparingSkillId,
-          success: false,
-          reason: '战法不存在',
-        });
-      }
-      unit.isPreparing = false;
-      unit.preparingSkillId = null;
-      unit.prepareLeft = null;
+  const releasedThisTurn = new Set<string>();
+  for (const prep of [...unit.preparations]) {
+    if (prep.left > 1) {
+      prep.left -= 1; // 继续准备（本将仍可普攻、其余主动照常判定）
+      continue;
     }
-  } else if (canCastActive) {
+    // 准备完成：释放并移除该准备槽（本回合不再对该战法做发动率判定）
+    unit.preparations = unit.preparations.filter((p) => p !== prep);
+    releasedThisTurn.add(prep.skillId);
+    const prepared = resolveSkill(ctx, prep.skillId);
+    if (prepared) {
+      ctx.events.push({
+        type: 'prepare_end',
+        unitId: unit.general.id,
+        skillId: prepared.id,
+        skillName: prepared.name,
+        success: true,
+      });
+      executePreparedSkill(ctx, unit, prepared, enemies, attackPool);
+    } else {
+      ctx.events.push({
+        type: 'prepare_end',
+        unitId: unit.general.id,
+        skillId: prep.skillId,
+        skillName: prep.skillId,
+        success: false,
+        reason: '战法不存在',
+      });
+    }
+  }
+  if (canCastActive) {
     for (const id of unit.general.activeSkillIds) {
       const active = resolveSkill(ctx, id);
       if (!active) continue;
-      // 本回合已进入准备（前一槽准备战法判定成功）：单一准备槽不能再登记第二段准备 ——
-      // 其余【准备战法】本回合不再判定；【瞬发主动】不受影响，照常进入发动率判定。
-      if (unit.isPreparing && active.type === 'active' && active.prepare) continue;
+      // 本回合刚释放的战法、以及仍在准备中的战法：本回合不做发动率判定
+      if (releasedThisTurn.has(id)) continue;
+      if (unit.preparations.some((p) => p.skillId === id)) continue;
       // 运筹决胜等：判定该主动战法发动率之前先走二类指挥 before_active
       triggerBeforeActiveCommands(ctx, unit);
       if (!unit.alive) break;
@@ -8120,9 +8119,11 @@ export function triggerActiveSkill(
         skillName: skill.name,
       });
     } else {
-      unit.isPreparing = true;
-      unit.preparingSkillId = skill.id;
-      unit.prepareLeft = (skill.type === 'active' && skill.prepare ? (skill.prepareTurns ?? 1) : 1);
+      // 登记本战法自己的准备槽（多准备槽：其他准备战法可同时各自准备）
+      unit.preparations.push({
+        skillId: skill.id,
+        left: skill.type === 'active' && skill.prepare ? (skill.prepareTurns ?? 1) : 1,
+      });
       ctx.events.push({
         type: 'prepare_start',
         unitId: unit.general.id,

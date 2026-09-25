@@ -48,8 +48,8 @@ function dummy(id: string, position: Position, opts: { attack?: number; speed?: 
 /** 从 report 构造 UnitState（computeStats/computeDetailedStats 需要） */
 function unitsOf(report: ReturnType<typeof runBattle>): UnitState[] {
   return [
-    ...report.myTeam.map((g) => ({ general: g, side: 'my' as const, troops: 0, wounded: 0, totalDead: 0, alive: true, statuses: [], isPreparing: false, preparingSkillId: null })),
-    ...report.enemyTeam.map((g) => ({ general: g, side: 'enemy' as const, troops: 0, wounded: 0, totalDead: 0, alive: true, statuses: [], isPreparing: false, preparingSkillId: null })),
+    ...report.myTeam.map((g) => ({ general: g, side: 'my' as const, troops: 0, wounded: 0, totalDead: 0, alive: true, statuses: [], preparations: [] })),
+    ...report.enemyTeam.map((g) => ({ general: g, side: 'enemy' as const, troops: 0, wounded: 0, totalDead: 0, alive: true, statuses: [], preparations: [] })),
   ];
 }
 

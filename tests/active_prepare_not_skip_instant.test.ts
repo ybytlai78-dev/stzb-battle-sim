@@ -1,12 +1,12 @@
 /**
- * 主动战法判定：准备战法「开始准备」后**不跳过**其余主动战法的判定（用户 2026-09-22 口径）。
+ * 主动战法判定 · 准备槽（用户 2026-09-22 口径）：
+ *  ① 准备战法判定成功「开始准备」后，本回合**其余主动照常判定**（瞬发 / 其他准备战法都不跳过）；
+ *  ② 准备槽**按战法**记录（`UnitState.preparations`），同一武将可同时准备多个主动战法；
+ *  ③ 释放的那一回合只跳过「被释放的这个战法」的发动率判定，其余主动照常判定；
+ *  ④ 准备中的战法在准备期间不再判定（防同一战法重复登记）。
  *
- * 用户场景（战报）：司马师携带 1 个准备主动 + 1 个瞬发主动 —— 准备战法判定成功「开始准备」后，
- * 瞬发主动整段没有被判定（旧实现 `if (unit.isPreparing) break`），连运筹决胜的
- * 「自身每次试图发动主动战法时」都少触发了一次。
- *
- * 保持的边界：引擎只有**单一准备槽**（UnitState.preparingSkillId）→ 本回合已进入准备时，
- * 其余【准备战法】本回合不再判定（否则会覆盖已登记的准备、被覆盖的那个永远不释放）。
+ * 用户示例（双准备）：第 1 回合判 A 成功（登记 A 准备槽）/ B 失败 →
+ * 第 2 回合释放 A，且继续判 B（B 成功后登记自己的准备槽）→ 第 3 回合释放 B。
  */
 import { describe, it, expect } from 'vitest';
 import { actUnit, type CombatContext } from '../src/engine/action';
@@ -50,8 +50,7 @@ function makeUnit(g: General, side: 'my' | 'enemy' = 'my'): UnitState {
     totalDead: 0,
     alive: true,
     statuses: [],
-    isPreparing: false,
-    preparingSkillId: null,
+    preparations: [],
   };
 }
 
@@ -68,24 +67,24 @@ function makeCtx(my: UnitState[], enemy: UnitState[], seed = 1): CombatContext {
   };
 }
 
-/** 1 回合准备主动（发动率 100%）：判定成功 → prepare_start，下回合行动释放策略伤害 */
-const PREP: Skill = {
-  id: 'test_prep',
-  name: '测试准备主动',
-  type: 'active',
-  prepare: true,
-  range: 5,
-  triggerRate: 1,
-  targetMode: 'single',
-  targetSide: 'enemy',
-  tags: ['damage'],
-  output: [{ kind: 'strategy_damage', rate: 100, strategyScaled: true }],
-};
+/** 准备主动（发动率 1；可选 prepareTurns） */
+function prepSkill(id: string, prepareTurns?: number): Skill {
+  return {
+    id,
+    name: `测试准备主动${id}`,
+    type: 'active',
+    prepare: true,
+    ...(prepareTurns != null ? { prepareTurns } : {}),
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'single',
+    targetSide: 'enemy',
+    tags: ['damage'],
+    output: [{ kind: 'physical_damage', rate: 100 }],
+  };
+}
 
-/** 另一个 1 回合准备主动（用于验证单一准备槽） */
-const PREP2: Skill = { ...PREP, id: 'test_prep_2', name: '测试准备主动2' };
-
-/** 瞬发主动（发动率 100%） */
+/** 瞬发主动（发动率 1） */
 const INSTANT: Skill = {
   id: 'test_instant',
   name: '测试瞬发主动',
@@ -96,10 +95,10 @@ const INSTANT: Skill = {
   targetMode: 'single',
   targetSide: 'enemy',
   tags: ['damage'],
-  output: [{ kind: 'strategy_damage', rate: 100, strategyScaled: true }],
+  output: [{ kind: 'physical_damage', rate: 100 }],
 };
 
-/** 装配一套「准备 + 瞬发」的司马师（主战法运筹决胜走 before_active 钩子） */
+/** 装配司马师（主战法运筹决胜走 before_active 钩子） */
 function simashiWith(activeSkillIds: string[]): UnitState {
   const g = dummy('simashi', '中军');
   g.name = '司马师';
@@ -108,10 +107,18 @@ function simashiWith(activeSkillIds: string[]): UnitState {
   return makeUnit(g);
 }
 
-function skillOf(ctx: CombatContext, id: string): Skill {
-  const s = ctx.skills.get(id);
-  if (!s) throw new Error(`测试战法 ${id} 未注册`);
-  return s;
+/** 覆盖 ctx 里某个战法的发动率（让某回合成功 / 失败可控） */
+function setRate(ctx: CombatContext, skillId: string, rate: number): void {
+  const s = ctx.skills.get(skillId);
+  if (!s) throw new Error(`测试战法 ${skillId} 未注册`);
+  ctx.skills.set(skillId, { ...s, triggerRate: rate } as Skill);
+}
+
+/** 关闭运筹决胜的两段 effect（隔离主动判定本身） */
+function muteYunchou(ctx: CombatContext): void {
+  const s = ctx.skills.get('yunchou_juesheng');
+  if (!s || s.type !== 'command') throw new Error('运筹决胜未注册');
+  ctx.skills.set('yunchou_juesheng', { ...s, output: [] });
 }
 
 function triggersOf(ctx: CombatContext, skillId: string) {
@@ -127,62 +134,59 @@ function damageOf(ctx: CombatContext, skillId: string) {
   );
 }
 
-describe('主动战法判定：进入准备不跳过其余主动', () => {
+function prepareEnds(ctx: CombatContext) {
+  return ctx.events.filter(
+    (e): e is Extract<BattleEvent, { type: 'prepare_end' }> => e.type === 'prepare_end' && e.success
+  );
+}
+
+describe('主动战法：进入准备不跳过其余主动；准备槽按战法记录', () => {
   it('准备在先：准备战法成功「开始准备」后，瞬发主动仍照常判定并发动', () => {
     const u = simashiWith(['test_prep', 'test_instant']);
     const enemy = makeUnit(dummy('e1', '前锋'), 'enemy');
     const ctx = makeCtx([u], [enemy]);
-    ctx.skills.set('test_prep', PREP);
+    ctx.skills.set('test_prep', prepSkill('test_prep'));
     ctx.skills.set('test_instant', INSTANT);
-    // 关闭运筹决胜的两段 effect，隔离本条（只验证主动判定本身）
-    ctx.skills.set('yunchou_juesheng', {
-      ...(skillOf(ctx, 'yunchou_juesheng') as Extract<Skill, { type: 'command' }>),
-      output: [],
-    });
+    muteYunchou(ctx);
 
     actUnit(ctx, u);
 
-    // 准备战法：判定成功 → 开始准备
     const prepStart = ctx.events.find((e) => e.type === 'prepare_start');
     expect(prepStart && prepStart.type === 'prepare_start' && prepStart.skillId).toBe('test_prep');
-    expect(u.isPreparing).toBe(true);
-    expect(u.preparingSkillId).toBe('test_prep');
+    expect(u.preparations).toEqual([{ skillId: 'test_prep', left: 1 }]);
 
     // 瞬发主动：必须仍然进入发动率判定（旧实现整段被跳过 → 这里为空）
     const instantTrigger = triggersOf(ctx, 'test_instant');
     expect(instantTrigger).toHaveLength(1);
     expect(instantTrigger[0].success).toBe(true);
-    // 并且真的打出了伤害
     expect(damageOf(ctx, 'test_instant').length).toBeGreaterThanOrEqual(1);
-    // 时序：准备登记在前、瞬发判定在后（战报里两条都在「主动战法判定」段内）
-    const instantIdx = ctx.events.findIndex((e) => e.type === 'skill_trigger' && e.skillId === 'test_instant');
+    const instantIdx = ctx.events.findIndex(
+      (e) => e.type === 'skill_trigger' && e.skillId === 'test_instant'
+    );
     expect(instantIdx).toBeGreaterThan(ctx.events.indexOf(prepStart!));
 
-    // 下回合：准备中的战法照常释放
+    // 下回合：释放准备中的战法，且**被释放的战法本回合不再做发动率判定**
     ctx.events.length = 0;
     ctx.currentRound = 2;
     actUnit(ctx, u);
-    expect(ctx.events.some((e) => e.type === 'prepare_end' && e.skillId === 'test_prep')).toBe(true);
+    expect(prepareEnds(ctx).map((e) => e.skillId)).toEqual(['test_prep']);
     expect(damageOf(ctx, 'test_prep').length).toBeGreaterThanOrEqual(1);
-    expect(u.isPreparing).toBe(false);
+    expect(triggersOf(ctx, 'test_prep')).toHaveLength(0);
+    expect(u.preparations).toHaveLength(0);
   });
 
   it('瞬发在先：两者都判定，顺序不影响结果', () => {
     const u = simashiWith(['test_instant', 'test_prep']);
     const enemy = makeUnit(dummy('e1', '前锋'), 'enemy');
     const ctx = makeCtx([u], [enemy]);
-    ctx.skills.set('test_prep', PREP);
+    ctx.skills.set('test_prep', prepSkill('test_prep'));
     ctx.skills.set('test_instant', INSTANT);
-    ctx.skills.set('yunchou_juesheng', {
-      ...(skillOf(ctx, 'yunchou_juesheng') as Extract<Skill, { type: 'command' }>),
-      output: [],
-    });
+    muteYunchou(ctx);
 
     actUnit(ctx, u);
 
     expect(triggersOf(ctx, 'test_instant')).toHaveLength(1);
     expect(ctx.events.some((e) => e.type === 'prepare_start' && e.skillId === 'test_prep')).toBe(true);
-    // 瞬发在前 → 其伤害先于准备登记
     const instantDmg = ctx.events.findIndex((e) => e.type === 'damage' && e.skillId === 'test_instant');
     const prepStart = ctx.events.findIndex((e) => e.type === 'prepare_start');
     expect(instantDmg).toBeGreaterThanOrEqual(0);
@@ -193,34 +197,110 @@ describe('主动战法判定：进入准备不跳过其余主动', () => {
     const u = simashiWith(['test_prep', 'test_instant']);
     const enemy = makeUnit(dummy('e1', '前锋'), 'enemy');
     const ctx = makeCtx([u], [enemy]);
-    ctx.skills.set('test_prep', PREP);
+    ctx.skills.set('test_prep', prepSkill('test_prep'));
     ctx.skills.set('test_instant', INSTANT);
-    // 运筹决胜保持原生两段（暴走 30% / 策略 50%）：每次试图发动 = 2 条 skill_trigger（与是否成功无关）
+    // 运筹决胜保持原生两段（暴走 30% / 策略 50%）：每次试图发动 = 2 条 skill_trigger（与成败无关）
 
     actUnit(ctx, u);
 
-    // 两个主动都进入判定 = 2 次 before_active = 4 条；旧实现准备成功后 break → 只有 2 条
     expect(triggersOf(ctx, 'yunchou_juesheng')).toHaveLength(4);
     expect(ctx.events.some((e) => e.type === 'prepare_start' && e.skillId === 'test_prep')).toBe(true);
     expect(triggersOf(ctx, 'test_instant')).toHaveLength(1);
   });
 
-  it('单一准备槽：本回合已进入准备后，其余【准备战法】不再判定（不覆盖已登记的准备）', () => {
+  it('用户示例·双准备：第 1 回合 A 成功 / B 失败 → 第 2 回合释放 A 并继续判 B → 第 3 回合释放 B', () => {
     const u = simashiWith(['test_prep', 'test_prep_2']);
     const enemy = makeUnit(dummy('e1', '前锋'), 'enemy');
     const ctx = makeCtx([u], [enemy]);
-    ctx.skills.set('test_prep', PREP);
-    ctx.skills.set('test_prep_2', PREP2);
-    ctx.skills.set('yunchou_juesheng', {
-      ...(skillOf(ctx, 'yunchou_juesheng') as Extract<Skill, { type: 'command' }>),
-      output: [],
-    });
+    ctx.skills.set('test_prep', prepSkill('test_prep'));
+    ctx.skills.set('test_prep_2', prepSkill('test_prep_2'));
+    setRate(ctx, 'test_prep_2', 0); // 第 1 回合 B 判定失败
+    muteYunchou(ctx);
+
+    // 第 1 回合：A 成功进入准备；B 判定失败
+    actUnit(ctx, u);
+    expect(ctx.events.some((e) => e.type === 'prepare_start' && e.skillId === 'test_prep')).toBe(true);
+    expect(triggersOf(ctx, 'test_prep_2')).toHaveLength(1);
+    expect(triggersOf(ctx, 'test_prep_2')[0].success).toBe(false);
+    expect(u.preparations).toEqual([{ skillId: 'test_prep', left: 1 }]);
+
+    // 第 2 回合：释放 A，且继续判定 B（B 这次成功 → 登记 B 自己的准备槽）
+    setRate(ctx, 'test_prep_2', 1);
+    ctx.events.length = 0;
+    ctx.currentRound = 2;
+    actUnit(ctx, u);
+    expect(prepareEnds(ctx).map((e) => e.skillId)).toEqual(['test_prep']); // 释放 A
+    expect(triggersOf(ctx, 'test_prep')).toHaveLength(0); // 释放回合不再判 A
+    expect(triggersOf(ctx, 'test_prep_2')).toHaveLength(1); // 继续判 B
+    expect(triggersOf(ctx, 'test_prep_2')[0].success).toBe(true);
+    expect(u.preparations).toEqual([{ skillId: 'test_prep_2', left: 1 }]);
+
+    // 第 3 回合：释放 B；A 本回合已空出准备槽 → 按用户口径「其他战法该判定还需要判定」照常判定
+    setRate(ctx, 'test_prep', 0); // 让 A 本次判定失败，便于断言
+    ctx.events.length = 0;
+    ctx.currentRound = 3;
+    actUnit(ctx, u);
+    expect(prepareEnds(ctx).map((e) => e.skillId)).toEqual(['test_prep_2']);
+    expect(triggersOf(ctx, 'test_prep')).toHaveLength(1);
+    expect(triggersOf(ctx, 'test_prep')[0].success).toBe(false);
+    expect(u.preparations).toHaveLength(0);
+  });
+
+  it('释放回合：只跳过被释放的战法，瞬发主动照常判定', () => {
+    const u = simashiWith(['test_prep', 'test_instant']);
+    const enemy = makeUnit(dummy('e1', '前锋'), 'enemy');
+    const ctx = makeCtx([u], [enemy]);
+    ctx.skills.set('test_prep', prepSkill('test_prep'));
+    ctx.skills.set('test_instant', INSTANT);
+    setRate(ctx, 'test_instant', 0); // 第 1 回合瞬发不发动（隔离出第 2 回合的判定）
+    muteYunchou(ctx);
 
     actUnit(ctx, u);
+    expect(u.preparations).toEqual([{ skillId: 'test_prep', left: 1 }]);
 
-    const prepStarts = ctx.events.filter((e) => e.type === 'prepare_start');
-    expect(prepStarts).toHaveLength(1);
-    expect(u.preparingSkillId).toBe('test_prep'); // 第二个不覆盖
-    expect(triggersOf(ctx, 'test_prep_2')).toHaveLength(0); // 第二个准备战法本回合未被判定
+    setRate(ctx, 'test_instant', 1);
+    ctx.events.length = 0;
+    ctx.currentRound = 2;
+    actUnit(ctx, u);
+    expect(prepareEnds(ctx).map((e) => e.skillId)).toEqual(['test_prep']); // A 释放
+    expect(triggersOf(ctx, 'test_prep')).toHaveLength(0); // A 本回合不再判定
+    expect(triggersOf(ctx, 'test_instant')).toHaveLength(1); // B 照常判定
+    expect(triggersOf(ctx, 'test_instant')[0].success).toBe(true);
+    expect(damageOf(ctx, 'test_instant').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('多准备槽：两个准备战法各自按 prepareTurns 释放（准备期间不重复判定）', () => {
+    const u = simashiWith(['test_prep_2turn', 'test_prep']); // A = 2 回合准备，B = 1 回合准备
+    const enemy = makeUnit(dummy('e1', '前锋'), 'enemy');
+    const ctx = makeCtx([u], [enemy]);
+    ctx.skills.set('test_prep_2turn', prepSkill('test_prep_2turn', 2));
+    ctx.skills.set('test_prep', prepSkill('test_prep'));
+    muteYunchou(ctx);
+
+    // 第 1 回合：两个准备战法都判定成功 → 两个准备槽共存
+    actUnit(ctx, u);
+    expect(ctx.events.filter((e) => e.type === 'prepare_start')).toHaveLength(2);
+    expect(u.preparations).toEqual([
+      { skillId: 'test_prep_2turn', left: 2 },
+      { skillId: 'test_prep', left: 1 },
+    ]);
+
+    // 第 2 回合：B 释放（A 继续准备，left 2→1）；两者本回合都不做发动率判定
+    ctx.events.length = 0;
+    ctx.currentRound = 2;
+    actUnit(ctx, u);
+    expect(prepareEnds(ctx).map((e) => e.skillId)).toEqual(['test_prep']);
+    expect(u.preparations).toEqual([{ skillId: 'test_prep_2turn', left: 1 }]);
+    expect(triggersOf(ctx, 'test_prep_2turn')).toHaveLength(0);
+    expect(triggersOf(ctx, 'test_prep')).toHaveLength(0);
+
+    // 第 3 回合：A 释放；B 本回合已空出准备槽 → 照常判定（让 B 判定失败以便断言）
+    setRate(ctx, 'test_prep', 0);
+    ctx.events.length = 0;
+    ctx.currentRound = 3;
+    actUnit(ctx, u);
+    expect(prepareEnds(ctx).map((e) => e.skillId)).toEqual(['test_prep_2turn']);
+    expect(triggersOf(ctx, 'test_prep')).toHaveLength(1);
+    expect(u.preparations).toHaveLength(0);
   });
 });

@@ -44,8 +44,7 @@ function unit(g: General, side: 'my' | 'enemy'): UnitState {
     totalDead: 0,
     alive: true,
     statuses: [],
-    isPreparing: false,
-    preparingSkillId: null,
+    preparations: [],
   };
 }
 
