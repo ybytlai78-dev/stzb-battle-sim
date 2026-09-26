@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 二级兵种（高级兵种）系统 —— 数据与规则表
  *
  * 依据：`docs/兵种转换调研.md`（用户 2026-09-20 审定口径，全部按现版）。
@@ -219,6 +219,25 @@ export function traitsFor(troop: SecondaryTroopType): GeneralTrait[] {
 /** 兵种是否属于某兵系 */
 export function familyOf(troop: SecondaryTroopType): TroopFamily {
   return SECONDARY_TROOPS[troop].family;
+}
+
+/** 兵系 → 基础兵种类别（用于「骑兵 / 步兵 / 弓兵」类判定） */
+const TROOP_OF_FAMILY: Record<TroopFamily, TroopType> = {
+  骑兵系: 'cavalry',
+  步兵系: 'infantry',
+  弓兵系: 'archer',
+};
+
+/**
+ * **有效兵系**（`TroopType` 视角）：二级兵种转换后按**该二级兵种的兵系**判定，未转换时取原兵种。
+ *
+ * 依据 `docs/兵种转换调研.md`：两个转换方向**可以跨兵系**（祝融夫人 群·骑 → 蛮兵，蛮兵属**步兵系**；
+ * 郭嘉 骑 → 死士属弓兵系；太史慈 弓 → 弓骑兵属骑兵系），且「蛮兵/藤甲兵仍为步系、象兵为骑系」。
+ * 战法文本里的「骑兵 / 步兵 / 弓兵」= 兵**系**，故转换后按新兵系判定
+ * （用户 2026-09-22：衡轭的「步兵普攻增伤」必须给蛮兵祝融）。
+ */
+export function effectiveTroopLine(g: { troopType: TroopType; secondaryTroop?: SecondaryTroopType }): TroopType {
+  return g.secondaryTroop ? TROOP_OF_FAMILY[SECONDARY_TROOPS[g.secondaryTroop].family] : g.troopType;
 }
 
 /** 攻击距离修正（长弓兵 +1 / 死士 −1 / 其余 0） */
