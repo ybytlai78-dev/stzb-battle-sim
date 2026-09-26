@@ -3369,6 +3369,15 @@ function inflictStatusCore(
     return;
   }
 
+  // 士气提升（morale_boost 正值）：**不与任何效果冲突**（用户 2026-09-22）——不同战法的士气提升
+  // 各自独立共存，由 `effectiveMorale` 逐实例相加（司马炎【谋议宏图】+ 司马徽【徽言龙凤】同时生效）。
+  // 同源重挂已在上方按刷新 / 显式叠层（谋议宏图 stack）处理；士气**降低**（负值）仍走原规则
+  // （同号取较高，与提升正负相反时各自共存）。
+  if (type === 'morale_boost' && create.type === 'morale_boost' && (create.amount ?? 0) > 0) {
+    pushStatus(ctx, target, create, sourceSkillType, sourceSkillId, casterId);
+    return;
+  }
+
   if (sameType) {
     // 同类型不同战法：冲突
     // 概率规避（列营守险）是状态类：不同来源同样先施加者生效、后施加者被拒（与同源冲突口径一致）

@@ -7,7 +7,7 @@
  * 全部通过 inflictStatus 单元测试，不依赖战法发动率 RNG。
  */
 import { describe, it, expect } from 'vitest';
-import { inflictStatus, hasStatus, getStatus } from '../src/engine/action';
+import { inflictStatus, hasStatus, getStatus, effectiveMorale } from '../src/engine/action';
 import type { CombatContext } from '../src/engine/action';
 import type { CreateStatus, Status, UnitState } from '../src/engine/types';
 import { Rng } from '../src/engine/rng';
@@ -250,6 +250,41 @@ describe('重复施加：默认刷新 / 显式叠层才累加（用户口径）'
     const list = u.statuses.filter((s) => s.type === 'morale_boost');
     expect(list).toHaveLength(1);
     expect((list[0] as { amount: number }).amount).toBe(24);
+  });
+
+  it('士气提升不与任何效果冲突：司马炎【谋议宏图】叠层 + 司马徽【徽言龙凤】+10 同时生效（用户 2026-09-22）', () => {
+    const ctx = makeCtx();
+    const u = makeUnit('r5');
+    // 谋议宏图：每回合 +8，同源显式叠层
+    inflictStatus(ctx, u, { type: 'morale_boost', amount: 8, duration: 999, stack: true }, 'command', 'mouyi_hongtu');
+    // 徽言龙凤：友军全体士气 +10（不同战法）→ 不再「取较高」替换，两实例共存
+    inflictStatus(ctx, u, { type: 'morale_boost', amount: 10, duration: 999 }, 'command', 'huiyan_longfeng');
+    expect(u.statuses.filter((s) => s.type === 'morale_boost')).toHaveLength(2);
+    expect(effectiveMorale(u)).toBe(118); // 100 + 8 + 10
+    expect(ctx.events.some((e) => e.type === 'status_conflict')).toBe(false);
+
+    // 更高数值的提升同样独立共存（不替换前面较低值）
+    inflictStatus(ctx, u, { type: 'morale_boost', amount: 20, duration: 999 }, 'command', 'other_high');
+    expect(u.statuses.filter((s) => s.type === 'morale_boost')).toHaveLength(3);
+    expect(effectiveMorale(u)).toBe(138);
+
+    // 同源仍然刷新 / 叠层（不走「不冲突」新增实例）
+    inflictStatus(ctx, u, { type: 'morale_boost', amount: 20, duration: 999 }, 'command', 'other_high');
+    expect(u.statuses.filter((s) => s.type === 'morale_boost')).toHaveLength(3);
+    expect(effectiveMorale(u)).toBe(138);
+  });
+
+  it('士气压低（morale_boost 负值）仍按原规则：同号取较高、与提升各自共存', () => {
+    const ctx = makeCtx();
+    const u = makeUnit('r6');
+    inflictStatus(ctx, u, { type: 'morale_boost', amount: -10, duration: 999 }, 'active', 'jifeng_ershi');
+    inflictStatus(ctx, u, { type: 'morale_boost', amount: -5, duration: 999 }, 'active', 'other_reduce');
+    const negatives = u.statuses.filter((s) => s.type === 'morale_boost');
+    expect(negatives).toHaveLength(1); // 同号冲突取较高：−5 替换 −10
+    expect((negatives[0] as { amount: number }).amount).toBe(-5);
+
+    inflictStatus(ctx, u, { type: 'morale_boost', amount: 12, duration: 999 }, 'command', 'mouyi_hongtu');
+    expect(effectiveMorale(u)).toBe(107); // 100 − 5 + 12（提升与降低正负相反，各自共存）
   });
 
   it('概率规避（evade_chance）同源重挂：冲突被拒、不刷新、状态数不增加', () => {
