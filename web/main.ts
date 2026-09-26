@@ -451,7 +451,8 @@ function renderBattleView(report: BattleReport, mode: 'summary' | 'stats' | 'det
   const body = document.createElement('div');
   body.className = 'report-body';
   if (mode === 'summary') {
-    body.appendChild(createBattleSummary(report));
+    // 方位（用户 2026-09-26 口径）：**我方（红队）在左、敌方（蓝队）在右**
+    body.appendChild(createBattleSummary(report, { myLeft: true }));
   } else if (mode === 'stats') {
     body.appendChild(createStatsView(report));
   } else {

@@ -437,6 +437,12 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(summary.querySelector('.vs-badge')).toBeTruthy();                 // VS 图标
     expect(summary.querySelectorAll('.sum-hero').length).toBe(4);            // 3 红 + 1 蓝
     expect(summary.querySelectorAll('.sh-stars').length).toBe(4);            // 星级/红度
+    // 方位（用户 2026-09-26）：我方（红队）在左、敌方（蓝队）在右
+    expect(Array.from(summary.querySelectorAll('.ss-title')).map((e) => e.textContent)).toEqual(['红方（我方）', '蓝方（敌方）']);
+    expect(
+      Array.from(summary.querySelectorAll('.sum-roster > div:first-child .sum-hero .sh-name')).map((e) => e.textContent),
+      '左侧名册应是我方三将（大营→中军→前锋）'
+    ).toEqual(['孙权', '周瑜', '太史慈']);
     // 简略战报卡＝官方卡面：卡框 + 画像铺满 + 左上势力字/竖排名 + 右上红度 + 底部 Lv·兵种；兵力条留在卡面外
     const shCard = summary.querySelector('.sum-hero .sh-card') as HTMLElement;
     expect(shCard, '简略战报卡应有官方卡面').toBeTruthy();
@@ -1061,6 +1067,8 @@ describe('Web 战斗模拟器冒烟', () => {
     // 详情默认展示简略战报（画像 + 总兵力条），点击后展开详细
     expect(panel.querySelector('.hist-detail .battle-summary')).toBeTruthy();
     expect(panel.querySelector('.hist-detail .sum-hero')).toBeTruthy();
+    // 历史详情的方位与战报页一致：我方（红队）在左、敌方（蓝队）在右
+    expect(Array.from(panel.querySelectorAll('.hist-detail .ss-title')).map((e) => e.textContent)).toEqual(['红方（我方）', '蓝方（敌方）']);
     expect(panel.querySelector('.hist-detail .result-banner')).toBeFalsy();
     (Array.from(panel.querySelectorAll('button')).find((b) => b.textContent!.includes('展开详细战报')) as HTMLElement).click();
     expect(panel.querySelector('.hist-detail .result-banner')).toBeTruthy();

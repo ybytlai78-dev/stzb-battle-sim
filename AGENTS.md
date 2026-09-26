@@ -893,3 +893,13 @@ const targetTeam = primaryTarget.side === unit.side ? allies : enemies; // ✓
 - 面板文案同步：`种子 base~base+⌈N/2⌉-1 · N 场` + 「必然互补」说明；`web/winRate.test.ts` 新增镜像队互补 1 个（共 6 个）；
   `web/smoke.test.ts` 断言由「逐场换种子」改为「对调红蓝」。
 
+### 战报方位：我方（红队）在左、敌方（蓝队）在右（用户 2026-09-26 口径）
+
+- 主站战报页（简略）与**战报历史详情**都传 `createBattleSummary(report, { myLeft: true })`
+  （`web/main.ts` `renderBattleView` / `web/teamEditor.ts` `renderDetail`）——原来主站是默认的「蓝左红右」，用户指出**位置反了**。
+- `web/battleSummary.ts`：`SummaryOpts` 原本有**两份同名声明**（`interface` 声明合并，靠这个才没报错）→ 删掉重复那份、只留一份并更新注释；
+  缺省仍是蓝左红右（未传参时），主站与伤害测试实验室都传 `myLeft: true`。
+- 方位断言（`web/smoke.test.ts` 新增，战报用例 + 历史详情用例各一处）：
+  `.ss-title` 顺序 = `['红方（我方）', '蓝方（敌方）']`；左侧名册 = 我方三将 大营→中军→前锋。
+- 统计页与详情页横幅本来就是「我方优先」（统计：红队行在前；详情横幅：`${myLabel}剩余…｜${enemyLabel}剩余…`），未改。
+
