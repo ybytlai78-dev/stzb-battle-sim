@@ -524,8 +524,8 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(wrMask, '统计胜率弹窗应打开').toBeTruthy();
     expect(wrMask.querySelector('.m-head h3')!.textContent).toContain('200 场');
     expect(wrMask.querySelector('.wr-status')!.textContent).toContain('模拟中');
-    // 基础种子取本场战报种子（可复现）
-    expect(wrMask.textContent).toContain('逐场换种子');
+    // 基础种子取本场战报种子（可复现）；每颗种子正/反各跑一场（对调红蓝，消除先手偏向）
+    expect(wrMask.textContent).toContain('对调红蓝');
     (wrMask.querySelector('.wr-done') as HTMLElement).click();
     expect(document.querySelector('.wr-mask')).toBeNull();
   });

@@ -231,4 +231,35 @@ describe('分兵只由普通攻击触发（追击不触发分兵）', () => {
     }
     expect(attacker.statuses.some((s) => s.type === 'split')).toBe(false);
   });
+
+  it('回归（2026-09-26）：蓝方单位触发分兵时溅射【受击目标同队】，不得打到自己队友', () => {
+    const ctx = makeCtx(5);
+    // 我方（side='my'）：前锋=普攻目标，中军=与目标相邻（应被溅射）
+    const mFront = makeUnit('mf', { position: '前锋' });
+    const mMid = makeUnit('mm', { position: '中军' });
+    const mBack = makeUnit('mb', { position: '大营' });
+    // 蓝方（side='enemy'）：中军是自己队友——修复前会被分兵误伤
+    const eMid = makeUnit('em', { position: '中军', side: 'enemy' });
+    const attacker = makeUnit('atk', { position: '前锋', side: 'enemy' });
+    ctx.myTeam = [mFront, mMid, mBack];
+    ctx.enemyTeam = [eMid, attacker];
+    attacker.statuses.push({
+      type: 'split',
+      remaining: 999,
+      rate: 55,
+      appliedRound: 1,
+      sourceSkillType: 'command',
+      sourceSkillId: 'test_split',
+    });
+
+    actUnit(ctx, attacker);
+
+    const splits = ctx.events.filter(
+      (e): e is Extract<BattleEvent, { type: 'split_damage' }> => e.type === 'split_damage'
+    );
+    expect(splits.length).toBeGreaterThanOrEqual(1);
+    for (const s of splits) expect(s.targetId, '分兵不得溅射到自己的队友').not.toBe('em');
+    expect(splits.some((s) => s.targetId === 'mm'), '分兵应溅射受击目标的同队相邻单位').toBe(true);
+    expect(eMid.troops, '自己队友必须毫发无损').toBe(eMid.general.maxTroops);
+  });
 });
