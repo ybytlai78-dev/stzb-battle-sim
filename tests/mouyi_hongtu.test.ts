@@ -170,15 +170,18 @@ describe('谋议宏图（司马炎，一类指挥：全军减伤 8/8 衰减 + �
     expect(getStatus(u, 'morale_boost')!.amount).toBe(16);
     expect(effectiveMorale(u)).toBe(116);
 
+    // 士气提升不与任何效果冲突（用户 2026-09-22）：不同战法的士气提升各自独立共存，effectiveMorale 相加
     inflictStatus(ctx, u, { type: 'morale_boost', amount: 10, duration: 999 }, 'command', 'other_morale');
-    expect(getStatus(u, 'morale_boost')!.amount).toBe(16);
-    expect(getStatus(u, 'morale_boost')!.sourceSkillId).toBe('mouyi_hongtu');
+    expect(u.statuses.filter((s) => s.type === 'morale_boost')).toHaveLength(2);
+    expect(effectiveMorale(u)).toBe(126); // 100 + 16（谋议宏图叠层）+ 10（他战法）
 
     const u2 = makeUnit('b');
     inflictStatus(ctx, u2, { type: 'morale_boost', amount: 8, duration: 999, stack: true }, 'command', 'mouyi_hongtu');
     inflictStatus(ctx, u2, { type: 'morale_boost', amount: 20, duration: 999 }, 'command', 'other_morale');
-    expect(getStatus(u2, 'morale_boost')!.amount).toBe(20);
-    expect(getStatus(u2, 'morale_boost')!.sourceSkillId).toBe('other_morale');
+    expect(effectiveMorale(u2)).toBe(128); // 100 + 8 + 20（两个实例共存，不再取较高替换）
+    expect(
+      u2.statuses.filter((s) => s.type === 'morale_boost').map((s) => s.sourceSkillId).sort()
+    ).toEqual(['mouyi_hongtu', 'other_morale']);
   });
 });
 
