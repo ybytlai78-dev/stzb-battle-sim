@@ -47,9 +47,11 @@ function troopBar(pct: number, cls: string): string {
     </div>`;
 }
 
-/** 简略战报选项：左右方位与双方标签（默认蓝左红右、红方=我方——保持主站行为；实验室传 myLeft 让我方在左） */
+/** 简略战报选项：左右方位与双方标签。
+ *  缺省仍是「蓝左红右」；**主站战报页 / 历史详情与伤害测试实验室都传 `myLeft: true`**
+ *  （用户 2026-09-26 口径：我方（红队）在左、敌方（蓝队）在右）。 */
 export interface SummaryOpts {
-  /** 我方显示在左（默认 false：敌方在左、我方在右） */
+  /** 我方显示在左（主站与实验室均传 true；缺省 false = 敌方在左、我方在右） */
   myLeft?: boolean;
   /** 我方标签（默认「红方（我方）」） */
   myLabel?: string;
@@ -107,16 +109,6 @@ function heroCard(g: General, troops: number, color: 'red' | 'blue'): string {
       ${troopBar(pct, dead ? 'bar-dead' : color === 'red' ? 'bar-red' : 'bar-blue')}
       <div class="sh-troops">${troops.toLocaleString()}${dead ? ' · 阵亡' : ''}</div>
     </div>`;
-}
-
-/** 简略战报选项：左右方位与双方标签（默认蓝左红右、红方=我方——保持主站行为；实验室传 myLeft 让我方在左） */
-export interface SummaryOpts {
-  /** 我方显示在左（默认 false：敌方在左、我方在右） */
-  myLeft?: boolean;
-  /** 我方标签（默认「红方（我方）」） */
-  myLabel?: string;
-  /** 敌方标签（默认「蓝方（敌方）」） */
-  enemyLabel?: string;
 }
 
 /** 简略战报视图 */

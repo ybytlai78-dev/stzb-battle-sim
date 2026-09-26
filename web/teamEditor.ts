@@ -1705,9 +1705,10 @@ export function openHistoryPanel(records: BattleRecord[], onClear?: () => void, 
   const renderDetail = (r: BattleRecord) => {
     detail.innerHTML = '';
     // 优先展示简略战报（武将画像 + 总兵力条），可切换「统计」「展开详细战报」；「复用队伍」把本场配置复制到红蓝两侧
+    // 方位与战报页一致（用户 2026-09-26）：我方（红队）在左、敌方（蓝队）在右
     const wrap = document.createElement('div');
     wrap.className = 'hist-detail-summary';
-    wrap.appendChild(createBattleSummary(r.report));
+    wrap.appendChild(createBattleSummary(r.report, { myLeft: true }));
 
     const bar = document.createElement('div');
     bar.className = 'hist-actions';
