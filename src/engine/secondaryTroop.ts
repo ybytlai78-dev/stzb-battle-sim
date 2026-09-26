@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 二级兵种（高级兵种）系统 —— 数据与规则表
  *
  * 依据：`docs/兵种转换调研.md`（用户 2026-09-20 审定口径，全部按现版）。
@@ -221,6 +221,25 @@ export function familyOf(troop: SecondaryTroopType): TroopFamily {
   return SECONDARY_TROOPS[troop].family;
 }
 
+/** 兵系 → 基础兵种类别（用于「骑兵 / 步兵 / 弓兵」类判定） */
+const TROOP_OF_FAMILY: Record<TroopFamily, TroopType> = {
+  骑兵系: 'cavalry',
+  步兵系: 'infantry',
+  弓兵系: 'archer',
+};
+
+/**
+ * **有效兵系**（`TroopType` 视角）：二级兵种转换后按**该二级兵种的兵系**判定，未转换时取原兵种。
+ *
+ * 依据 `docs/兵种转换调研.md`：两个转换方向**可以跨兵系**（祝融夫人 群·骑 → 蛮兵，蛮兵属**步兵系**；
+ * 郭嘉 骑 → 死士属弓兵系；太史慈 弓 → 弓骑兵属骑兵系），且「蛮兵/藤甲兵仍为步系、象兵为骑系」。
+ * 战法文本里的「骑兵 / 步兵 / 弓兵」= 兵**系**，故转换后按新兵系判定
+ * （用户 2026-09-22：衡轭的「步兵普攻增伤」必须给蛮兵祝融）。
+ */
+export function effectiveTroopLine(g: { troopType: TroopType; secondaryTroop?: SecondaryTroopType }): TroopType {
+  return g.secondaryTroop ? TROOP_OF_FAMILY[SECONDARY_TROOPS[g.secondaryTroop].family] : g.troopType;
+}
+
 /** 攻击距离修正（长弓兵 +1 / 死士 −1 / 其余 0） */
 export function rangeModOf(troop: SecondaryTroopType | undefined): number {
   return troop ? SECONDARY_TROOPS[troop].rangeMod ?? 0 : 0;
@@ -261,21 +280,28 @@ export function troopCounterReduceOf(params: {
   targetSecondary?: SecondaryTroopType;
 }): number {
   const { attackerTroop, attackerSecondary, targetTroop, targetSecondary } = params;
+  // 相克按**有效兵系**：二级兵种转换后取该兵种的兵系（蛮兵 → 步兵系；用户 2026-09-22）
+  const atkLine: TroopType = attackerSecondary
+    ? TROOP_OF_FAMILY[SECONDARY_TROOPS[attackerSecondary].family]
+    : attackerTroop;
+  const tgtLine: TroopType = targetSecondary
+    ? TROOP_OF_FAMILY[SECONDARY_TROOPS[targetSecondary].family]
+    : targetTroop;
 
   // —— 长枪兵自身作为攻击方：对骑 +30%、被弓克 −30% ——
   if (attackerSecondary === '长枪兵') {
-    if (targetTroop === 'cavalry') return -0.3; // 枪打骑：目标受击 +30%
-    if (targetTroop === 'archer') return 0.3; // 枪打弓：自身被克 −30%
+    if (tgtLine === 'cavalry') return -0.3; // 枪打骑：目标受击 +30%
+    if (tgtLine === 'archer') return 0.3; // 枪打弓：自身被克 −30%
     return 0;
   }
   // —— 长枪兵作为受击方：骑打枪 −30%、弓打枪 +30% ——
   if (targetSecondary === '长枪兵') {
-    if (attackerTroop === 'cavalry') return 0.3; // 骑打枪：骑被克 −30%
-    if (attackerTroop === 'archer') return -0.3; // 弓打枪：弓获增伤 +30%
+    if (atkLine === 'cavalry') return 0.3; // 骑打枪：骑被克 −30%
+    if (atkLine === 'archer') return -0.3; // 弓打枪：弓获增伤 +30%
     return 0;
   }
 
-  return COUNTER_OF[targetTroop] === attackerTroop ? 0.3 : 0;
+  return COUNTER_OF[tgtLine] === atkLine ? 0.3 : 0;
 }
 
 /** 基础相克链：克制对象（骑克步、步克弓、弓克骑） */

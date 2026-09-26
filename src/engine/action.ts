@@ -32,7 +32,7 @@ import type {
 } from './types';
 import type { Rng } from './rng';
 import { calcDamage, applyTroopCap, scaledValue, roundRate, sumRates, buffMult, calcHealAmount, moraleRate, applyIgnoreDef, troopCounterReduce } from './formulas';
-import { troopCounterReduceOf as secondaryCounterReduceOf, traitCombatModifiers, traitStatBonus, statModOf, type TraitCombatContext } from './secondaryTroop';
+import { troopCounterReduceOf as secondaryCounterReduceOf, traitCombatModifiers, traitStatBonus, statModOf, effectiveTroopLine, type TraitCombatContext } from './secondaryTroop';
 import { isTreasureSource, treasureLabel } from './treasure-source';
 import { nearestEnemy, skillTargets, distanceBetween, adjacentUnits, sameSideDistance, attackRangeOf, POSITION_INDEX, unitsInSkillRange } from './target';
 
@@ -372,11 +372,12 @@ function pickEnemyByDamageTargetPick(
 
 /**
  * 开场上阵兵种集合是否 ⊆ allowed（不论 alive）。
+ * **按有效兵系**判定：二级兵种转换后取该二级兵种的兵系（蛮兵 → 步兵系；用户 2026-09-22）。
  * @param team 该侧部署名单
- * @param allowed 允许的兵种
+ * @param allowed 允许的兵种（兵系：骑/步/弓）
  */
 export function teamPassesTroopFilter(team: UnitState[], allowed: TroopType[]): boolean {
-  const set = new Set(team.map((u) => u.general.troopType));
+  const set = new Set(team.map((u) => effectiveTroopLine(u.general)));
   for (const t of set) {
     if (!allowed.includes(t)) return false;
   }
@@ -413,10 +414,11 @@ export function teamFactionsSame(team: UnitState[]): boolean {
 /**
  * 我军出战名单是否「3 名武将兵种全部相同」（典藏战法【追加】条件，凤仪亭 / 鼎足江东：
  * 「若我军 3 名武将兵种相同」）。读部署名单（不论 alive）；名单不足 3 人视为不满足。
+ * **按有效兵系**比较（二级兵种转换后取该兵种兵系：蛮兵与步兵同兵系；用户 2026-09-22）。
  */
 export function teamTroopsSame(team: UnitState[]): boolean {
   if (team.length < 3) return false;
-  return new Set(team.map((u) => u.general.troopType)).size === 1;
+  return new Set(team.map((u) => effectiveTroopLine(u.general))).size === 1;
 }
 
 /**
@@ -7182,7 +7184,8 @@ function executeSkillOutputs(
       continue;
     }
     if ('troopTypes' in out && out.troopTypes && out.troopTypes.length > 0) {
-      pool = pool.filter((u) => out.troopTypes!.includes(u.general.troopType));
+      // 按**有效兵系**过滤：二级兵种转换后取该二级兵种的兵系（蛮兵 → 步兵系；用户 2026-09-22）
+      pool = pool.filter((u) => out.troopTypes!.includes(effectiveTroopLine(u.general)));
     }
     // 段级按阵营过滤锁定目标（率尔方雅）：不经重选池，直接取**本战法整体目标**中同侧/对侧/自身者，
     // 使「同一批敌我混合目标」按阵营分派不同段（先混合抽 3 个 → 友军段增伤+代打、敌军段随机控制）
