@@ -330,6 +330,18 @@ npx tsc --noEmit                    # 类型检查（strict）
 - 测试 `tests/troop_counter.test.ts`（7 个：9 组合单元 / calcDamage 确定性 / 普攻与战法事件字段 / 总伤害对比 <85%）。**golden 已重新生成**（伤害数值变化 + 新字段为预期）。
 - 修复既有类型缺口：`web/battleSummary.ts` createStatsView 构造 UnitState 缺 `wounded/totalDead`（web/ 本不在 tsc include 内，被 damageLab 测试链暴露）。
 
+### 有效兵系 `effectiveTroopLine`（用户 2026-09-22）
+
+- **规则**：二级兵种转换后，战法文本里的「骑兵 / 步兵 / 弓兵」按**该二级兵种的兵系**判定（可跨兵系）：
+  蛮兵/藤甲兵 = **步兵系**、死士 = 弓兵系、象兵 = 骑兵系（依据 `docs/兵种转换调研.md`；
+  如 祝融夫人 群·骑 → 蛮兵 = 步兵系）。未转换时取武将原兵种。
+- **实现**：`src/engine/secondaryTroop.ts` `effectiveTroopLine(general)`；调用点 = ① 战法段 `out.troopTypes` 目标过滤
+  （衡轭「步兵普攻伤害 +50%」→ 蛮兵吃得到）② `teamPassesTroopFilter` 阵容门闩（「我军仅由骑兵和步兵组成时生效」）。
+- 修正案例：华雄【衡轭】此前只给骑兵发谋略 +50（蛮兵祝融拿不到步兵段）；现蛮兵祝融吃**步兵段普攻增伤**、
+  不再吃骑兵段谋略（兵系单一归属，不叠加两段）。测试 `tests/troop_line_conversion.test.ts`。
+- **仍未按兵系改**（待用户定夺）：兵种相克 `troopCounterReduceOf`、兵种加成 `troopBonus.ts`（部队加成弹窗）、
+  典藏条件「3 名武将兵种相同」目前仍读基础 `troopType`。
+
 ### Web 新功能：伤害测试实验室（`web/damageLab.ts`，v2 按用户反馈重构）
 
 - **入口**：主站顶栏「伤害测试」导航（`web/main.ts` `enterLab/exitLab`，每次进入重新 mountDamageLab；lab 内「← 返回配将」调用 onExit 恢复）。`web/lab.css` 由 main.ts import（vite 打包）。
