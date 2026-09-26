@@ -821,3 +821,29 @@ npx tsc --noEmit                    # 类型检查（strict）
 - `web/smoke.test.ts` 新增 2 个：槽位「等级 · 兵种（特性）」行（DOM 位置 + 等级/兵种转换同步 + mobile.css 隐藏契约）/
   预设→「设为木桩队伍」→实验室右栏详情→模拟十次→切回侍卫（端到端）。
 - 全量 `npm test` **191 files / 1896 passed**；`npx tsc --noEmit` + `npx tsc -p web --noEmit` clean；引擎零改动、golden 未动。
+
+## 会话交接（战报底栏「统计胜率」· 2026-09-26）
+
+### 用户口径
+
+- 主站「开始模拟」后的战报底栏：**删掉「复用队伍」，换成「统计胜率」** —— 点一下跑 **200 场**快速模拟，给出**胜利 / 平局 / 失败**各自概率。
+- 「复用队伍」**只保留在战报历史面板**（`teamEditor.ts` `openHistoryPanel` 的 `.hist-actions` 里，仍回调 `main.ts` 的 `reuseTeamFromReport`）；底栏那个不再提供复用。
+
+### 实现（新模块 `web/winRate.ts` + `web/main.ts` 底栏 + `web/styles.css` `.wr-*`）
+
+- **判定口径复用 L4 的 `judgeOutcome`（`web/battleSim.ts`，用户 2026-09-22 定稿）**，避免两处口径漂移：
+  ① 一方大营阵亡 → 引擎给 win/loss（斩首）；② 打满 8 回合双方大营存活 → 比剩余兵力，高者胜，**只有兵力完全相同才算平**。
+  ⇒ 面板三行的「平局」= 完全平（通常 0%）；「打满回合」的构成（斩首胜/负 + 兵力判定胜/负/完全平）另起一行写在口径说明里。
+- **不交换场地**（与 L4 页不同）：统计的就是「这一场红蓝站位」的胜率。逐场种子 = `baseSeed + i`，`baseSeed` 取**本场战报种子**
+  ⇒ 同一份战报重复统计结果一致、可复现（面板底部显示基础种子与序列）。
+- 每场用浅拷贝的 General 跑（200 场之间不串数据）；浏览器端 `simulateWinRateAsync` 每 25 场 `await` 一次让出主线程
+  → 先显示进度条，跑完换成三行概率（百分比 + 条形 + 场次）。
+- 弹窗沿用 `.modal-mask` / `.modal` 骨架 ⇒ × / 关闭 / 点蒙层 / 安卓返回键（`closeTopOverlay`）都能关；连点两次只留一层。
+
+### 测试
+
+- `web/winRate.test.ts`（5 个）：默认 200 场常量 / 同种子可复现 + 胜平负与构成守恒 / 打满回合按剩余兵力判定（40 个种子逐场与手跑 `runBattle` 对齐）/
+  异步分片进度 / 弹窗渲染（三行概率 = 场次÷N）+ 连点只留一层。
+- `web/smoke.test.ts` 战报用例追加：底栏含「统计胜率」且不再含「复用队伍」、点击弹出 200 场弹窗并可关闭。
+- 全量 `npm test` **202 files / 2100 passed**；`npx tsc --noEmit` + `npx tsc -p web/tsconfig.json --noEmit` clean；引擎零改动、golden 未动。
+
