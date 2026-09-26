@@ -47,6 +47,7 @@ import { setupTouchDrag } from './touchDrag';
 import { setupBackButton } from './backButton';
 import { createBattleView } from './battleView';
 import { createBattleSummary, createStatsView } from './battleSummary';
+import { WIN_RATE_RUNS, openWinRatePanel } from './winRate';
 import { mountDamageLab, setDummyPreset } from './damageLab';
 
 // ─── 状态 ───
@@ -487,12 +488,21 @@ function renderBattleView(report: BattleReport, mode: 'summary' | 'stats' | 'det
   }
   dock.appendChild(tabs);
 
-  const reuse = document.createElement('button');
-  reuse.type = 'button';
-  reuse.className = 'btn ghost';
-  reuse.textContent = '复用队伍';
-  reuse.onclick = () => reuseTeamFromReport(report);
-  dock.appendChild(reuse);
+  // 「统计胜率」：用当前双方队伍快速跑 200 场，给出 胜 / 平 / 负 概率（口径见 web/winRate.ts）
+  const winRate = document.createElement('button');
+  winRate.type = 'button';
+  winRate.className = 'btn ghost';
+  winRate.textContent = '统计胜率';
+  winRate.title = `以当前双方队伍快速模拟 ${WIN_RATE_RUNS} 场：大营阵亡即斩首定胜负，打满回合按剩余兵力判定`;
+  winRate.onclick = () =>
+    openWinRatePanel({
+      myTeam: report.myTeam,
+      enemyTeam: report.enemyTeam,
+      runs: WIN_RATE_RUNS,
+      baseSeed: report.seed,
+      maxRounds: report.maxRounds,
+    });
+  dock.appendChild(winRate);
 
   const again = document.createElement('button');
   again.type = 'button';

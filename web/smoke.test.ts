@@ -464,6 +464,9 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(dock.textContent).toContain('统计');
     expect(dock.textContent).toContain('详情');
     expect(document.querySelector('.report-nav')).toBeFalsy();
+    // 底栏操作键：「复用队伍」已换成「统计胜率」（复用只保留在战报历史面板里）
+    expect(dock.textContent).toContain('统计胜率');
+    expect(dock.textContent).not.toContain('复用队伍');
     const navBtn = (label: string) =>
       Array.from(dock.querySelectorAll('button')).find((b) => b.textContent!.includes(label)) as HTMLElement;
     navBtn('统计').click();
@@ -512,6 +515,19 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(document.querySelector('.event-stream')!.textContent).toContain('【兵种】');
     expect(document.querySelector('.event-stream')!.textContent).toContain('【战法】');
     expect(document.querySelector('.event-stream')!.textContent).toContain('暂无效果');
+
+    // 底栏「统计胜率」：点击 → 200 场快速模拟弹窗（先显进度条，跑完换成 胜/平/负 概率）
+    const wrBtn = Array.from(dock.querySelectorAll('button')).find((b) => b.textContent!.includes('统计胜率')) as HTMLElement;
+    expect(wrBtn, '底栏应有「统计胜率」').toBeTruthy();
+    wrBtn.click();
+    const wrMask = document.querySelector('.wr-mask') as HTMLElement;
+    expect(wrMask, '统计胜率弹窗应打开').toBeTruthy();
+    expect(wrMask.querySelector('.m-head h3')!.textContent).toContain('200 场');
+    expect(wrMask.querySelector('.wr-status')!.textContent).toContain('模拟中');
+    // 基础种子取本场战报种子（可复现）
+    expect(wrMask.textContent).toContain('逐场换种子');
+    (wrMask.querySelector('.wr-done') as HTMLElement).click();
+    expect(document.querySelector('.wr-mask')).toBeNull();
   });
 
   it('底栏：随机种子自动不可调、最大回合固定 8、双方士气默认 120 可调', async () => {

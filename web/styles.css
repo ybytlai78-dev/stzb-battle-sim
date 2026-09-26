@@ -1775,7 +1775,7 @@ main {
   flex-shrink: 0;
 }
 
-/* 战报底栏：返回配将 + 居中页签 + 复用队伍 / 再打一场 */
+/* 战报底栏：返回配将 + 居中页签 + 统计胜率 / 再打一场 */
 .report-dock {
   flex-shrink: 0;
   display: flex;
@@ -1815,6 +1815,46 @@ main {
   color: var(--color-text-muted);
 }
 .report-dock .btn-back:hover { color: var(--gold-bright); }
+
+/* ── 战报「统计胜率」弹窗：200 场快速模拟 → 胜 / 平 / 负 概率 ── */
+.wr-modal { width: min(460px, 92vw); }
+.wr-sub { font-size: 12px; color: var(--color-text-muted); line-height: 1.7; margin-bottom: 12px; }
+.wr-live { padding: 2px 0 4px; }
+.wr-live .wr-track { height: 10px; margin-bottom: 9px; }
+.wr-live .wr-track i { background: linear-gradient(90deg, var(--gold), var(--gold-bright)); }
+.wr-rows { display: flex; flex-direction: column; gap: 11px; margin: 2px 0 14px; }
+.wr-row {
+  display: grid;
+  grid-template-columns: 34px 58px minmax(0, 1fr) 56px;
+  align-items: center;
+  gap: 9px;
+}
+.wr-label { font-size: 13px; letter-spacing: 1px; color: var(--color-text-muted); }
+.wr-pct {
+  font-family: var(--font-kai);
+  font-size: 17px;
+  text-align: right;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+.wr-track {
+  height: 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.wr-track i { display: block; height: 100%; width: 0; transition: width .25s ease; }
+.wr-row.win .wr-label,
+.wr-row.win .wr-pct { color: var(--gold-bright); }
+.wr-row.win .wr-track i { background: linear-gradient(90deg, var(--gold), var(--gold-bright)); }
+.wr-row.draw .wr-track i { background: var(--text-weak); }
+.wr-row.loss .wr-label,
+.wr-row.loss .wr-pct { color: color-mix(in srgb, var(--red) 55%, var(--color-text)); }
+.wr-row.loss .wr-track i { background: var(--red); }
+.wr-n { font-size: 12px; color: var(--color-text-muted); text-align: right; font-variant-numeric: tabular-nums; }
+.wr-note { font-size: 12px; color: var(--color-text-muted); line-height: 1.8; }
+.wr-meta { font-size: 12px; color: var(--text-weak); line-height: 1.8; margin-top: 6px; }
 
 /* ── 统计视图（图二骨架：左轨 + 行）── */
 .stats-view {
