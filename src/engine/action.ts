@@ -414,10 +414,11 @@ export function teamFactionsSame(team: UnitState[]): boolean {
 /**
  * 我军出战名单是否「3 名武将兵种全部相同」（典藏战法【追加】条件，凤仪亭 / 鼎足江东：
  * 「若我军 3 名武将兵种相同」）。读部署名单（不论 alive）；名单不足 3 人视为不满足。
+ * **按有效兵系**比较（二级兵种转换后取该兵种兵系：蛮兵与步兵同兵系；用户 2026-09-22）。
  */
 export function teamTroopsSame(team: UnitState[]): boolean {
   if (team.length < 3) return false;
-  return new Set(team.map((u) => u.general.troopType)).size === 1;
+  return new Set(team.map((u) => effectiveTroopLine(u.general))).size === 1;
 }
 
 /**

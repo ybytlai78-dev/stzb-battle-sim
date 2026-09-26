@@ -16,6 +16,7 @@ import { computeTroopBonuses, ZERO_BONUS } from '../src/engine/troopBonus';
 import {
   SECONDARY_TROOPS,
   TRAIT_SLOTS_MAX,
+  effectiveTroopLine,
   traitsFor,
   type GeneralTrait,
   type SecondaryTroopType,
@@ -480,12 +481,13 @@ export function openTroopBonusPanel(teamLabel: string, slots: SlotState[]): void
   }
   const result = computeTroopBonuses(generals);
 
-  // 阵营 / 兵种按人数取多数
+  // 阵营 / 兵种按人数取多数（兵种按**有效兵系**：二级兵种转换后算新兵系，与 computeTroopBonuses 口径一致）
   const facCount = new Map<string, number>();
   const troopCount = new Map<TroopType, number>();
   for (const g of generals) {
     facCount.set(g.faction, (facCount.get(g.faction) ?? 0) + 1);
-    troopCount.set(g.troopType, (troopCount.get(g.troopType) ?? 0) + 1);
+    const line = effectiveTroopLine(g);
+    troopCount.set(line, (troopCount.get(line) ?? 0) + 1);
   }
   const mainFaction = [...facCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? '—';
   const mainTroop = [...troopCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] as TroopType | undefined;

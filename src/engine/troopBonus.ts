@@ -1,4 +1,5 @@
 import type { FormationBonus, FormationBonusLine, General, TroopBonusResult, TroopType } from './types';
+import { effectiveTroopLine } from './secondaryTroop';
 import { TITLE_REGISTRY } from '../data/titles';
 
 const POS_ORDER: Record<string, number> = { 大营: 0, 中军: 1, 前锋: 2 };
@@ -72,7 +73,9 @@ export function computeTroopBonuses(generals: General[]): TroopBonusResult {
   const troopCount = new Map<TroopType, number>();
   for (const g of sorted) {
     facCount.set(g.faction, (facCount.get(g.faction) ?? 0) + 1);
-    troopCount.set(g.troopType, (troopCount.get(g.troopType) ?? 0) + 1);
+    // 兵种加成按**有效兵系**计数（二级兵种转换：蛮兵计入步兵系；用户 2026-09-22）
+    const line = effectiveTroopLine(g);
+    troopCount.set(line, (troopCount.get(line) ?? 0) + 1);
   }
 
   const addLine = (g: General, line: FormationBonusLine) => {
@@ -106,13 +109,14 @@ export function computeTroopBonuses(generals: General[]): TroopBonusResult {
       });
     }
 
-    const nTroop = troopCount.get(g.troopType) ?? 0;
+    const line = effectiveTroopLine(g);
+    const nTroop = troopCount.get(line) ?? 0;
     const troopRate = nTroop >= 3 ? 10 : nTroop === 2 ? 5 : 0;
     if (troopRate > 0) {
       addLine(g, {
         unitId: g.id,
         category: 'troop',
-        bonuses: percentOn(g, troopRate, TROOP_KEYS[g.troopType]),
+        bonuses: percentOn(g, troopRate, TROOP_KEYS[line]),
       });
     }
   }
