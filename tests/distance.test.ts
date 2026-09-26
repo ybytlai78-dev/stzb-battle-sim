@@ -42,8 +42,7 @@ function makeUnit(id: string, position: General['position'], alive = true, attac
     totalDead: 0,
     alive,
     statuses: [],
-    isPreparing: false,
-    preparingSkillId: null,
+    preparations: [],
   };
 }
 

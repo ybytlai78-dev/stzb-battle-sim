@@ -109,8 +109,7 @@ function makeUnit(id: string, opts: { troops?: number; maxTroops?: number } = {}
     totalDead: 0,
     alive: true,
     statuses: [],
-    isPreparing: false,
-    preparingSkillId: null,
+    preparations: [],
   };
 }
 

@@ -52,8 +52,7 @@ function makeUnit(id: string, maxTroops = 10000): UnitState {
     totalDead: 0,
     alive: true,
     statuses: [],
-    isPreparing: false,
-    preparingSkillId: null,
+    preparations: [],
   };
 }
 

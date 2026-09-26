@@ -50,8 +50,7 @@ function toUnit(g: General, side: 'my' | 'enemy' = 'my'): UnitState {
     totalDead: 0,
     alive: true,
     statuses: [],
-    isPreparing: false,
-    preparingSkillId: null,
+    preparations: [],
   };
 }
 

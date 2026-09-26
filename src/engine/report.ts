@@ -71,8 +71,8 @@ function renderStatsTable(stats: UnitStats[]): string {
 function renderDetailedStats(report: BattleReport): string {
   const fmt = (n: number) => n.toLocaleString('en-US');
   const units = [
-    ...report.myTeam.map((g) => ({ general: g, side: 'my' as const, troops: 0, wounded: 0, totalDead: 0, alive: true, statuses: [], isPreparing: false, preparingSkillId: null })),
-    ...report.enemyTeam.map((g) => ({ general: g, side: 'enemy' as const, troops: 0, wounded: 0, totalDead: 0, alive: true, statuses: [], isPreparing: false, preparingSkillId: null })),
+    ...report.myTeam.map((g) => ({ general: g, side: 'my' as const, troops: 0, wounded: 0, totalDead: 0, alive: true, statuses: [], preparations: [] })),
+    ...report.enemyTeam.map((g) => ({ general: g, side: 'enemy' as const, troops: 0, wounded: 0, totalDead: 0, alive: true, statuses: [], preparations: [] })),
   ];
   const detailed = computeDetailedStats(report.events, units);
   const lines: string[] = ['────── 战法统计（次数 ｜ 杀伤 ｜ 恢复）──────'];

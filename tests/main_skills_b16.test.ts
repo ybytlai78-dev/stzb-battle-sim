@@ -56,8 +56,7 @@ function makeUnit(g: General, side: 'my' | 'enemy' = 'my'): UnitState {
     totalDead: 0,
     alive: true,
     statuses: [],
-    isPreparing: false,
-    preparingSkillId: null,
+    preparations: [],
     hasActedThisRound: false,
   };
 }
@@ -184,8 +183,7 @@ describe('运筹决胜（司马师，二类指挥：试图发动主动战法前 
         activeSkillIds: ['test_prep_active'],
       })
     );
-    prepCaster.isPreparing = true;
-    prepCaster.preparingSkillId = 'test_prep_active';
+    prepCaster.preparations = [{ skillId: 'test_prep_active', left: 1 }];
     const prepEnemy = makeUnit(dummy('e2', '前锋'), 'enemy');
     const prepCtx = makeCtx([prepCaster], [prepEnemy]);
     prepCtx.skills.set('test_prep_active', PREP_ACTIVE);

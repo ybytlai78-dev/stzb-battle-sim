@@ -201,8 +201,7 @@ function dummyUnit(id: string, position: Position, extra: Partial<General> = {},
     totalDead: 0,
     alive: true,
     statuses: [],
-    isPreparing: false,
-    preparingSkillId: null,
+    preparations: [],
     hasActedThisRound: false,
   };
 }

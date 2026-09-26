@@ -2481,7 +2481,8 @@ export function troopRatioMatches(target: UnitState, cond: TroopRatioCond): bool
   return true;
 }
 
-/** 分兵攻击：普攻命中后，对目标同队的相邻存活单位造成比例攻击伤害（无视攻击距离） */
+/** 分兵攻击（**只由普通攻击触发**）：普攻命中后立即对目标同队的相邻存活单位造成比例攻击伤害（无视攻击距离）。
+ *  调用点只有一个：`actUnit` 的普攻命中分支（追击战法判定之前）——追击/主动战法/DoT 均不触发分兵。 */
 function executeSplitAttack(
   ctx: CombatContext,
   unit: UnitState,
@@ -2712,7 +2713,7 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
   // 忠克猛烈：施法者行动时清除其施加的受击追加攻击标记（窗口「直到施法者下回合行动前」）
   expireRetaliateOnCasterAct(ctx, unit);
 
-  // 行动阶段判定顺序：被动 → 指挥（预备怯战 + 二类） → DoT → 主动 → 普攻 → 追击 → 分兵
+  // 行动阶段判定顺序：被动 → 指挥（预备怯战 + 二类） → DoT → 主动 → 普攻（命中后立即结算分兵） → 追击
   // 混乱：无法发动主动战法 + 普攻；但被动/指挥/DoT仍正常判定
 
   // 0. 被动战法（武将行动阶段判定）：只触发 round_start 型；
@@ -2810,45 +2811,49 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
   const combinedPool = [...allies, ...enemies].filter((t) => t.alive && t !== unit);
   const attackPool = rampage ? combinedPool : enemies;
 
-  // 5+6. 主动战法阶段：
-  //  - 准备中：prepareLeft > 1 则减 1 继续准备（仍普攻、不再判定其他主动）；
-  //    prepareLeft === 1 则 prepare_end 并释放。缺省 1 回合准备与旧行为一致。
-  //  - 无准备战法：逐槽判定主动战法（含准备战法的发动率判定，判定成功即进入准备，本回合不再判定其他主动）
+  // 5+6. 主动战法阶段（准备槽**按战法**记录，可同时多段准备）：
+  //  a) 先结算准备槽：left > 1 则 −1 继续准备；left === 1 则 prepare_end 并释放该战法。
+  //  b) 再逐槽判定主动战法：本回合刚释放的战法与仍在准备中的战法跳过判定，其余照常判定。
+  //     **进入准备不中断其他主动的判定**（用户 2026-09-22 口径）：
+  //     双准备 = 第 1 回合判 A 成功（登记 A 的准备槽）/ B 失败 → 第 2 回合释放 A + 继续判 B。
   const canCastActive = !hasStatus(unit, 'hesitation');
-  if (unit.isPreparing && unit.preparingSkillId) {
-    const left = unit.prepareLeft ?? 1;
-    if (left > 1) {
-      unit.prepareLeft = left - 1;
-      // 不释放、不判定其他主动；后面仍普攻
-    } else {
-      const prepared = resolveSkill(ctx, unit.preparingSkillId);
-      if (prepared) {
-        ctx.events.push({
-          type: 'prepare_end',
-          unitId: unit.general.id,
-          skillId: prepared.id,
-          skillName: prepared.name,
-          success: true,
-        });
-        executePreparedSkill(ctx, unit, prepared, enemies, attackPool);
-      } else {
-        ctx.events.push({
-          type: 'prepare_end',
-          unitId: unit.general.id,
-          skillId: unit.preparingSkillId,
-          skillName: unit.preparingSkillId,
-          success: false,
-          reason: '战法不存在',
-        });
-      }
-      unit.isPreparing = false;
-      unit.preparingSkillId = null;
-      unit.prepareLeft = null;
+  const releasedThisTurn = new Set<string>();
+  for (const prep of [...unit.preparations]) {
+    if (prep.left > 1) {
+      prep.left -= 1; // 继续准备（本将仍可普攻、其余主动照常判定）
+      continue;
     }
-  } else if (canCastActive) {
+    // 准备完成：释放并移除该准备槽（本回合不再对该战法做发动率判定）
+    unit.preparations = unit.preparations.filter((p) => p !== prep);
+    releasedThisTurn.add(prep.skillId);
+    const prepared = resolveSkill(ctx, prep.skillId);
+    if (prepared) {
+      ctx.events.push({
+        type: 'prepare_end',
+        unitId: unit.general.id,
+        skillId: prepared.id,
+        skillName: prepared.name,
+        success: true,
+      });
+      executePreparedSkill(ctx, unit, prepared, enemies, attackPool);
+    } else {
+      ctx.events.push({
+        type: 'prepare_end',
+        unitId: unit.general.id,
+        skillId: prep.skillId,
+        skillName: prep.skillId,
+        success: false,
+        reason: '战法不存在',
+      });
+    }
+  }
+  if (canCastActive) {
     for (const id of unit.general.activeSkillIds) {
       const active = resolveSkill(ctx, id);
       if (!active) continue;
+      // 本回合刚释放的战法、以及仍在准备中的战法：本回合不做发动率判定
+      if (releasedThisTurn.has(id)) continue;
+      if (unit.preparations.some((p) => p.skillId === id)) continue;
       // 运筹决胜等：判定该主动战法发动率之前先走二类指挥 before_active
       triggerBeforeActiveCommands(ctx, unit);
       if (!unit.alive) break;
@@ -2860,14 +2865,12 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
         phase: 'active_skill',
       });
       triggerActiveSkill(ctx, unit, active, enemies, allies, attackPool);
-      if (unit.isPreparing) break; // 已进入准备，本回合不再判定其他主动
     }
   }
 
-  // 7+8. 普通攻击阶段（连击：至多两次普攻，非乘算；怯战无法普攻）。
-  // 追击战法在每次普攻命中后立即判定（连击：普攻→追击→普攻→追击），而非全部普攻结束后统一判定。
-  // 时序依赖追击的战法（烈火焚舟：第二刀引爆第一刀挂上的燃烧）依赖该穿插顺序。
-  const hits: UnitState[] = [];
+  // 7+8+9. 普通攻击阶段（连击：至多两次普攻，非乘算；怯战无法普攻）。
+  // 每次**普攻命中后立即**结算：① 分兵 → ② 追击战法判定（连击：普攻→分兵→追击→普攻→分兵→追击），
+  // 而非全部普攻结束后统一判定。时序依赖追击的战法（烈火焚舟：第二刀引爆第一刀挂上的燃烧）依赖该穿插顺序。
   const doOneAttack = (): UnitState | null => {
     ctx.events.push({
       type: 'unit_act_start',
@@ -2878,7 +2881,15 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
     });
     const hit = normalAttack(ctx, unit, attackPool, allies, canNormalAttack);
     if (hit) {
-      hits.push(hit);
+      // 分兵（普攻衍生伤害）：**只由普通攻击触发**，命中后随本次普攻立即对相邻敌军溅射（无视攻击距离）。
+      // 必须在追击判定之前结算——原先放在两次普攻之后（追击之后）结算，会让分兵事件落进追击战法段
+      // （战报看起来像「追击触发了分兵」），且追击打死普攻目标时分兵会被整段吞掉。
+      const splitStatus = getStatus(unit, 'split');
+      if (splitStatus && hit.alive) {
+        executeSplitAttack(ctx, unit, hit, splitStatus.rate, allies, enemies);
+        // 次数型分兵（鱼鳞/飒沓）按普攻次数消耗；鹤翼等无 charges 的分兵不扣
+        if ('charges' in splitStatus && splitStatus.charges != null) consumeSplitCharges(unit);
+      }
       // 本次普攻命中后：逐追击槽判定（目标已死时追击对死目标判定，内部无目标则不生效）
       for (const id of unit.general.pursuitSkillIds) {
         const pursuit = resolveSkill(ctx, id);
@@ -2902,17 +2913,6 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
   for (let extra = 0; extra < YANGSHA_MAX_EXTRA_ATTACKS; extra++) {
     if (!consumeStacksForExtraAttack(ctx, unit, canNormalAttack)) break;
     doOneAttack();
-  }
-
-  // 9. 分兵攻击阶段（普攻后无视攻击距离对相邻目标造成比例伤害）
-  const splitStatus = getStatus(unit, 'split');
-  if (splitStatus) {
-    for (const hitTarget of hits) {
-      if (!hitTarget.alive) continue;
-      executeSplitAttack(ctx, unit, hitTarget, splitStatus.rate, allies, enemies);
-      // 次数型分兵（鱼鳞/飒沓）按输出次数消耗；鹤翼等无 charges 的分兵不扣
-      if ('charges' in splitStatus && splitStatus.charges != null) consumeSplitCharges(unit);
-    }
   }
 
   endUnitAct(ctx, unit, actEndMarked, statusesAtActStart); // 正常出口：状态在行动结束后递减
@@ -8119,9 +8119,11 @@ export function triggerActiveSkill(
         skillName: skill.name,
       });
     } else {
-      unit.isPreparing = true;
-      unit.preparingSkillId = skill.id;
-      unit.prepareLeft = (skill.type === 'active' && skill.prepare ? (skill.prepareTurns ?? 1) : 1);
+      // 登记本战法自己的准备槽（多准备槽：其他准备战法可同时各自准备）
+      unit.preparations.push({
+        skillId: skill.id,
+        left: skill.type === 'active' && skill.prepare ? (skill.prepareTurns ?? 1) : 1,
+      });
       ctx.events.push({
         type: 'prepare_start',
         unitId: unit.general.id,

@@ -154,8 +154,7 @@ describe('速度 buff 影响出手顺序（其疾如风完整机制）', () => {
       wounded: 0,
       totalDead: 0,
       statuses: [{ type: 'speed_buff', amount: 100, remaining: 3, appliedRound: 0, sourceSkillType: 'command', sourceSkillId: 'qiji_rufeng' }],
-      isPreparing: false,
-      preparingSkillId: null,
+      preparations: [],
     };
     const fastUnit: import('../src/engine/types').UnitState = {
       general: dummy('dummy-fast', '前锋'),
@@ -165,8 +164,7 @@ describe('速度 buff 影响出手顺序（其疾如风完整机制）', () => {
       wounded: 0,
       totalDead: 0,
       statuses: [],
-      isPreparing: false,
-      preparingSkillId: null,
+      preparations: [],
     };
     const order = buildTurnOrder([slowUnit, fastUnit]);
     // 木桩基础速度远低于张辽，但张辽带速度增益后应仍在前

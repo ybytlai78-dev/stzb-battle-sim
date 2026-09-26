@@ -57,8 +57,7 @@ function makeUnit(id: string, opts: { position?: Position; attack?: number } = {
     wounded: 0,
     totalDead: 0,
     statuses: [],
-    isPreparing: false,
-    preparingSkillId: null,
+    preparations: [],
   };
 }
 

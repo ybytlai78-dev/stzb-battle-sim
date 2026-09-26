@@ -1103,7 +1103,7 @@ export interface PreparedActiveSkill extends BaseSkill {
   prepare: true;
   /**
    * 准备回合数。缺省 1（现有 1 回合准备战法零改动）。
-   * 进入准备时 `prepareLeft = prepareTurns ?? 1`；下一行动 `prepareLeft > 1` 则再减 1 并继续准备。
+   * 进入准备时登记准备槽 `{ skillId, left: prepareTurns ?? 1 }`；本将每次行动开始时 left > 1 则 −1（继续准备）。
    */
   prepareTurns?: number;
   /** 含 `random_single`：率土「敌军/友军单体」为距离内均匀随机，不是最近优先；
@@ -2219,6 +2219,18 @@ export type Status =
   /** 控制效果额外 +1 目标（鸾凤和鸣）：消耗制，不按回合递减（两个 tick 函数显式跳过） */
   | { type: 'control_spread'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string };
 
+/**
+ * 一个准备槽（按**战法**记录，而非按武将单一槽）：同一武将可同时准备多个主动战法。
+ *  - 进入准备时 `left = prepareTurns ?? 1`；
+ *  - 本将每次行动开始时：`left > 1` → `left − 1`（继续准备）；`left === 1` → 释放该战法并移除本槽；
+ *  - 释放的那一回合该战法**不再**做发动率判定，但该武将其余主动（含其他准备战法）照常判定
+ *    （用户 2026-09-22 口径：双准备 = 第 1 回合判 A 成功 / B 失败 → 第 2 回合释放 A 并继续判 B）。
+ */
+export interface PreparationSlot {
+  skillId: string;
+  left: number;
+}
+
 export interface UnitState {
   readonly general: General;
   side: Side;
@@ -2231,14 +2243,10 @@ export interface UnitState {
   alive: boolean;
   /** 身上状态（混乱/怯战/规避） */
   statuses: Status[];
-  /** 是否处于准备阶段（1 回合准备战法） */
-  isPreparing: boolean;
-  /** 正在准备的战法 id */
-  preparingSkillId: string | null;
+  /** 准备中的战法槽（每个准备战法各自一格，可同时多段准备；`[]` = 未准备） */
+  preparations: PreparationSlot[];
   /** 本回合是否已行动完毕（缓师徐持「已行动的敌军」）。回合开始清 false，unit_act_end 置 true */
   hasActedThisRound?: boolean;
-  /** 剩余准备行动次数。缺省 null / 未设 = 非准备。进入准备时 = prepareTurns??1 */
-  prepareLeft?: number | null;
   /** 本回合是否已有一次主动战法实际释放成功。回合开始清 false */
   firstActiveSucceededThisRound?: boolean;
   /**

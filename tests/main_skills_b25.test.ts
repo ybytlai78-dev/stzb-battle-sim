@@ -91,8 +91,7 @@ function makeUnit(id: string, position: Position, attackRange = 4): UnitState {
     totalDead: 0,
     alive: true,
     statuses: [],
-    isPreparing: false,
-    preparingSkillId: null,
+    preparations: [],
   };
 }
 

@@ -79,8 +79,7 @@ function unitFrom(g: General, side: 'my' | 'enemy' = 'my'): UnitState {
     totalDead: 0,
     alive: true,
     statuses: [],
-    isPreparing: false,
-    preparingSkillId: null,
+    preparations: [],
     hasActedThisRound: false,
   };
 }
@@ -327,14 +326,13 @@ describe('十面埋伏（S 主动·1 回合准备：敌军全体策略 130% + �
     } as Extract<Skill, { type: 'active' }>);
 
     actUnit(ctx, carrier);
-    expect(carrier.isPreparing).toBe(true);
-    expect(carrier.preparingSkillId).toBe('shimian_maifu');
+    expect(carrier.preparations).toEqual([{ skillId: 'shimian_maifu', left: 1 }]);
     expect(damageEvents(ctx, 'shimian_maifu')).toHaveLength(0);
     expect(ctx.events.some((e) => e.type === 'prepare_start')).toBe(true);
 
     ctx.currentRound = 2;
     actUnit(ctx, carrier);
-    expect(carrier.isPreparing).toBe(false);
+    expect(carrier.preparations).toHaveLength(0);
     expect(ctx.events.some((e) => e.type === 'prepare_end')).toBe(true);
     expect(damageEvents(ctx, 'shimian_maifu')).toHaveLength(3);
   });

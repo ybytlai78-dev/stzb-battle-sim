@@ -44,8 +44,7 @@ function makeUnit(id: string, stats: Partial<Pick<UnitState['general'], 'attack'
     wounded: 0,
     totalDead: 0,
     statuses: [],
-    isPreparing: false,
-    preparingSkillId: null,
+    preparations: [],
   };
 }
 
