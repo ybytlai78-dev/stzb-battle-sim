@@ -2493,7 +2493,11 @@ function executeSplitAttack(
   allies: UnitState[],
   enemies: UnitState[]
 ): void {
-  const targetTeam = primaryTarget.side === 'my' ? allies : enemies;
+  // 溅射范围 = **受击目标（primaryTarget）同队**的相邻存活单位。
+  // ⚠️ 必须比较「目标 vs 施法者」的阵营：原来写的是 `primaryTarget.side === 'my'`（拿固定阵营比），
+  //    只有在施法者恰好在 'my' 侧时才等价 → 蓝方单位触发分兵时会去打**自己队友**（用户 2026-09-26 实战发现：
+  //    同样两队交换红蓝后胜率不成互补，蓝方分兵自伤造成 +20pp 红方优势）。
+  const targetTeam = primaryTarget.side === unit.side ? allies : enemies;
   const adj = adjacentUnits(primaryTarget, targetTeam);
   for (const adjRaw of adj) {
     if (!adjRaw.alive) continue;

@@ -88,6 +88,19 @@ describe('统计胜率（200 场快速模拟）', () => {
     expect(capped, '该组合应出现打满 8 回合（引擎原生平局）').toBeGreaterThan(0);
   });
 
+  it('交换红蓝后两次统计必然互补（胜率之和 = 100%）——每颗种子正/反各跑一场', () => {
+    // 用「镜像队」（同阵容同加点，速度全同、引擎本身有红先手偏向）验证统计层已做正反对调
+    const A = team(['孙权', '周瑜', '太史慈']);
+    const B = team(['孙权', '周瑜', '太史慈']);
+    const ab = simulateWinRate(A, B, { runs: 60, baseSeed: 540720 });
+    const ba = simulateWinRate(B, A, { runs: 60, baseSeed: 540720 });
+    expect(ab.runs).toBe(60);
+    expect(ba.runs).toBe(60);
+    // 60 场 = 30 颗种子 × 正/反两场：每场或分胜负（两方各计 1 胜）、或完全平（两边都记平）
+    expect(ab.win + ba.win + (ab.draw + ba.draw) / 2).toBe(60);
+    expect(ab.winRate + ba.winRate + (ab.drawRate + ba.drawRate) / 2).toBeCloseTo(1, 10);
+  });
+
   it('异步版分片跑批并回报进度（页面用）', async () => {
     const seen: number[] = [];
     const s = await simulateWinRateAsync(team(['太史慈']), team(['马云禄']), {
@@ -122,7 +135,8 @@ describe('统计胜率（200 场快速模拟）', () => {
     // 口径与种子可复现说明都在面板里
     expect(mask.textContent).toContain('打满 8 回合');
     expect(mask.textContent).toContain('基础种子 12345');
-    expect(mask.textContent).toContain('12345~12354');
+    expect(mask.textContent).toContain('12345~12349');
+    expect(mask.textContent).toContain('必然互补');
 
     (mask.querySelector('.wr-done') as HTMLElement).click();
     expect(document.querySelector('.wr-mask')).toBeNull();
