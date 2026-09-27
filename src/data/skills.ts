@@ -11063,4 +11063,448 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       ],
     },
   },
+
+  // ─── 典籍战法批次 4（2026-09-27）：悬权而动 200241 / 九变之利 200243 / 知己知彼 200249 /
+  //     兵者诡道 200253 / 奇正之势 200815 / 计险远近 200248 ───
+
+  /**
+   * 悬权而动（A 指挥·一类·距离 3·目标「友军群体（有效距离内 2 个目标）」）：
+   * 战斗前 2 回合，友军群体士气低于 160 时，每造成一次攻击或策略伤害后令其士气提升 3.0；
+   * 从第 3 回合自身行动起，友军士气最高单体造成的攻击和策略伤害提升 30.0%，持续至战斗结束。
+   * 官方 https://stzb.163.com/m/skilllist/200241.html（id 200241；1 级 15%）。
+   * 口径：
+   *   ①「每造成一次攻击或策略伤害后」= `allyDealStack`（准备阶段把跟踪状态挂到锁定的 2 名友军身上，
+   *      此后其每次造成匹配伤害同源再施加一次）——跟踪状态用 `morale_boost{ amount:0 }`（**零值占位**：
+   *      准备阶段不产生士气变化、首次触发才 +3，贴合「每造成一次伤害后」原文；同源 `stack:true` 累加）；
+   *   ②「战斗前 2 回合」+「士气低于 160 时」= 本轮**新增** `allyDealStack` 配置项 `endRound` /
+   *      `requireMoraleBelow`（在**触发时**按持有者当前生效士气与当前回合过滤）；
+   *   ③「从第 3 回合自身行动起」= `onActSegments{ startRound:3, once:true }`（一类指挥行动时分段，言出必克同款）；
+   *      「友军士气最高单体」= 本轮**新增** `targetPick:'highest_morale_ally'`（按生效士气比较、含施法者自身）；
+   *   ④ **推定**：官方未说明「士气最高单体」是否随士气变化迁移——按「第 3 回合自身行动时锁定当时士气最高者、
+   *      整场生效」实现（`once:true`）；若改为每回合重挂，会在多名友军身上叠出多份 30%。
+   *   ⑤ **推定**：「友军」按仓库 ally 池口径含施法者自身（同 `highest_*_ally` 先例）。
+   * 全文无「受 XX 属性影响」→ 不登记下架（**上架**）。
+   */
+  xuanquan_erdong: {
+    id: 'xuanquan_erdong',
+    name: '悬权而动',
+    type: 'command',
+    phase: 'prep',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'ally',
+    retainAfterDeath: true,
+    tags: ['morale_boost', 'damage_boost'],
+    output: [],
+    allyDealStack: {
+      endRound: 2,
+      requireMoraleBelow: 160,
+      // 触发时 +3 士气（同源 stack 累加）
+      status: { type: 'morale_boost', amount: 3, duration: 999, stack: true },
+      // 准备阶段挂 amount 0 跟踪占位（否则会白送一次 +3，且可能把士气顶过 160 门槛）
+      initialStatus: { type: 'morale_boost', amount: 0, duration: 999, stack: true },
+    },
+    onActSegments: [
+      {
+        startRound: 3,
+        once: true,
+        output: [
+          {
+            kind: 'inflict_status',
+            targetPick: 'highest_morale_ally',
+            // 「造成的攻击和策略伤害提升 30.0%」= 不写 damageType（攻击 + 策略两类都吃）
+            status: { type: 'damage_boost', rate: 0.3, duration: 999, direction: 'caused' },
+          },
+        ],
+      },
+    ],
+  },
+
+  /**
+   * 九变之利（A 准备主动·距离 4·发动率 40%·目标「敌军群体（有效距离内 2 个目标）」）：
+   * 1 回合准备，选取敌军群体 2 目标：若目标处于控制状态，则使其防御、谋略属性降低 35.0（持续 2 回合）；
+   * 若目标处于持续性伤害状态，则使其受到的攻击和策略伤害提升 40.0%（持续 2 回合）；
+   * 否则使目标进入怯战或动摇（伤害率 90.0%）（持续 2 回合）。然后对其造成一次攻击（伤害率 180.0%）。
+   * 官方 https://stzb.163.com/m/skilllist/200243.html（id 200243；1 级 17.5 / 20% / 45% / 90%）。
+   * 口径：
+   *   ① 三段「若…若…否则」= 三条 `inflict_status` 各自带**逐目标状态门槛**（本轮新增
+   *      `requireTargetStatuses` / `unlessTargetStatuses`）：控制轨（混乱/暴走/怯战/犹豫）优先；
+   *      持续性伤害轨（妖术/燃烧/恐慌/诅咒/引燃）要求**不处于控制**；否则轨要求**二者皆无**——
+   *      同一批 2 目标因此各自只吃与自身状态相符的那一条分支；
+   *   ②「怯战**或**动摇」= `status` 数组（缺省每目标随机 1 个施加，奇佐鬼谋同款）；
+   *   ③「然后对其造成一次攻击 180%」= `physical_damage{ rate:180 }`（沿用战法锁定目标，不重选）；
+   *   ④ 全文无「受 XX 属性影响」→ 不登记下架（**上架**）。
+   */
+  jiubian_zhili: {
+    id: 'jiubian_zhili',
+    name: '九变之利',
+    type: 'active',
+    prepare: true,
+    range: 4,
+    triggerRate: 0.4,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['damage', 'debuff_defense', 'debuff_strategy', 'damage_boost', 'cowardice', 'panic'],
+    output: [
+      // 分支 1：处于控制状态 → 防御 / 谋略 −35（2 回合）
+      {
+        kind: 'inflict_status',
+        requireTargetStatuses: ['confusion', 'rampage', 'cowardice', 'hesitation'],
+        status: { type: 'defense_buff', amount: -35, duration: 2 },
+      },
+      {
+        kind: 'inflict_status',
+        requireTargetStatuses: ['confusion', 'rampage', 'cowardice', 'hesitation'],
+        status: { type: 'strategy_buff', amount: -35, duration: 2 },
+      },
+      // 分支 2：处于持续性伤害状态（且不在控制状态）→ 受到的攻击和策略伤害 +40%（2 回合）
+      {
+        kind: 'inflict_status',
+        requireTargetStatuses: ['sorcery', 'burning', 'panic', 'curse', 'ignite'],
+        unlessTargetStatuses: ['confusion', 'rampage', 'cowardice', 'hesitation'],
+        status: { type: 'damage_boost', rate: 0.4, duration: 2, direction: 'taken' },
+      },
+      // 分支 3：否则 → 怯战 或 动摇（90% 逃兵 DoT）（2 回合）
+      {
+        kind: 'inflict_status',
+        unlessTargetStatuses: [
+          'confusion',
+          'rampage',
+          'cowardice',
+          'hesitation',
+          'sorcery',
+          'burning',
+          'panic',
+          'curse',
+          'ignite',
+        ],
+        status: [
+          { type: 'cowardice', duration: 2 },
+          { type: 'panic', duration: 2, rate: 90, growthRate: 0 },
+        ],
+      },
+      // 然后对其造成一次攻击（伤害率 180%）
+      { kind: 'physical_damage', rate: 180 },
+    ],
+  },
+
+  /**
+   * 知己知彼（A 指挥·一类·距离 5·目标「敌我群体」）：
+   * 战斗中，我军群体每造成一次攻击或策略伤害后，有 60.0% 几率使其造成的该类型伤害提升 8.0%，
+   * 最多叠加 5 次；敌军群体每受到一次攻击或策略伤害后，有 60.0% 几率使其受到该类型伤害提升 8.0%，
+   * 最多叠加 5 次，两种效果独立判断。
+   * 官方 https://stzb.163.com/m/skilllist/200249.html（id 200249；1 级 4%）。
+   * 口径：
+   *   ① 我军侧（造成侧）= `allyDealStack` 两条**独立轨**（攻击 / 策略各一条，`direction:'caused'`、
+   *      `damageType` 分轨、`rate:0.6` 走施法者士气、`stack:true, maxStacks:5`——反间同款）；
+   *   ② 敌军侧（受到侧）= `onHurt` 两条独立轨（`victim:'enemy'` + `damageKind` 物理/策略 +
+   *      `applyTo:'victim'`，60% 判定后给受击者挂 `direction:'taken'` 同型 8%、`maxStacks:5`）；
+   *   ③ **推定（与反间同口径）**：准备阶段先挂 1 层「免费层」（我军侧由 `allyDealStack` 准备阶段施加、
+   *      敌军侧由 `initialOutput` 补齐），此后每次匹配伤害 60% 判定 +1 层，合计封顶 5 层（即 +8%→+40%）；
+   *      两条轨完全独立、互不影响。
+   *   ④ `targetMode:'all'` = 「我军群体 / 敌军群体」在本仓库 3 将阵容下取全体；施法者阵亡后效果仍在
+   *      （`retainAfterDeath`，一类指挥口径）。
+   * 全文无「受 XX 属性影响」→ 不登记下架（**上架**）。
+   */
+  zhiji_zhibi: {
+    id: 'zhiji_zhibi',
+    name: '知己知彼',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    retainAfterDeath: true,
+    tags: ['damage_boost'],
+    output: [],
+    allyDealStack: [
+      {
+        damageType: 'physical',
+        rate: 0.6,
+        status: {
+          type: 'damage_boost',
+          rate: 0.08,
+          duration: 999,
+          direction: 'caused',
+          damageType: 'physical',
+          stack: true,
+          maxStacks: 5,
+        },
+      },
+      {
+        damageType: 'strategy',
+        rate: 0.6,
+        status: {
+          type: 'damage_boost',
+          rate: 0.08,
+          duration: 999,
+          direction: 'caused',
+          damageType: 'strategy',
+          stack: true,
+          maxStacks: 5,
+        },
+      },
+    ],
+    // 敌军侧免费首层（准备阶段一次性施加；之后由 onHurt 两条轨按 60% 叠层）
+    initialOutput: [
+      {
+        kind: 'inflict_status',
+        targetSide: 'enemy',
+        targetMode: 'all',
+        status: {
+          type: 'damage_boost',
+          rate: 0.08,
+          duration: 999,
+          direction: 'taken',
+          damageType: 'physical',
+          stack: true,
+          maxStacks: 5,
+        },
+      },
+      {
+        kind: 'inflict_status',
+        targetSide: 'enemy',
+        targetMode: 'all',
+        status: {
+          type: 'damage_boost',
+          rate: 0.08,
+          duration: 999,
+          direction: 'taken',
+          damageType: 'strategy',
+          stack: true,
+          maxStacks: 5,
+        },
+      },
+    ],
+    onHurt: [
+      {
+        victim: 'enemy',
+        rate: 0.6,
+        damageKind: 'physical',
+        applyTo: 'victim',
+        output: [
+          {
+            kind: 'inflict_status',
+            status: {
+              type: 'damage_boost',
+              rate: 0.08,
+              duration: 999,
+              direction: 'taken',
+              damageType: 'physical',
+              stack: true,
+              maxStacks: 5,
+            },
+          },
+        ],
+      },
+      {
+        victim: 'enemy',
+        rate: 0.6,
+        damageKind: 'strategy',
+        applyTo: 'victim',
+        output: [
+          {
+            kind: 'inflict_status',
+            status: {
+              type: 'damage_boost',
+              rate: 0.08,
+              duration: 999,
+              direction: 'taken',
+              damageType: 'strategy',
+              stack: true,
+              maxStacks: 5,
+            },
+          },
+        ],
+      },
+    ],
+  },
+
+  /**
+   * 兵者诡道（A 被动·距离 5·目标「自己」）：
+   * 每试图发动 3 次主动或追击战法后，随机触发以下效果中的一种：对敌军单体造成一次策略伤害
+   * （伤害率 170.0%，受谋略属性影响）；自身进入规避状态，免疫下 2 次受到的所有伤害；
+   * 恢复自身及友军单体一定兵力（恢复率 150.0%，受谋略属性影响）。
+   * 官方 https://stzb.163.com/m/skilllist/200253.html（id 200253；1 级 85% / 75%）。
+   * 口径：
+   *   ①「每试图发动 3 次主动或追击战法后」= 本轮**新增** `BaseSkill.attemptEvery`：携带者每次
+   *      **试图发动**主动或追击战法（进入发动率判定前，无论结果）计 1 次，主动 / 追击共用
+   *      `ctx.skillAttemptCounters`（键 `${casterId}:${skillId}`，整场累计，满 3 次触发并继续累计）；
+   *   ②「随机触发以下效果中的一种」= `random_pick{ count:1, options:[…] }`（铁戟金戈 / 三虎夺帅同款）；
+   *   ③ 规避「免疫下 2 次受到的所有伤害」= `evasion{ stacks:2 }`（雪奋短兵同款层数式必挡）；
+   *   ④「恢复自身及友军单体」= 两条 `heal`（自身 + 友军池随机单体、`excludeSelf`）；
+   *   ⑤ 策略 170% 与恢复 150% 官方均只写「受谋略属性影响」未给成长系数 → `strategyScaled:true` +
+   *      `growthRate` 留空（heal 必填给 0 = 按基值）→ 登记 `OFFLINE_LEARNABLE_SKILLS`（下架，待反解）。
+   */
+  bingzhe_guidao: {
+    id: 'bingzhe_guidao',
+    name: '兵者诡道',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['damage', 'evasion', 'heal'],
+    output: [],
+    attemptEvery: {
+      every: 3,
+      output: [
+        {
+          kind: 'random_pick',
+          count: 1,
+          options: [
+            // ① 对敌军单体造成一次策略伤害（170%，受谋略）
+            [
+              {
+                kind: 'strategy_damage',
+                rate: 170,
+                strategyScaled: true,
+                targetSide: 'enemy',
+                targetMode: 'random_single',
+              },
+            ],
+            // ② 自身进入规避状态，免疫下 2 次受到的所有伤害
+            [{ kind: 'inflict_status', target: 'self', status: { type: 'evasion', stacks: 2 } }],
+            // ③ 恢复自身及友军单体（150%，受谋略）
+            [
+              { kind: 'heal', rate: 150, strategyScaled: true, growthRate: 0, target: 'self' },
+              {
+                kind: 'heal',
+                rate: 150,
+                strategyScaled: true,
+                growthRate: 0,
+                targetSide: 'ally',
+                targetMode: 'random_single',
+                excludeSelf: true,
+              },
+            ],
+          ],
+        },
+      ],
+    },
+  },
+
+  /**
+   * 奇正之势（B 主动·距离 4·发动率 30%·目标「敌军单体」）：
+   * 对敌方单体发动一次猛攻（伤害率 240.0%）；攻击最高的友军单体在 1 回合内首次试图发动主动战法时，
+   * 造成的攻击无视目标 30.0% 防御属性，持续 1 回合，对有效距离 4 以内的敌军单体发动一次猛攻
+   * （伤害率 220.0%）。
+   * 官方 https://stzb.163.com/m/skilllist/200815.html（id 200815；1 级 120% / 15% / 110%）。
+   * 口径（2026-09-27 联网核对社区实测：二段伤害由**攻击最高的友军**在其试图发动主动战法时打出、
+   * 参战属性取该友军攻击；战法携带者自己不会触发）：
+   *   ① 一段「猛攻 240%」= `physical_damage{ rate:240 }`（战法锁定敌军单体，`random_single`）；
+   *   ② 二段 = 本轮**新增** `BaseSkill.allyActiveAttemptStrike`：发动时选定**攻击最高友军（排除施法者自身）**
+   *      登记 `ctx.allyActiveMarks`；该友军**下一次试图发动主动战法**时消耗标记，以**该友军**为行动者结算
+   *      output（`ignore_def 30%` 持续 1 回合 + `physical_damage 220%`，距离沿用本战法 range 4）；
+   *   ③ **推定**：官方「1 回合内」在本引擎表达为「直到该友军下一次试图发动主动战法」——
+   *      社区实测「若发动时该友军已行动过，二段顺延到下一回合」，故不做回合末过期；
+   *   ④ 二段「无视 30% 防御」= `ignore_def{ rate:0.3, duration:1 }`（非全额 `ignoresDefense`，
+   *      官方给的是 30% 比例）。
+   * 全文无「受 XX 属性影响」→ 不登记下架（**上架**）。
+   */
+  qizheng_zhishi: {
+    id: 'qizheng_zhishi',
+    name: '奇正之势',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.3,
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['damage', 'ignore_def'],
+    output: [{ kind: 'physical_damage', rate: 240 }],
+    allyActiveAttemptStrike: {
+      targetPick: 'highest_attack_ally',
+      output: [
+        // 该友军造成的攻击无视目标 30% 防御（持续 1 回合；先挂再打，二段 220% 也享受）
+        { kind: 'inflict_status', target: 'self', status: { type: 'ignore_def', rate: 0.3, duration: 1 } },
+        // 对有效距离 4 以内的敌军单体发动一次猛攻（220%）
+        { kind: 'physical_damage', rate: 220, targetSide: 'enemy', targetMode: 'random_single' },
+      ],
+    },
+  },
+
+  /**
+   * 计险远近（A 指挥·一类·距离 5·目标「我军全体」）：
+   * 当我军 3 名武将基础攻击距离均不相同时：大营造成的伤害无视规避；中军攻击、防御、谋略属性增加 20.0；
+   * 前锋每回合受到的首次攻击或策略攻击伤害减少 50.0%；且我军全体在发动普通攻击后，使攻击目标本回合
+   * 受到的所有伤害提高 15.0%，可叠加。
+   * 官方 https://stzb.163.com/m/skilllist/200248.html（id 200248；1 级 10 / 25% / 7.5%）。
+   * 口径：
+   *   ① 整队门闩「3 名武将基础攻击距离均不相同」= 本轮**新增** `BaseSkill.teamAttackRangeDistinct`
+   *      （按 `General.attackRange` 面板基础值比较、读部署名单不论 alive，teamTroopDistinct 同判定点）；
+   *   ②「大营造成的伤害无视规避」= `ignore_evasion` + `throughRound:999`（识破同款「回合窗口内不消耗」，
+   *      即整场持续；官方只给「无视规避」未给次数 → **推定**整场）；
+   *   ③「中军攻击、防御、谋略 +20.0」= 三条属性 buff（`status` 数组 + `applyAll`）挂 `positions:['中军']`；
+   *   ④「前锋每回合受到的首次攻击或策略攻击伤害减少 50.0%」= `roundStartRepeat` 每回合为前锋挂一条
+   *      `damage_reduce{ rate:0.5, duration:1, charges:1 }`（磐阵善守同款次数型减伤，吃首次任一类型伤害，
+   *      **推定**「攻击或策略攻击」= 二者合算一次，而非各一条独立轨）；
+   *   ⑤「我军全体普攻后使攻击目标本回合受到的所有伤害 +15.0%，可叠加」= `basicHitProc`（合纵连横同款
+   *      全队普攻监听）+ 受击侧 `damage_boost{ direction:'taken', stack:true }`（无上限、`duration:1`）。
+   * 全文无「受 XX 属性影响」→ 不登记下架（**上架**）。
+   */
+  jixian_yuanjin: {
+    id: 'jixian_yuanjin',
+    name: '计险远近',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    teamAttackRangeDistinct: true,
+    retainAfterDeath: true,
+    tags: ['attack_buff', 'defense_buff', 'strategy_buff', 'damage_reduce', 'damage_boost'],
+    output: [
+      // 大营：造成的伤害无视规避（throughRound 型 = 窗口中不消耗，整场有效）
+      {
+        kind: 'inflict_status',
+        targetSide: 'ally',
+        targetMode: 'all',
+        positions: ['大营'],
+        status: { type: 'ignore_evasion', duration: 999, throughRound: 999 },
+      },
+      // 中军：攻击 / 防御 / 谋略 +20（整场）
+      {
+        kind: 'inflict_status',
+        targetSide: 'ally',
+        targetMode: 'all',
+        positions: ['中军'],
+        applyAll: true,
+        status: [
+          { type: 'attack_buff', amount: 20, duration: 999 },
+          { type: 'defense_buff', amount: 20, duration: 999 },
+          { type: 'strategy_buff', amount: 20, duration: 999 },
+        ],
+      },
+    ],
+    // 前锋：每回合受到的首次攻击或策略攻击伤害 −50%（每回合重挂，charges 1）
+    roundStartRepeat: {
+      startRound: 1,
+      endRound: 8,
+      output: [
+        {
+          kind: 'inflict_status',
+          targetSide: 'ally',
+          targetMode: 'all',
+          positions: ['前锋'],
+          status: { type: 'damage_reduce', rate: 0.5, duration: 1, charges: 1 },
+        },
+      ],
+    },
+    // 我军全体普攻命中后：使攻击目标本回合受到的所有伤害 +15%（可叠加）
+    basicHitProc: {
+      rate: 1,
+      output: [
+        {
+          kind: 'inflict_status',
+          status: { type: 'damage_boost', rate: 0.15, duration: 1, direction: 'taken', stack: true },
+        },
+      ],
+    },
+  },
 };

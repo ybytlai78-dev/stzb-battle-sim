@@ -468,7 +468,10 @@ export type SkillOutput =
         | 'highest_troops_enemy'
         /** 我军**当前兵力最低**的存活单体（磐阵善守「每回合使我军兵力最低的武将受到首次攻击/策略攻击伤害大幅降低」），
          *  含施法者自身（heal.targetPick 同款口径） */
-        | 'lowest_troops_ally';
+        | 'lowest_troops_ally'
+        /** 我军**当前生效士气最高**的存活单体（悬权而动「友军士气最高单体造成的攻击和策略伤害提升 30.0%」），
+         *  按 `effectiveMorale` 比较、含施法者自身（仓库 ally 池口径），**推定**。 */
+        | 'highest_morale_ally';
       /** `targetPick:'ally_named'` 时的武将名（如 '吕布'） */
       targetPickName?: string;
       /**
@@ -477,6 +480,15 @@ export type SkillOutput =
        * 与 `requireStatuses`（逐目标过滤伤害段）不同：这里是整段结算与否的门槛。
        */
       requireAnyPrevDamageTargetStatus?: StatusType[];
+      /**
+       * 逐目标状态门槛（九变之利「若目标处于控制状态，则…；若目标处于持续性伤害状态，则…」）：
+       * 目标**当前带这些状态之一**才结算本段；与 `unlessTargetStatuses` 同时给出时须同时满足。
+       * 与 `requireAnyPrevDamageTargetStatus`（整段开关、看上一段伤害目标）不同：本字段是**逐个目标过滤**，
+       * 因此同一批锁定目标可由多条段各自命中一条分支（if / else if / else）。
+       */
+      requireTargetStatuses?: StatusType[];
+      /** 逐目标状态排除：目标**带这些状态之一**则跳过本段（配合 `requireTargetStatuses` 表达「否则」分支） */
+      unlessTargetStatuses?: StatusType[];
     }
   | { kind: 'remove_debuffs'; target?: 'self'; troopTypes?: TroopType[] }
   /**
@@ -897,6 +909,12 @@ interface BaseSkill {
   /** 我方**出战** 3 名武将兵系**两两不同**（形兵之极；按有效兵系比较，读部署名单不论 alive） */
   teamTroopDistinct?: boolean;
   /**
+   * 我方**出战** 3 名武将**基础攻击距离两两不同**（计险远近「我军 3 名武将基础攻击距离均不相同时」）：
+   * 按 `General.attackRange`（**面板基础值**，不含 `range_buff` / 二级兵种修正）比较，读部署名单不论 alive；
+   * 名单不足 3 人视为不满足。不满足 → 本战法整次不生效（含准备阶段 output / 每回合段 / 普攻监听）。
+   */
+  teamAttackRangeDistinct?: boolean;
+  /**
    * 我军**出战**的 3 名武将必须**全部为该性别**，否则本战法整次不生效
    * （美人计「我方 3 名武将均为女武将时」）。读部署名单（不论 alive）；无性别数据者视为不匹配。
    */
@@ -972,8 +990,21 @@ interface BaseSkill {
    * 数组形式用于「攻击 / 策略两条独立轨」（反间、知己知彼）。
    */
   allyDealStack?:
-    | { damageType?: DamageType; skillTypes?: SkillType[]; status: CreateStatus; rate?: number }
-    | Array<{ damageType?: DamageType; skillTypes?: SkillType[]; status: CreateStatus; rate?: number }>;
+    | { damageType?: DamageType; skillTypes?: SkillType[]; status: CreateStatus; /** 准备阶段挂的「跟踪状态」；缺省 = `status`。用于跟踪状态本身不该有效果的场景（悬权而动：挂 amount 0 占位，触发时才用 status 的 +3 同源累加） */ initialStatus?: CreateStatus; rate?: number; /** 只在当前回合 ≤ 此值内叠层（悬权而动「战斗前 2 回合」）；缺省不限 */ endRound?: number; /** 只在持有者当前生效士气 < 此值时才叠层（悬权而动「士气低于 160 时」）；缺省不限 */ requireMoraleBelow?: number }
+    | Array<{ damageType?: DamageType; skillTypes?: SkillType[]; status: CreateStatus; initialStatus?: CreateStatus; rate?: number; endRound?: number; requireMoraleBelow?: number }>;
+  /**
+   * 「每试图发动 N 次主动或追击战法后」钩子（兵者诡道）：携带者每次**试图发动**主动或追击战法
+   * （进入发动率判定前，无论结果）累计 1 次，达到 `every` 次后结算 `output` 并把计数归零。
+   * 主动 / 追击共用同一个 `ctx.skillAttemptCounters`（键 `${casterId}:${skillId}`，整场累计）。
+   */
+  attemptEvery?: { every: number; output: SkillOutput[] };
+  /**
+   * 「友军（攻击最高单体）在 1 回合内首次试图发动主动战法时」追加段（奇正之势）：
+   * 发动时按 `targetPick` 选定 1 名友军（**不含施法者自身**——官方「自己不会触发」），登记到
+   * `ctx.allyActiveMarks`；该友军**下一次试图发动主动战法**时（`triggerActiveAttemptHooks` 内）
+   * 消耗标记，并以**该友军**为行动者结算 `output`（段内缺省目标池 = 该友军，缺距离用本战法 range）。
+   */
+  allyActiveAttemptStrike?: { targetPick: 'highest_attack_ally'; output: SkillOutput[] };
   /**
    * 自身**主动主战法**发动后叠层，满层触发一次攻击并清空（乘间击隙「自身每发动主动主战法后，使自身造成的
    * 攻击伤害提升 15%，最多叠加 3 次。该效果每叠加 3 次后，对敌军群体发动 1 次攻击（240%），发动后攻击伤害

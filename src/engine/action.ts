@@ -441,6 +441,16 @@ export function teamTroopsDistinct(team: UnitState[]): boolean {
 }
 
 /**
+ * 我军出战名单是否「3 名武将**基础攻击距离**两两不同」（计险远近「我军 3 名武将基础攻击距离均不相同时」）。
+ * 读部署名单（不论 alive）；名单不足 3 人视为不满足；取 `General.attackRange` **面板基础值**，
+ * 不含 `range_buff` / 二级兵种修正（官方写「基础攻击距离」）。
+ */
+export function teamAttackRangesDistinct(team: UnitState[]): boolean {
+  if (team.length < 3) return false;
+  return new Set(team.map((u) => u.general.attackRange)).size === team.length;
+}
+
+/**
  * 段级条件判定（典藏战法【追加】，见 `OutputCondition`）：
  * `require` 全部满足 且 `unless` 全部不满足 才返回 true。
  * 未给出的条件维视为「不限」；`casterNames` 按武将名匹配（同名多张卡都算，缚父临危先例）；
@@ -708,6 +718,17 @@ export interface CombatContext {
    */
   skillDamageCounters?: Map<string, number>;
   /**
+   * 「每试图发动 N 次主动或追击战法后」计数（兵者诡道）：key `${casterId}:${skillId}` → 已试图发动次数
+   * （主动与追击共用，整场累计不重置，达到 every 的整数倍时触发一次）。可选字段：单元测试可省略，
+   * 执行时惰性初始化。
+   */
+  skillAttemptCounters?: Map<string, number>;
+  /**
+   * 「友军首次试图发动主动战法时」待发标记（奇正之势）：发动时选定攻击最高友军登记，
+   * 该友军下一次试图发动主动战法时消耗并由其结算 `output`。可选字段：单元测试可省略。
+   */
+  allyActiveMarks?: Array<{ unitId: string; casterId: string; skillId: string; output: SkillOutput[] }>;
+  /**
    * 全队累计伤害计数（徽言龙凤）：key `${casterId}:${skillId}` → 该战法视角下「本侧已造成伤害次数」。
    * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
    */
@@ -900,6 +921,8 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
     if (skill.teamFactionDistinct && !teamFactionsDistinct(unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam)) continue;
     // 兵系条件（形兵之极）：我军出战 3 将兵系两两不同，否则整次不生效
     if (skill.teamTroopDistinct && !teamTroopsDistinct(unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam)) continue;
+    // 基础攻击距离条件（计险远近）：我军出战 3 将基础攻击距离两两不同，否则整次不生效
+    if (skill.teamAttackRangeDistinct && !teamAttackRangesDistinct(unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam)) continue;
     // 性别条件（美人计）：我军出战 3 将须全为指定性别，否则整次不生效
     if (skill.teamGenderFilter && !teamGendersMatch(unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam, skill.teamGenderFilter)) continue;
     ctx.events.push({
@@ -969,7 +992,10 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
       for (const t of targets) {
         if (!t.alive) continue;
         for (const cfg of stacks) {
-          inflictStatus(ctx, t, cfg.status, skill.type, skill.id, unit.general.id);
+          // 注：`endRound` / `requireMoraleBelow` 只在**触发时**过滤（窗口内首次造成伤害才叠层），
+          // 准备阶段仍挂"跟踪状态"——否则士气后续降回门槛内时无状态可回溯、整段失效。
+          // `initialStatus`（缺省 = status）：跟踪状态本身不该有效果时用（悬权而动挂 amount 0）。
+          inflictStatus(ctx, t, cfg.initialStatus ?? cfg.status, skill.type, skill.id, unit.general.id);
         }
       }
     }
@@ -6714,6 +6740,9 @@ function triggerAllyDealStack(ctx: CombatContext, source: UnitState, damageType?
     const casterId = 'sourceUnitId' in s ? s.sourceUnitId : undefined;
     for (const cfg of cfgs) {
       if (cfg.damageType && cfg.damageType !== damageType) continue;
+      // 窗口 / 士气门槛（悬权而动「战斗前 2 回合」「士气低于 160 时」）
+      if (cfg.endRound != null && ctx.currentRound > cfg.endRound) continue;
+      if (cfg.requireMoraleBelow != null && effectiveMorale(source) >= cfg.requireMoraleBelow) continue;
       if (cfg.rate != null) {
         // 按几率叠层（反间 / 知己知彼）：走**原施法者**士气修正，逐次发 skill_trigger
         const caster = casterId ? castUnit(ctx, casterId) : undefined;
@@ -6747,12 +6776,34 @@ function triggerPursuitAttemptHooks(ctx: CombatContext, unit: UnitState, hitTarg
   if (!unit.alive) return;
   for (const id of [...unit.general.passiveSkillIds, ...unit.general.commandSkillIds]) {
     const skill = resolveSkill(ctx, id);
-    const cfg = skill?.onPursuitAttempt;
-    if (!skill || !cfg) continue;
-    if (!passesCasterPosition(skill, unit)) continue;
-    executeSkillOutputs(ctx, unit, skill, [hitTarget], cfg.output);
-    if (!unit.alive) return;
+    if (!skill || !passesCasterPosition(skill, unit)) continue;
+    const cfg = skill.onPursuitAttempt;
+    if (cfg) {
+      executeSkillOutputs(ctx, unit, skill, [hitTarget], cfg.output);
+      if (!unit.alive) return;
+    }
+    // 「每试图发动 N 次主动或追击战法后」（兵者诡道）：主动 / 追击共用一个计数
+    if (skill.attemptEvery) {
+      triggerAttemptEveryHook(ctx, unit, skill);
+      if (!unit.alive) return;
+    }
   }
+}
+
+/**
+ * 「每试图发动 N 次主动或追击战法后」计数（兵者诡道）：携带者每次**试图发动**主动或追击战法
+ * （进入发动率判定前，无论结果）累计 1 次，达到 `every` 的整数倍时结算 `output`（等价于每满 `every` 次触发一次）。
+ * 主动 / 追击共用 `ctx.skillAttemptCounters`（键 `${casterId}:${skillId}`，整场累计不重置）。
+ */
+function triggerAttemptEveryHook(ctx: CombatContext, unit: UnitState, skill: Skill): void {
+  const cfg = skill.attemptEvery;
+  if (!cfg) return;
+  ctx.skillAttemptCounters ??= new Map();
+  const key = `${unit.general.id}:${skill.id}`;
+  const count = (ctx.skillAttemptCounters.get(key) ?? 0) + 1;
+  ctx.skillAttemptCounters.set(key, count);
+  if (count % cfg.every !== 0) return;
+  executeSkillOutputs(ctx, unit, skill, [unit], cfg.output);
 }
 
 /**
@@ -6764,10 +6815,55 @@ function triggerActiveAttemptHooks(ctx: CombatContext, unit: UnitState): void {
   if (!unit.alive) return;
   for (const id of [...unit.general.passiveSkillIds, ...unit.general.commandSkillIds]) {
     const skill = resolveSkill(ctx, id);
-    const cfg = skill?.onActiveAttempt;
-    if (!skill || !cfg) continue;
-    if (!passesCasterPosition(skill, unit)) continue;
-    executeSkillOutputs(ctx, unit, skill, [unit], cfg.output);
+    if (!skill || !passesCasterPosition(skill, unit)) continue;
+    const cfg = skill.onActiveAttempt;
+    if (cfg) {
+      executeSkillOutputs(ctx, unit, skill, [unit], cfg.output);
+      if (!unit.alive) return;
+    }
+    // 「每试图发动 N 次主动或追击战法后」（兵者诡道）：主动 / 追击共用一个计数
+    if (skill.attemptEvery) {
+      triggerAttemptEveryHook(ctx, unit, skill);
+      if (!unit.alive) return;
+    }
+  }
+  // 友军「1 回合内首次试图发动主动战法时」待发标记（奇正之势）：由被标记的友军本次试图发动时消耗
+  consumeAllyActiveMarks(ctx, unit);
+}
+
+/**
+ * 奇正之势：登记「攻击最高友军（不含施法者自身）首次试图发动主动战法时」待发标记。
+ * 同一「战法 × 施法者」只保留最新一份（重复发动覆盖，避免多份标记叠加）。
+ */
+function registerAllyActiveAttemptMark(ctx: CombatContext, caster: UnitState, skill: Skill): void {
+  const cfg = skill.allyActiveAttemptStrike;
+  if (!cfg) return;
+  const allies = (caster.side === 'my' ? ctx.myTeam : ctx.enemyTeam).filter(
+    (u) => u.alive && u.general.id !== caster.general.id
+  );
+  if (allies.length === 0) return;
+  const target = allies.reduce((best, u) =>
+    effectiveStat(u, 'attack') > effectiveStat(best, 'attack') ? u : best
+  );
+  ctx.allyActiveMarks ??= [];
+  ctx.allyActiveMarks = ctx.allyActiveMarks.filter((m) => !(m.skillId === skill.id && m.casterId === caster.general.id));
+  ctx.allyActiveMarks.push({
+    unitId: target.general.id,
+    casterId: caster.general.id,
+    skillId: skill.id,
+    output: cfg.output,
+  });
+}
+
+/** 奇正之势：被标记友军试图发动主动战法时消耗标记，并以**该友军**为行动者结算其 output */
+function consumeAllyActiveMarks(ctx: CombatContext, unit: UnitState): void {
+  const marks = ctx.allyActiveMarks?.filter((m) => m.unitId === unit.general.id);
+  if (!marks || marks.length === 0) return;
+  ctx.allyActiveMarks = ctx.allyActiveMarks!.filter((m) => m.unitId !== unit.general.id);
+  for (const m of marks) {
+    const skill = resolveSkill(ctx, m.skillId);
+    if (!skill) continue;
+    executeSkillOutputs(ctx, unit, skill, [unit], m.output);
     if (!unit.alive) return;
   }
 }
@@ -7067,6 +7163,8 @@ function executeSkillOutputs(
   if (!outputs) scheduleDelayedRoundOutputs(ctx, caster, skill);
   // 随机复制发动（奇门遁甲）：同样仅最外层执行；显式 outputs 传入被复制战法 → 其自身 chain/copy 不递归
   if (!outputs) runCopyRandomActive(ctx, caster, skill, targets);
+  // 奇正之势：登记「攻击最高友军首次试图发动主动战法时」待发标记（仅最外层发动）
+  if (!outputs) registerAllyActiveAttemptMark(ctx, caster, skill);
   /** 属性/兵力/增减伤的读取来源；缺省与施法者同体（旧口径） */
   const statU = statSource ?? caster;
   /** 上两段伤害输出的实际目标，供 onlyIfOverlapPrevious（怀德畏威重合混乱）取交集 */
@@ -7252,6 +7350,16 @@ function executeSkillOutputs(
     if (out.kind === 'inflict_status' && out.requirePositions) {
       pool = pool.filter((u) => out.requirePositions!.includes(u.general.position));
     }
+    // 逐目标状态门槛（九变之利：控制分支 / 持续性伤害分支 / 否则分支）——
+    // 三条段各自过滤同一批锁定目标，于是每个目标只会吃到与其当前状态相符的那一条
+    if (out.kind === 'inflict_status' && out.requireTargetStatuses && out.requireTargetStatuses.length > 0) {
+      const need = out.requireTargetStatuses;
+      pool = pool.filter((u) => u.statuses.some((st) => need.includes(st.type)));
+    }
+    if (out.kind === 'inflict_status' && out.unlessTargetStatuses && out.unlessTargetStatuses.length > 0) {
+      const ban = out.unlessTargetStatuses;
+      pool = pool.filter((u) => !u.statuses.some((st) => ban.includes(st.type)));
+    }
     // 阵营过滤（合纵连横「对非自身阵营的武将普通攻击后…使目标陷入围困」）：同阵营目标不结算本段。
     // 「自身」取**实际行动者**（监听类调用传 statSource = 触发者，缺省与 caster 同体）
     if (out.kind === 'inflict_status' && out.targetFactionNotSelf) {
@@ -7298,6 +7406,12 @@ function executeSkillOutputs(
         // 磐阵善守「我军兵力最低的武将」：按**当前兵力**比较，含施法者自身（heal 同款口径）
         const alive = allies.filter((u) => u.alive);
         pool = alive.length ? [alive.reduce((low, u) => (u.troops < low.troops ? u : low))] : [];
+      } else if (pick === 'highest_morale_ally') {
+        // 悬权而动「友军士气最高单体」：按**当前生效士气**比较，含施法者自身（仓库 ally 池口径，推定）
+        const alive = allies.filter((u) => u.alive);
+        pool = alive.length
+          ? [alive.reduce((best, u) => (effectiveMorale(u) > effectiveMorale(best) ? u : best))]
+          : [];
       } else {
         const [, mode, stat, side] = /^(highest|lowest)_(attack|defense|strategy)_(ally|enemy)$/.exec(pick) ?? [];
         if (mode && stat && side) {
@@ -8853,6 +8967,8 @@ function executeSkillWithTargets(
   if (skill.teamFactionDistinct && !teamFactionsDistinct(unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam)) return;
   // 兵系条件（形兵之极）：我军出战 3 将兵系两两不同，否则整次不生效
   if (skill.teamTroopDistinct && !teamTroopsDistinct(unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam)) return;
+  // 基础攻击距离条件（计险远近）：我军出战 3 将基础攻击距离两两不同，否则整次不生效
+  if (skill.teamAttackRangeDistinct && !teamAttackRangesDistinct(unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam)) return;
   // 性别条件（美人计）：我军出战 3 将须全为指定性别，否则整次不生效
   if (skill.teamGenderFilter && !teamGendersMatch(unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam, skill.teamGenderFilter)) return;
 

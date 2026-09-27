@@ -3014,5 +3014,83 @@
     "status": "implemented",
     "missingMechanics": "",
     "note": "典籍批次 p3：teamTroopDistinct（新增门闩）+ trigger_boost(mainSkillOnly, active/pursuit) + damage_reduce 4 回合 + 每回合中军首次增伤 charges 1；上架"
+  },
+  {
+    "name": "悬权而动",
+    "quality": "A",
+    "type": "command",
+    "range": 3,
+    "triggerRate": null,
+    "targetDesc": "友军群体（有效距离内2个目标）",
+    "effectDesc": "战斗前2回合，友军群体士气低于160时，每造成一次攻击或策略伤害后令其士气提升3.0；从第3回合自身行动起，友军士气最高单体造成的攻击和策略伤害提升30.0%，持续至战斗结束",
+    "sources": "3个WEI、SHU、WU、JIN5星武将兑换（典籍）",
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "典籍批次 p4：allyDealStack 扩展 endRound / requireMoraleBelow / initialStatus（零值跟踪占位）+ onActSegments(once) + targetPick highest_morale_ally（新增）；上架"
+  },
+  {
+    "name": "九变之利",
+    "quality": "A",
+    "type": "active",
+    "range": 4,
+    "triggerRate": "40%",
+    "targetDesc": "敌军群体（有效距离内2个目标）",
+    "effectDesc": "1回合准备，选取敌军群体2目标，若目标处于控制状态，则使其防御属性、谋略属性降低35.0，持续2回合，若目标处于持续性伤害状态，则使其受到的攻击和策略伤害提升40.0%，持续2回合，否则使目标进入怯战或动摇(伤害率90.0%)，持续2回合。然后对其造成一次攻击（伤害率180.0%）",
+    "sources": "3个WEI、SHU、WU、JIN5星武将兑换（典籍）",
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "典籍批次 p4：inflict_status 逐目标状态门槛 requireTargetStatuses / unlessTargetStatuses（新增，控制 / 持续伤害 / 否则三分支）+ 怯战或动摇随机 + 攻击 180%；上架"
+  },
+  {
+    "name": "知己知彼",
+    "quality": "A",
+    "type": "command",
+    "range": 5,
+    "triggerRate": null,
+    "targetDesc": "敌我群体",
+    "effectDesc": "战斗中，我军群体每造成一次攻击或策略伤害后，有60.0%几率使其造成的该类型伤害提升8.0%，此效果最多叠加5次；敌军群体每受到一次攻击或策略伤害后，有60.0%几率使其受到该类型伤害提升8.0%，此效果最多叠加5次，两种效果独立判断。",
+    "sources": "3个WEI、SHU、WU、JIN5星武将兑换（典籍）",
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "典籍批次 p4：allyDealStack 两条造成轨（60%）+ onHurt 两条受到轨（60%）+ initialOutput 免费首层（与反间同口径，两轨独立）；上架"
+  },
+  {
+    "name": "兵者诡道",
+    "quality": "A",
+    "type": "passive",
+    "range": 5,
+    "triggerRate": null,
+    "targetDesc": "自己",
+    "effectDesc": "每试图发动3次主动或追击战法后，随机触发以下效果中的一种：对敌军单体造成一次策略伤害（伤害率170.0%，受谋略属性影响）；自身进入规避状态，免疫下2次受到的所有伤害；恢复自身及友军单体一定兵力（恢复率150.0%，受谋略属性影响）",
+    "sources": "3个WEI、SHU、WU、JIN5星武将兑换（典籍）",
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "典籍批次 p4：BaseSkill.attemptEvery（主动 / 追击共用 skillAttemptCounters，每 3 次试图发动）+ random_pick 三选一 + evasion 2 层；策略 170% / 恢复 150% 受谋略无系数 → 下架"
+  },
+  {
+    "name": "奇正之势",
+    "quality": "B",
+    "type": "active",
+    "range": 4,
+    "triggerRate": "30%",
+    "targetDesc": "敌军单体 ",
+    "effectDesc": "对敌方单体发动一次猛攻（伤害率240.0%）；攻击最高的友军单体在1回合内首次试图发动主动战法时，造成的攻击无视目标30.0%防御属性，持续1回合，对有效距离4以内的敌军单体发动一次猛攻（伤害率220.0%）",
+    "sources": "3个WEI、SHU、WU5星武将兑换（典籍）",
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "典籍批次 p4：BaseSkill.allyActiveAttemptStrike + ctx.allyActiveMarks（攻击最高友军首次试图发动主动时由其打出 220% + ignore_def 30% 1 回合）；上架"
+  },
+  {
+    "name": "计险远近",
+    "quality": "A",
+    "type": "command",
+    "range": 5,
+    "triggerRate": null,
+    "targetDesc": "我军全体",
+    "effectDesc": "当我军3名武将基础攻击距离均不相同时，大营造成的伤害无视规避，中军攻击、防御、谋略属性增加20.0，前锋每回合受到的首次攻击或策略攻击伤害减少50.0%；且我军全体在发动普通攻击后，使攻击目标本回合受到的所有伤害提高15.0%，可叠加",
+    "sources": "3个WEI、SHU、WU、JIN5星武将兑换（典籍）",
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "典籍批次 p4：BaseSkill.teamAttackRangeDistinct（新增门闩）+ ignore_evasion throughRound 999（大营整场无视规避）+ 中军三属性 +20 + 前锋每回合 charges 1 减伤 + basicHitProc 受伤 +15% 可叠；上架"
   }
 ]
