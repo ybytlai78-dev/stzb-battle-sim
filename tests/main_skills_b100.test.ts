@@ -5,8 +5,8 @@
  *   长兵：使目标攻击距离 -1，持续 2 回合；弓：有 60.0% 几率该战法目标数 +1；
  *   其余宝物或未授予：使目标防御属性降低 36.0%（受攻击属性影响），持续 2 回合。
  * 官方：scripts/skill_extra.json id 200957；来源 https://stzb.163.com/m/skilllist/200957.html
- * 入档：**下架** —— 默认段「受攻击属性影响」官方未给成长系数（`attackScaled` 在、`growthRate` 缺 → 按基值 36），
- *   登记 `listing.OFFLINE_MAIN_SKILLS`，待实测反推系数后上架。
+ * 入档：**上架** —— 默认段「防御 −36 受攻击属性影响」的成长率由用户 2026-09-27 实测点锁定
+ *   （攻击 200.6 → 减防 49.6% ⇒ `growthRate: 0.1125`/点，百分比按 0.1% 粒度显示），四分支为官方原文 → 可玩。
  * 引擎配套（本批新增，见 `src/engine/types.ts`）：
  *   ① `OutputCondition.casterTreasureKinds` —— 段级宝物分支条件（未佩戴宝物 = '其他'）；
  *   ② `BaseSkill.bonusGroupTargets` —— 选目标阶段的「目标数 +1」（60% 士气修正 + skill_trigger 事件）。
@@ -137,7 +137,7 @@ const damageTargetIds = (ctx: CombatContext) =>
   new Set(eventsOf(ctx, 'damage').filter((e) => e.skillId === SKILL_ID).map((e) => e.targetId));
 
 describe('五兵之烈（曹彰 h683）', () => {
-  it('装配：主动·距离 5·35%·敌军群体 2 目标·挂槽 main_skill_id·按成长率未确认下架', () => {
+  it('装配：主动·距离 5·35%·敌军群体 2 目标·挂槽 main_skill_id·成长率锁定后上架', () => {
     const hero = HERO_REGISTRY[HERO_ID];
     expect(hero.name).toBe('曹彰');
     expect(hero.faction).toBe('魏');
@@ -164,8 +164,9 @@ describe('五兵之烈（曹彰 h683）', () => {
     const main = s.output[4] as { outputs: { kind: string; rate?: number }[] };
     expect(main.outputs[0]).toEqual({ kind: 'physical_damage', rate: FULL_RATE });
 
-    expect(isHeroListed(HERO_RECORDS[HERO_ID])).toBe(false);
-    expect(OFFLINE_MAIN_SKILLS[SKILL_ID]).toContain('受攻击属性影响');
+    // 默认段成长率已由用户实测点锁定（攻击 200.6 → 49.6% ⇒ 0.1125/点）→ **上架**
+    expect(isHeroListed(HERO_RECORDS[HERO_ID])).toBe(true);
+    expect(OFFLINE_MAIN_SKILLS[SKILL_ID]).toBeUndefined();
   });
 
   it('剑分支：先移除目标有益效果，再发动 300% 攻击（减益不受影响）', () => {
