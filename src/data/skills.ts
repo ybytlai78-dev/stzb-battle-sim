@@ -10336,4 +10336,120 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       ],
     },
   },
+
+  // ─── 典籍战法（非武将主战法，官方 id 200248）───
+
+  /**
+   * 计险远近（A 指挥·距离 5·一类指挥·我军全体，典籍战法）：
+   * 官方：scripts/skill_extra.json id 200248（1 级减半：10 / 25%）。
+   * ① **条件**：我军 3 名武将**基础攻击距离均不相同**时整次生效；
+   * ② 大营造成的伤害无视规避；
+   * ③ 中军攻击、防御、谋略属性增加 20.0；
+   * ④ 前锋每回合受到的首次**攻击或策略攻击**伤害减少 50.0%；
+   * ⑤ 我军全体发动普通攻击后，使攻击目标本回合受到的所有伤害提高 15.0%，**可叠加**。
+   *
+   * 引擎配套（新增 1 个字段 + 2 个过滤维，其余全复用既有能力）：
+   *   ① `BaseSkill.teamAttackRangeDistinct`（本轮新增，与 `teamFactionDistinct` 同判定点）：
+   *      「**基础**攻击距离」取 `General.attackRange` 面板值，**不含**二级兵种修正（长弓兵 +1 / 死士 −1）
+   *      与 `range_buff` —— 与 `target.attackRangeOf`（实际可达距离）刻意区分，读部署名单、战斗中不复查；
+   *   ② `ignore_evasion` + `throughRound: 999` 复用「常驻不消耗」语义（宝物「识破」先例）——
+   *      缚父临危那种缺省（无 throughRound）会在第一次造成伤害后被 consumeEvasion 吃掉，不适用；
+   *      本战法每回合对锁定友军重发一次同名同源状态，被驱散后下回合自动补回；
+   *   ③ `attack_buff` / `defense_buff` / `strategy_buff` 各 +20（点数、非百分比、无「受属性影响」→ 不缩放）；
+   *   ④ 两条 `damage_reduce`（同战法、过滤维不同 → 独立共存，互不覆盖）：
+   *      `damageType:'physical' + firstHitPerRound:'attack'`（攻击轨）
+   *      `damageType:'strategy' + firstHitPerRound:'strategy'`（策略轨）——
+   *      `firstHitPerRound` 本轮扩展为 `true | 'attack' | 'strategy'`（宝物「强固」仍是 true，行为不变）：
+   *      去重键带**伤害类型维** → 两类各记一次、互不顶掉；只有该轨本次**真的吃到减伤**才写标记
+   *      （`markFirstHitReduceUsed` 与 `sumReduce` 同口径），普攻不会白吃掉「攻击」额度；
+   *      `excludeDot`（本轮新增过滤维）：DoT 跳伤/引燃/引爆不算「攻击或策略攻击」，不吃也不占额度；
+   *      「攻击」按既有 `damageType:'physical'` 口径（普攻/物理主动/追击/分兵/反击），策略攻击 = 策略伤害；
+   *      状态 duration 999 常驻，每回合的两次额度靠记账键（回合+类型维）重置，不靠状态生命周期；
+   *   ⑤ `BaseSkill.basicHitProc`（合纵连横先例；rate 1 = 必发，仍发 skill_trigger 便于战报核对）：
+   *      准备阶段按锁定友军**逐单位注册**，任一被注册友军普攻命中后对**该普攻目标**挂
+   *      `damage_boost` direction:'taken' +15%，`stack: true`（官方写「可叠加」）→ 同战法累加、
+   *      duration 1 = 本回合（回合开始施加口径：挂上后回合末正常递减移除，可叠加回合内多次普攻）。
+   * 施加时点：四段都挂在**第 1 回合回合开始**（`roundStartRepeat` 无 startRound = 每回合，含第 1 回合）
+   * ——官方未写「战斗开始后」（合纵连横写「战斗中」、美人计写「正式回合开始后」），按战斗开始即生效处理。
+   */
+  jixian_yuanjin: {
+    id: 'jixian_yuanjin',
+    name: '计险远近',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    retainAfterDeath: true,
+    teamAttackRangeDistinct: true,
+    tags: ['insight', 'attack_buff', 'defense_buff', 'strategy_buff', 'damage_reduce', 'damage_boost'],
+    output: [],
+    roundStartRepeat: {
+      output: [
+        // ② 大营造成的伤害无视规避（throughRound = 常驻不消耗；每回合重挂，被驱散后下回合补回）
+        {
+          kind: 'inflict_status',
+          requirePositions: ['大营'],
+          status: { type: 'ignore_evasion', duration: 999, throughRound: 999 },
+        },
+        // ③ 中军攻击、防御、谋略 +20
+        {
+          kind: 'inflict_status',
+          requirePositions: ['中军'],
+          status: [
+            { type: 'attack_buff', amount: 20, duration: 999 },
+            { type: 'defense_buff', amount: 20, duration: 999 },
+            { type: 'strategy_buff', amount: 20, duration: 999 },
+          ],
+          applyAll: true,
+        },
+        // ④ 前锋每回合受到的首次攻击 / 策略攻击伤害 −50%（DoT 跳伤不算攻击）
+        //
+        //   「攻击**或**策略攻击」= 两类各限一次，故拆成**两条** `damage_reduce`（同战法、过滤维不同
+        //   → 按「同类型不同过滤维 = 独立效果」共存，互不覆盖）：
+        //     攻击轨  = damageType:'physical' + firstHitPerRound:'attack'
+        //     策略轨  = damageType:'strategy' + firstHitPerRound:'strategy'
+        //   每回合的两次额度走 `firstHitReduceKeys` 的**伤害类型维去重键**分别记账，互不顶掉
+        //   （先吃一次物理攻击只消耗攻击额度，策略攻击的首次减伤仍在，反之亦然）；标记只在该轨
+        //   本次真的吃到减伤时写入（`markFirstHitReduceUsed` 判定口径与 `sumReduce` 一致）。
+        //   `excludeDot`：官方「攻击或策略攻击」不含持续性伤害（DoT 跳伤/引燃/引爆），不吃也不占额度。
+        //   duration 999 = 状态常驻，每回合的两次额度靠 `firstHitReduceKeys` 的回合+类型维重置
+        //   （不是靠状态生命周期）——进攻方被斩杀/大营阵亡等场景不受影响。
+        {
+          kind: 'inflict_status',
+          requirePositions: ['前锋'],
+          status: [
+            {
+              type: 'damage_reduce',
+              rate: 0.5,
+              duration: 999,
+              damageType: 'physical',
+              firstHitPerRound: 'attack',
+              excludeDot: true,
+            },
+            {
+              type: 'damage_reduce',
+              rate: 0.5,
+              duration: 999,
+              damageType: 'strategy',
+              firstHitPerRound: 'strategy',
+              excludeDot: true,
+            },
+          ],
+          applyAll: true,
+        },
+      ],
+    },
+    // ⑤ 我军全体普攻命中后 → 该目标本回合受到的所有伤害 +15%（可叠加）
+    basicHitProc: {
+      rate: 1,
+      output: [
+        {
+          kind: 'inflict_status',
+          status: { type: 'damage_boost', rate: 0.15, duration: 1, direction: 'taken', stack: true },
+        },
+      ],
+    },
+  },
 };
