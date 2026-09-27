@@ -98,6 +98,23 @@ function dragSlotToPool(from: HTMLElement): void {
   dragSlotTo(from, pool);
 }
 
+/** 槽位里的武将名（未上阵 → 空串） */
+function slotHeroName(team: 'red' | 'blue', idx: number): string {
+  const slot = document.querySelectorAll(`.team-panel.${team} .slots .slot`)[idx] as HTMLElement;
+  return slot.querySelector('.hero-name')?.textContent?.trim() ?? '';
+}
+
+/** 打开已上阵槽位的武将详情页 → 修改等级（40~50）→ 关闭，用于区分两队的同名武将配置 */
+function setSlotLevel(team: 'red' | 'blue', idx: number, level: number): void {
+  (document.querySelectorAll(`.team-panel.${team} .slots .slot`)[idx] as HTMLElement).click();
+  const modal = document.querySelector('.modal') as HTMLElement;
+  const input = modal.querySelector('.hd-level-row input') as HTMLInputElement;
+  expect(input, '详情页应有等级输入框').toBeTruthy();
+  input.value = String(level);
+  input.dispatchEvent(new Event('change', { bubbles: true }));
+  (modal.querySelector('.m-close') as HTMLElement).click();
+}
+
 describe('Web 战斗模拟器冒烟', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
@@ -256,7 +273,7 @@ describe('Web 战斗模拟器冒烟', () => {
     }
   });
 
-  it('拖拽武将池卡牌到红队/蓝队槽位（Drop-Zone）：配将成功、池子保留原卡', async () => {
+  it('拖拽武将池卡牌到红队/蓝队槽位（Drop-Zone）：同一武将可同时上阵两队、池子保留原卡', async () => {
     await boot();
     const card = document.querySelector('.hero-pool .hero-card') as HTMLElement;
     const heroId = card.dataset.heroId!;
@@ -281,14 +298,25 @@ describe('Web 战斗模拟器冒烟', () => {
     // 投放触发 refresh 重渲染 → 重新查询槽位
     const redSlot2 = document.querySelector('.team-panel.red .slots .slot') as HTMLElement;
     expect(redSlot2.querySelector('.hero-name')!.textContent).toContain(heroName);
-    // 拖到蓝队前锋（主站全局唯一：红队原槽被清空）
+    // 拖到蓝队前锋：红队原槽**保留**（同一武将可同时上阵红蓝两队，用户 2026-09-26 口径）
     const blueSlot = document.querySelectorAll('.team-panel.blue .slots .slot')[2] as HTMLElement;
     const drop2 = new Event('drop', { bubbles: true, cancelable: true });
     Object.defineProperty(drop2, 'dataTransfer', { value: dt });
     blueSlot.dispatchEvent(drop2);
     const blueSlot2 = document.querySelectorAll('.team-panel.blue .slots .slot')[2] as HTMLElement;
     expect(blueSlot2.querySelector('.hero-name')!.textContent).toContain(heroName);
-    expect((document.querySelector('.team-panel.red .slots .slot') as HTMLElement).classList.contains('empty')).toBe(true); // 全局唯一：原槽清空
+    const redSlotAfter = document.querySelector('.team-panel.red .slots .slot') as HTMLElement;
+    expect(redSlotAfter.classList.contains('empty')).toBe(false); // 跨队复制不抢红队槽位
+    expect(redSlotAfter.querySelector('.hero-name')!.textContent).toContain(heroName);
+    // 再把池子卡拖到红队中军：只清理红队内的旧槽（队内唯一），蓝队那份保留
+    const redMid = document.querySelectorAll('.team-panel.red .slots .slot')[1] as HTMLElement;
+    const drop3 = new Event('drop', { bubbles: true, cancelable: true });
+    Object.defineProperty(drop3, 'dataTransfer', { value: dt });
+    redMid.dispatchEvent(drop3);
+    const redSlotsAfter = document.querySelectorAll('.team-panel.red .slots .slot');
+    expect((redSlotsAfter[0] as HTMLElement).classList.contains('empty')).toBe(true); // 红队内移走旧槽
+    expect((redSlotsAfter[1] as HTMLElement).querySelector('.hero-name')!.textContent).toContain(heroName);
+    expect((document.querySelectorAll('.team-panel.blue .slots .slot')[2] as HTMLElement).querySelector('.hero-name')!.textContent).toContain(heroName);
     // 武将池保留原卡
     expect((document.querySelector('.hero-pool .hero-card') as HTMLElement).dataset.heroId).toBe(heroId);
   });
@@ -325,6 +353,81 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(blueSlots()[1].classList.contains('empty')).toBe(true);
     expect(blueSlots()[0].querySelector('.hero-name')!.textContent).toContain('周瑜');
     expect(document.querySelector('.hero-pool .hero-card')).toBeTruthy();
+  });
+
+  it('红蓝同将：同一武将可同时上阵两队，两边同名槽位可互相切换（各自配置跟着换）', async () => {
+    await boot();
+    // 两队前锋都上阵太史慈（对方也可能有相同武将）
+    pickHeroIntoSlot('red', 2, '太史慈');
+    pickHeroIntoSlot('blue', 2, '太史慈');
+    expect(slotHeroName('red', 2)).toContain('太史慈');
+    expect(slotHeroName('blue', 2)).toContain('太史慈');
+    // 用等级区分两边配置：蓝队 45 级、红队 40 级
+    setSlotLevel('blue', 2, 45);
+    const redSlot = () => document.querySelectorAll('.team-panel.red .slots .slot')[2] as HTMLElement;
+    const blueSlot = () => document.querySelectorAll('.team-panel.blue .slots .slot')[2] as HTMLElement;
+    expect(blueSlot().querySelector('.sm-lv')!.textContent).toContain('Lv.45');
+    expect(redSlot().querySelector('.sm-lv')!.textContent).toContain('Lv.40');
+    // 拖动红队太史慈 ↔ 蓝队太史慈：两边仍各有一份，配置互换
+    dragSlotTo(redSlot(), blueSlot());
+    expect(slotHeroName('red', 2)).toContain('太史慈');
+    expect(slotHeroName('blue', 2)).toContain('太史慈');
+    expect(redSlot().querySelector('.sm-lv')!.textContent).toContain('Lv.45');
+    expect(blueSlot().querySelector('.sm-lv')!.textContent).toContain('Lv.40');
+  });
+
+  it('跨队拖动拦截「同队重复武将」：目标队已有同将时不能拖进去，但同名槽位互换放行', async () => {
+    await boot();
+    pickHeroIntoSlot('red', 2, '太史慈');
+    pickHeroIntoSlot('blue', 2, '太史慈'); // 蓝队已有一份太史慈
+    const redSlot = () => document.querySelectorAll('.team-panel.red .slots .slot')[2] as HTMLElement;
+    const blueSlots = () => document.querySelectorAll('.team-panel.blue .slots .slot') as NodeListOf<HTMLElement>;
+    // 拖到蓝队空槽 → 会让蓝队出现两份太史慈 → 拦截
+    dragSlotTo(redSlot(), blueSlots()[0]);
+    expect(blueSlots()[0].classList.contains('empty')).toBe(true);
+    expect(slotHeroName('red', 2)).toContain('太史慈');
+    expect(document.querySelector('.app-notice')!.textContent).toContain('同一队伍不能重复武将');
+    // 拖到蓝队同名槽（互换）→ 允许
+    dragSlotTo(redSlot(), blueSlots()[2]);
+    expect(slotHeroName('red', 2)).toContain('太史慈');
+    expect(slotHeroName('blue', 2)).toContain('太史慈');
+  });
+
+  it('红蓝同将模拟：镜像对局可正常出战报（简略 / 统计 / 详情都不串味）', async () => {
+    await boot();
+    pickHeroIntoSlot('red', 2, '太史慈');
+    pickHeroIntoSlot('blue', 2, '太史慈');
+    (document.querySelector('#start') as HTMLButtonElement).click();
+    expect(document.querySelector('.err-msg')!.textContent).toBe('');
+    const summary = document.querySelector('.battle-summary') as HTMLElement;
+    expect(summary, '镜像对局应正常出简略战报').toBeTruthy();
+    expect(Array.from(summary.querySelectorAll('.sh-name')).map((e) => e.textContent)).toEqual(['太史慈', '太史慈']);
+    // 引擎给蓝队副本改了 unitId：展示层仍须取到官方画像（不能拿副本 id 查武将）
+    const arts = Array.from(summary.querySelectorAll<HTMLImageElement>('.sh-art'));
+    expect(arts).toHaveLength(2);
+    for (const img of arts) expect(img.src).toContain('/portraits/');
+    const dock = document.querySelector('.report-dock') as HTMLElement;
+    const navBtn = (label: string) =>
+      Array.from(dock.querySelectorAll('button')).find((b) => b.textContent!.includes(label)) as HTMLElement;
+    navBtn('统计').click();
+    expect(document.querySelectorAll('.stats-view .st-row').length).toBe(2);
+    navBtn('详情').click();
+    expect(document.querySelector('.battle-view .event-stream')).toBeTruthy();
+    const turnAvatars = Array.from(document.querySelectorAll<HTMLImageElement>('.dv-turns .turn img'));
+    expect(turnAvatars.length).toBe(2);
+    for (const img of turnAvatars) expect(img.src).toContain('/portraits/');
+
+    // 战报历史「复用队伍」：副本 unitId 必须还原成真实武将 id（否则 buildGeneral 查不到武将）
+    (document.querySelector('.nav-link[data-nav="history"]') as HTMLElement).click();
+    const panel = Array.from(document.querySelectorAll('.modal')).at(-1) as HTMLElement;
+    const reuse = Array.from(panel.querySelectorAll('button')).find((b) => b.textContent!.includes('复用队伍')) as HTMLElement;
+    expect(reuse, '历史详情应有「复用队伍」').toBeTruthy();
+    reuse.click();
+    expect(slotHeroName('red', 2)).toContain('太史慈');
+    expect(slotHeroName('blue', 2)).toContain('太史慈');
+    (document.querySelector('#start') as HTMLButtonElement).click();
+    expect(document.querySelector('.err-msg')!.textContent).toBe('');
+    expect(document.querySelector('.battle-summary')).toBeTruthy();
   });
 
   it('武将详情页：三板块（详情 / 配点 / 兵种）+ 四维成长 + 战法栏', async () => {
@@ -1424,17 +1527,19 @@ describe('Web 阵容预设（保存 / 编号 / 搜索 / 一键上场 / 持久化
     expect(slotHeroIds('red')).toEqual(before);
   });
 
-  it('预设上场到另一边：对面同武将槽位被清空（全局唯一）', async () => {
+  it('预设上场到另一边：对面同武将保留（红蓝两队可同时上阵同一武将）', async () => {
     await boot();
     pickHeroIntoSlot('red', 0, '孙权');
     pickHeroIntoSlot('red', 1, '周瑜');
+    const before = slotHeroIds('red');
     savePresetFromTeam('red', '双减魏智');
 
     const modal = openPresetModal();
     (modal.querySelector('[data-act="apply-blue"]') as HTMLElement).click();
     expect(slotHeroIds('blue').filter(Boolean).length).toBe(2);
-    expect(slotHeroIds('red')).toEqual(['', '', '']);
+    expect(slotHeroIds('red')).toEqual(before); // 预设上场不清空对面的同武将
     expect(document.querySelector('.app-notice')!.textContent).toContain('→ 蓝队');
+    expect(document.querySelector('.app-notice')!.textContent).not.toContain('清空');
   });
 
   it('退出重进仍在：重新 initApp（等价重开页面）后预设可上场', async () => {

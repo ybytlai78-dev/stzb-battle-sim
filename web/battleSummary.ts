@@ -8,7 +8,7 @@
 import type { BattleReport, General, UnitState } from '../src/engine/types';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import { computeDetailedStats, computeContributionShares, type UnitDetailedStats } from '../src/engine/stats';
-import { avatarSrc, portraitSrc, getHeroById, rednessStars, skillGrade, TROOP_CHAR, factionIconSrc, cardFrameSrc } from './heroes';
+import { avatarSrc, portraitSrc, getHeroById, heroIdOf, rednessStars, skillGrade, TROOP_CHAR, factionIconSrc, cardFrameSrc } from './heroes';
 import { RESULT_GLYPH } from './resultGlyph';
 
 /** 统计视图用的占位单位（只取 general / side，兵力与状态不参与汇总） */
@@ -87,13 +87,13 @@ function heroCard(g: General, troops: number, color: 'red' | 'blue'): string {
   const dead = troops <= 0;
   const r = g.redness ?? 0;
   const lv = g.level ?? 40;
-  const hero = getHeroById(g.id);
+  const hero = getHeroById(heroIdOf(g));
   const faction = hero?.faction ?? '';
   const facIcon = factionIconSrc(faction);
   return `
     <div class="sum-hero ${dead ? 'dead' : ''}">
       <div class="sh-card">
-        <img class="sh-art" src="${portraitSrc(g.id)}" alt="${g.name}" loading="lazy" decoding="async" onerror="this.style.display='none'" />
+        <img class="sh-art" src="${portraitSrc(heroIdOf(g))}" alt="${g.name}" loading="lazy" decoding="async" onerror="this.style.display='none'" />
         <div class="frame" style="background-image:url('${cardFrameSrc()}')"></div>
         <div class="plate">
           ${facIcon ? `<img class="fac" data-faction="${faction}" alt="${faction}" src="${facIcon}" />` : ''}
@@ -171,7 +171,7 @@ export function createBattleSummary(report: BattleReport, opts: SummaryOpts = {}
 
 /** 把武将的 General 还原为统计列顺序：主战法 + 携带战法一/二（装配顺序，主战法除外） */
 function columnOrder(g: General): Array<{ label: string; skillId: string | null }> {
-  const hero = getHeroById(g.id);
+  const hero = getHeroById(heroIdOf(g));
   const mainId = hero?.mainSkillId && SKILL_REGISTRY[hero.mainSkillId] ? hero.mainSkillId : null;
   const cols: Array<{ label: string; skillId: string | null }> = [
     { label: hero?.mainSkillName || '未实现', skillId: mainId },
@@ -195,7 +195,7 @@ function heroMini(g: General): string {
   const lv = g.level ?? 40;
   const stars = Array.from({ length: 5 }, (_, i) => `<i${i < r ? ' class="on"' : ''}></i>`).join('');
   return `<div class="hcard" data-name="${g.name}">
-    <img src="${avatarSrc(g.id)}" alt="${g.name}" draggable="false" onerror="this.style.display='none'" />
+    <img src="${avatarSrc(heroIdOf(g))}" alt="${g.name}" draggable="false" onerror="this.style.display='none'" />
     <span class="hn">${g.name}</span>
     <span class="lv">Lv.${lv}</span>
     <span class="stars" aria-label="红度 ${r}">${stars}</span>

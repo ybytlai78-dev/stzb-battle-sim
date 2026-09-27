@@ -16,16 +16,57 @@ import { applyTreasureEffects, triggerTreasureRoundStart } from './treasure';
 
 const POSITION_PRIORITY: Record<string, number> = { 前锋: 0, 中军: 1, 大营: 2 };
 
+/**
+ * 单位 id 全局唯一化：红蓝两队可以上阵**同一名武将**（对方可能有相同武将），
+ * 而引擎全程用 `general.id` 作为单位身份（事件 unitId、统计、实时距离、状态来源、各类计数器都按它索引）——
+ * 直接同名会让两边的单位互相串味（如「A 打 A」、统计合并、距离为 0）。
+ *
+ * 规则：按「红队 → 蓝队」顺序，首次出现的 id 保留；后续重复副本改写为 `原id#2`、`原id#3`…，
+ * 并把原始武将 id 记入 `General.heroId` 供 UI 还原（画像 / 势力 / 主战法 / 复用队伍）。
+ * **无重复时原样返回**（不产生任何对象改写，既有战报逐字节不变）。
+ *
+ * @param myTeam 红队（我方）
+ * @param enemyTeam 蓝队（敌方）
+ */
+export function ensureUniqueUnitIds(
+  myTeam: General[],
+  enemyTeam: General[]
+): { myTeam: General[]; enemyTeam: General[] } {
+  const taken = new Set<string>();
+  let changed = false;
+  const normalize = (team: General[]): General[] =>
+    team.map((g) => {
+      if (!taken.has(g.id)) {
+        taken.add(g.id);
+        return g;
+      }
+      let n = 2;
+      let id = `${g.id}#${n}`;
+      while (taken.has(id)) {
+        n += 1;
+        id = `${g.id}#${n}`;
+      }
+      taken.add(id);
+      changed = true;
+      return { ...g, id, heroId: g.heroId ?? g.id };
+    });
+  const my = normalize(myTeam);
+  const enemy = normalize(enemyTeam);
+  return changed ? { myTeam: my, enemyTeam: enemy } : { myTeam, enemyTeam };
+}
+
 export function runBattle(config: BattleConfig): BattleReport {
+  // 红蓝同将去重：先保证单位 id 全局唯一（无重复时为 no-op），再做互斥校验与全部结算
+  const teams = ensureUniqueUnitIds(config.myTeam, config.enemyTeam);
   // 同队互斥校验：SP 与普通重名武将不可同队（SP赵云 + 赵云）
-  const conflict = validateMutualExclusion(config.myTeam) ?? validateMutualExclusion(config.enemyTeam);
+  const conflict = validateMutualExclusion(teams.myTeam) ?? validateMutualExclusion(teams.enemyTeam);
   if (conflict) throw new Error(`配队非法：${conflict}`);
   const rng = new Rng(config.seed);
   const events: BattleEvent[] = [];
   const skills: Map<string, Skill> = new Map(Object.entries(SKILL_REGISTRY));
 
-  const myTeam = toUnitStates(config.myTeam, 'my');
-  const enemyTeam = toUnitStates(config.enemyTeam, 'enemy');
+  const myTeam = toUnitStates(teams.myTeam, 'my');
+  const enemyTeam = toUnitStates(teams.enemyTeam, 'enemy');
 
   const ctx: CombatContext = {
     rng,
@@ -184,8 +225,8 @@ export function runBattle(config: BattleConfig): BattleReport {
     maxRounds: config.maxRounds,
     result,
     rounds: config.maxRounds,
-    myTeam: config.myTeam,
-    enemyTeam: config.enemyTeam,
+    myTeam: teams.myTeam,
+    enemyTeam: teams.enemyTeam,
     finalMyTroops: myTeam.map((u) => u.troops),
     finalEnemyTroops: enemyTeam.map((u) => u.troops),
     finalMyWounded: myTeam.map((u) => u.wounded),

@@ -12,7 +12,7 @@
  *  · 恢复口径 = 恢复兵力（heal.amount），报双方占比
  *  · 伤害口径 = 普攻 attack_hit + 战法 damage + DoT dot_tick + 分兵 split_damage（与战报统计一致）
  */
-import { runBattle } from '../src/engine/combat';
+import { ensureUniqueUnitIds, runBattle } from '../src/engine/combat';
 import type { BattleEvent, BattleReport, General } from '../src/engine/types';
 
 export interface SimEnv {
@@ -268,17 +268,19 @@ export function collectRun(report: BattleReport, myIds: Set<string>): RunRaw {
 /** 单场：按种子跑一局（交换场地时把我方放右侧），并按实战口径判定胜负 */
 export function runOne(myTeam: General[], enemyTeam: General[], index: number, env: SimEnv): RunRaw {
   const swap = env.swapSides && index % 2 === 1;
-  // myTeam 是「我方名单」：交换场地只把双方放到不同侧，id 名单不变
-  const left = swap ? enemyTeam : myTeam;
-  const right = swap ? myTeam : enemyTeam;
+  // 红蓝同将：先按「我方 → 敌方」固定全局唯一 id，再决定谁站左侧。
+  // 否则交换场地时左侧（此时是敌方）会先占用原 id、我方副本被改名，myIds 归属会整个反过来。
+  const teams = ensureUniqueUnitIds(myTeam, enemyTeam);
+  const left = swap ? teams.enemyTeam : teams.myTeam;
+  const right = swap ? teams.myTeam : teams.enemyTeam;
   const report = runBattle({
     myTeam: left,
     enemyTeam: right,
     maxRounds: env.maxRounds,
     seed: env.baseSeed + index,
   } as never);
-  // 我方单位 id 与「站在哪一侧」无关：始终取 myTeam（交换场地只换侧别）
-  const myIds = new Set(myTeam.map((g) => g.id));
+  // 我方单位 id 与「站在哪一侧」无关：取固定去重后的 myTeam（交换场地只换侧别）
+  const myIds = new Set(teams.myTeam.map((g) => g.id));
   const raw = collectRun(report, myIds);
   // 引擎结果是「左侧视角」→ 交换场地时先还原成我方视角
   const engineResult: 'win' | 'loss' | 'draw' = swap
@@ -442,29 +444,34 @@ export interface BatchOptions {
 
 /** 同步批量（脚本 / 测试） */
 export function runBatch(myTeam: General[], enemyTeam: General[], opts: BatchOptions): BatchStats {
+  // 先固定全局唯一 id（红蓝同将时敌方副本改名），整批统计的 key 才稳定
+  const teams = ensureUniqueUnitIds(myTeam, enemyTeam);
+  const mine = teams.myTeam;
   const acc = emptyAcc();
-  const myIds = new Set(myTeam.map((g) => g.id));
+  const myIds = new Set(mine.map((g) => g.id));
   const t0 = Date.now();
   for (let i = 0; i < opts.runs; i += 1) {
-    merge(acc, runOne(myTeam, enemyTeam, i, opts.env), myTeam);
+    merge(acc, runOne(mine, teams.enemyTeam, i, opts.env), mine);
     opts.onProgress?.(i + 1, opts.runs);
   }
-  return finalize(acc, myTeam, myIds, Date.now() - t0);
+  return finalize(acc, mine, myIds, Date.now() - t0);
 }
 
 /** 异步批量（页面用：可显示进度且不卡界面） */
 export async function runBatchAsync(myTeam: General[], enemyTeam: General[], opts: BatchOptions): Promise<BatchStats> {
+  const teams = ensureUniqueUnitIds(myTeam, enemyTeam);
+  const mine = teams.myTeam;
   const acc = emptyAcc();
-  const myIds = new Set(myTeam.map((g) => g.id));
+  const myIds = new Set(mine.map((g) => g.id));
   const t0 = Date.now();
   const every = Math.max(1, opts.yieldEvery ?? 25);
   for (let i = 0; i < opts.runs; i += 1) {
-    merge(acc, runOne(myTeam, enemyTeam, i, opts.env), myTeam);
+    merge(acc, runOne(mine, teams.enemyTeam, i, opts.env), mine);
     if ((i + 1) % every === 0) {
       opts.onProgress?.(i + 1, opts.runs);
       await new Promise((res) => setTimeout(res, 0));
     }
   }
   opts.onProgress?.(opts.runs, opts.runs);
-  return finalize(acc, myTeam, myIds, Date.now() - t0);
+  return finalize(acc, mine, myIds, Date.now() - t0);
 }

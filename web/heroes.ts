@@ -219,6 +219,14 @@ export function getHeroById(id: string): HeroJson | undefined {
   return ALL_HEROES.find((h) => h.id === id);
 }
 
+/**
+ * 展示用武将 id：红蓝两队上阵同一武将时，引擎会把第二份单位 id 改写为 `原id#2`
+ * 并保留 `heroId`（见 `ensureUniqueUnitIds`）——展示层一律用本函数取真实武将 id。
+ */
+export function heroIdOf(g: General): string {
+  return g.heroId ?? g.id;
+}
+
 /** 战法类型中文名 */
 export const SKILL_TYPE_NAME: Record<string, string> = {
   passive: '被动',
