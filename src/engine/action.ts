@@ -421,6 +421,17 @@ export function teamFactionsSame(team: UnitState[]): boolean {
 }
 
 /**
+ * 我军出战名单是否「3 名武将基础攻击距离两两不同」（计险远近「当我军 3 名武将基础攻击距离均不相同时」）。
+ * 读部署名单（不论 alive）；名单不足 3 人视为不满足（该条件以 3 将阵容为前提）。
+ * 取 `General.attackRange` **面板基础值**——不含二级兵种修正（长弓兵 +1 / 死士 −1）与 range_buff
+ * 状态；官方文案写的就是「基础攻击距离」，故与 `target.attackRangeOf`（实际可达距离）区分。
+ */
+export function teamAttackRangesDistinct(team: UnitState[]): boolean {
+  if (team.length < 3) return false;
+  return new Set(team.map((u) => u.general.attackRange)).size === team.length;
+}
+
+/**
  * 我军出战名单是否「3 名武将兵种全部相同」（典藏战法【追加】条件，凤仪亭 / 鼎足江东：
  * 「若我军 3 名武将兵种相同」）。读部署名单（不论 alive）；名单不足 3 人视为不满足。
  * **按有效兵系**比较（二级兵种转换后取该兵种兵系：蛮兵与步兵同兵系；用户 2026-09-22）。
@@ -438,16 +449,6 @@ export function teamTroopsSame(team: UnitState[]): boolean {
 export function teamTroopsDistinct(team: UnitState[]): boolean {
   if (team.length < 3) return false;
   return new Set(team.map((u) => effectiveTroopLine(u.general))).size === team.length;
-}
-
-/**
- * 我军出战名单是否「3 名武将**基础攻击距离**两两不同」（计险远近「我军 3 名武将基础攻击距离均不相同时」）。
- * 读部署名单（不论 alive）；名单不足 3 人视为不满足；取 `General.attackRange` **面板基础值**，
- * 不含 `range_buff` / 二级兵种修正（官方写「基础攻击距离」）。
- */
-export function teamAttackRangesDistinct(team: UnitState[]): boolean {
-  if (team.length < 3) return false;
-  return new Set(team.map((u) => u.general.attackRange)).size === team.length;
 }
 
 /**
@@ -1247,7 +1248,7 @@ function triggerStrategyAdjacentBonus(
         breakdown,
         modifiers: mods,
       });
-      applyDamage(ctx, raw, capped, source, 'strategy', 'skill', mods, l.skill.type);
+      applyDamage(ctx, raw, capped, source, 'strategy', 'skill', mods, { skillType: l.skill.type });
     }
   }
 }
@@ -1917,7 +1918,7 @@ function executeRoundCommand(ctx: CombatContext, unit: UnitState, skill: Command
         breakdown,
         modifiers: mods,
       });
-      applyDamage(ctx, t, capped, source, 'physical', 'skill', mods, skill.type);
+      applyDamage(ctx, t, capped, source, 'physical', 'skill', mods, { skillType: skill.type });
     }
     if (attacked) consumeAttackCharges(ctx, source, { damageSource: 'skill', damageType: 'physical', skillType: 'command' });
   }
@@ -2340,6 +2341,13 @@ export function dealDotDamage(
     if (consumeEvasion(ctx, unit, dot.sourceUnitId ?? '')) return;
   }
   const src = dot.sourceUnitId ? castUnit(ctx, dot.sourceUnitId) : undefined;
+  // 本次 DoT 跳伤的判定上下文（计险远近：DoT 不算「攻击或策略攻击」，不吃也不占用每回合首次额度）
+  const dotHit: DamageHitContext = {
+    damageSource: 'skill',
+    damageType: 'strategy',
+    dotType: dot.type,
+    ...(dot.sourceSkillId ? { skillId: dot.sourceSkillId } : {}),
+  };
   // 燃烧/恐慌/妖术/诅咒/引燃均按策略伤害：友军施法者叠谋略，友军受击者叠防御（持节镇西）
   if (src) {
     triggerStackBuff(ctx, src, unit, 'strategy');
@@ -2359,7 +2367,7 @@ export function dealDotDamage(
       // 挂上时冻结的增减伤归因
       modifiers: dot.stored.modifiers,
     });
-    applyDamage(ctx, unit, capped, src, 'strategy', 'skill', dot.stored.modifiers);
+    applyDamage(ctx, unit, capped, src, 'strategy', 'skill', dot.stored.modifiers, dotHit);
     // 敌军每回合首次受到持续性伤害（衔命建功）
     triggerOnDotReceived(ctx, unit);
     // 宝物「燮理」：自身施加的燃烧每回合首次跳伤后，自身恢复一次兵力
@@ -2399,7 +2407,7 @@ export function dealDotDamage(
     breakdown,
     modifiers: fbMods,
   });
-  applyDamage(ctx, unit, capped, src, 'strategy', 'skill', fbMods);
+  applyDamage(ctx, unit, capped, src, 'strategy', 'skill', fbMods, dotHit);
   // 敌军每回合首次受到持续性伤害（衔命建功）
   triggerOnDotReceived(ctx, unit);
   // 宝物「燮理」：自身施加的燃烧每回合首次跳伤后，自身恢复一次兵力
@@ -4321,9 +4329,13 @@ function pushStatus(
     if ((type === 'damage_reduce' || type === 'damage_boost') && 'requireSelfStatus' in create && create.requireSelfStatus != null) {
       (push as { requireSelfStatus?: StatusType | StatusType[] }).requireSelfStatus = create.requireSelfStatus;
     }
-    // 宝物「强固」：每回合首次受伤减伤标记
+    // 宝物「强固」/ 计险远近「每回合首次攻击或策略攻击」：每回合首次减伤标记（含伤害类型限定）
     if (type === 'damage_reduce' && 'firstHitPerRound' in create && create.firstHitPerRound) {
-      (push as { firstHitPerRound?: boolean }).firstHitPerRound = true;
+      (push as { firstHitPerRound?: true | 'attack' | 'strategy' }).firstHitPerRound = create.firstHitPerRound;
+    }
+    // 排除持续性伤害（计险远近）：DoT 跳伤/引燃/引爆不算「攻击或策略攻击」，不吃本减伤
+    if (type === 'damage_reduce' && 'excludeDot' in create && create.excludeDot) {
+      (push as { excludeDot?: boolean }).excludeDot = true;
     }
     // 宝物「威势」：攻击方统率低于自身才生效
     if (type === 'damage_reduce' && 'enemyCostBelowSelf' in create && create.enemyCostBelowSelf) {
@@ -5244,12 +5256,14 @@ export type DamageHitContext = {
  * 增减伤/减伤是否计入本次伤害。hit 缺省或某维缺省 = 该维不限制。
  */
 export function statusMatchesHit(
-  s: { damageSource?: 'basic' | 'skill'; skillTypes?: SkillType[]; damageType?: 'physical' | 'strategy'; dotTypes?: DotType[]; skillIds?: string[]; attackOnly?: boolean },
+  s: { damageSource?: 'basic' | 'skill'; skillTypes?: SkillType[]; damageType?: 'physical' | 'strategy'; dotTypes?: DotType[]; skillIds?: string[]; attackOnly?: boolean; excludeDot?: boolean },
   hit?: DamageHitContext
 ): boolean {
   if (!hit) return true;
   // 仅「进行攻击」（缚父临危）：普攻 / 物理主动 / 追击，不含分兵溅射、反击、指挥代打与 DoT
   if (s.attackOnly && !isAttackHitForProc(hit)) return false;
+  // 排除持续性伤害（计险远近「首次**攻击或策略攻击**」：DoT 跳伤/引燃/引爆不算攻击，不吃本减伤）
+  if (s.excludeDot && hit.dotType != null) return false;
   if (s.damageSource && hit.damageSource && s.damageSource !== hit.damageSource) return false;
   if (s.damageType && hit.damageType && s.damageType !== hit.damageType) return false;
   if (s.dotTypes && s.dotTypes.length > 0) {
@@ -5326,14 +5340,16 @@ export function sumReduce(
       s.type === 'damage_reduce' &&
       statusMatchesHit(s, hit) &&
       (!('requireSelfStatus' in s) || !s.requireSelfStatus || hasRequiredSelfStatus(target, s.requireSelfStatus)) &&
-      // 宝物「强固」：每回合首次减伤 —— 本回合该状态尚未生效过才计入
-      (!('firstHitPerRound' in s && s.firstHitPerRound) ||
-        !ctx.firstHitReduceKeys?.has(`${ctx.currentRound}:${target.general.id}:${s.sourceSkillId}`)) &&
+      // 宝物「强固」/ 计险远近「每回合首次攻击或策略攻击」：本回合该类型尚未生效过才计入
+      ((!('firstHitPerRound' in s) || !s.firstHitPerRound) ||
+        (firstHitReduceMatches(s, hit) &&
+          !ctx.firstHitReduceKeys?.has(
+            `${ctx.currentRound}:${target.general.id}:${s.sourceSkillId}:${firstHitReduceKind(s, hit)}`
+          ))) &&
       // 宝物「威势」：仅当伤害来源（当前行动者）的初始统率低于携带者时生效
       (!('enemyCostBelowSelf' in s && s.enemyCostBelowSelf) || isLowerCostAttacker(ctx, target))
   );
   return sumRates(list, 'damage_reduce') + pendingStacksReduceOf(target) + hurtStackReduceOf(target) + traitMods(ctx, source, target, hit).reduce;
-  return sumRates(list, 'damage_reduce') + pendingStacksReduceOf(target) + hurtStackReduceOf(target);
 }
 
 /** 宝物「威势」：当前伤害来源（`ctx.actingUnitId`）的**初始统率**是否低于携带者 */
@@ -5343,13 +5359,61 @@ function isLowerCostAttacker(ctx: CombatContext, target: UnitState): boolean {
   return attacker.general.cost < target.general.cost;
 }
 
-/** 宝物「强固」：本次实际扣兵后标记「本回合已用」（applyDamage 扣兵后调用） */
-export function markFirstHitReduceUsed(ctx: CombatContext, target: UnitState): void {
+/**
+ * 宝物「强固」/ 计险远近「每回合首次攻击或策略攻击」：本次实际扣兵后标记「本回合已用」
+ * （applyDamage 扣兵后调用）。
+ *
+ * **必须按该状态自己的过滤维判定**：只有**本次伤害真的吃到了这条减伤**才消耗每回合额度 ——
+ * 否则「普攻命中」会把只对策略攻击生效的额度顶掉（计险远近前锋段会被普攻白吃），
+ * DoT 跳伤同理（`excludeDot`）。判定只依赖 `damageType` / `dotType`（`applyDamage` 拿得到），
+ * 与 `sumReduce` 的过滤维（`firstHitReduceMatches` + `excludeDot`）保持一致，故两侧不会漂移。
+ */
+export function markFirstHitReduceUsed(
+  ctx: CombatContext,
+  target: UnitState,
+  hit?: DamageHitContext
+): void {
   for (const s of target.statuses) {
     if (s.type !== 'damage_reduce' || !s.firstHitPerRound) continue;
+    // 判定维只依赖 hit.damageType / hit.dotType（applyDamage 拿得到），故与 sumReduce 口径不会漂移；
+    // 「不认的战法类型」不做排除——每回合首次减伤本就不按战法类型筛（skillType 在 applyDamage 处不可得）。
+    if (!firstHitReduceMatches(s, hit)) continue;
+    if (s.excludeDot && hit?.dotType != null) continue;
     ctx.firstHitReduceKeys ??= new Set();
-    ctx.firstHitReduceKeys.add(`${ctx.currentRound}:${target.general.id}:${s.sourceSkillId}`);
+    ctx.firstHitReduceKeys.add(
+      `${ctx.currentRound}:${target.general.id}:${s.sourceSkillId}:${firstHitReduceKind(s, hit)}`
+    );
   }
+}
+
+/**
+ * 「每回合首次」减伤的**判定维**（去重键尾段，进 key 才能各记一次）：
+ * - 缺省（`true`，宝物「强固」）：全部伤害共用一个键 —— 本回合第一次实际扣兵即用掉；
+ * - `'attack'` / `'strategy'`（计险远近）：只对**攻击 / 策略攻击**伤害生效，且**两类各记一次**
+ *   （先吃到一次策略攻击不会顶掉本回合剩余的攻击伤害减伤，反之亦然）。
+ * 判定维取自本次伤害类型（`DamageHitContext.damageType`）：官方「每回合受到的首次**攻击**或
+ * **策略攻击**伤害」= 物理 / 策略两类，两类各限一次。
+ */
+function firstHitReduceKind(
+  s: { firstHitPerRound?: true | 'attack' | 'strategy' },
+  hit?: DamageHitContext
+): string {
+  if (s.firstHitPerRound !== 'attack' && s.firstHitPerRound !== 'strategy') return 'any';
+  return hit?.damageType === 'strategy' ? 'strategy' : 'attack';
+}
+
+/**
+ * 本状态本次是否吃「每回合首次」减伤：按 `firstHitPerRound` 与该次伤害**类型**过滤 ——
+ * 普攻（`damageType` 缺省为物理）也算攻击伤害，故只在显式给 `'strategy'` 时排除物理伤害。
+ */
+function firstHitReduceMatches(
+  s: { firstHitPerRound?: true | 'attack' | 'strategy' },
+  hit?: DamageHitContext
+): boolean {
+  const kind = s.firstHitPerRound;
+  if (kind !== 'attack' && kind !== 'strategy') return true;
+  const damageType = hit?.damageType ?? 'physical';
+  return kind === 'attack' ? damageType === 'physical' : damageType === 'strategy';
 }
 
 /** 宝物「不屈」：受击叠层式减伤（值 = stacks × perStack；stacks 由受击钩子累加、回合开始清零） */
@@ -6710,7 +6774,7 @@ function triggerDealPunish(ctx: CombatContext, source: UnitState): void {
       breakdown,
       modifiers: dpMods,
     });
-    applyDamage(ctx, source, capped, caster, 'strategy', 'skill', dpMods, skill.type);
+    applyDamage(ctx, source, capped, caster, 'strategy', 'skill', dpMods, { skillType: skill.type });
   }
 }
 
@@ -7647,7 +7711,7 @@ function executeSkillOutputs(
                 breakdown,
                 modifiers: rideMods,
               });
-              applyDamage(ctx, t, capped, rider, damageType, 'skill', rideMods, skill.type);
+              applyDamage(ctx, t, capped, rider, damageType, 'skill', rideMods, { skillType: skill.type });
             }
             if (riderAttacked) consumeAttackCharges(ctx, rider, { damageSource: 'skill', damageType: 'physical', skillType: skill.type });
           }
@@ -7754,7 +7818,7 @@ function executeSkillOutputs(
               breakdown,
               modifiers: physMods,
             });
-            applyDamage(ctx, t, capped, source, 'physical', 'skill', physMods, skill.type);
+            applyDamage(ctx, t, capped, source, 'physical', 'skill', physMods, { skillType: skill.type });
             // 按造成伤害次数递增发动率（霸王渡江）：本战法每造成 1 次伤害计 1 层（上限 maxStacks）
             if (skill.chanceBoostPerDamage && capped > 0) {
               ctx.skillDamageCounters ??= new Map();
@@ -7916,7 +7980,7 @@ function executeSkillOutputs(
               breakdown,
               modifiers: stratMods,
             });
-            applyDamage(ctx, t, capped, stratActor, 'strategy', 'skill', stratMods, skill.type);
+            applyDamage(ctx, t, capped, stratActor, 'strategy', 'skill', stratMods, { skillType: skill.type });
             // 其徐如林：本侧施加的策略伤害生效后，对目标同侧相邻敌军额外造成一次策略伤害（原伤害率 × 比例）
             if (capped > 0) triggerStrategyAdjacentBonus(ctx, caster, t, rate);
           }
@@ -8375,7 +8439,7 @@ function executeSkillOutputs(
             breakdown,
             modifiers: posMods,
           });
-          applyDamage(ctx, t, capped, source, 'physical', 'skill', posMods, skill.type);
+          applyDamage(ctx, t, capped, source, 'physical', 'skill', posMods, { skillType: skill.type });
         }
         rememberDamageTargets(selectedIds);
         if (attacked) consumeAttackCharges(ctx, source, { damageSource: 'skill', damageType: 'physical', skillType: skill.type });
@@ -9980,6 +10044,14 @@ function annotateAfterTroops(ctx: CombatContext, unit: UnitState): void {
   }
 }
 
+/**
+ * 结算一次伤害扣兵。
+ *
+ * `hit`（可选）＝本次伤害的完整判定上下文（`dotType` / `skillType` / `skillId` / `split`）：
+ * 目前只用于「每回合首次减伤」的**消耗记账**（`markFirstHitReduceUsed`）——`damageType` /
+ * `damageSource` 两个入参已覆盖多数判定维，但 `excludeDot` 需要 `dotType` 才能判断本次是否
+ * 真的吃到了该减伤（DoT 跳伤不得消耗「首次攻击」额度）。缺省时退化为 `{damageSource, damageType}`。
+ */
 export function applyDamage(
   ctx: CombatContext,
   target: UnitState,
@@ -9989,8 +10061,13 @@ export function applyDamage(
   damageSource?: 'basic' | 'skill',
   /** 本次伤害的增减伤归因（避锐治气累计净幅度用；缺省不累计——如分摊/结转等无归因路径） */
   modifiers?: DamageModifiers,
-  /** 本次伤害的来源战法类型（极火佐攻「下 1 次主动战法伤害提升」的次数消耗需按 active 过滤；缺省不参与过滤） */
-  skillType?: SkillType
+  /**
+   * 本次伤害的完整判定上下文（`dotType` / `skillType` / `skillId`）——两个来源合并：
+   *   ① 计险远近「每回合首次攻击或策略攻击」的**消耗记账**需要 `dotType`（DoT 跳伤不得消耗「首次攻击」额度）；
+   *   ② 极火佐攻「下 1 次主动战法伤害提升」的次数消耗需要 `skillType`。
+   * 缺省时退化为 `{damageSource, damageType}`。
+   */
+  hit?: DamageHitContext
 ): void {  // 已阵亡单位不再吃伤害、不再走急救（阻止伤兵池膨胀后被救回）
   if (!target.alive) return;
   // 七擒七纵：我军前 N 次受到伤害实例的规避判定（共享计数；判定成败都消耗 1 次，第 N 次后惩罚）
@@ -10086,6 +10163,8 @@ export function applyDamage(
       }
     }
   }
+  // 本次伤害的完整判定上下文（调用方给的 dotType/skillType/skillId 优先，显式入参补 damageSource/damageType）
+  const hitCtx: DamageHitContext = { ...(hit ?? {}), damageSource, damageType };
   let actual = Math.min(incoming, target.troops);
   // 玉玺（僭号天子）：我方受到的伤害按比例转入玉玺账本，本回合不从受击者扣兵（回合开始结转给持有者）。
   // 结转结算自身置 ctx.sealResolving → 不再被玉玺转移（防自循环）。
@@ -10133,7 +10212,7 @@ export function applyDamage(
     if (source) decayOnDealStatuses(ctx, source);
     // 天子诏令：点名目标回合内累计受击达阈值 → 追加受伤提升 + 全属性下降
     decreePunish(ctx, target);
-    const hit: DamageHitContext = { damageSource, damageType, skillType };
+    // 本次伤害的完整判定上下文由外层统一构造（hitCtx）
     // 单位累计造成伤害（七擒七纵「造成伤害累计最高的敌军单体」）与敌军伤害计数（正始之变）
     if (source) {
       ctx.damageDealtTotals ??= new Map();
@@ -10144,8 +10223,8 @@ export function applyDamage(
     if (source) noteTeamDamage(ctx, source);
     // 攻心 / 士气降低（心战为上）：我军对敌军造成伤害后的监听（伤害值 = 本次实际扣兵）
     if (source) triggerHealOnDamageCommands(ctx, source, target, actual, damageType);
-    consumeTakenCharges(target, hit);
-    decayFifthsOnHit(ctx, target, hit);
+    consumeTakenCharges(target, hitCtx);
+    decayFifthsOnHit(ctx, target, hitCtx);
     // 避锐治气：受击「增减伤净幅度」累计（实际扣兵 > 0 才计；每满 50% 判定一次）
     if (modifiers) noteTakenMagnitude(ctx, target, modifiers);
     // 受击叠层（凤仪亭）：实际扣兵后自身增伤 +1 层（上限 maxStacks）
@@ -10198,8 +10277,8 @@ export function applyDamage(
   if (actual > 0) triggerOnHurt(ctx, target, source, damageType, damageSource);
   // 宝物·受击叠层（不屈/破浪）与首次受击规避（避险）——纯状态变更，不产生二次伤害
   if (actual > 0) updateTreasureOnHurt(ctx, target);
-  // 宝物「强固」：本次扣兵后标记「本回合已用」，本回合后续伤害不再吃该减伤
-  if (actual > 0) markFirstHitReduceUsed(ctx, target);
+  // 宝物「强固」/ 计险远近：本次扣兵后标记「本回合已用」（仅对本次真的吃到该减伤的伤害类型生效）
+  if (actual > 0) markFirstHitReduceUsed(ctx, target, hitCtx);
   // 每受到 N 次伤害触发（蛮王御众）：包一层 resolvingHurtHooks，触发段的伤害不再回灌计数/受击钩子
   if (!ctx.resolvingHurtHooks && actual > 0) {
     ctx.resolvingHurtHooks = true;
