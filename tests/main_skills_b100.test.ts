@@ -14,6 +14,7 @@
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { inflictStatus, triggerActiveSkill, type CombatContext } from '../src/engine/action';
+import { scaledValue } from '../src/engine/formulas';
 import type { BattleEvent, General, Position, Skill, Status, UnitState } from '../src/engine/types';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import { initHeroDB, HERO_RECORDS, HERO_REGISTRY, level40, withSkills } from '../src/data/heroes';
@@ -102,9 +103,9 @@ const statusOf = <T extends Status['type']>(u: UnitState, type: T) =>
     | Extract<Status, { type: T }>
     | undefined;
 
-/** 曹彰（40 级 + 兵力 9000，宝物由 `treasure` 指定） */
-function caozhang(treasureId?: number): UnitState {
-  const base = level40(HERO_REGISTRY[HERO_ID]);
+/** 曹彰（40 级 + 兵力 9000，宝物由 `treasure` 指定；freeAttack 用于对齐实测点的攻击值） */
+function caozhang(treasureId?: number, freeAttack = 0): UnitState {
+  const base = level40(HERO_REGISTRY[HERO_ID], { attack: freeAttack });
   const g: General = {
     ...withSkills(base, {}),
     position: '中军',
@@ -121,8 +122,8 @@ function enemyTrio(): UnitState[] {
   ];
 }
 
-function setup(treasureId?: number, seed = 1) {
-  const cz = caozhang(treasureId);
+function setup(treasureId?: number, seed = 1, freeAttack = 0) {
+  const cz = caozhang(treasureId, freeAttack);
   const foes = enemyTrio();
   const ctx = makeCtx([cz], foes, seed);
   return { ctx, cz, foes };
@@ -256,7 +257,7 @@ describe('五兵之烈（曹彰 h683）', () => {
     expect(eventsOf(hitCase!, 'status_changed').some((e) => e.detail?.includes('距离'))).toBe(false);
   });
 
-  it('其余宝物 / 未授予：目标防御 −36（受攻击属性影响，成长率未确认 → 基值）、持续 2 回合', () => {
+  it('其余宝物 / 未授予：目标防御 −36 受攻击缩放（成长率 0.1125/点）、持续 2 回合', () => {
     for (const treasureId of [FAN, OTHER, undefined]) {
       const { ctx, cz, foes } = setup(treasureId, 7);
       cast(ctx, cz, foes);
@@ -267,15 +268,37 @@ describe('五兵之烈（曹彰 h683）', () => {
         const debuff = statusOf(foe, 'defense_buff');
         expect(debuff, `宝物 ${treasureId}：应挂防御降低`).toBeTruthy();
         if (debuff?.type === 'defense_buff') {
-          // 受攻击缩放：曹彰 40 级攻击 154（98 + 39×2.16 四舍五入）→ 攻击 154 > 80，
-          // 但 growthRate 未给（未确认）→ 不缩放、用基值 36
-          expect(debuff.amount).toBe(-36);
+          // 曹彰 40 级白板攻击 182（98 + 39×2.16 四舍五入）→ 36 + 0.1125×102 = 47.475 → 0.1% 粒度 47.5
+          expect(debuff.amount).toBeCloseTo(-47.5, 6);
           expect(debuff.remaining).toBe(2);
         }
       }
       // 默认分支没有刀的自增伤
       expect(statusOf(cz, 'damage_boost')).toBeUndefined();
     }
+  });
+
+  it('默认段「受攻击属性影响」缩放口径：实测点 攻击 200.6 → 减防 49.6%（用户 2026-09-27）', () => {
+    // 曹彰 40 级攻击 = 98 + 39×2.16 = 182 → +18.6 自由点 = 200.6（对齐实测点）
+    const { ctx, cz, foes } = setup(undefined, 7, 18.6);
+    expect(cz.general.attack).toBe(200.6);
+    cast(ctx, cz, foes);
+    const hit = damageTargetIds(ctx);
+    expect(hit.size).toBeGreaterThan(0);
+    for (const id of hit) {
+      const foe = foes.find((f) => f.general.id === id)!;
+      const debuff = statusOf(foe, 'defense_buff');
+      expect(debuff?.type).toBe('defense_buff');
+      if (debuff?.type === 'defense_buff') expect(debuff.amount).toBeCloseTo(-49.6, 6);
+      const detail = eventsOf(ctx, 'status_inflicted').find(
+        (e) => e.unitId === id && e.statusType === 'defense_buff'
+      )?.detail;
+      expect(detail).toContain('49.6%');
+    }
+    // 反推公式：36 + 0.1125×(200.6−80) = 49.5575 → 0.1% 粒度四舍五入 = 49.6
+    expect(Math.round(scaledValue(36, 0.1125, 200.6) * 10) / 10).toBeCloseTo(49.6, 6);
+    // 相邻候选在该点会显示别的值（0.115 → 49.9、0.12 → 50.5），故实测 49.6 支持 0.1125
+    expect(Math.round(scaledValue(36, 0.115, 200.6) * 10) / 10).toBeCloseTo(49.9, 6);
   });
 
   it('分支互斥：同一次发动只吃佩戴宝物对应的那一条分支', () => {

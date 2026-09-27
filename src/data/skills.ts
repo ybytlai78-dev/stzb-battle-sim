@@ -11560,9 +11560,9 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    *   · 其余宝物或未授予：使目标防御属性降低 36.0%（受攻击属性影响），持续 2 回合。
    * 官方：scripts/skill_extra.json id 200957；来源 https://stzb.163.com/m/skilllist/200957.html
    *   （官方现页与 skill_extra 一致，无两版拼接）。
-   * 入档：**下架** —— 默认段「防御 −36 受攻击属性影响」官方未给成长系数 → `attackScaled: true` 但不给
-   *   `growthRate`（按基值 36 不缩放），按仓库口径登记 `listing.OFFLINE_MAIN_SKILLS`；
-   *   待实测反推（`scripts/derive_growth_rate.mjs`）后补系数即可上架。
+   * 入档：**下架** —— 默认段「防御 −36 受攻击属性影响」的成长系数已由用户 2026-09-27 给出的实测点反推
+   *   （攻击 200.6 → 减防 49.6% ⇒ 成长率 0.1125/点；0.115/0.12 在该点会显示 49.9/50.5，已排除），
+   *   仍是**单数据点**，故按仓库口径先登记 `listing.OFFLINE_MAIN_SKILLS`；补第二个攻击值的实测点即可上架。
    * 引擎配套（本批新增）：`OutputCondition.casterTreasureKinds`（段级宝物分支条件，未佩戴宝物 = '其他'；
    *   由 `action.ts` 的 `casterTreasureKind` 解析）+ `BaseSkill.bonusGroupTargets`（选目标阶段 +1 目标，
    *   在 `executeSkillWithTargets` 内实现；**注意**：+1 目标落在选目标阶段，故各分支条件都必须在
@@ -11621,7 +11621,10 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         outputs: [
           {
             kind: 'inflict_status',
-            status: { type: 'defense_buff', amount: -36, duration: 2, attackScaled: true },
+            // 成长率 0.1125/点：用户 2026-09-27 实测「攻击 200.6 → 减防 49.6%」反推
+            // （36 + 0.1125×(200.6−80) = 49.5575 → 0.1% 粒度显示 49.6%；0.115 会显示 49.9、0.12 显示 50.5，已排除）。
+            // percent: true = 百分比类（按 0.1% 粒度缩放，见 action.ts 属性缩放分支）；⚠️ 单点待第二实测点复核。
+            status: { type: 'defense_buff', amount: -36, duration: 2, percent: true, attackScaled: true, growthRate: 0.1125 },
           },
         ],
       },

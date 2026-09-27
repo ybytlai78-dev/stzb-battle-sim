@@ -8240,7 +8240,9 @@ function executeSkillOutputs(
             // 鏖兵卫主防御 +50 受防御 / 武锋攻击·谋略 −56 受速度）：
             // 实际数值 = 基础 + 成长率×(生效属性-80)；按绝对值缩放后恢复符号
             // （减益类基础值为负，效果幅度随属性增强：如 -15% 谋略216 → -35%）
-            // 百分比类（percent）按 1% 粒度「八舍九入」取整；点数类四舍五入
+            // 百分比类（percent）按 **0.1% 粒度**四舍五入（游戏内百分比显示到一位小数，如
+            // 五兵之烈「防御 −36 受攻击」实测攻击 200.6 → 49.6%；1% 粒度「八舍九入」只用于
+            // 伤害率/恢复率/增减伤率等 rate 字段）；点数类四舍五入。
             const attr = create.attackScaled
               ? effectiveStat(caster, 'attack')
               : create.defenseScaled
@@ -8249,7 +8251,7 @@ function executeSkillOutputs(
                   ? effectiveStat(caster, 'speed')
                   : effectiveStat(caster, 'strategy');
             const scaled = scaledValue(Math.abs(create.amount), create.growthRate, attr);
-            const amount = (create.percent ? roundRate(scaled) : Math.round(scaled)) * Math.sign(create.amount);
+            const amount = (create.percent ? Math.round(scaled * 10) / 10 : Math.round(scaled)) * Math.sign(create.amount);
             inflictStatus(ctx, t, { ...create, amount }, skill.type, skill.id);
           } else {
             // 增减伤/减伤（步步为营等）：记录施法者，供战报「增减伤统计」归因

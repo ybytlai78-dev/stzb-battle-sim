@@ -85,10 +85,11 @@ describe('魏武之世（曹操·魏，一类指挥：敌军全体四属性下�
     const enemyDebuffs = ['attack_buff', 'defense_buff', 'strategy_buff', 'speed_buff'].map((t) =>
       inflicted(report, t).filter((e) => e.unitId.startsWith('enemy'))
     );
-    // 每种属性 debuff 都施加到敌军，且为负百分比（受谋略影响，降幅随谋略增大）
+    // 每种属性 debuff 都施加到敌军，且为负百分比（受谋略影响，降幅随谋略增大）；
+    // 百分比按 0.1% 粒度显示（用户 2026-09-27 口径：五兵之烈实测 49.6%），故允许一位小数
     for (const deb of enemyDebuffs) {
       expect(deb.length).toBeGreaterThan(0);
-      expect(deb[0].detail).toMatch(/降低了\d+%\(\d+\)\(\d+\)/);
+      expect(deb[0].detail).toMatch(/降低了\d+(\.\d+)?%\(\d+\)\(\d+\)/);
     }
   });
 
