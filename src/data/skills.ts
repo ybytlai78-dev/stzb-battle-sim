@@ -11543,4 +11543,97 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       ],
     },
   },
+
+  // ─── 宝物系统落地后首位武将：曹彰·五兵之烈（五宝物分支）───
+
+  /**
+   * 五兵之烈（魏·曹彰 h683 主战法）：主动 S·距离 5·发动 35%·敌军群体（有效距离内 2 个目标）。
+   * 满级：对敌军群体发动一次猛烈的攻击（伤害率 300.0%）。当授予曹彰不同种类宝物时，
+   *   将额外获得以下效果（**按佩戴宝物的种类五选一**，用户 2026-09-27 确认）：
+   *   · 剑：先移除目标的有益效果再发动攻击（`remove_buffs` → 与看破同口径，走 `removeBeneficialStatuses`：
+   *     只清「来源优先级 ≤ 主动」的有益状态，指挥光环 / 被动增益 / undispellable 清不掉）；
+   *   · 刀：使自身造成的攻击伤害提升 15.0%，可叠加并持续直至战斗结束
+   *     （官方**未写层数上限** → 不加人为封顶，`stack:true` + duration 999，用户 2026-09-27 口径）；
+   *   · 长兵：使目标攻击距离 -1，持续 2 回合（`range_buff` 负值 → 只影响普攻可达距离上限）；
+   *   · 弓：有 60.0% 几率该战法目标数 +1（`bonusGroupTargets`：选目标阶段按士气修正掷一次，
+   *     命中则从有效距离内未选中的敌军补 1 个，本次发动的全部输出段共用扩大后的目标池）；
+   *   · 其余宝物或未授予：使目标防御属性降低 36.0%（受攻击属性影响），持续 2 回合。
+   * 官方：scripts/skill_extra.json id 200957；来源 https://stzb.163.com/m/skilllist/200957.html
+   *   （官方现页与 skill_extra 一致，无两版拼接）。
+   * 入档：**上架** —— 默认段「防御 −36 受攻击属性影响」的成长系数由用户 2026-09-27 实测点锁定
+   *   （攻击 200.6 → 减防 **49.6%**（游戏内百分比显示到一位小数）⇒ `growthRate: 0.1125`/点；
+   *   0.115 会在该点显示 49.9、0.12 显示 50.5，已排除），四分支与「刀不封顶」均为官方原文 → 上架可玩。
+   * 引擎配套（本批新增）：`OutputCondition.casterTreasureKinds`（段级宝物分支条件，未佩戴宝物 = '其他'；
+   *   由 `action.ts` 的 `casterTreasureKind` 解析）+ `BaseSkill.bonusGroupTargets`（选目标阶段 +1 目标，
+   *   在 `executeSkillWithTargets` 内实现；**注意**：+1 目标落在选目标阶段，故各分支条件都必须在
+   *   目标确定前就能求值——不依赖本段伤害目标）。
+   * 顺序口径：官方「剑：先移除目标的有益效果**再发动攻击**」——剑分支自带 300% 攻击段且排在前面；
+   *   其余四分支（刀/长兵/弓/默认）的附加效果按官方文本列在攻击之后，攻击段排在分支之后统一结算。
+   */
+  wubing_zhilie: {
+    id: 'wubing_zhilie',
+    name: '五兵之烈',
+    type: 'active',
+    prepare: false,
+    range: 5,
+    triggerRate: 0.35,
+    targetMode: 'group',
+    tags: ['damage', 'debuff_defense', 'damage_boost'],
+    // 【弓】目标数 +1：条件 = 佩戴弓类宝物，60% 经士气修正，落在选目标阶段
+    bonusGroupTargets: { rate: 0.6, condition: { casterTreasureKinds: ['弓'] } },
+    output: [
+      // ① 剑：先移除目标的有益效果，再发动攻击（同一目标池）
+      {
+        kind: 'conditional',
+        require: { casterTreasureKinds: ['剑'] },
+        outputs: [{ kind: 'remove_buffs' }, { kind: 'physical_damage', rate: 300 }],
+      },
+      // ② 刀：自身造成的攻击伤害 +15%（可叠加、持续至战斗结束）
+      {
+        kind: 'conditional',
+        require: { casterTreasureKinds: ['刀'] },
+        outputs: [
+          {
+            kind: 'inflict_status',
+            target: 'self',
+            status: {
+              type: 'damage_boost',
+              rate: 0.15,
+              duration: 999,
+              direction: 'caused',
+              damageType: 'physical',
+              stack: true,
+            },
+          },
+        ],
+      },
+      // ③ 长兵：目标攻击距离 −1，持续 2 回合（行动中施加给他人的口径 → duration 2）
+      {
+        kind: 'conditional',
+        require: { casterTreasureKinds: ['长兵'] },
+        outputs: [{ kind: 'inflict_status', status: { type: 'range_buff', amount: -1, duration: 2 } }],
+      },
+      // ④ 弓：+1 目标已在选目标阶段结算（bonusGroupTargets），此处无追加效果
+      // ⑤ 其余宝物 / 未授予（扇 / 其他）：目标防御属性 −36（受攻击属性影响，成长率未确认 → 基值），持续 2 回合
+      {
+        kind: 'conditional',
+        require: { casterTreasureKinds: ['扇', '其他'] },
+        outputs: [
+          {
+            kind: 'inflict_status',
+            // 成长率 0.1125/点：用户 2026-09-27 实测「攻击 200.6 → 减防 49.6%」反推
+            // （36 + 0.1125×(200.6−80) = 49.5575 → 0.1% 粒度显示 49.6%；0.115 会显示 49.9、0.12 显示 50.5，已排除）。
+            // percent: true = 百分比类（按 0.1% 粒度缩放，见 action.ts 属性缩放分支）；⚠️ 单点待第二实测点复核。
+            status: { type: 'defense_buff', amount: -36, duration: 2, percent: true, attackScaled: true, growthRate: 0.1125 },
+          },
+        ],
+      },
+      // ⑥ 主体攻击（剑分支已自带攻击段 → 该分支不重复；其余四分支统一在此结算）
+      {
+        kind: 'conditional',
+        unless: { casterTreasureKinds: ['剑'] },
+        outputs: [{ kind: 'physical_damage', rate: 300 }],
+      },
+    ],
+  },
 };

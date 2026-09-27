@@ -34,6 +34,8 @@ import type { Rng } from './rng';
 import { calcDamage, applyTroopCap, scaledValue, roundRate, sumRates, buffMult, calcHealAmount, moraleRate, applyIgnoreDef, troopCounterReduce } from './formulas';
 import { troopCounterReduceOf as secondaryCounterReduceOf, traitCombatModifiers, traitStatBonus, statModOf, effectiveTroopLine, type TraitCombatContext } from './secondaryTroop';
 import { isTreasureSource, treasureLabel } from './treasure-source';
+import { TREASURES_BY_ID } from '../data/treasures';
+import type { TreasureType } from '../data/treasures';
 import { nearestEnemy, skillTargets, distanceBetween, adjacentUnits, sameSideDistance, attackRangeOf, POSITION_INDEX, unitsInSkillRange } from './target';
 
 /**
@@ -479,9 +481,21 @@ export function outputConditionMatches(
     if (cond.endRound != null && ctx.currentRound > cond.endRound) return false;
     if (cond.rounds && !cond.rounds.includes(ctx.currentRound)) return false;
     if (cond.parity != null && (ctx.currentRound - (cond.startRound ?? 1)) % 2 !== cond.parity) return false;
+    // 宝物分支（五兵之烈「当授予曹彰不同种类宝物时」）：按**施法者当前佩戴宝物**的种类匹配；
+    // 未佩戴宝物 → '其他'（官方「其余宝物或未授予」与「其他」同类）。
+    if (cond.casterTreasureKinds && cond.casterTreasureKinds.length > 0) {
+      if (!cond.casterTreasureKinds.includes(casterTreasureKind(caster))) return false;
+    }
     return true;
   };
   return check(require) && (unless ? !check(unless) : true);
+}
+
+/** 施法者佩戴宝物的种类（`src/data/treasures.ts` 的 type）；未佩戴/宝物 id 无效 → `'其他'` */
+export function casterTreasureKind(caster: UnitState): TreasureType {
+  const loadout = caster.general.treasure;
+  if (!loadout) return '其他';
+  return TREASURES_BY_ID[loadout.treasureId]?.type ?? '其他';
 }
 
 /** 带发动率属性的战法生效概率 = 基础率 × 施法者士气系数（四舍五入取整到百分位），上限 100% */
@@ -8226,7 +8240,9 @@ function executeSkillOutputs(
             // 鏖兵卫主防御 +50 受防御 / 武锋攻击·谋略 −56 受速度）：
             // 实际数值 = 基础 + 成长率×(生效属性-80)；按绝对值缩放后恢复符号
             // （减益类基础值为负，效果幅度随属性增强：如 -15% 谋略216 → -35%）
-            // 百分比类（percent）按 1% 粒度「八舍九入」取整；点数类四舍五入
+            // 百分比类（percent）按 **0.1% 粒度**四舍五入（游戏内百分比显示到一位小数，如
+            // 五兵之烈「防御 −36 受攻击」实测攻击 200.6 → 49.6%；1% 粒度「八舍九入」只用于
+            // 伤害率/恢复率/增减伤率等 rate 字段）；点数类四舍五入。
             const attr = create.attackScaled
               ? effectiveStat(caster, 'attack')
               : create.defenseScaled
@@ -8235,7 +8251,7 @@ function executeSkillOutputs(
                   ? effectiveStat(caster, 'speed')
                   : effectiveStat(caster, 'strategy');
             const scaled = scaledValue(Math.abs(create.amount), create.growthRate, attr);
-            const amount = (create.percent ? roundRate(scaled) : Math.round(scaled)) * Math.sign(create.amount);
+            const amount = (create.percent ? Math.round(scaled * 10) / 10 : Math.round(scaled)) * Math.sign(create.amount);
             inflictStatus(ctx, t, { ...create, amount }, skill.type, skill.id);
           } else {
             // 增减伤/减伤（步步为营等）：记录施法者，供战报「增减伤统计」归因
@@ -9026,6 +9042,31 @@ function executeSkillWithTargets(
                 ? allies
                 : enemies;
     targets = skillTargets(ctx, unit, pool, skill.range, targetMode, skill.groupCount ?? 2);
+    // 战法级「目标数 +1」（五兵之烈【弓】）：选目标阶段掷一次（士气修正 + skill_trigger），
+    // 命中则从「战法有效距离内、未选中」的存活单位中随机补 1 个；本次发动的全部输出段共用扩大后的池。
+    const bonus = skill.bonusGroupTargets;
+    if (bonus && outputConditionMatches(ctx, unit, bonus.condition)) {
+      const morale = effectiveMorale(unit);
+      const rate = moraleTriggerRate(morale, bonus.rate);
+      const success = ctx.rng.chance(rate);
+      ctx.events.push({
+        type: 'skill_trigger',
+        unitId: unit.general.id,
+        skillId: skill.id,
+        skillName: skill.name,
+        success,
+        rate: Math.round(rate * 100),
+        baseRate: Math.round(bonus.rate * 100),
+        morale,
+      });
+      const picked = new Set(targets.map((t) => t.general.id));
+      const candidates = unitsInSkillRange(ctx, unit, pool, skill.range).filter(
+        (u) => !picked.has(u.general.id)
+      );
+      if (success && candidates.length > 0 && targets.length > 0) {
+        targets = [...targets, candidates[ctx.rng.int(candidates.length)]];
+      }
+    }
   }
 
   ctx.events.push({
