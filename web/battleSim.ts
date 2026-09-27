@@ -10,10 +10,12 @@
  *  · 主指标 = 胜率（含 95% 置信半宽）+ 平均剩余兵力优势（我方剩余% − 敌方剩余%）
  *  · 控制口径 = 平均控制「人回合」（从 status_inflicted 的 detail 解析时长；无法解析按 1 计）
  *  · 恢复口径 = 恢复兵力（heal.amount），报双方占比
- *  · 伤害口径 = 普攻 attack_hit + 战法 damage + DoT dot_tick + 分兵 split_damage（与战报统计一致）
+ *  · 伤害口径 = 普攻 attack_hit + 战法 damage + DoT dot_tick + 分兵 split_damage（与战报统计一致；
+ *    分兵按 creditToId（授予分兵的施法者）归属，缺省 sourceId）
  */
 import { runBattle } from '../src/engine/combat';
 import type { BattleEvent, BattleReport, General } from '../src/engine/types';
+import { SKILL_REGISTRY } from '../src/data/skills';
 
 export interface SimEnv {
   maxRounds: number;
@@ -207,13 +209,24 @@ export function collectRun(report: BattleReport, myIds: Set<string>): RunRaw {
       continue;
     }
     switch (ev.type) {
-      case 'attack_hit':
-      case 'split_damage': {
+      case 'attack_hit': {
         const mine = myIds.has(ev.sourceId);
         unit(ev.sourceId).damage += ev.damage;
         unit(ev.targetId).taken += ev.damage;
         if (mine) acc.myDamage += ev.damage;
         else acc.enemyDamage += ev.damage;
+        break;
+      }
+      case 'split_damage': {
+        // 分兵溅射：伤害归属「授予分兵的来源战法施法者」（creditToId，缺省 = 打出普攻的 sourceId），
+        // 与引擎统计口径一致（长兵方阵给友军挂分兵 → 计入施法者的【长兵方阵】杀伤）
+        const owner = ev.creditToId ?? ev.sourceId;
+        const mine = myIds.has(owner);
+        unit(owner).damage += ev.damage;
+        unit(ev.targetId).taken += ev.damage;
+        if (mine) acc.myDamage += ev.damage;
+        else acc.enemyDamage += ev.damage;
+        if (ev.skillId) skill(ev.skillId, name(owner), SKILL_REGISTRY[ev.skillId]?.name ?? ev.skillId).damage += ev.damage;
         break;
       }
       case 'damage': {

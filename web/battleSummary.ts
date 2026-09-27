@@ -7,7 +7,13 @@
  */
 import type { BattleReport, General, UnitState } from '../src/engine/types';
 import { SKILL_REGISTRY } from '../src/data/skills';
-import { computeDetailedStats, computeContributionShares, type UnitDetailedStats } from '../src/engine/stats';
+import {
+  computeDetailedStats,
+  computeContributionShares,
+  type SkillKiller,
+  type SkillStat,
+  type UnitDetailedStats,
+} from '../src/engine/stats';
 import { avatarSrc, portraitSrc, getHeroById, rednessStars, skillGrade, TROOP_CHAR, factionIconSrc, cardFrameSrc } from './heroes';
 import { RESULT_GLYPH } from './resultGlyph';
 
@@ -205,11 +211,14 @@ function heroMini(g: General): string {
 /**
  * 战法格：品级圆点 + 名称 + 次数 / 杀伤；恢复与杀伤同一行（绿色）。
  * 普攻不带品级；空携带槽显示 — / 0。
+ * 杀伤数字在「不是携带者本人打出的」时可点击（调兵代打类战法，见 {@link killersOf}）。
  * @param name 列名（普攻 / 战法名 / —）
  * @param count 次数
  * @param damage 杀伤
  * @param heal 恢复兵力
  * @param grade 品级字母，空则不渲染角标
+ * @param killers 通过该战法造成杀伤的武将明细（非携带者代打时数字可点击 → 弹窗；普攻传空）
+ * @param ownerId 携带该战法的武将 id（用于判断「代打」：杀伤主要来自别人）
  */
 function skillCellHtml(
   name: string,
@@ -217,15 +226,35 @@ function skillCellHtml(
   damage: number,
   heal: number,
   grade: string | null,
+  killers: SkillKiller[] = [],
+  ownerId?: string,
 ): string {
   const badge = grade ? `<i class="grade ${grade.toLowerCase()}">${grade}</i>` : '';
   const healHtml = heal > 0
     ? ` <span class="heal">恢复 ${heal.toLocaleString()}</span>`
     : '';
+  const dmg = `杀伤 ${damage.toLocaleString()}`;
+  // 「通过此战法造成伤害的如果不是携带者」→ 数字可点击，点击后弹出武将明细
+  const dmgHtml = isDelegatedDamage(killers, ownerId)
+    ? `<a class="dmg-link sk-kill-link" href="javascript:void(0)">${dmg}</a>`
+    : dmg;
   return `<div class="sk">
     <div class="sk-h">${badge}<span class="sk-n">${name}</span><span class="sk-c">次数 ${count}</span></div>
-    <div class="sk-d">杀伤 ${damage.toLocaleString()}${healHtml}</div>
+    <div class="sk-d">${dmgHtml}${healHtml}</div>
   </div>`;
+}
+
+/** 可点击杀伤数字上挂的武将明细（挂在 DOM 上：每次重绘换新节点，见 attachKillers） */
+type SkillKillLink = HTMLElement & { __killers?: SkillKiller[] };
+
+/** 杀伤是否**不是携带者本人**打出来的（有任一其他武将通过该战法造成杀伤 → 可点击看明细）。 */
+function isDelegatedDamage(killers: SkillKiller[], ownerId?: string): boolean {
+  return killers.some((k) => k.unitId !== ownerId);
+}
+
+/** 通过某战法造成杀伤的武将明细（无战法统计时为空）。 */
+function killersOf(s: SkillStat | undefined): SkillKiller[] {
+  return s?.killers ?? [];
 }
 
 /**
@@ -247,6 +276,8 @@ function skillRowHtml(g: General, stats: UnitDetailedStats | undefined): string 
       s?.damage ?? 0,
       s?.healAmount ?? 0,
       skillGrade(c.skillId),
+      killersOf(s),
+      g.id,
     );
   });
   return `<div class="sk-row">${atk}${skills.join('')}</div>`;
@@ -271,10 +302,104 @@ function shareRowHtml(pct: number, healPct: number, ctrlPct: number): string {
 }
 
 /**
+ * 「通过该战法造成杀伤的武将」弹窗：标题 + 逐武将（头像 + 伤害数字）。
+ * 文案/类名沿用战报详情的 `.dmg-popup` 体系（避免两套弹窗样式）。
+ */
+function buildKillerPopup(killers: SkillKiller[], nm: (id: string) => string): HTMLElement {
+  const pop = document.createElement('div');
+  pop.className = 'dmg-popup sk-kill-popup';
+  const title = document.createElement('div');
+  title.className = 'dmg-pop-title';
+  title.textContent = '通过该战法造成杀伤的武将';
+  pop.appendChild(title);
+  for (const k of killers) {
+    const item = document.createElement('div');
+    item.className = 'dmg-pop-item sk-kill-item';
+    const img = document.createElement('img');
+    img.className = 'sk-kill-av';
+    img.src = avatarSrc(k.unitId);
+    img.alt = nm(k.unitId);
+    // 画像缺失时不留破图（与武将卡同口径）
+    img.onerror = () => {
+      img.style.display = 'none';
+    };
+    item.appendChild(img);
+    const nameEl = document.createElement('span');
+    nameEl.className = 'sk-kill-name';
+    nameEl.textContent = nm(k.unitId);
+    const dmgEl = document.createElement('span');
+    dmgEl.className = 'sk-kill-num';
+    dmgEl.textContent = k.damage.toLocaleString();
+    item.append(nameEl, dmgEl);
+    pop.appendChild(item);
+  }
+  return pop;
+}
+
+/** 移除页面上所有「通过该战法造成杀伤的武将」弹窗（含定位用的 zIndex 复位）。 */
+function closeSkillKillerPopups(): void {
+  for (const p of Array.from(document.querySelectorAll('.sk-kill-popup'))) {
+    const line = p.parentElement;
+    if (line) line.style.zIndex = '';
+    p.remove();
+  }
+}
+
+/**
+ * 绑定战法格杀伤数字的点击：在数字旁弹出「通过该战法造成杀伤的武将」。
+ * 复用战报详情的定位口径 —— 弹窗挂到**数字所在行**（`.sk-d`，position:relative）并用 offset* 定位，
+ * 挂到滚动容器会让坐标随滚动错位、被 overflow 裁掉。数据存在 DOM 上（`__killers`），
+ * 因为每次 `paintMain()` 重绘都会换新节点。
+ */
+function bindSkillKillerPopups(root: HTMLElement, nm: (id: string) => string): void {
+  let popup: HTMLElement | null = null;
+  let owner: HTMLElement | null = null;
+  const close = (): void => {
+    closeSkillKillerPopups();
+    popup = null;
+    owner = null;
+  };
+  const open = (link: HTMLElement, killers: SkillKiller[]): void => {
+    const line = link.parentElement; // .sk-d（弹窗定位用包含块）
+    if (!line) return;
+    popup = buildKillerPopup(killers, nm);
+    owner = link;
+    // 弹窗绝对定位的包含块必须在行内（同战报详情口径）；内联兜底，不依赖样式表是否已加载
+    line.style.position = 'relative';
+    line.style.zIndex = '20';
+    line.appendChild(popup);
+    const gap = 8;
+    const spaceRight = line.clientWidth - link.offsetLeft - link.offsetWidth - gap;
+    const needLeft = popup.offsetWidth > spaceRight && link.offsetLeft > popup.offsetWidth;
+    popup.style.left = needLeft
+      ? `${Math.max(0, link.offsetLeft - popup.offsetWidth - gap)}px`
+      : `${link.offsetLeft + link.offsetWidth + gap}px`;
+    popup.style.top = `${Math.max(0, link.offsetTop - 6)}px`;
+  };
+  root.addEventListener('click', (e) => {
+    const link = (e.target as HTMLElement).closest<HTMLElement>('.sk-kill-link');
+    if (!link) return; // 弹窗内点击不关；空白处点击由 document 监听收尾
+    e.preventDefault();
+    e.stopPropagation();
+    if (popup && owner === link) {
+      close();
+      return;
+    }
+    close();
+    open(link, (link as SkillKillLink).__killers ?? []);
+  });
+  // 点击弹窗与数字以外的任意处关闭（document 层：外层容器可能吞掉冒泡）
+  document.addEventListener('click', (e) => {
+    if (popup && !(e.target as HTMLElement).closest('.sk-kill-popup, .sk-kill-link')) close();
+  });
+}
+
+/**
  * 统计页（图二骨架）：`.stats-view` > `.st-page`（左轨 + 行列表）。
  *
  * 口径：次数 = skill_cast 计数（指挥战法准备阶段算 1 次，如魏武之世 次数 1 · 杀伤 0）；
- * 杀伤 = 该战法命中伤害合计（指挥队友攻击计入施法者 `creditToId`，不含普攻/DoT/分兵溅射）；
+ * 杀伤 = 该战法命中伤害合计（指挥队友攻击计入施法者 `creditToId`；**分兵溅射计入授予该分兵的来源战法**
+ * 三军齐出 / 长兵方阵 / 先声夺人 / 其徐如林…，归属其施法者；不含普攻）；
  * 恢复 = heal 事件回复兵力合计（归属施法者，如刘备皇裔流离/张机金匮要略）。
  *
  * 行序：红 大营→中军→前锋，再蓝 前锋→中军→大营（缺槽过滤）。默认 `data-stats="skill"`。
@@ -317,12 +442,36 @@ export function createStatsView(report: BattleReport): HTMLElement {
     </div>`;
   };
 
+  /** 把「通过该战法造成杀伤的武将」挂到可点击的杀伤数字上（重绘会换新节点，故每轮重挂）。
+   *  按格子顺序取明细：`skillRowHtml` 的格子顺序 = 普攻 + `columnOrder(g).filter(skillId)`，
+   *  而标记了 `.sk-kill-link` 的只有「非本人打出杀伤」的战法格，故用后 N 个战法格对齐。 */
+  const attachKillers = (main: HTMLElement, g: General): void => {
+    const cells = Array.from(main.querySelectorAll<SkillKillLink>('.sk-kill-link'));
+    if (cells.length === 0) return;
+    const st = byId.get(g.id);
+    const cols = columnOrder(g).filter((c) => c.skillId);
+    const roster = cols.map((c) => killersOf(st?.skills.find((s) => s.skillId === c.skillId)));
+    const offset = Math.max(0, cols.length - cells.length);
+    cells.forEach((link, i) => {
+      link.__killers = roster[offset + i] ?? [];
+    });
+  };
+
   const paintMain = (): void => {
     const main = root.querySelector('.st-main');
     if (!main) return;
     main.innerHTML = `
       <div class="st-team">${redRows.map((g) => statsRow(g, 'red')).join('')}</div>
       <div class="st-team">${blueRows.map((g) => statsRow(g, 'blue')).join('')}</div>`;
+    if (mode === 'skill') {
+      main.querySelectorAll<HTMLElement>('.st-team').forEach((team, i) => {
+        const rows = i === 0 ? redRows : blueRows;
+        Array.from(team.querySelectorAll<HTMLElement>('.st-row')).forEach((rowEl, j) => {
+          const g = rows[j];
+          if (g) attachKillers(rowEl, g);
+        });
+      });
+    }
   };
 
   root.innerHTML = `
@@ -334,6 +483,8 @@ export function createStatsView(report: BattleReport): HTMLElement {
       <div class="st-main scroll-quiet"></div>
     </div>`;
   paintMain();
+  // 点击战法格的杀伤数字 → 弹「通过该战法造成杀伤的武将」
+  bindSkillKillerPopups(root, (id) => getHeroById(id)?.name ?? byId.get(id)?.name ?? id);
 
   root.querySelectorAll<HTMLButtonElement>('[data-stats]').forEach((btn) => {
     btn.addEventListener('click', () => {

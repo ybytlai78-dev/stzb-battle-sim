@@ -2021,8 +2021,30 @@ main {
   text-overflow: ellipsis;
 }
 .sk-c { font-size: 10px; color: var(--color-text-muted); flex: 0 0 auto; }
-.sk-d { font-size: 10px; color: var(--color-text-muted); }
+.sk-d { font-size: 10px; color: var(--color-text-muted); position: relative; }
 .sk-d .heal { color: var(--color-green); }
+/* 战法格杀伤数字可点击（调兵代打类战法：杀伤不是携带者本人打的）→ 点击弹武将明细 */
+.sk-d .sk-kill-link { font-size: 10px; }
+.sk-kill-popup { min-width: 200px; }
+.sk-kill-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-left: 0;
+  margin-top: 4px;
+}
+.sk-kill-av {
+  width: 34px;
+  height: 34px;
+  object-fit: cover;
+  object-position: top center;
+  border-radius: 3px;
+  border: 1px solid var(--line-strong);
+  background: var(--panel-2);
+  flex: 0 0 auto;
+}
+.sk-kill-name { color: var(--ink); flex: 1 1 auto; }
+.sk-kill-num { color: var(--color-text); font-weight: 600; font-variant-numeric: tabular-nums; }
 
 .sk-row .grade {
   width: 12px;

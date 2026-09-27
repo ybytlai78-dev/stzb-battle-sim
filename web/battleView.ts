@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 战报详情：紧凑结果横幅 + 图三三栏（出手顺序 / 事件流 / 回合轨）。
  * 事件文案仍由 `renderEvents` / `renderPrepEvents` / `appendDamageModifierLine` 产出。
  */
@@ -609,7 +609,9 @@ function renderEvents(
       }
       case 'split_damage': {
         appendDamageModifierLine(group, ev.modifiers, popupApi);
-        add('dmg-phy', `分兵溅射「${nm(ev.targetId)}」造成 <b>${ev.damage.toLocaleString()}</b>${afterSuffix(ev.afterTroops)}`);
+        // 标注来源战法（三军齐出 / 长兵方阵…）：分兵伤害计入该战法统计
+        const splitSrc = ev.skillId ? SKILL_REGISTRY[ev.skillId]?.name : undefined;
+        add('dmg-phy', `分兵溅射「${nm(ev.targetId)}」造成 <b>${ev.damage.toLocaleString()}</b>${afterSuffix(ev.afterTroops)}${splitSrc ? `（${splitSrc}）` : ''}`);
         break;
       }
       case 'prepare_start':
