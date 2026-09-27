@@ -1945,7 +1945,13 @@ export interface TreasureLoadout {
 }
 
 export interface General {
+  /** 引擎单位 id。红蓝两队上阵同一名武将时，第二份会被 `runBattle` 改写为 `原id#2`（见 `heroId`） */
   id: string;
+  /**
+   * 原始武将 id：仅当 `id` 因红蓝同将去重被改写时写入（缺省 = `id` 本身就是武将 id）。
+   * UI 展示（画像/势力/主战法/复用队伍）用它还原真实武将。
+   */
+  heroId?: string;
   name: string;
   /** 稀有度：4星 / 5星 */
   rarity: '4星' | '5星';

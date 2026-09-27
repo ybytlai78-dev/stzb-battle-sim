@@ -10,7 +10,7 @@
  */
 import { runBattle } from '../src/engine/combat';
 import type { BattleEvent, BattleReport, General, TroopType } from '../src/engine/types';
-import { buildGeneral, getHeroById, SKILL_GRADES, avatarSrc, isMainSkill, isLearnableSkillListed } from './heroes';
+import { buildGeneral, getHeroById, heroIdOf, SKILL_GRADES, avatarSrc, isMainSkill, isLearnableSkillListed } from './heroes';
 import {
   renderHeroPool,
   renderSlot,
@@ -608,7 +608,7 @@ function renderDamageAnalysis(container: HTMLElement): void {
   cards.className = 'share-cards';
   const myTeam = reports[0].myTeam;
   for (const g of myTeam) {
-    const hero = getHeroById(g.id);
+    const hero = getHeroById(heroIdOf(g));
     const mainId = hero?.mainSkillId ?? '';
     const extras = g.activeSkillIds.concat(g.passiveSkillIds, g.commandSkillIds, g.pursuitSkillIds).filter((id) => id !== mainId);
     const extraIds = extras.slice(0, 2);
@@ -635,7 +635,7 @@ function renderDamageAnalysis(container: HTMLElement): void {
     card.className = 'share-card';
     card.innerHTML = `
       <div class="sc-head">
-        <img class="sc-avatar" src="${avatarSrc(g.id)}" alt="" onerror="this.style.display='none'" />
+        <img class="sc-avatar" src="${avatarSrc(heroIdOf(g))}" alt="" onerror="this.style.display='none'" />
         <span>${g.name}</span><span class="sc-pos">${g.position ?? '前锋'} · Lv${g.level ?? 40}</span>
         <span class="sc-main-skill">${mainId ? (SKILL_REGISTRY[mainId]?.name ?? '') : '无主战法'}</span>
       </div>

@@ -5,7 +5,7 @@
 import type { BattleEvent, BattleReport, DamageModifierSource, DamageModifiers } from '../src/engine/types';
 import { formatBonusText } from '../src/engine/troopBonus';
 import { SKILL_REGISTRY } from '../src/data/skills';
-import { avatarSrc } from './heroes';
+import { avatarSrc, heroIdOf } from './heroes';
 import { RESULT_GLYPH } from './resultGlyph';
 
 /** 事件流渲染附加上下文：组头兵力与红蓝分色（不改事件字符串口径） */
@@ -14,6 +14,8 @@ interface RenderEvCtx {
   troopsOf?: (unitId: string) => number | undefined;
   /** 我方单位 id，用于 `.act-head` 红/蓝底 */
   myIds?: Set<string>;
+  /** 按 unitId 取真实武将 id 的头像（跨队同将副本 id 无法直接查武将） */
+  iconOf?: (unitId: string) => string;
 }
 
 /** 准备阶段三段标题：阵容 / 兵种 / 战法 */
@@ -54,11 +56,20 @@ export function createBattleView(report: BattleReport, opts: BattleViewOpts = {}
   const root = document.createElement('div');
   root.className = 'battle-view';
 
-  // 单位 id → 名字
+  // 单位 id → 名字 / 展示用武将 id（红蓝同将时引擎副本 id 为 `h16#2`，原 id 在 heroId）
   const nameById = new Map<string, string>();
-  for (const g of report.myTeam) nameById.set(g.id, g.name);
-  for (const g of report.enemyTeam) nameById.set(g.id, g.name);
+  const heroIdById = new Map<string, string>();
+  for (const g of report.myTeam) {
+    nameById.set(g.id, g.name);
+    heroIdById.set(g.id, heroIdOf(g));
+  }
+  for (const g of report.enemyTeam) {
+    nameById.set(g.id, g.name);
+    heroIdById.set(g.id, heroIdOf(g));
+  }
   const nm = (id: string) => nameById.get(id) ?? id;
+  /** 头像等展示素材按真实武将 id 取（跨队同将的副本 id 不能直接查武将） */
+  const heroIcon = (id: string) => avatarSrc(heroIdById.get(id) ?? id);
 
   // 按回合分组事件
   const roundEvents: Array<Array<BattleEvent>> = [];
@@ -96,7 +107,7 @@ export function createBattleView(report: BattleReport, opts: BattleViewOpts = {}
     if (ei >= 0) return enemy[ei] ?? report.enemyTeam[ei]!.maxTroops;
     return undefined;
   };
-  const evCtx: RenderEvCtx = { troopsOf, myIds };
+  const evCtx: RenderEvCtx = { troopsOf, myIds, iconOf: heroIcon };
 
   // ── 结果横幅（紧凑，供 smoke / 历史详情识别）──
   const banner = document.createElement('div');
@@ -257,7 +268,7 @@ export function createBattleView(report: BattleReport, opts: BattleViewOpts = {}
       btn.type = 'button';
       btn.className = 'turn';
       btn.dataset.unitId = id;
-      btn.innerHTML = `<span class="n">${i + 1}</span><span class="av"><img src="${avatarSrc(id)}" alt="" onerror="this.style.display='none'" /></span>`;
+      btn.innerHTML = `<span class="n">${i + 1}</span><span class="av"><img src="${heroIcon(id)}" alt="" onerror="this.style.display='none'" /></span>`;
       btn.onclick = () => scrollLogToUnit(id);
       turns.appendChild(btn);
       turnBtns.push(btn);
@@ -462,7 +473,7 @@ function renderEvents(
         head.className = side ? `act-head ${side}` : 'act-head';
         const n = ctx?.troopsOf?.(ev.unitId);
         const troopHtml = n !== undefined ? `<span class="troops">${n.toLocaleString()}</span>` : '';
-        head.innerHTML = `<img class="act-avatar" src="${avatarSrc(ev.unitId)}" alt="" onerror="this.style.display='none'" /><span class="hl">${nm(ev.unitId)}</span><span class="phase">${PHASE_NAME[ev.phase] ?? ev.phase}</span>${troopHtml}`;
+        head.innerHTML = `<img class="act-avatar" src="${ctx?.iconOf?.(ev.unitId) ?? avatarSrc(ev.unitId)}" alt="" onerror="this.style.display='none'" /><span class="hl">${nm(ev.unitId)}</span><span class="phase">${PHASE_NAME[ev.phase] ?? ev.phase}</span>${troopHtml}`;
         group.appendChild(head);
         const body = document.createElement('div');
         body.className = 'act-body';

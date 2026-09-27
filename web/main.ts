@@ -9,7 +9,7 @@ import './tutorial.css';
 import { runBattle } from '../src/engine/combat';
 import type { General } from '../src/engine/types';
 import type { BattleReport } from '../src/engine/types';
-import { buildGeneral, freePointBudget, getHeroById } from './heroes';
+import { buildGeneral, freePointBudget, getHeroById, heroIdOf } from './heroes';
 import {
   emptyEditor,
   renderTeamEditor,
@@ -159,7 +159,10 @@ function saveCurrentAsPreset(side: TeamSide, name: string): PresetActionResult {
   return { presetId: result.preset.id };
 }
 
-/** 预设上场：整边替换（含空槽原样）；对面若已上阵同一武将则先清空（上场方优先） */
+/**
+ * 预设上场：整边替换（含空槽原样）。
+ * 同一武将可以同时出现在红蓝两队（对方可能有相同武将，用户 2026-09-26 口径）——**不再清空对面上阵的同名槽位**。
+ */
 function applyPresetToSide(preset: TeamPreset, side: TeamSide): void {
   const slots = cloneSlots(preset.slots);
   const invalid = presetTeamError(slots);
@@ -167,18 +170,9 @@ function applyPresetToSide(preset: TeamPreset, side: TeamSide): void {
     showNotice(`预设 #${preset.no} 无法上场：${invalid}`);
     return;
   }
-  const other: TeamSide = side === 'red' ? 'blue' : 'red';
-  const ids = new Set(slots.map((s) => s.heroId).filter((id): id is string => Boolean(id)));
-  let cleared = 0;
-  state[other].forEach((s, i) => {
-    if (s.heroId && ids.has(s.heroId)) {
-      state[other][i] = emptySlot();
-      cleared += 1;
-    }
-  });
   state[side] = slots;
   refresh();
-  showNotice(`已上场预设 #${preset.no}「${preset.name}」→ ${SIDE_LABEL[side]}${cleared ? `（对面 ${cleared} 个同武将槽位已清空）` : ''}`);
+  showNotice(`已上场预设 #${preset.no}「${preset.name}」→ ${SIDE_LABEL[side]}`);
 }
 
 function renamePresetById(id: string, name: string): PresetActionResult {
@@ -224,20 +218,17 @@ function presetPanelDeps(opts: { dummyMode?: boolean } = {}): PresetPanelDeps {
 
 const handlers: EditorHandlers = {
   onPickHero(team, idx, heroId) {
-    // 同队互斥校验
+    // 同队互斥校验（SP / 同名武将不能同队）
     const conflict = mutualConflict(state[team], heroId);
     if (conflict) {
       showNotice(`互斥冲突：「${conflict}」与所选武将不能同队（同名/SP 武将互斥）`);
       return;
     }
-    // 全局唯一：若该武将已在其他槽位，先移除原槽
-    for (const t of ['red', 'blue'] as const) {
-      state[t].forEach((s, i) => {
-        if (s.heroId === heroId && !(t === team && i === idx)) {
-          state[t][i] = emptySlot();
-        }
-      });
-    }
+    // 队内唯一：同一队伍不能重复上阵同一武将（率土规则）——若已在本队其他槽位，原槽被移走；
+    // **另一队的同一武将保留**（红蓝两队可以各上一份，用户 2026-09-26 口径）。
+    state[team].forEach((s, i) => {
+      if (s.heroId === heroId && i !== idx) state[team][i] = emptySlot();
+    });
     state[team][idx] = { ...emptySlot(), heroId };
     refresh();
   },
@@ -246,9 +237,14 @@ const handlers: EditorHandlers = {
     const from = state[fromTeam][fromIdx];
     const to = state[toTeam][toIdx];
     if (!from.heroId) return;
-    // 跨队：对「即将加入该队」的武将做同名/SP 互斥（目标槽会被换走，不参与校验）
+    // 跨队：对「即将加入该队」的武将做队内唯一 + 同名/SP 互斥（目标槽会被换走，不参与校验）。
+    // 目标队已有同一武将时报错——两边同将可以（互换两边的同将槽位也走这里），但不能在同一队里出现两份。
     if (fromTeam !== toTeam) {
       const destRest = state[toTeam].filter((_, i) => i !== toIdx);
+      if (destRest.some((s) => s.heroId === from.heroId)) {
+        showNotice(`「${getHeroById(from.heroId)?.name ?? from.heroId}」已在${SIDE_LABEL[toTeam]}上阵（同一队伍不能重复武将）`);
+        return;
+      }
       const c1 = mutualConflict(destRest, from.heroId);
       if (c1) {
         showNotice(`互斥冲突：「${c1}」与所选武将不能同队（同名/SP 武将互斥）`);
@@ -256,6 +252,10 @@ const handlers: EditorHandlers = {
       }
       if (to.heroId) {
         const srcRest = state[fromTeam].filter((_, i) => i !== fromIdx);
+        if (srcRest.some((s) => s.heroId === to.heroId)) {
+          showNotice(`「${getHeroById(to.heroId)?.name ?? to.heroId}」已在${SIDE_LABEL[fromTeam]}上阵（同一队伍不能重复武将）`);
+          return;
+        }
         const c2 = mutualConflict(srcRest, to.heroId);
         if (c2) {
           showNotice(`互斥冲突：「${c2}」与所选武将不能同队（同名/SP 武将互斥）`);
@@ -522,7 +522,7 @@ function renderBattleView(report: BattleReport, mode: 'summary' | 'stats' | 'det
 /** 战报 → SlotState 反推（与 buildGeneral 互逆）：面板 = round(基础 + (L-1)×成长) + 自由加点；
  *  等级/红度随战报透传还原；自由加点按该等级反推（面板精确还原）。 */
 function generalToSlot(g: General): SlotState {
-  const h = getHeroById(g.id);
+  const h = getHeroById(heroIdOf(g));
   const level = g.level ?? 40;
   const redness = g.redness ?? 0;
   const mainId = h?.mainSkillId ?? '';
@@ -537,7 +537,7 @@ function generalToSlot(g: General): SlotState {
     free.strategy = Math.max(0, g.strategy - Math.round(h.baseStrategy + (level - 1) * h.growthStrategy));
     free.speed = Math.max(0, g.speed - Math.round(h.baseSpeed + (level - 1) * h.growthSpeed));
   }
-  return { heroId: g.id, extraSkillIds: extra.slice(0, 2), freePoints: free, redness, level, treasure: g.treasure ?? null };
+  return { heroId: heroIdOf(g), extraSkillIds: extra.slice(0, 2), freePoints: free, redness, level, treasure: g.treasure ?? null };
 }
 
 /** 复用战报队伍：把红/蓝双方（大营→中军→前锋）复制到配将区，返回配将界面 */

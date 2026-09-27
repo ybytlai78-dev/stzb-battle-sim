@@ -76,6 +76,25 @@ describe('批量模拟：复现性与交换场地', () => {
     expect(raw.myTroopRatio + raw.enemyTroopRatio).toBeGreaterThan(0);
     expect(raw.myDamage).toBeGreaterThan(0);
   });
+
+  it('红蓝同将（镜像 id）：交换场地时归属不错乱（与预去重控制组一致）', () => {
+    // 双方单位 id 相同（对方有相同武将），且我方明显更强 → 归属若反，伤害/兵力比例会立刻穿帮
+    const mine = team({ active: ['yiji_dangqian'] }, 'x');
+    const oppSame = team({}, 'x');
+    const oppCtrl = team({}, 'o'); // 控制组：id 本就不冲突
+    const a = runOne(mine, oppSame, 1, smallEnv); // index 1 → 交换场地（我方站右）
+    const b = runOne(mine, oppCtrl, 1, smallEnv);
+    expect(a.myDamage).toBeCloseTo(b.myDamage, 6);
+    expect(a.enemyDamage).toBeCloseTo(b.enemyDamage, 6);
+    expect(a.myTroopRatio).toBeCloseTo(b.myTroopRatio, 6);
+    expect(a.enemyTroopRatio).toBeCloseTo(b.enemyTroopRatio, 6);
+
+    const batchA = runBatch(mine, oppSame, { runs: 40, env: smallEnv });
+    const batchB = runBatch(mine, oppCtrl, { runs: 40, env: smallEnv });
+    expect(batchA.avgDamageMine).toBeCloseTo(batchB.avgDamageMine, 6);
+    expect(batchA.troopAdvantage).toBeCloseTo(batchB.troopAdvantage, 6);
+    expect(batchA.perUnit.length).toBe(3);
+  });
 });
 
 describe('统计口径', () => {

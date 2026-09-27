@@ -906,3 +906,19 @@ const targetTeam = primaryTarget.side === unit.side ? allies : enemies; // ✓
   `.ss-title` 顺序 = `['红方（我方）', '蓝方（敌方）']`；左侧名册 = 我方三将 大营→中军→前锋。
 - 统计页与详情页横幅本来就是「我方优先」（统计：红队行在前；详情横幅：`${myLabel}剩余…｜${enemyLabel}剩余…`），未改。
 
+### 红蓝同将：同一武将可同时上阵两队（用户 2026-09-26 口径）
+
+- **配将规则**：取消原「全局唯一」——武将池的同一张卡可以分别拖到红队和蓝队，跨队拖动互不抢占
+  （`web/main.ts` `onPickHero` 只做**队内唯一**）。队内仍不能重复同一武将（率土规则）：池子卡拖进同队已有该将的队伍 → 移走原槽；
+  **跨队**把武将拖到另一边空槽、而目标队已有同将 → 拦截提示（`onMoveSlot` 新增队内唯一校验）。
+- **两边同将可互换**：红蓝各自都上阵同一武将时，把两张同名槽位对拖 = 互换整卡配置（等级/加点/战法/宝物跟着走）。
+- **预设上场**：`applyPresetToSide` 不再清空对面的同武将槽位（原「上场方优先」取消）。
+- **引擎去重**：引擎全程用 `general.id` 当单位身份，红蓝同 id 会串味（A 打 A / 统计合并 / 距离 0）。
+  `runBattle` 入口新增 `ensureUniqueUnitIds`：按「红队→蓝队」首现保 id，重复副本改写为 `原id#2`、`#3`…，
+  原武将 id 写进 `General.heroId`；**无重复时原样返回**（golden 逐字节不变）。展示层统一用 `web/heroes.ts` `heroIdOf(g)`。
+- **战报 / 批量模拟**：`battleSummary` / `battleView` / `damageLab` / `main.generalToSlot` 改用 `heroIdOf`；
+  `web/battleSim.ts` `runOne/runBatch(Async)` 先固定唯一 id 再交换场地（否则交换后 myIds 归属会反）。
+- **测试**：`tests/mirror_units.test.ts`（5 个：去重单元 + 镜像对局事件/统计 + 预去重控制组一致 + 幂等）；
+  `web/smoke.test.ts` 新增/改写 4 处（池子跨队、同将互换、同队重复拦截、镜像对局简略/统计/详情/复用队伍）；
+  `tests/battle_sim.test.ts` 新增镜像 id 交换场地归属 1 个。全量 203 files / 2113 passed，golden 未变。
+
