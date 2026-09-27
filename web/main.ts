@@ -494,7 +494,7 @@ function renderBattleView(report: BattleReport, mode: 'summary' | 'stats' | 'det
   winRate.type = 'button';
   winRate.className = 'btn ghost';
   winRate.textContent = '统计胜率';
-  winRate.title = `以当前双方队伍快速模拟 ${WIN_RATE_RUNS} 场：大营阵亡即斩首定胜负，打满回合按剩余兵力判定`;
+  winRate.title = `以当前双方队伍快速模拟 ${WIN_RATE_RUNS} 场：大营阵亡即斩首定胜负；打满回合判平局（兵力占优计入胜场，兵力劣势 / 相同计入平局场）`;
   winRate.onclick = () =>
     openWinRatePanel({
       myTeam: report.myTeam,

@@ -1,11 +1,13 @@
 /**
  * 战报页「统计胜率」：把**当前双方队伍**快速跑 N 场（默认 200）模拟，给出 胜 / 平 / 负 概率。
  * ---------------------------------------------------------------------------
- * · 判定口径沿用 L4「实战胜率批量模拟」（`judgeOutcome`，用户 2026-09-22 定稿，见 web/battleSim.ts）：
- *   ① 一方大营阵亡 → 引擎直接给 win / loss（斩首）；
- *   ② 打满 maxRounds 回合双方大营都活着 → 比剩余兵力，高者胜；只有完全相同才算平。
+ * · 判定口径（用户 2026-09-27 调整；兵力比较仍复用 L4 `judgeOutcome`，胜 / 平 / 负归并按本模块口径）：
+ *   ① 一方大营阵亡 → 引擎直接给 win / loss（斩首场，计入胜 / 负场）；
+ *   ② 打满 maxRounds 回合双方大营都活着 → 判**平局**，再按剩余兵力分：
+ *      我方兵力占优 =「优势平」（计入胜场）、兵力劣势 =「劣势平」（计入平局场）、
+ *      兵力完全相同 =「完全平」（计入平局场）。
  * · 固定红蓝站位、**每颗种子跑「正/反」两场**（其中一场把两队对调，`swapSides`，与 L4 同一口径）：
- *   消除先手 / 站位偏向，且「把红蓝两队对调后再统计」两次结果必然互补（和 = 100%）。
+ *   消除先手 / 站位偏向，且「把红蓝两队对调后再统计」两次的胜率必然互补（和 = 100%）。
  * · 种子 = 基础种子 + 种子序号（默认取本场战报种子）→ 同一份战报重复统计结果一致、可复现。
  * · 只跑引擎、不渲染战报；浏览器里分片让出主线程，边跑边刷进度条。
  */
@@ -24,8 +26,11 @@ export const WIN_RATE_YIELD_EVERY = 25;
 
 export interface WinRateStats {
   runs: number;
+  /** 胜场 = 斩首胜 + 优势平（用户口径） */
   win: number;
+  /** 败场 = 斩首负（用户口径：打满回合不计负） */
   loss: number;
+  /** 平局场 = 劣势平 + 完全平（用户口径） */
   draw: number;
   winRate: number;
   lossRate: number;
@@ -33,12 +38,13 @@ export interface WinRateStats {
   /** 斩首（大营阵亡）决定的场次 */
   decapWin: number;
   decapLoss: number;
-  /** 打满回合后按剩余兵力判定的场次 */
-  troopWin: number;
-  troopLoss: number;
-  /** 打满回合且剩余兵力完全相同（真正的平局） */
+  /** 打满回合且我方剩余兵力占优（优势平）——计入胜场 */
+  advDraw: number;
+  /** 打满回合且我方剩余兵力劣势（劣势平）——计入平局场 */
+  disadvDraw: number;
+  /** 打满回合且剩余兵力完全相同（完全平）——计入平局场 */
   evenDraw: number;
-  /** 打满回合（引擎原生平局）总场次 = troopWin + troopLoss + evenDraw */
+  /** 打满回合（引擎原生平局）总场次 = advDraw + disadvDraw + evenDraw */
   capped: number;
   baseSeed: number;
   /** 实际耗时（毫秒） */
@@ -64,8 +70,8 @@ interface Tally {
   draw: number;
   decapWin: number;
   decapLoss: number;
-  troopWin: number;
-  troopLoss: number;
+  advDraw: number;
+  disadvDraw: number;
   evenDraw: number;
   capped: number;
 }
@@ -78,8 +84,8 @@ function emptyTally(): Tally {
     draw: 0,
     decapWin: 0,
     decapLoss: 0,
-    troopWin: 0,
-    troopLoss: 0,
+    advDraw: 0,
+    disadvDraw: 0,
     evenDraw: 0,
     capped: 0,
   };
@@ -96,10 +102,10 @@ function cloneTeam(team: General[]): General[] {
   }));
 }
 
-/** 跑一场并按实战口径计入 tally（`myTeam` 恒为「我方」视角）。
+/** 跑一场并按用户口径计入 tally（`myTeam` 恒为「我方」视角）。
  *  `swap` = 本场把两队对调（我方临时放到右侧），结果再还原成我方视角：
  *  每颗种子跑「正/反」两场，消除先手 / 站位偏向（L4 口径）；
- *  由此「两队对调后再统计」两次结果必然互补（和 = 100%）。 */
+ *  由此「两队对调后再统计」两次的胜率必然互补（和 = 100%）。 */
 function countOne(
   myTeam: General[],
   enemyTeam: General[],
@@ -128,22 +134,30 @@ function countOne(
         ? 'win'
         : 'draw'
     : report.result;
-  // 打满回合（引擎原生 draw）时，judgeOutcome 用剩余兵力分胜负；兵力相同才是平局
+  // 用户口径：斩首场直接计胜 / 负；打满回合（引擎原生 draw）判平局，再按剩余兵力分
+  // 优势平（计入胜场）/ 劣势平（计入平局场）/ 完全平（计入平局场）——兵力比较复用 judgeOutcome。
   const judged = judgeOutcome(result, myTroops, enemyTroops);
   const capped = result === 'draw';
   t.runs += 1;
   if (capped) t.capped += 1;
-  if (judged.win) {
+  if (!capped) {
+    // 斩首：大营阵亡，引擎已判 win / loss
+    if (result === 'win') {
+      t.win += 1;
+      t.decapWin += 1;
+    } else {
+      t.loss += 1;
+      t.decapLoss += 1;
+    }
+  } else if (judged.win) {
     t.win += 1;
-    if (capped) t.troopWin += 1;
-    else t.decapWin += 1;
+    t.advDraw += 1;
   } else if (judged.draw) {
     t.draw += 1;
     t.evenDraw += 1;
   } else {
-    t.loss += 1;
-    if (capped) t.troopLoss += 1;
-    else t.decapLoss += 1;
+    t.draw += 1;
+    t.disadvDraw += 1;
   }
 }
 
@@ -159,8 +173,8 @@ function finalize(t: Tally, baseSeed: number, ms: number): WinRateStats {
     drawRate: t.draw / n,
     decapWin: t.decapWin,
     decapLoss: t.decapLoss,
-    troopWin: t.troopWin,
-    troopLoss: t.troopLoss,
+    advDraw: t.advDraw,
+    disadvDraw: t.disadvDraw,
     evenDraw: t.evenDraw,
     capped: t.capped,
     baseSeed,
@@ -235,9 +249,10 @@ function resultHtml(s: WinRateStats, maxRounds: number): string {
       ${rowHtml('draw', '平局', s.draw, s.drawRate)}
       ${rowHtml('loss', '失败', s.loss, s.lossRate)}
     </div>
-    <p class="wr-note">判定口径：一方大营阵亡即斩首定胜负；打满 ${maxRounds} 回合双方大营存活时，按剩余兵力判定，高者胜（兵力完全相同才算平）。</p>
-    <p class="wr-note">每颗种子跑「正/反」两场（其中一场把两队对调，消除先手 / 站位偏向）——因此<b>把红蓝两队对调后再统计，两次结果必然互补（和 = 100%）</b>。</p>
-    <p class="wr-note">斩首：胜 ${s.decapWin} · 负 ${s.decapLoss}<br />打满 ${maxRounds} 回合（${s.capped} 场）：兵力判定胜 ${s.troopWin} · 负 ${s.troopLoss} · 完全平 ${s.evenDraw}</p>
+    <p class="wr-note">判定口径：一方大营阵亡即斩首定胜负；打满 ${maxRounds} 回合双方大营存活时判平局，按剩余兵力分优势平（我方占优）/ 劣势平（我方劣势）/ 完全平（兵力相同）。</p>
+    <p class="wr-note">统计口径：胜场 = 斩首胜 + 优势平；平局场 = 劣势平 + 完全平；败场 = 斩首负。</p>
+    <p class="wr-note">每颗种子跑「正/反」两场（其中一场把两队对调，消除先手 / 站位偏向）——因此<b>把红蓝两队对调后再统计，两次胜率必然互补（和 = 100%）</b>。</p>
+    <p class="wr-note">斩首：胜 ${s.decapWin} · 负 ${s.decapLoss}<br />打满 ${maxRounds} 回合（${s.capped} 场）：优势平 ${s.advDraw} · 劣势平 ${s.disadvDraw} · 完全平 ${s.evenDraw}</p>
     <p class="wr-meta">基础种子 ${s.baseSeed} · 种子 ${s.baseSeed}~${s.baseSeed + seedSpan - 1} · ${s.runs} 场 · 耗时 ${(s.ms / 1000).toFixed(1)}s</p>`;
 }
 
