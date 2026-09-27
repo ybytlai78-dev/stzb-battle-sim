@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * 「统计胜率」单测：判定口径（斩首 / 打满回合按剩余兵力 / 完全平）、异步进度、弹窗渲染与关闭。
+ * 「统计胜率」单测：判定口径（斩首 / 打满回合平局：优势平计入胜场、劣势平 / 完全平计入平局场）、异步进度、弹窗渲染与关闭。
  * 引擎侧全量覆盖在 Node 测试里；这里只验这一层薄壳。
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -48,14 +48,15 @@ describe('统计胜率（200 场快速模拟）', () => {
     expect(a.runs).toBe(20);
     expect(a.win + a.loss + a.draw).toBe(20);
     expect(a.winRate + a.lossRate + a.drawRate).toBeCloseTo(1, 10);
-    // 构成拆分守恒：斩首 / 兵力判定 / 完全平
-    expect(a.decapWin + a.troopWin).toBe(a.win);
-    expect(a.decapLoss + a.troopLoss).toBe(a.loss);
-    expect(a.troopWin + a.troopLoss + a.evenDraw).toBe(a.capped);
+    // 构成拆分守恒（用户口径：胜 = 斩首胜 + 优势平；平 = 劣势平 + 完全平；负 = 斩首负）
+    expect(a.decapWin + a.advDraw).toBe(a.win);
+    expect(a.decapLoss).toBe(a.loss);
+    expect(a.disadvDraw + a.evenDraw).toBe(a.draw);
+    expect(a.advDraw + a.disadvDraw + a.evenDraw).toBe(a.capped);
     expect(a.capped).toBeLessThanOrEqual(20);
   });
 
-  it('打满回合（引擎原生平局）按剩余兵力判定：不等则分胜负，完全相同才算平', () => {
+  it('打满回合判平局：兵力占优 = 优势平（计入胜场）、劣势 = 劣势平（计入平局场）、相同 = 完全平', () => {
     const my = team(RED);
     const enemy = team(BLUE);
     let capped = 0;
@@ -72,23 +73,29 @@ describe('统计胜率（200 场快速模拟）', () => {
         if (myTroops === enemyTroops) {
           expect(one.evenDraw).toBe(1);
           expect(one.draw).toBe(1);
+          expect(one.win).toBe(0);
         } else if (myTroops > enemyTroops) {
-          expect(one.troopWin).toBe(1);
+          expect(one.advDraw).toBe(1);
+          expect(one.win).toBe(1); // 优势平计入胜场
           expect(one.draw).toBe(0);
         } else {
-          expect(one.troopLoss).toBe(1);
-          expect(one.draw).toBe(0);
+          expect(one.disadvDraw).toBe(1);
+          expect(one.draw).toBe(1); // 劣势平计入平局场
+          expect(one.win).toBe(0);
+          expect(one.loss).toBe(0); // 打满回合不计负（用户口径）
         }
       } else if (report.result === 'win') {
         expect(one.decapWin).toBe(1);
+        expect(one.win).toBe(1);
       } else {
         expect(one.decapLoss).toBe(1);
+        expect(one.loss).toBe(1);
       }
     }
     expect(capped, '该组合应出现打满 8 回合（引擎原生平局）').toBeGreaterThan(0);
   });
 
-  it('交换红蓝后两次统计必然互补（胜率之和 = 100%）——每颗种子正/反各跑一场', () => {
+  it('交换红蓝后两次统计的胜率互补（每场非完全平有且只有一方计胜）——每颗种子正/反各跑一场', () => {
     // 用「镜像队」（同阵容同加点，速度全同、引擎本身有红先手偏向）验证统计层已做正反对调
     const A = team(['孙权', '周瑜', '太史慈']);
     const B = team(['孙权', '周瑜', '太史慈']);
@@ -96,9 +103,9 @@ describe('统计胜率（200 场快速模拟）', () => {
     const ba = simulateWinRate(B, A, { runs: 60, baseSeed: 540720 });
     expect(ab.runs).toBe(60);
     expect(ba.runs).toBe(60);
-    // 60 场 = 30 颗种子 × 正/反两场：每场或分胜负（两方各计 1 胜）、或完全平（两边都记平）
-    expect(ab.win + ba.win + (ab.draw + ba.draw) / 2).toBe(60);
-    expect(ab.winRate + ba.winRate + (ab.drawRate + ba.drawRate) / 2).toBeCloseTo(1, 10);
+    // 60 场 = 30 颗种子 × 正/反两场：每场或一方计胜（斩首 / 优势平）、或完全平（两边都不计胜）
+    expect(ab.win + ba.win + (ab.evenDraw + ba.evenDraw) / 2).toBe(60);
+    expect(ab.winRate + ba.winRate + (ab.evenDraw + ba.evenDraw) / ab.runs / 2).toBeCloseTo(1, 10);
   });
 
   it('异步版分片跑批并回报进度（页面用）', async () => {
@@ -134,6 +141,9 @@ describe('统计胜率（200 场快速模拟）', () => {
     });
     // 口径与种子可复现说明都在面板里
     expect(mask.textContent).toContain('打满 8 回合');
+    expect(mask.textContent).toContain('优势平');
+    expect(mask.textContent).toContain('劣势平');
+    expect(mask.textContent).toContain('胜场 = 斩首胜 + 优势平');
     expect(mask.textContent).toContain('基础种子 12345');
     expect(mask.textContent).toContain('12345~12349');
     expect(mask.textContent).toContain('必然互补');

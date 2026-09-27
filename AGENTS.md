@@ -948,3 +948,36 @@ const targetTeam = primaryTarget.side === unit.side ? allies : enemies; // ✓
   `web/smoke.test.ts` 新增/改写 4 处（池子跨队、同将互换、同队重复拦截、镜像对局简略/统计/详情/复用队伍）；
   `tests/battle_sim.test.ts` 新增镜像 id 交换场地归属 1 个。全量 203 files / 2113 passed，golden 未变。
 
+## 会话交接（统计胜率口径调整 · 2026-09-27）
+
+### 用户口径（勿再询问）
+
+- **胜场 = 胜利场数（斩首胜）+ 优势平局；平局场 = 劣势平（+ 完全平）；败场 = 失败场数（斩首负）**。
+- **优势平** = 打满回合时我方剩余兵力占优；**劣势平** = 兵力劣势；**完全平** = 兵力完全相同。
+- 即打满回合不再按「高者胜」直接拆进胜 / 负：**只有大营阵亡才算负**；优势平计入胜场，劣势平 / 完全平计入平局场。
+
+### 实现（`web/winRate.ts` + `web/main.ts`）
+
+- `WinRateStats.troopWin / troopLoss` → `advDraw / disadvDraw`（`evenDraw` 不变）：
+  `win = decapWin + advDraw`、`loss = decapLoss`、`draw = disadvDraw + evenDraw`；`capped = advDraw + disadvDraw + evenDraw`。
+- `countOne`：斩首场按引擎 win / loss 计；打满回合（引擎原生 draw）用 `judgeOutcome` 比较兵力后按上述口径归并。
+- 面板文案：新增「统计口径」行；拆分行由「兵力判定胜 / 负 / 完全平」改为「优势平 / 劣势平 / 完全平」；底栏 tooltip 同步。
+  注意：优势平计入胜场后，**红蓝对调两次的胜率仍互补**（每场非完全平有且只有一方计胜）；劣势平在对方视角就是优势平。
+
+### 测试（`web/winRate.test.ts`）
+
+- 守恒式：`decapWin + advDraw = win`、`decapLoss = loss`、`disadvDraw + evenDraw = draw`、`advDraw + disadvDraw + evenDraw = capped`。
+- 打满回合逐场断言：优势平 → win；劣势平 → draw 且 `loss = 0`；完全平 → draw。
+- 镜像互补改用 `evenDraw`：`ab.win + ba.win + (ab.evenDraw + ba.evenDraw) / 2 = 场次`。
+
+### ⚠️ L4 批量模拟页未改
+
+`web/battleSim.ts` `judgeOutcome` 仍是「打满回合比兵力，高者胜」（`tests/battle_sim.test.ts` 锁定）；本次只改主站战报底栏「统计胜率」面板。
+若要两处统一，另开口径变更（L4 的胜场不变、平 / 负拆分改变）。
+
+### 验证
+
+- `npx vitest run web/winRate.test.ts`（6）/ `web/smoke.test.ts`（43）/ `tests/battle_sim.test.ts`（13）全绿；
+  `npx tsc --noEmit` + `npx tsc -p web/tsconfig.json --noEmit` clean；
+- 全量 `npm test` **211 files / 2225 passed**（引擎零改动、golden 未动）。
+
