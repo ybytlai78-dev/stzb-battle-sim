@@ -246,9 +246,12 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
     case 'status_resisted':
       lines.push(`  ✦ ${ev.unitId} 抵御了${statusName(ev.statusType)}效果（${SKILL_REGISTRY[ev.skillId]?.name ?? ev.skillId}）`);
       break;
-    case 'split_damage':
-      lines.push(`  → 分兵溅射「${ev.targetId}」造成 ${fmt(ev.damage)}${afterSuffix(ev.afterTroops)}（${renderBreakdown(ev.breakdown)}）`);
+    case 'split_damage': {
+      // 标注来源（三军齐出 / 长兵方阵…）：分兵伤害计入该战法统计，战报里也要能看出是谁给的
+      const src = skillLabelOf(ev.skillId);
+      lines.push(`  → 分兵溅射「${ev.targetId}」造成 ${fmt(ev.damage)}${afterSuffix(ev.afterTroops)}${src ? `（${src}）` : ''}（${renderBreakdown(ev.breakdown)}）`);
       break;
+    }
     case 'unit_act_end':
       break;
     case 'round_end': {
@@ -263,6 +266,18 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
 
 function renderBreakdown(b: { troopBase: number; base: number; main: number }): string {
   return `兵力基础${b.troopBase} + 属性基础${b.base} + 主要${b.main}`;
+}
+
+/** 兵种特性来源（不是注册战法）在战报里的可读名：散射 / 重骑冲阵等 */
+const TRAIT_LABELS: Record<string, string> = {
+  trait_sanshe_split: '散射（兵种特性）',
+  trait_zhongqi_counter: '重骑冲阵（兵种特性）',
+};
+
+/** 伤害来源显示名：注册战法 → 战法名；兵种特性 → 中文名；其余回退原始 id（无则 undefined）。 */
+function skillLabelOf(skillId: string | undefined): string | undefined {
+  if (!skillId) return undefined;
+  return SKILL_REGISTRY[skillId]?.name ?? TRAIT_LABELS[skillId] ?? skillId;
 }
 
 /** 动兵力事件统一后缀：结算后剩余兵力（引擎带 afterTroops；缺省不显示）。

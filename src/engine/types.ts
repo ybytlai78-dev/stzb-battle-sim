@@ -2262,7 +2262,10 @@ export type Status =
    * 未触发时持续到战斗结束（remaining 缺省 999）。
    */
   | { type: 'ignite'; remaining: number; rate: number; sourceStrategy: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; stored?: DotStoredDamage }
-  | { type: 'split'; remaining: number; rate: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; /** 次数型分兵（鱼鳞）：有值时按攻击输出次数消耗，不按回合递减 */ charges?: number; /** 受谋略缩放（鱼鳞） */ strategyScaled?: boolean }
+  /** 分兵（三军齐出 / 长兵方阵 / 先声夺人 / 其徐如林…）：普攻命中后溅射相邻目标。
+   *  `sourceSkillId` = 授予本次分兵的战法；`sourceUnitId` = 该战法的施法者（自施 buff 时 = 携带者）
+   *  —— 分兵伤害统计归属**来源战法**（战法级）与**施法者**（武将级），而非打出普攻的友军。 */
+  | { type: 'split'; remaining: number; rate: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; /** 次数型分兵（鱼鳞）：有值时按攻击输出次数消耗，不按回合递减 */ charges?: number; /** 受谋略缩放（鱼鳞） */ strategyScaled?: boolean }
   | { type: 'jump_prep'; remaining: number; rate: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'taunt'; remaining: number; targetId: string; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'counter'; remaining: number; rate: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
@@ -2575,6 +2578,7 @@ export type BattleEvent =
   | { type: 'treasure_evade_triggered'; unitId: string; skillId: string }
   | {
       type: 'split_damage';
+      /** 打出分兵的武将（本次普攻的执行者） */
       sourceId: string;
       targetId: string;
       damage: number;
@@ -2583,6 +2587,10 @@ export type BattleEvent =
       breakdown: DamageBreakdown;
       /** 本次伤害的增减伤归因（神兵天降/大赏三军/减伤/兵种克制），无增减伤时为 undefined */
       modifiers?: DamageModifiers;
+      /** 授予本次分兵的来源战法 id（三军齐出 / 长兵方阵 / 先声夺人 / 其徐如林…）→ 统计计入该战法杀伤 */
+      skillId?: string;
+      /** 该战法施法者（长兵方阵给友军挂分兵时 ≠ sourceId）；缺省 = sourceId */
+      creditToId?: string;
     }
   | {
       type: 'round_end';

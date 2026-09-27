@@ -2544,15 +2544,22 @@ export function troopRatioMatches(target: UnitState, cond: TroopRatioCond): bool
 }
 
 /** 分兵攻击（**只由普通攻击触发**）：普攻命中后立即对目标同队的相邻存活单位造成比例攻击伤害（无视攻击距离）。
- *  调用点只有一个：`actUnit` 的普攻命中分支（追击战法判定之前）——追击/主动战法/DoT 均不触发分兵。 */
+ *  调用点只有一个：`actUnit` 的普攻命中分支（追击战法判定之前）——追击/主动战法/DoT 均不触发分兵。
+ *  伤害归属（用户 2026-09-26 口径）：`skillId` = 授予本次分兵的来源战法（三军齐出 / 长兵方阵 / 先声夺人 / 其徐如林…），
+ *  `creditToId` = 该战法施法者 —— 统计里分兵伤害计入**该战法**的杀伤，而不是凭空丢失，
+ *  也不算进普攻（普攻统计仍只含 attack_hit）。友军被挂分兵（长兵方阵）时施法者 ≠ 打出普攻的武将。 */
 function executeSplitAttack(
   ctx: CombatContext,
   unit: UnitState,
   primaryTarget: UnitState,
-  splitRate: number,
+  split: Extract<Status, { type: 'split' }>,
   allies: UnitState[],
   enemies: UnitState[]
 ): void {
+  const splitRate = split.rate;
+  // 分兵伤害统计归属：来源战法施法者（缺省 = 携带者自身，如三军齐出/先声夺人）
+  const credit = split.sourceUnitId ? castUnit(ctx, split.sourceUnitId) : undefined;
+  const creditToId = credit?.general.id ?? unit.general.id;
   // 溅射范围 = **受击目标（primaryTarget）同队**的相邻存活单位。
   // ⚠️ 必须比较「目标 vs 施法者」的阵营：原来写的是 `primaryTarget.side === 'my'`（拿固定阵营比），
   //    只有在施法者恰好在 'my' 侧时才等价 → 蓝方单位触发分兵时会去打**自己队友**（用户 2026-09-26 实战发现：
@@ -2594,6 +2601,9 @@ function executeSplitAttack(
       damage: capped,
       breakdown,
       modifiers: splitMods,
+      // 来源战法（统计计入该战法杀伤）+ 施法者归属（长兵方阵挂友军时 ≠ sourceId）
+      skillId: split.sourceSkillId,
+      creditToId,
     });
     applyDamage(ctx, adjTarget, capped, unit, 'physical', 'skill', splitMods);
   }
@@ -2955,7 +2965,7 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
       // （战报看起来像「追击触发了分兵」），且追击打死普攻目标时分兵会被整段吞掉。
       const splitStatus = getStatus(unit, 'split');
       if (splitStatus && hit.alive) {
-        executeSplitAttack(ctx, unit, hit, splitStatus.rate, allies, enemies);
+        executeSplitAttack(ctx, unit, hit, splitStatus, allies, enemies);
         // 次数型分兵（鱼鳞/飒沓）按普攻次数消耗；鹤翼等无 charges 的分兵不扣
         if ('charges' in splitStatus && splitStatus.charges != null) consumeSplitCharges(unit);
       }
@@ -4578,6 +4588,8 @@ function pushStatus(
       sourceSkillId,
     };
     if (src.charges != null) push.charges = src.charges;
+    // 施法者归属（分兵伤害统计计入该战法的施法者；长兵方阵给友军挂分兵时 ≠ 携带者）
+    if (casterId) push.sourceUnitId = casterId;
     target.statuses.push(push);
     ctx.events.push({
       type: 'status_inflicted',

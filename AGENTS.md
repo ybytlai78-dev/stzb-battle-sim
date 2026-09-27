@@ -234,6 +234,32 @@ npx tsc --noEmit                    # 类型检查（strict）
 - 测试更新：`tests/main_skills_b3.test.ts` / `b4.test.ts` 的 detail 断言改为百分数格式（「造成的伤害提高 40%」等）；golden 重新生成（detail 文案变化为预期）。
 - 关键文件：`src/engine/types.ts`（curse/ignite 状态与 CreateStatus、status 数组）、`src/engine/action.ts`（`triggerCurseOnPursuit` / `triggerIgniteOnHurt` / 数组随机 / damage_boost strategyScaled）、`src/data/skills.ts`（三战法）；测试 `tests/main_skills_s2.test.ts`（11 个，含单元级 ignite 一次性/curse 不消耗断言）。
 
+### 分兵伤害统计归属（用户 2026-09-26 口径）
+
+- **问题**：分兵溅射（`split_damage`）此前既不计入普攻、也不计入任何战法 —— 战报里整段丢失（三军齐出 / 长兵方阵 / 先声夺人 / 鹤翼 / 鱼鳞 / 横扫 / 飒沓如星 / 散射 等全部受影响）。
+- **口径（勿再询问）**：分兵伤害记在**授予该分兵的来源战法统计**下，不计入普攻；施法者 ≠ 打出普攻的武将时（长兵方阵给友军挂分兵）**归属施法者**。
+- **实现**：`Status.split` 新增 `sourceUnitId`（授予者，`inflictStatus` 带 casterId 时写入）→ `executeSplitAttack` 的 `split_damage` 事件新增可选 `skillId`（来源战法）与 `creditToId`（施法者）；`stats.ts` 三个函数（`computeStats` / `computeDetailedStats` / `computeContributionShares`）把 `split_damage` 计入来源战法杀伤（统一走 `damageOwnerId` = creditToId ?? sourceId）。
+- **Web 同步**：`battleSim.ts` / `damageLab.ts`（造成伤害与四类占比）/ `battleSummary.ts` 统计口径；战报文案（`report.ts` / `battleView.ts`）分兵行标注来源战法名。
+- 测试 `tests/split_stats.test.ts`（7 个：三军齐出自施 / 长兵方阵挂友军（归属施法者）/ 先声夺人 / 恒等式 / 其徐如林相邻跳伤 / 机制层 sourceUnitId+creditToId / 无施法者回退携带者）。golden 快照不受影响（固定测试集不含分兵）。
+- ⚠️ 与「损兵 dmg」类事件同处的隐藏坑：任何按类型分支汇总伤害的地方（`BattleEvent.type === 'damage'`）都要一并处理 `split_damage`，否则统计静默丢失。
+
+### 战法统计：杀伤数字可点击 →「通过该战法造成杀伤的武将」（用户 2026-09-26 口径）
+
+- **触发条件**：某战法的杀伤**不是携带者本人打出来的** → 战法统计格里的杀伤数字变成可点击链接（`.sk-kill-link`）。
+  点一下在数字旁弹出「通过该战法造成杀伤的武将」面板（逐条：头像 + 武将名 + 伤害），再点/点别处关闭。
+  携带者自己打的（三军齐出 / 长兵方阵施法者自己普攻…）保持纯文本 —— 没信息可看。
+- **数据源（引擎 `SkillStat.killers`）**：`computeDetailedStats` 把每笔战法杀伤同时记两个口径 ——
+  ① `damage` = **统计归属**（damage/split_damage 取 `creditToId ?? sourceId`；dot_tick 取 `casterId`，与 `computeStats` 一致）；
+  ② `killers[]` = **实际打人者**（事件的 `sourceId`）。长兵方阵给友军挂分兵时：前者 = 施法者 1 人，后者 = 打人的多个友军。
+  ⚠️ 两个口径**必须分开**，别把 `creditToId` 当打人者 —— 否则名单会只剩施法者一个（曾踩过）。
+- **覆盖范围**（调兵代打 / 挂分兵类全部适用）：长兵方阵、奇兵拒北（魏延借友军）、西陵克晋（陆抗代打）、
+  其徐如林（相邻跳伤由实际打出策略伤害的友军结算）、鹤翼/飒沓如星/鱼鳞等分兵 buff、受击追加攻击（忠克猛烈）…
+- **实现**：`web/battleSummary.ts` `isDelegatedDamage` + `buildKillerPopup` + `bindSkillKillerPopups`（沿战报详情 `.dmg-popup` 定位口径：
+  弹窗挂数字所在行 `.sk-d`、`position:relative` 内联兜底 + offset 左右避让）；样式 `.sk-kill-*`（`web/styles.css`）。
+  明细保存在 DOM 节点上（`__killers`），因为每次 `paintMain()` 重绘换新节点。
+- 测试：`tests/split_stats.test.ts`（+3：长兵方阵多友军明细/其徐如林含 DoT 归属维/三军齐出自打 → 名单只有本人）、
+  `web/skillKillerPopup.test.ts`（4：可点击+弹窗内容/定位父元素/开合/自打不可点）。
+
 ### 录入规则（用户明确强调）
 
 1. **只实现现有引擎机制能做的**；要新增机制的先跳过（不算遗漏，算待机制）。

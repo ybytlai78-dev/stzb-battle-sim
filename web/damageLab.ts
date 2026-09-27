@@ -353,7 +353,13 @@ interface Share {
   extra2: number;
 }
 
-/** 按事件流汇总某武将四类伤害（口径与引擎 stats 一致：damage 归属 creditToId ?? sourceId，DoT 归属施法者） */
+/** 伤害事件的归属武将：creditToId 优先（指挥代打 / 分兵施法者），缺省 sourceId（口径同引擎 stats） */
+function damageOwnerId(ev: Extract<BattleEvent, { type: 'damage' | 'split_damage' }>): string {
+  return ev.creditToId ?? ev.sourceId;
+}
+
+/** 按事件流汇总某武将四类伤害（口径与引擎 stats 一致：damage 归属 creditToId ?? sourceId，
+ *  DoT 归属施法者，分兵归属授予分兵的来源战法施法者） */
 function computeShare(events: BattleEvent[], heroId: string, mainSkillId: string, extraSkillIds: string[]): Share {
   const [e1, e2] = extraSkillIds;
   const s: Share = { attack: 0, main: 0, extra1: 0, extra2: 0 };
@@ -366,7 +372,10 @@ function computeShare(events: BattleEvent[], heroId: string, mainSkillId: string
   for (const ev of events) {
     if (ev.type === 'attack_hit' && ev.sourceId === heroId) {
       s.attack += ev.damage;
-    } else if (ev.type === 'damage' && ev.skillId && (ev.creditToId ?? ev.sourceId) === heroId) {
+    } else if (ev.type === 'damage' && ev.skillId && damageOwnerId(ev) === heroId) {
+      classify(ev.skillId, ev.damage);
+    } else if (ev.type === 'split_damage' && ev.skillId && damageOwnerId(ev) === heroId) {
+      // 分兵溅射计入来源战法（三军齐出 / 长兵方阵…），不计普攻
       classify(ev.skillId, ev.damage);
     } else if (ev.type === 'dot_tick' && ev.skillId && ev.casterId === heroId) {
       classify(ev.skillId, ev.damage);
@@ -375,12 +384,13 @@ function computeShare(events: BattleEvent[], heroId: string, mainSkillId: string
   return s;
 }
 
-/** 某将单场造成的总伤害（普攻 + 战法 + DoT，口径与 computeShare 一致） */
+/** 某将单场造成的总伤害（普攻 + 战法 + DoT + 分兵，口径与 computeShare 一致） */
 function dealtDamage(report: BattleReport, heroId: string): number {
   let total = 0;
   for (const ev of report.events) {
     if (ev.type === 'attack_hit' && ev.sourceId === heroId) total += ev.damage;
-    else if (ev.type === 'damage' && ev.skillId && (ev.creditToId ?? ev.sourceId) === heroId) total += ev.damage;
+    else if (ev.type === 'damage' && ev.skillId && damageOwnerId(ev) === heroId) total += ev.damage;
+    else if (ev.type === 'split_damage' && ev.skillId && damageOwnerId(ev) === heroId) total += ev.damage;
     else if (ev.type === 'dot_tick' && ev.skillId && ev.casterId === heroId) total += ev.damage;
   }
   return total;
