@@ -530,8 +530,9 @@ npx tsc --noEmit                    # 类型检查（strict）
   起点同 `main` `19fb1a7`）；武将 33~69 全部逐个提交在**未命名分支的 detached HEAD** 上（**未 push、未合并**；落地方式待用户定，
   合并前先看 `docs/工作树落地流程.md`，且合并回主仓库后必须重灌主库——见下）。
   提交一律**显式列路径**（`git add src/... tests/... web/data/...`），不要 `git add -A` / `git add web`。
-- **已验证基线**：`npx tsc --noEmit` clean；`npm test` **181 files / 1732 passed**（主仓库 + 主库口径）；golden 字节一致；
-  已实现主战法 **157**、上架池 **90**、《下架武将清单》重生成口径 **待实现 4 / 卡成长率下架 67 / 上架 90**。
+- **已验证基线（2026-09-27 刷新）**：`npx tsc --noEmit` clean；`npx vitest run` **212 files / 2233 passed**；golden 字节一致；
+  已实现主战法 **158**、上架池 **90**、《下架武将清单》重生成口径 **待实现 3 / 卡成长率下架 68 / 上架 90**。
+  （2026-09-20 当时口径：181 files / 1732 passed、已实现 157、待实现 4 / 卡成长率下架 67。）
 - **2026-09-20 修正（田丰误登记下架）**：`jinyan_zhijian` 曾按「两段受谋略」误登记 OFFLINE → 复核官方 desc（200966 现页 +
   `skill_extra.json`）**无「受…属性」段**（+10% / +30% 为固定值）→ 撤销登记、田丰**上架**。**教训：登记 OFFLINE 前必须
   逐条核对该战法自己的官方原文**（勿套用同类战法的措辞）；审计脚本思路 = 「OFFLINE 键 ↔ 官方 desc 是否含 `受…(谋略|防御|攻击|速度|兵力|最高属性)`」，
@@ -650,6 +651,34 @@ npx tsc --noEmit                    # 类型检查（strict）
   `web/smoke.test.ts` 首个用例偶发超时 flake（并发跑全量时更易触发，复跑即绿）；
   生成《下架武将清单》用 `.\node_modules\.bin\tsx scripts/gen_offline_report.mts`
   （`npx tsx` 在本机会解析到 Desktop 仓库的 tsx，勿用）。
+
+
+### 2026-09-27「宝物系统已实装」后首将：曹彰·五兵之烈（h683）
+
+> 用户口径（勿再询问）：**① 「刀」无层数上限**（官方未写上限 → 不加人为封顶，`stack:true` + duration 999；
+> 实测发现上限再补 `maxStacks`）；**② 默认段防御 −36「受攻击属性影响」官方未给系数 → 成长率留空取基值 +
+> 曹彰登记下架**（严格遵从仓库「官方未给数值不编造」口径，待实测反推后移出 OFFLINE）。
+
+- **战法**（`src/data/skills.ts` `wubing_zhilie`，主动 S·距离 5·35%·敌军群体 2 目标，官方 id 200957）：
+  **按佩戴宝物种类五选一**——剑 `remove_buffs`（清有益效果）→ 300% 攻击；刀 自身攻击伤害 +15% 可叠加常驻；
+  长兵 目标攻击距离 −1 持续 2 回合；弓 60% 目标数 +1；扇/其他/未授予 目标防御 −36 持续 2 回合。
+- **本批新增引擎件（最小侵入、缺省路径零回归）**：
+  - **`OutputCondition.casterTreasureKinds`**（`types.ts` + `action.ts` `outputConditionMatches`）——段级**宝物分支条件**：
+    按施法者佩戴宝物的 `TreasureType` 匹配；未佩戴 / 宝物 id 无效 → `'其他'`（新增导出 `casterTreasureKind(caster)`），
+    故「其余宝物或未授予」写 `['扇', '其他']`。后续任何「佩戴 XX 类宝物时」的战法可直接复用。
+  - **`BaseSkill.bonusGroupTargets: { rate, condition? }`**（`executeSkillWithTargets` 内、`skillTargets` 之后）——
+    **选目标阶段的「目标数 +1」**：满足 `condition` 时按 `rate` 经**士气修正**掷一次（发 `skill_trigger`，
+    `baseRate` 记基础值），命中则从「战法有效距离内、未被选中」的存活单位中随机补 1 个；本次发动的**全部输出段
+    共用扩大后的目标池**。⚠️ 因为它在**选目标阶段**结算，**附加段的条件必须不依赖本段伤害目标**（五兵之烈正是如此）。
+  - ⚠️ 坑：`isHeroListed()` 收的是 `{ mainSkillId: string }`（`HeroRecord`），传 `General`（`mainSkillId?: string`）
+    会 tsc 报错 → 测试里用 `HERO_RECORDS[HERO_ID]`。
+- **数据链**：`build_heroes_seed.mjs`（`五兵之烈: 'wubing_zhilie'`）→ `gen_skill_data.mjs` → `sync_hero_mainskill.mjs h683 wubing_zhilie`
+  → `.\node_modules\.bin\tsx scripts/gen_offline_report.mts`（口径：**待实现 3 / 卡成长率下架 68 / 上架 90**，曹彰归入 §三）。
+- **测试** `tests/main_skills_b100.test.ts`（**8 个**）：装配 + 下架登记 / 剑（移除 2 个有益、保减益、无默认段）/ 刀（caused·physical·999）/
+  长兵（−1·2 回合·只打敌人）/ 弓（成功 3 目标 vs 失败 2 目标 + 事件字段）/ 默认分支（扇/其他/未授予三态）/ 分支互斥 / 刀叠层（两次发动 → 伤害增减伤来源 15% → 30%）。
+- **验证**：`npx tsc --noEmit` clean；`npx vitest run` **212 files / 2233 passed**（新测试 8 个全绿）；golden **字节一致**（本批不进固定测试集）。
+- **剩余待实现（3 位）**：h2 乱政（负面池 4 类伤害率官方无数值）、h33 遗志（「恢复极大量兵力」无数值）、
+  SP卢植 h102004 中郎尽瘁（伤害降低 + 援护均无数字）——**均卡官方数值，需用户给口径**。
 
 
 ### 西陵克晋（陆抗 h574）联网查证结论 — 2026-09-18

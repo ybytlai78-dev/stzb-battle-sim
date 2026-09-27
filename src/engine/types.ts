@@ -4,6 +4,8 @@
  * 全部为纯数据，无任何 UI 依赖。
  */
 import type { GeneralTrait, SecondaryTroopType } from './secondaryTroop';
+/** 宝物类型（`src/data/treasures.ts` 的 `TreasureType`）：仅类型引用，无运行时依赖 */
+import type { TreasureType } from '../data/treasures';
 
 export type TroopType = 'cavalry' | 'infantry' | 'archer';
 
@@ -123,6 +125,12 @@ export interface OutputCondition {
   rounds?: number[];
   /** 与 `startRound`（缺省 1）之差的奇偶：0 = 起始回合及每隔一回合，1 = 其后一回合及每隔一回合（桃园结义【追加】前锋/中军交替援护） */
   parity?: 0 | 1;
+  /**
+   * 宝物分支（曹彰·五兵之烈「当授予曹彰不同种类宝物时，将额外获得以下效果」）：
+   * 施法者**当前佩戴宝物**的 `treasureType` 属于本列表才满足；未给该字段 = 不限。
+   * 未佩戴宝物视为 `'其他'`，故「其余宝物或未授予」分支写 `['扇', '其他']`。
+   */
+  casterTreasureKinds?: TreasureType[];
 }
 
 /** 战法单个效果 */
@@ -925,6 +933,14 @@ interface BaseSkill {
    * 站位战斗中不变，故只在准备阶段 / 监听入口判定一次。
    */
   casterPositions?: Position[];
+  /**
+   * 战法**选目标阶段**的额外目标（曹彰·五兵之烈【弓】「有 60.0% 几率该战法目标数 +1」）：
+   * 在 `skillTargets` 选出 `groupCount` 个目标之后，满足 `condition`（缺省恒真）时按 `rate`
+   * 经**士气修正**掷一次（`skill_trigger` 事件与其它发动率判定同口径）——命中则从
+   * 「战法有效距离内、尚未被选中」的存活单位中再随机补 1 个（池空则不加），本次发动的
+   * 全部输出段共用这个扩大后的目标池。
+   */
+  bonusGroupTargets?: { rate: number; condition?: OutputCondition };
   /**
    * 重复施加奖励（诸葛锦囊「若发动时目标已有诸葛锦囊效果，则额外恢复目标一定兵力」）：
    * 战法每次发动时逐目标判定，目标身上已带**本战法**施加的状态则追加结算这段 output；

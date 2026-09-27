@@ -34,6 +34,8 @@ import type { Rng } from './rng';
 import { calcDamage, applyTroopCap, scaledValue, roundRate, sumRates, buffMult, calcHealAmount, moraleRate, applyIgnoreDef, troopCounterReduce } from './formulas';
 import { troopCounterReduceOf as secondaryCounterReduceOf, traitCombatModifiers, traitStatBonus, statModOf, effectiveTroopLine, type TraitCombatContext } from './secondaryTroop';
 import { isTreasureSource, treasureLabel } from './treasure-source';
+import { TREASURES_BY_ID } from '../data/treasures';
+import type { TreasureType } from '../data/treasures';
 import { nearestEnemy, skillTargets, distanceBetween, adjacentUnits, sameSideDistance, attackRangeOf, POSITION_INDEX, unitsInSkillRange } from './target';
 
 /**
@@ -479,9 +481,21 @@ export function outputConditionMatches(
     if (cond.endRound != null && ctx.currentRound > cond.endRound) return false;
     if (cond.rounds && !cond.rounds.includes(ctx.currentRound)) return false;
     if (cond.parity != null && (ctx.currentRound - (cond.startRound ?? 1)) % 2 !== cond.parity) return false;
+    // 宝物分支（五兵之烈「当授予曹彰不同种类宝物时」）：按**施法者当前佩戴宝物**的种类匹配；
+    // 未佩戴宝物 → '其他'（官方「其余宝物或未授予」与「其他」同类）。
+    if (cond.casterTreasureKinds && cond.casterTreasureKinds.length > 0) {
+      if (!cond.casterTreasureKinds.includes(casterTreasureKind(caster))) return false;
+    }
     return true;
   };
   return check(require) && (unless ? !check(unless) : true);
+}
+
+/** 施法者佩戴宝物的种类（`src/data/treasures.ts` 的 type）；未佩戴/宝物 id 无效 → `'其他'` */
+export function casterTreasureKind(caster: UnitState): TreasureType {
+  const loadout = caster.general.treasure;
+  if (!loadout) return '其他';
+  return TREASURES_BY_ID[loadout.treasureId]?.type ?? '其他';
 }
 
 /** 带发动率属性的战法生效概率 = 基础率 × 施法者士气系数（四舍五入取整到百分位），上限 100% */
@@ -9026,6 +9040,31 @@ function executeSkillWithTargets(
                 ? allies
                 : enemies;
     targets = skillTargets(ctx, unit, pool, skill.range, targetMode, skill.groupCount ?? 2);
+    // 战法级「目标数 +1」（五兵之烈【弓】）：选目标阶段掷一次（士气修正 + skill_trigger），
+    // 命中则从「战法有效距离内、未选中」的存活单位中随机补 1 个；本次发动的全部输出段共用扩大后的池。
+    const bonus = skill.bonusGroupTargets;
+    if (bonus && outputConditionMatches(ctx, unit, bonus.condition)) {
+      const morale = effectiveMorale(unit);
+      const rate = moraleTriggerRate(morale, bonus.rate);
+      const success = ctx.rng.chance(rate);
+      ctx.events.push({
+        type: 'skill_trigger',
+        unitId: unit.general.id,
+        skillId: skill.id,
+        skillName: skill.name,
+        success,
+        rate: Math.round(rate * 100),
+        baseRate: Math.round(bonus.rate * 100),
+        morale,
+      });
+      const picked = new Set(targets.map((t) => t.general.id));
+      const candidates = unitsInSkillRange(ctx, unit, pool, skill.range).filter(
+        (u) => !picked.has(u.general.id)
+      );
+      if (success && candidates.length > 0 && targets.length > 0) {
+        targets = [...targets, candidates[ctx.rng.int(candidates.length)]];
+      }
+    }
   }
 
   ctx.events.push({
