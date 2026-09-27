@@ -70,17 +70,26 @@ function triggerOnMoraleRaise(ctx: CombatContext, raised: UnitState): void {
  * 一类指挥·每回合结束结算（佐命晋武「每回合结束时，为我军兵力最低单体恢复 2 次兵力」）：
  * 在回合结束的状态 tick 之前，对**战法锁定目标**执行 `roundEndOutput`（施法者阵亡时按
  * `retainAfterDeath` 判定，同一类指挥口径）。
+ * 复核：另承载避锐治气「前 4 回合每回合结束时，我军群体将额外触发一次以上效果」——
+ * `takenMagnitudeTrigger.roundEndExtra` 时对每个锁定目标**额外触发一次**（不掷几率，**推定**：
+ * 官方只写「额外触发一次」，未写是否仍需 50% 判定与阈值累计）。
  */
 export function triggerRoundEndCommands(ctx: CombatContext): void {
   for (const l of ctx.lockedCommands) {
     const skill = l.skill;
-    if (skill.type !== 'command' || !skill.roundEndOutput) continue;
+    if (skill.type !== 'command') continue;
+    const mag = skill.takenMagnitudeTrigger;
+    const needMag = mag?.roundEndExtra === true && ctx.currentRound <= mag.endRound;
+    if (!skill.roundEndOutput && !needMag) continue;
     const caster = ctx.myTeam.concat(ctx.enemyTeam).find((u) => u.general.id === l.casterId);
     if (!caster) continue;
     if (!caster.alive && !skill.retainAfterDeath) continue;
     const aliveTargets = l.targets.filter((t) => t.alive);
     if (aliveTargets.length === 0) continue;
-    executeSkillOutputs(ctx, caster, skill, aliveTargets, skill.roundEndOutput);
+    if (needMag && mag) {
+      for (const t of aliveTargets) executeSkillOutputs(ctx, t, skill, [t], mag.output);
+    }
+    if (skill.roundEndOutput) executeSkillOutputs(ctx, caster, skill, aliveTargets, skill.roundEndOutput);
   }
 }
 
@@ -730,6 +739,11 @@ export interface CombatContext {
    */
   stacksConsumeCounters?: Map<string, { acc: number; stacks: number }>;
   /**
+   * 【避锐治气】受击增减伤净幅度累计计数器：key `${victimId}:${casterId}:${skillId}` → { acc }。
+   * 每满 `threshold` 扣阈值并判定一次；可选字段，执行时惰性初始化。
+   */
+  takenMagnitudeCounters?: Map<string, { acc: number }>;
+  /**
    * 受击触发整场次数上限（持玺兴兵）：key `${casterId}:${skillId}` → 已触发次数（整场累计，不随回合重置）。
    * 可选字段：单元测试直接构造 ctx 时可省略，执行时惰性初始化。
    */
@@ -1180,6 +1194,7 @@ function triggerStrategyAdjacentBonus(
         ctx.rng
       );
       const capped = applyTroopCap(damage, raw.troops);
+      const mods = collectDamageModifiers(ctx, source, raw, true, hit);
       ctx.events.push({
         type: 'damage',
         sourceId: source.general.id,
@@ -1189,9 +1204,9 @@ function triggerStrategyAdjacentBonus(
         damageType: 'strategy',
         damage: capped,
         breakdown,
-        modifiers: collectDamageModifiers(ctx, source, raw, true, hit),
+        modifiers: mods,
       });
-      applyDamage(ctx, raw, capped, source, 'strategy', 'skill');
+      applyDamage(ctx, raw, capped, source, 'strategy', 'skill', mods);
     }
   }
 }
@@ -1847,6 +1862,7 @@ function executeRoundCommand(ctx: CombatContext, unit: UnitState, skill: Command
           ctx.rng
         );
         const capped = applyTroopCap(damage, t.troops);
+      const mods = collectDamageModifiers(ctx, source, t, true, hit, { ignoresTroopCounter: out.ignoresTroopCounter });
       ctx.events.push({
         type: 'damage',
         sourceId: source.general.id,
@@ -1858,9 +1874,9 @@ function executeRoundCommand(ctx: CombatContext, unit: UnitState, skill: Command
         damageType: 'physical',
         damage: capped,
         breakdown,
-        modifiers: collectDamageModifiers(ctx, source, t, true, hit, { ignoresTroopCounter: out.ignoresTroopCounter }),
+        modifiers: mods,
       });
-      applyDamage(ctx, t, capped, source, 'physical', 'skill');
+      applyDamage(ctx, t, capped, source, 'physical', 'skill', mods);
     }
     if (attacked) consumeAttackCharges(ctx, source, { damageSource: 'skill', damageType: 'physical', skillType: 'command' });
   }
@@ -1933,7 +1949,7 @@ export function triggerPassiveSkills(
       skill.output.length === 0 &&
       !skill.roundStartRepeat &&
       !skill.onHurt &&
-      (skill.troopThresholdBuff || skill.recoverEachRound || skill.onPursuitAttempt)
+      (skill.troopThresholdBuff || skill.recoverEachRound || skill.onPursuitAttempt || skill.onActiveAttempt)
     ) {
       ctx.events.push({
         type: 'skill_cast',
@@ -2302,7 +2318,7 @@ export function dealDotDamage(
       // 挂上时冻结的增减伤归因
       modifiers: dot.stored.modifiers,
     });
-    applyDamage(ctx, unit, capped, src, 'strategy', 'skill');
+    applyDamage(ctx, unit, capped, src, 'strategy', 'skill', dot.stored.modifiers);
     // 敌军每回合首次受到持续性伤害（衔命建功）
     triggerOnDotReceived(ctx, unit);
     // 宝物「燮理」：自身施加的燃烧每回合首次跳伤后，自身恢复一次兵力
@@ -2329,6 +2345,8 @@ export function dealDotDamage(
     ctx.rng
   );
   const capped = applyTroopCap(damage, unit.troops);
+  // 回退路径不携带增减伤提升，只带受击方减伤来源
+  const fbMods = collectDamageModifiers(ctx, unit, unit, false);
   ctx.events.push({
     type: 'dot_tick',
     sourceId: unit.general.id,
@@ -2338,10 +2356,9 @@ export function dealDotDamage(
     casterId: dot.sourceUnitId ?? '',
     damage: capped,
     breakdown,
-    // 回退路径不携带增减伤提升，只带受击方减伤来源
-    modifiers: collectDamageModifiers(ctx, unit, unit, false),
+    modifiers: fbMods,
   });
-  applyDamage(ctx, unit, capped, src, 'strategy', 'skill');
+  applyDamage(ctx, unit, capped, src, 'strategy', 'skill', fbMods);
   // 敌军每回合首次受到持续性伤害（衔命建功）
   triggerOnDotReceived(ctx, unit);
   // 宝物「燮理」：自身施加的燃烧每回合首次跳伤后，自身恢复一次兵力
@@ -2465,6 +2482,8 @@ function tickDots(ctx: CombatContext, unit: UnitState): void {
     if (dot.type === 'sorcery' && dot.onHurt) continue;
     // 普攻触发动摇（威震逍遥）：不在行动时跳伤，改由携带者发动 / 受到普通攻击后触发
     if (dot.type === 'panic' && dot.triggerOnBasic) continue;
+    // 属性下降触发动摇（袭屯夺气）：不在行动时跳伤，改由携带者被施加属性下降效果时触发
+    if (dot.type === 'panic' && dot.triggerOnAttrDown) continue;
     // 兵力阈值条件（巧音唤蝶燃烧「当目标兵力高于初始兵力 50% 时受到一次策略伤害」）：不满足则本回合不跳伤
     if (dot.troopRatio && !troopRatioMatches(unit, dot.troopRatio)) continue;
     dealDotDamage(ctx, unit, dot);
@@ -2526,15 +2545,16 @@ function executeSplitAttack(
       ctx.rng
     );
     const capped = applyTroopCap(damage, adjTarget.troops);
+    const splitMods = collectDamageModifiers(ctx, unit, adjTarget, true, hit);
     ctx.events.push({
       type: 'split_damage',
       sourceId: unit.general.id,
       targetId: adjTarget.general.id,
       damage: capped,
       breakdown,
-      modifiers: collectDamageModifiers(ctx, unit, adjTarget, true, hit),
+      modifiers: splitMods,
     });
-    applyDamage(ctx, adjTarget, capped, unit, 'physical', 'skill');
+    applyDamage(ctx, adjTarget, capped, unit, 'physical', 'skill', splitMods);
   }
 }
 
@@ -3009,7 +3029,10 @@ function inflictStatusCore(
   // 「每种属性单独计算」= 攻击/防御/谋略/速度各是一个状态，这里每个状态各触发一次。
   const ATTR_STATUS_TYPES: StatusType[] = ['attack_buff', 'defense_buff', 'strategy_buff', 'speed_buff'];
   if (ATTR_STATUS_TYPES.includes(type) && 'amount' in create) {
-    triggerOnAttrChange(ctx, target, create.amount >= 0 ? 'up' : 'down');
+    const sign = create.amount >= 0 ? 'up' : 'down';
+    triggerOnAttrChange(ctx, target, sign);
+    // 袭屯夺气：被施加属性**下降**效果时跳一次逃兵（每种属性独立计数）——与举贤决机同点（推定）
+    if (sign === 'down') triggerPanicOnAttrDown(ctx, target, type);
   }
 
   // 洞察：免疫控制类效果（混乱/怯战/暴走/犹豫）+ 挑衅（官方【洞察】原文「免疫混乱、犹豫、怯战、
@@ -4419,6 +4442,12 @@ function pushStatus(
     }
     if (create.type === 'panic' && create.undispellable) {
       (status as Extract<Status, { type: 'panic' }>).undispellable = true;
+    }
+    // 属性下降触发动摇（袭屯夺气）：行动时不跳伤，改为携带者被施加属性下降时跳伤，每种属性各自计数
+    if (create.type === 'panic' && create.triggerOnAttrDown) {
+      const mark = status as Extract<Status, { type: 'panic' }>;
+      mark.triggerOnAttrDown = true;
+      mark.chargesPerAttr = create.chargesPerAttr ?? 4;
     }
     target.statuses.push(status);
     const durText = create.duration >= 999 ? '持续至战斗结束' : `持续 ${create.duration} 回合`;
@@ -6116,6 +6145,60 @@ function consumeStacksForExtraAttack(ctx: CombatContext, unit: UnitState, canNor
 }
 
 /**
+ * 【避锐治气】受击「增减伤净幅度」累计：受击者每受到 1 次伤害（实际扣兵 > 0），把该次伤害的
+ * 增减伤净幅度（百分点，`buffMult(...) − 1` ×100，与伏波扬砂 `stacksConsume` 同口径）累入其
+ * **独立**计数器；每满 `threshold`（50）扣阈值，按 `chance`（走士气）判定一次，命中则该次由
+ * **受击者自身**（行动者）结算 `output`（`target:'self'` 恢复自身 + 敌军随机单体造成伤害 −10%）。
+ * 计数走 `ctx.takenMagnitudeCounters`（键 `${victimId}:${casterId}:${skillId}`，整场累计不重置）。
+ * 口径：以「实际扣兵 > 0」为准（规避 / 免疫整次未扣兵不累计，与伏波扬砂「命中后」同）；
+ * 只统计**本战法锁定的我军目标**。
+ */
+function noteTakenMagnitude(ctx: CombatContext, victim: UnitState, mods: DamageModifiers): void {
+  if (!victim.alive) return;
+  const sumOf = (arr: DamageModifierSource[]): number => arr.reduce((a, s) => a + s.rate, 0);
+  const mult = buffMult(1 + sumOf(mods.caused), 1 + sumOf(mods.taken), sumOf(mods.reduce));
+  const points = (mult - 1) * 100;
+  if (!Number.isFinite(points) || points === 0) return;
+  const team = victim.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+  for (const holder of team) {
+    if (!holder.alive) continue;
+    for (const id of holder.general.commandSkillIds) {
+      const skill = resolveSkill(ctx, id);
+      if (!skill || skill.type !== 'command' || !skill.takenMagnitudeTrigger) continue;
+      const cfg = skill.takenMagnitudeTrigger;
+      if (ctx.currentRound > cfg.endRound) continue;
+      const locked = ctx.lockedCommands.find((l) => l.skill.id === skill.id && l.casterId === holder.general.id);
+      if (!locked || !locked.targets.includes(victim)) continue;
+      ctx.takenMagnitudeCounters ??= new Map();
+      const key = `${victim.general.id}:${holder.general.id}:${skill.id}`;
+      const state = ctx.takenMagnitudeCounters.get(key) ?? { acc: 0 };
+      state.acc += points;
+      ctx.takenMagnitudeCounters.set(key, state);
+      while (state.acc >= cfg.threshold && victim.alive) {
+        state.acc -= cfg.threshold;
+        const morale = effectiveMorale(holder);
+        const rate = moraleTriggerRate(morale, cfg.chance);
+        const success = ctx.rng.chance(rate);
+        ctx.events.push({
+          type: 'skill_trigger',
+          unitId: holder.general.id,
+          skillId: skill.id,
+          skillName: skill.name,
+          targetId: victim.general.id,
+          success,
+          rate: Math.round(rate * 100),
+          baseRate: Math.round(cfg.chance * 100),
+          morale,
+        });
+        if (!success) continue;
+        // 以受击者为行动者结算：恢复自身（target:'self'）、并对敌方随机单体施加降伤
+        executeSkillOutputs(ctx, victim, skill, [victim], cfg.output);
+      }
+    }
+  }
+}
+
+/**
  * 玉玺账本（僭号天子）：取受击者一侧、持有者存活的账本（我方全体受击都走这一份；持有者阵亡则不再转移）。
  */
 function findSealLedger(
@@ -6542,6 +6625,7 @@ function triggerDealPunish(ctx: CombatContext, source: UnitState): void {
       ctx.rng
     );
     const capped = applyTroopCap(damage, source.troops);
+    const dpMods = collectDamageModifiers(ctx, caster, source, true, hit);
     ctx.events.push({
       type: 'damage',
       sourceId: caster.general.id,
@@ -6551,9 +6635,9 @@ function triggerDealPunish(ctx: CombatContext, source: UnitState): void {
       damageType: 'strategy',
       damage: capped,
       breakdown,
-      modifiers: collectDamageModifiers(ctx, caster, source, true, hit),
+      modifiers: dpMods,
     });
-    applyDamage(ctx, source, capped, caster, 'strategy', 'skill');
+    applyDamage(ctx, source, capped, caster, 'strategy', 'skill', dpMods);
   }
 }
 
@@ -6606,6 +6690,23 @@ function triggerPursuitAttemptHooks(ctx: CombatContext, unit: UnitState, hitTarg
     if (!skill || !cfg) continue;
     if (!passesCasterPosition(skill, unit)) continue;
     executeSkillOutputs(ctx, unit, skill, [hitTarget], cfg.output);
+    if (!unit.alive) return;
+  }
+}
+
+/**
+ * 「每次**试图发动主动战法**时」钩子（令无空悬）：进入主动战法发动率判定前（无论判定结果）
+ * 对携带者（被动，缺省目标池 = 自身）执行 `output`。与 `triggerPursuitAttemptHooks` 对称；
+ * 准备完成释放 / 混乱 / 犹豫不会走到本钩子（`triggerActiveSkill` 只在「试图发动」时被调用）。
+ */
+function triggerActiveAttemptHooks(ctx: CombatContext, unit: UnitState): void {
+  if (!unit.alive) return;
+  for (const id of [...unit.general.passiveSkillIds, ...unit.general.commandSkillIds]) {
+    const skill = resolveSkill(ctx, id);
+    const cfg = skill?.onActiveAttempt;
+    if (!skill || !cfg) continue;
+    if (!passesCasterPosition(skill, unit)) continue;
+    executeSkillOutputs(ctx, unit, skill, [unit], cfg.output);
     if (!unit.alive) return;
   }
 }
@@ -7343,6 +7444,7 @@ function executeSkillOutputs(
                 ctx.rng
               );
               const capped = applyTroopCap(damage, t.troops);
+              const rideMods = collectDamageModifiers(ctx, rider, t, true, hit, { ignoresTroopCounter: out.ignoresTroopCounter });
               ctx.events.push({
                 type: 'damage',
                 sourceId: rider.general.id,
@@ -7352,9 +7454,9 @@ function executeSkillOutputs(
                 damageType,
                 damage: capped,
                 breakdown,
-                modifiers: collectDamageModifiers(ctx, rider, t, true, hit, { ignoresTroopCounter: out.ignoresTroopCounter }),
+                modifiers: rideMods,
               });
-              applyDamage(ctx, t, capped, rider, damageType, 'skill');
+              applyDamage(ctx, t, capped, rider, damageType, 'skill', rideMods);
             }
             if (riderAttacked) consumeAttackCharges(ctx, rider, { damageSource: 'skill', damageType: 'physical', skillType: skill.type });
           }
@@ -7447,6 +7549,7 @@ function executeSkillOutputs(
               ctx.rng
             );
             const capped = applyTroopCap(damage, t.troops);
+            const physMods = collectDamageModifiers(ctx, source, t, true, hit, { ignoresTroopCounter: out.ignoresTroopCounter });
             ctx.events.push({
               type: 'damage',
               sourceId: source.general.id,
@@ -7458,9 +7561,9 @@ function executeSkillOutputs(
               damageType: 'physical',
               damage: capped,
               breakdown,
-              modifiers: collectDamageModifiers(ctx, source, t, true, hit, { ignoresTroopCounter: out.ignoresTroopCounter }),
+              modifiers: physMods,
             });
-            applyDamage(ctx, t, capped, source, 'physical', 'skill');
+            applyDamage(ctx, t, capped, source, 'physical', 'skill', physMods);
             // 按造成伤害次数递增发动率（霸王渡江）：本战法每造成 1 次伤害计 1 层（上限 maxStacks）
             if (skill.chanceBoostPerDamage && capped > 0) {
               ctx.skillDamageCounters ??= new Map();
@@ -7608,6 +7711,7 @@ function executeSkillOutputs(
               ctx.rng
             );
             const capped = applyTroopCap(damage, t.troops);
+            const stratMods = collectDamageModifiers(ctx, stratSrc, t, true, hit);
             ctx.events.push({
               type: 'damage',
               sourceId: stratActor.general.id,
@@ -7619,9 +7723,9 @@ function executeSkillOutputs(
               damageType: 'strategy',
               damage: capped,
               breakdown,
-              modifiers: collectDamageModifiers(ctx, stratSrc, t, true, hit),
+              modifiers: stratMods,
             });
-            applyDamage(ctx, t, capped, stratActor, 'strategy', 'skill');
+            applyDamage(ctx, t, capped, stratActor, 'strategy', 'skill', stratMods);
             // 其徐如林：本侧施加的策略伤害生效后，对目标同侧相邻敌军额外造成一次策略伤害（原伤害率 × 比例）
             if (capped > 0) triggerStrategyAdjacentBonus(ctx, caster, t, rate);
           }
@@ -8064,6 +8168,7 @@ function executeSkillOutputs(
             ctx.rng
           );
           const capped = applyTroopCap(damage, t.troops);
+          const posMods = collectDamageModifiers(ctx, source, t, true, hit, { ignoresTroopCounter: out.ignoresTroopCounter });
           ctx.events.push({
             type: 'damage',
             sourceId: source.general.id,
@@ -8074,9 +8179,9 @@ function executeSkillOutputs(
             damageType: 'physical',
             damage: capped,
             breakdown,
-            modifiers: collectDamageModifiers(ctx, source, t, true, hit, { ignoresTroopCounter: out.ignoresTroopCounter }),
+            modifiers: posMods,
           });
-          applyDamage(ctx, t, capped, source, 'physical', 'skill');
+          applyDamage(ctx, t, capped, source, 'physical', 'skill', posMods);
         }
         rememberDamageTargets(selectedIds);
         if (attacked) consumeAttackCharges(ctx, source, { damageSource: 'skill', damageType: 'physical', skillType: skill.type });
@@ -8097,6 +8202,9 @@ export function triggerActiveSkill(
 ): void {
   // 七步释嫌等：进入主动发动率判定即「试图发动」
   triggerAllyActCommands(ctx, unit);
+  if (!unit.alive) return;
+  // 令无空悬：每次试图发动主动战法时（进入判定即算，无论发动率结果）
+  triggerActiveAttemptHooks(ctx, unit);
   if (!unit.alive) return;
   // 发动率递减（威震河朔）：每次成功发动后基础率 −decay，可叠、最低 0（在 trigger_boost 与士气之前）
   const decayPerCast = skill.triggerRateDecayPerCast ?? 0;
@@ -8900,6 +9008,7 @@ function dealAttack(ctx: CombatContext, unit: UnitState, target: UnitState, dist
   // 伏波扬砂：普攻命中后把该次伤害的**增减伤净幅度**（百分点，含兵种克制）累入【扬砂】计数器
   accumulateStacksConsume(ctx, unit, (mult - 1) * 100);
 
+  const basicMods = collectDamageModifiers(ctx, unit, hit, true, hitCtx);
   ctx.events.push({
     type: 'attack_hit',
     sourceId: unit.general.id,
@@ -8907,9 +9016,9 @@ function dealAttack(ctx: CombatContext, unit: UnitState, target: UnitState, dist
     distance,
     damage: capped,
     breakdown,
-    modifiers: collectDamageModifiers(ctx, unit, hit, true, hitCtx),
+    modifiers: basicMods,
   });
-  applyDamage(ctx, hit, capped, unit, 'physical', 'basic');
+  applyDamage(ctx, hit, capped, unit, 'physical', 'basic', basicMods);
   // 普攻命中后钩子（疾风迅雷）：未被规避且命中目标存活时判定
   triggerBasicHitHooks(ctx, unit, hit);
   consumeAttackCharges(ctx, unit, { damageSource: 'basic', damageType: 'physical' });
@@ -9274,6 +9383,27 @@ function triggerBasicPanic(ctx: CombatContext, unit: UnitState): void {
 }
 
 /**
+ * 属性下降触发动摇（袭屯夺气「在被成功施加属性下降效果时损失一定兵力（伤害率 87%），最多生效 4 次，
+ * **每种属性单独计算**」）：携带者被施加攻击/防御/谋略/速度**下降**状态时（`inflictStatusCore`
+ * 属性分支在「成功施加之前」调用，与举贤决机 `triggerOnAttrChange` 同点），逐条 `triggerOnAttrDown`
+ * 动摇各跳 1 次逃兵；每种属性独立计数（`chargesPerAttr`，缺省 4），该属性用尽后不再触发
+ * （动摇本体仍保留到 `remaining` 到期）。跳伤沿用「挂上时冻结」的 stored 伤害（同 DoT 口径）。
+ */
+function triggerPanicOnAttrDown(ctx: CombatContext, unit: UnitState, attrType: StatusType): void {
+  const marks = unit.statuses.filter(
+    (s): s is Extract<Status, { type: 'panic' }> => s.type === 'panic' && s.triggerOnAttrDown === true
+  );
+  for (const mark of marks) {
+    if (!unit.alive) break;
+    const per = mark.chargesPerAttr ?? 4;
+    const counts = (mark.attrDownCounts ??= {});
+    if ((counts[attrType] ?? 0) >= per) continue;
+    counts[attrType] = (counts[attrType] ?? 0) + 1;
+    dealDotDamage(ctx, unit, mark);
+  }
+}
+
+/**
  * 「每受到 N 次伤害」触发（蛮王御众）：受伤者携带 `hurtEvery` 的被动时累计受击次数，
  * 每满 `hits` 次对携带者（施法者）结算一次该配置的 output。
  * 调用点：`applyDamage` 扣兵后、受击 hook（triggerOnHurt）之后，外层包 `ctx.resolvingHurtHooks`
@@ -9588,6 +9718,7 @@ function settleCounterOnHurt(ctx: CombatContext, holder: UnitState, attacker: Un
       ctx.rng
     );
     const capped = applyTroopCap(damage, attacker.troops);
+    const retMods = collectDamageModifiers(ctx, holder, attacker, true, hit);
     ctx.events.push({
       type: 'damage',
       sourceId: holder.general.id,
@@ -9598,9 +9729,9 @@ function settleCounterOnHurt(ctx: CombatContext, holder: UnitState, attacker: Un
       damageType: 'physical',
       damage: capped,
       breakdown,
-      modifiers: collectDamageModifiers(ctx, holder, attacker, true, hit),
+      modifiers: retMods,
     });
-    applyDamage(ctx, attacker, capped, holder, 'physical', 'skill');
+    applyDamage(ctx, attacker, capped, holder, 'physical', 'skill', retMods);
   }
 }
 
@@ -9657,7 +9788,9 @@ export function applyDamage(
   damage: number,
   source?: UnitState,
   damageType?: DamageType,
-  damageSource?: 'basic' | 'skill'
+  damageSource?: 'basic' | 'skill',
+  /** 本次伤害的增减伤归因（避锐治气累计净幅度用；缺省不累计——如分摊/结转等无归因路径） */
+  modifiers?: DamageModifiers
 ): void {  // 已阵亡单位不再吃伤害、不再走急救（阻止伤兵池膨胀后被救回）
   if (!target.alive) return;
   // 七擒七纵：我军前 N 次受到伤害实例的规避判定（共享计数；判定成败都消耗 1 次，第 N 次后惩罚）
@@ -9813,6 +9946,8 @@ export function applyDamage(
     if (source) triggerHealOnDamageCommands(ctx, source, target, actual, damageType);
     consumeTakenCharges(target, hit);
     decayFifthsOnHit(ctx, target, hit);
+    // 避锐治气：受击「增减伤净幅度」累计（实际扣兵 > 0 才计；每满 50% 判定一次）
+    if (modifiers) noteTakenMagnitude(ctx, target, modifiers);
     // 受击叠层（凤仪亭）：实际扣兵后自身增伤 +1 层（上限 maxStacks）
     hurtStackBoostStatuses(ctx, target);
     // 奉令护蜀：受到实际伤害后清空待发层数（本次减伤已被 sumReduce 计入）

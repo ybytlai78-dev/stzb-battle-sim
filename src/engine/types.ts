@@ -797,6 +797,14 @@ export type CreateStatus =
       clearBuffsOnTick?: boolean;
       /** 不可被移除（威震逍遥「以上效果无法被移除」） */
       undispellable?: boolean;
+      /**
+       * 被成功施加「属性下降」效果时跳伤（袭屯夺气「在被成功施加属性下降效果时损失一定兵力…
+       * 最多生效 4 次，每种属性单独计算」）：行动时**不跳**，改为携带者被施加攻击/防御/谋略/速度
+       * 下降状态时各跳 1 次逃兵；每种属性各自计数，上限 = `chargesPerAttr`。
+       */
+      triggerOnAttrDown?: boolean;
+      /** 属性下降触发的**每种属性**上限次数（袭屯夺气 4；缺省 4） */
+      chargesPerAttr?: number;
     }
   /** 妖术诅咒（密谋定蜀）：携带者试图发动追击战法时触发一次妖术伤害（rate% 受谋略），持续 2 回合 */
   | { type: 'curse'; duration: number; rate: number; growthRate: number; sourceStrategy?: number }
@@ -935,6 +943,12 @@ interface BaseSkill {
    * 对携带者执行 `output`；段内缺省目标池 = 本次追击的攻击目标。
    */
   onPursuitAttempt?: { output: SkillOutput[] };
+  /**
+   * 「**每次试图发动主动战法时**」钩子（令无空悬「自身每次试图发动主动战法时，使主动战法造成的下一次伤害
+   * 提升 30%，此效果最多叠加 4 次」）：进入主动战法发动率判定前（无论判定结果）对携带者执行 `output`；
+   * 与 `onPursuitAttempt` 对称，口径同 `roundTrigger:'before_active'`（准备完成释放 / 混乱 / 犹豫不触发）。
+   */
+  onActiveAttempt?: { output: SkillOutput[] };
   /**
    * 「每回合自身**首次造成伤害**后」钩子（以直报怨「每回合自身首次造成伤害后，使目标单体造成的所有伤害降低」）：
    * 按 `${回合}:${战法}:${施法者}` 整场去重（每回合一次），命中则对**本次伤害目标**执行 output。
@@ -1279,6 +1293,29 @@ export interface CommandSkill extends BaseSkill {
     maxStacks: number;
     /** 每次额外普通攻击消耗的层数（4） */
     consumePerAttack: number;
+  };
+  /**
+   * 受击「增减伤净幅度」累计触发（避锐治气「战斗开始后前 4 回合，我军群体受到伤害时，受到的伤害共计
+   * 提升幅度每达到 50% 时，有 50% 几率触发：自身恢复兵力 + 使敌军随机单体造成的所有伤害降低 10%，
+   * 最多叠加 9 次；前 4 回合每回合结束时，我军群体将额外触发一次以上效果」）：
+   * 本战法**锁定的我军目标**每受到 1 次伤害（实际扣兵 > 0），把该次伤害的增减伤净幅度
+   * （百分点，与 `stacksConsume` 同口径 `buffMult(...) − 1`）累入其**独立**计数器；
+   * 每满 `threshold` 点扣阈值并按 `chance`（走士气）判定一次，命中即对**该受击者**结算 `output`。
+   * `roundEndExtra` = 前 `endRound` 回合内每回合结束时，对每个锁定目标**额外触发一次**（不掷几率，官方
+   * 「额外触发一次以上效果」无数值口径 → 推定直接触发）。
+   * 计数走 `ctx.takenMagnitudeCounters`（键 `${victimId}:${casterId}:${skillId}`，整场累计不重置）。
+   */
+  takenMagnitudeTrigger?: {
+    /** 每满多少个百分点触发一次判定（50） */
+    threshold: number;
+    /** 触发几率（0.5，走士气修正） */
+    chance: number;
+    /** 前 N 回合内有效（4） */
+    endRound: number;
+    /** 前 endRound 回合内，每回合结束时对每个锁定目标额外触发一次（不掷几率） */
+    roundEndExtra?: boolean;
+    /** 触发效果的输出段（以**受击者**为行动者结算：`target:'self'` 恢复自身） */
+    output: SkillOutput[];
   };
   /**
    * 玉玺·伤害转移（僭号天子）：我军全体受到伤害的 `rate`%（受施法者**生效防御**缩放）由玉玺承担，
@@ -2155,7 +2192,7 @@ export type Status =
    */
   | { type: 'sorcery'; remaining: number; rate: number; sourceStrategy: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; stored?: DotStoredDamage; troopRatio?: TroopRatioCond; onHurt?: boolean; charges?: number }
   | { type: 'burning'; remaining: number; rate: number; sourceStrategy: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; stored?: DotStoredDamage; troopRatio?: TroopRatioCond }
-  | { type: 'panic'; remaining: number; rate: number; sourceStrategy: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; stored?: DotStoredDamage; troopRatio?: TroopRatioCond; /** 普攻触发动摇（威震逍遥） */ triggerOnBasic?: boolean; /** 剩余生效次数（triggerOnBasic 口径） */ charges?: number; /** 跳伤无视规避（张辽·威震逍遥【追加】） */ ignoresEvasionOnTick?: boolean; /** 跳伤时移除目标有益效果（关羽·汜水关【追加】） */ clearBuffsOnTick?: boolean; /** 不可被移除（威震逍遥） */ undispellable?: boolean }
+  | { type: 'panic'; remaining: number; rate: number; sourceStrategy: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; stored?: DotStoredDamage; troopRatio?: TroopRatioCond; /** 普攻触发动摇（威震逍遥） */ triggerOnBasic?: boolean; /** 剩余生效次数（triggerOnBasic 口径） */ charges?: number; /** 跳伤无视规避（张辽·威震逍遥【追加】） */ ignoresEvasionOnTick?: boolean; /** 跳伤时移除目标有益效果（关羽·汜水关【追加】） */ clearBuffsOnTick?: boolean; /** 不可被移除（威震逍遥） */ undispellable?: boolean; /** 属性下降触发动摇（袭屯夺气） */ triggerOnAttrDown?: boolean; /** 属性下降触发时每种属性各自的上限次数（袭屯夺气 4） */ chargesPerAttr?: number; /** 属性下降触发已用次数（按属性类型分别计数，袭屯夺气「每种属性单独计算」） */ attrDownCounts?: Partial<Record<StatusType, number>> }
   /**
    * 妖术诅咒（密谋定蜀）：携带者「试图发动追击战法」时（进入追击判定，无论发动率结果），
    * 立即受到一次妖术诅咒伤害（rate% 受谋略，挂上时冻结 stored 滞后触发，同 DoT），

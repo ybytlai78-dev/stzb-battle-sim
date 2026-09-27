@@ -10336,4 +10336,210 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       ],
     },
   },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 拆解通用 · 后出 / 漏录批次（2026-09-27）：`dateyuan/通用战法待添加名单.md` §二 剩余 4 个 A/S
+  // 官方数据来源 scripts/skill_extra.json（网易技能库）：袭屯夺气 200271 / 令无空悬 200280 /
+  // 除恶务尽 200276 / 避锐治气 200291。
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * 袭屯夺气（A 主动·距离 4·发动率 35%·目标「敌军群体」）：
+   * 对敌军群体发动一次策略攻击（伤害率 160.0%，受谋略属性影响），并使其陷入恐慌状态，
+   * 在被成功施加属性下降效果时损失一定兵力（伤害率 87.0%，受谋略属性影响），最多生效 4 次，每种属性单独计算。
+   * 官方 https://stzb.163.com/m/skilllist/200271.html（id 200271；1 级 80% / 43.5%）。
+   * 口径：
+   *   ① 策略攻击 160%（受谋略）→ `strategy_damage` + `strategyScaled`，官方未给系数 → `growthRate` 留空（按基值）；
+   *   ②「恐慌」= 仓库既有口径映射 `panic` DoT，但触发条件为「被成功施加属性下降效果」→ 引擎新增
+   *      `panic.triggerOnAttrDown`（行动时**不跳伤**），每次被施加属性下降时跳 1 次（沿用挂上时冻结的 stored 伤害）；
+   *   ③「最多生效 4 次，每种属性单独计算」→ `chargesPerAttr: 4`，状态内 `attrDownCounts` 按
+   *      攻击/防御/谋略/速度四类**各自**计数（任一属性到 4 次后该属性不再触发，其余属性照常）；
+   *   ④ 官方未写持续回合 → `duration: 999`（持续到「4 次 × 4 属性」用尽或战斗结束，**推定**）；
+   *   ⑤ 触发时点 = 属性状态「成功施加判定之前」（引擎唯一属性升降钩子点，与举贤决机 `triggerOnAttrChange` 同点）
+   *      ——官方「被成功施加」字面应在冲突判定之后，本轮不做该细分，**推定**。
+   * 成长率：策略 160% 与恐慌 87% 官方均只写「受谋略属性影响」未给系数 → DoT 必填字段给 0（按基值）
+   *   → 登记 `listing.OFFLINE_LEARNABLE_SKILLS`（下架，待 `derive_growth_rate.mjs` 反解）。
+   */
+  xitun_duoqi: {
+    id: 'xitun_duoqi',
+    name: '袭屯夺气',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.35,
+    targetMode: 'group',
+    targetSide: 'enemy',
+    tags: ['damage', 'panic'],
+    output: [
+      { kind: 'strategy_damage', rate: 160, strategyScaled: true },
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'panic',
+          duration: 999,
+          rate: 87,
+          growthRate: 0,
+          triggerOnAttrDown: true,
+          chargesPerAttr: 4,
+        },
+      },
+    ],
+  },
+
+  /**
+   * 令无空悬（A 被动·距离 1·目标「自己」）：
+   * 战斗中，自身每次试图发动主动战法时，使主动战法造成的下一次伤害提升 30.0%，此效果最多叠加 4 次；
+   * 第 1、3、5、7 回合自身行动时，本回合内造成攻击或策略攻击伤害的主动战法发动率提升 10.0%。
+   * 官方 https://stzb.163.com/m/skilllist/200280.html（id 200280；1 级 15% / 5%）。
+   * 口径：
+   *   ① 引擎新增 `BaseSkill.onActiveAttempt`（进入主动发动率判定即算「试图发动」，无论判定结果；
+   *      与 `onPursuitAttempt` / `roundTrigger:'before_active'` 同口径：准备完成释放 / 混乱 / 犹豫不触发）；
+   *   ②「下一次伤害提升 30%，最多叠加 4 次」= `damage_boost`（caused + `skillTypes:['active']`）+
+   *      `stacks:1 / maxStacks:4 / charges:1 / chargesStack:true`——每次试图发动 +1 层并累加 rate，
+   *      下一次主动战法伤害打出即**整条消耗**（与势无虚动 2026-09-19 用户确认的消耗制同款口径，**推定同源**）；
+   *   ③ 第 1/3/5/7 回合 = `roundStartRepeat.oddRounds`（行动阶段自行判定，与鱼鳞 / 鹤翼同款）；
+   *      「本回合内造成攻击或策略攻击伤害的主动战法发动率提升 10%」= `trigger_boost`
+   *      (`rate:0.1, duration:1, skillTypes:['active'], damageSkillsOnly:true`)——
+   *      `damageSkillsOnly` 即「可造成攻击伤害或策略伤害的战法」。
+   * 全文无「受 XX 属性影响」→ 无成长率留空问题、不登记下架（**上架**）。
+   */
+  lingwu_kongxuan: {
+    id: 'lingwu_kongxuan',
+    name: '令无空悬',
+    type: 'passive',
+    timing: 'battle_start', // 登记走 battle_start；回合窗口段在 roundStartRepeat（行动阶段）
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['damage_boost', 'trigger_boost'],
+    output: [],
+    onActiveAttempt: {
+      output: [
+        {
+          kind: 'inflict_status',
+          target: 'self',
+          status: {
+            type: 'damage_boost',
+            rate: 0.3,
+            duration: 999,
+            direction: 'caused',
+            skillTypes: ['active'],
+            stacks: 1,
+            maxStacks: 4,
+            charges: 1,
+            chargesStack: true,
+          },
+        },
+      ],
+    },
+    roundStartRepeat: {
+      oddRounds: true,
+      output: [
+        {
+          kind: 'inflict_status',
+          target: 'self',
+          status: {
+            type: 'trigger_boost',
+            rate: 0.1,
+            duration: 1,
+            skillTypes: ['active'],
+            damageSkillsOnly: true,
+          },
+        },
+      ],
+    },
+  },
+
+  /**
+   * 除恶务尽（S 指挥·一类·距离 5·目标「我军全体」）：
+   * 前三回合，令我军全体处于怯战状态下的武将受到的所有伤害降低 30.0%；
+   * 战斗开始后第四回合起，使我军全体每回合有 70.0% 几率可以进行两次普通攻击，持续至战斗结束。
+   * 官方 https://stzb.163.com/m/skilllist/200276.html（id 200276；1 级 15% / 35%）。
+   * 口径：
+   *   ① 一类指挥（准备阶段释放一次）+ `retainAfterDeath`（施法者阵亡后效果仍生效，先驱 / 战必同口径）；
+   *   ②「处于怯战状态下…受到的所有伤害降低」= `damage_reduce.requireSelfStatus: 'cowardice'`
+   *      （人公将军 2026-09-18 新增的条件减伤，按携带者**当前**状态实时判定），「前三回合」= duration 3；
+   *   ③「第四回合起每回合 70% 几率可以两次普攻」= `roundRepeat { startRound:4, endRound:8, rate:0.7 }`
+   *      + `combo duration 1`（其疾如风同款）；`endRound: 8` = 本仓库战斗上限回合（措手不及先例），
+   *      即「持续至战斗结束」（**推定**：官方只写「持续至战斗结束」）。
+   * 全文无「受 XX 属性影响」→ 无成长率留空问题、不登记下架（**上架**）。
+   */
+  chue_wujin: {
+    id: 'chue_wujin',
+    name: '除恶务尽',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    retainAfterDeath: true,
+    tags: ['damage_reduce', 'combo'],
+    initialOutput: [
+      {
+        kind: 'inflict_status',
+        status: { type: 'damage_reduce', rate: 0.3, duration: 3, requireSelfStatus: 'cowardice' },
+      },
+    ],
+    roundRepeat: { startRound: 4, endRound: 8, rate: 0.7 },
+    output: [{ kind: 'inflict_status', status: { type: 'combo', duration: 1 } }],
+  },
+
+  /**
+   * 避锐治气（S 指挥·一类·距离 5·目标「我军群体（有效距离内 2 个目标）」）：
+   * 战斗开始后前 4 回合，我军群体受到伤害时，受到的伤害共计提升幅度每达到 50% 时，有 50.0% 几率触发以下效果：
+   * 自身恢复一定兵力（恢复率 70.0%），并使敌军随机单体造成的所有伤害降低 10.0%，持续到战斗结束，
+   * 伤害降低效果最多叠加 9 次；前 4 回合每回合结束时，我军群体将额外触发一次以上效果。
+   * 官方 https://stzb.163.com/m/skilllist/200291.html（id 200291；1 级 35% / 5%）。
+   * 口径：
+   *   ① 引擎新增 `CommandSkill.takenMagnitudeTrigger`：本战法**锁定的我军目标**每受到 1 次伤害
+   *      （实际扣兵 > 0），把该次伤害的**增减伤净幅度**（百分点，`buffMult(...) − 1`，与伏波扬砂
+   *      `stacksConsume` 同口径——用户 2026-09-19 已确认「伤害共计提升幅度」= 总增伤与总减伤净合计）
+   *      累入其**独立**计数器；每满 `threshold`（50）扣阈值并按 `chance`（走士气）判定，命中即触发；
+   *   ② 触发效果以**受击者自身**为行动者结算：`heal`（恢复率 70%，官方未写受属性 → 不缩放）
+   *      `target:'self'` 恢复自身 + 敌军随机单体 `damage_boost caused −10%`（`stack` 上限 9，duration 999
+   *      = 持续到战斗结束）；
+   *   ③「前 4 回合每回合结束时额外触发一次」= `roundEndExtra`（`triggerRoundEndCommands` 内对每个锁定目标
+   *      直接触发一次，**不掷几率**）——官方只写「额外触发一次」，未写是否仍需 50% 判定/阈值累计，**推定**；
+   *   ④ 累计按「每名锁定目标各自一份」计数（官方「我军群体受到伤害时…自身恢复」），**推定**。
+   * 全文无「受 XX 属性影响」→ 无成长率留空问题、不登记下架（**上架**）。
+   */
+  birui_zhiqi: {
+    id: 'birui_zhiqi',
+    name: '避锐治气',
+    type: 'command',
+    phase: 'prep',
+    range: 5,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'ally',
+    retainAfterDeath: true,
+    tags: ['heal', 'damage_boost'],
+    output: [],
+    takenMagnitudeTrigger: {
+      threshold: 50,
+      chance: 0.5,
+      endRound: 4,
+      roundEndExtra: true,
+      output: [
+        // 自身恢复一定兵力（恢复率 70%，官方未写受属性影响 → 不缩放）
+        { kind: 'heal', rate: 70, strategyScaled: false, growthRate: 0, target: 'self' },
+        // 敌军随机单体造成的所有伤害 −10%，持续到战斗结束，最多叠加 9 次
+        {
+          kind: 'inflict_status',
+          targetSide: 'enemy',
+          targetMode: 'random_single',
+          status: {
+            type: 'damage_boost',
+            rate: -0.1,
+            duration: 999,
+            direction: 'caused',
+            stack: true,
+            maxStacks: 9,
+          },
+        },
+      ],
+    },
+  },
 };

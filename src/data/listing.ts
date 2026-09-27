@@ -155,6 +155,8 @@ export const OFFLINE_LEARNABLE_SKILLS: Record<string, string> = {
   danqijiuzhu: '造成伤害降低 25% 受防御成长未确认（按基值不缩放）',
   huoshaolianying: '火攻 50% / 受伤提升 5% / 燃烧 120% 受谋略成长未确认（按基值不缩放）',
   weizhen_xiaoyao: '受伤提升 24% 受速度成长未确认（动摇 125% 描述未写受属性，均按基值不缩放）',
+  // ─── 2026-09-27 拆解通用「后出 / 漏录」批次（`dateyuan/通用战法待添加名单.md` §二）───
+  xitun_duoqi: '策略攻击 160% / 恐慌 87% 受谋略成长未确认（按基值不缩放）',
 };
 
 /**
