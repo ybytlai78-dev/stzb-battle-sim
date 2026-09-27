@@ -10715,4 +10715,168 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
+
+  // ─── 典籍战法批次 2（2026-09-27）：文启 200820 / 分险 200787 / 兵贵神速 200812 / 武锋 200823 / 掠敌之利 200786 ───
+
+  /**
+   * 文启（B 指挥·一类·目标「自己」·官方面板距离 1）：
+   * 战斗中能够优先行动，并使自身受到攻击伤害时有 50.0% 的几率对有效距离 3 以内的敌军单体
+   * 发动一次策略攻击（伤害率 60.0%，受谋略影响）。
+   * 官方 https://stzb.163.com/m/skilllist/200820.html（id 200820；1 级 30%）。
+   * 口径：
+   *   ①「优先行动」= `CommandSkill.priorityRounds: 999`（全程先手，甘宁先例）；一类指挥 + `retainAfterDeath`；
+   *   ②「受到**攻击伤害**时 50%」= `onHurt`（`victim:'self'` + `damageKind:'physical'`，不限来源——
+   *      普攻与物理战法都算「攻击伤害」）+ `applyTo:'skill_targets'`；
+   *   ③ **推定**：`applyTo:'skill_targets'` 取的是**本战法**的 `range`/`targetMode`，而官方面板距离写 1
+   *      （只因为战法目标是自己）——故引擎侧 `range` 取 **3**（对应「有效距离 3 以内的敌军单体」），
+   *      `targetMode:'random_single'`（敌军单体 = 距离内均匀随机）。
+   * 成长率：策略攻击 60% 官方只写「受谋略影响」未给系数 → `strategyScaled` + `growthRate` 留空（按基值）
+   *   → 登记 `OFFLINE_LEARNABLE_SKILLS`（下架）。
+   */
+  wenqi: {
+    id: 'wenqi',
+    name: '文启',
+    type: 'command',
+    phase: 'prep',
+    range: 3,
+    triggerRate: 1,
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    priorityRounds: 999,
+    retainAfterDeath: true,
+    tags: ['damage'],
+    output: [],
+    onHurt: {
+      victim: 'self',
+      damageKind: 'physical',
+      rate: 0.5,
+      applyTo: 'skill_targets',
+      output: [{ kind: 'strategy_damage', rate: 60, strategyScaled: true }],
+    },
+  },
+
+  /**
+   * 分险（B 被动·距离 1·目标「自己」）：
+   * 自身攻击距离 +1，受到所有伤害时都有 50.0% 的几率使本次伤害降低 32.0%。
+   * 官方 https://stzb.163.com/m/skilllist/200787.html（id 200787；1 级 16%）。
+   * 口径：① 攻击距离 +1 = `range_buff{ amount:1 }`（帝临回光同款，作用于普攻可达距离）；
+   *   ②「受到所有伤害时 50% 本次伤害 −32%」= `onHurt{ timing:'before_damage', thisHitReduce:0.32 }`
+   *   （回马 / 健卒不殆同款：按次判定、只作用于本次伤害，不按回合递减）。
+   * 全文无「受 XX 属性影响」→ 上架。
+   */
+  fenxian: {
+    id: 'fenxian',
+    name: '分险',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    tags: ['range_buff', 'damage_reduce'],
+    prepOutput: true, // 攻击距离 +1 是准备阶段段（另有 onHurt 受击减伤钩子）
+    output: [
+      { kind: 'inflict_status', target: 'self', status: { type: 'range_buff', amount: 1, duration: 999 } },
+    ],
+    onHurt: {
+      victim: 'self',
+      rate: 0.5,
+      timing: 'before_damage',
+      thisHitReduce: 0.32,
+      applyTo: 'victim',
+    },
+  },
+
+  /**
+   * 兵贵神速（C 指挥·一类·距离 2·目标「我军群体（有效距离内 3 个目标）」）：
+   * 战斗中，我军全体骑兵受到攻击伤害时防御属性提高 10.0（受速度属性影响），可叠加 8 次。
+   * 官方 https://stzb.163.com/m/skilllist/200812.html（id 200812；1 级 5）。
+   * 口径：
+   *   ①「受到攻击伤害时」= `onHurt{ victim:'locked', damageKind:'physical' }`（一类指挥锁定我军群体）；
+   *   ②「骑兵」= 输出段 `troopTypes:['cavalry']`（方圆先例，按**生效兵系**判定）；
+   *   ③「可叠加 8 次」= `defense_buff{ stack:true, maxStacks:8 }`（显式叠层：同源重复施加数值累加，封顶 8 层）；
+   *   ④ 受速度缩放：`speedScaled:true`，官方未给系数 → `growthRate` 留空（按基值不缩放）
+   *      → 登记 `OFFLINE_LEARNABLE_SKILLS`（下架）。
+   */
+  bingui_shensu: {
+    id: 'bingui_shensu',
+    name: '兵贵神速',
+    type: 'command',
+    phase: 'prep',
+    range: 2,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 3,
+    targetSide: 'ally',
+    retainAfterDeath: true,
+    tags: ['defense_buff'],
+    output: [],
+    onHurt: {
+      victim: 'locked',
+      damageKind: 'physical',
+      rate: 1,
+      applyTo: 'victim',
+      output: [
+        {
+          kind: 'inflict_status',
+          // 目标缺省 = 本次受击者（onHurt applyTo:'victim' 的池），不写 target:'self'（那是施法者）
+          troopTypes: ['cavalry'],
+          status: {
+            type: 'defense_buff',
+            amount: 10,
+            duration: 999,
+            speedScaled: true,
+            stack: true,
+            maxStacks: 8,
+          },
+        },
+      ],
+    },
+  },
+
+  /**
+   * 武锋（B 主动·距离 4·发动率 40%·目标「敌军单体」）：
+   * 对敌军单体发动一次猛攻（伤害率 209.0%），并使其攻击、谋略属性降低 56.0（受速度属性影响），持续 2 回合。
+   * 官方 https://stzb.163.com/m/skilllist/200823.html（id 200823；1 级 104.5% / 28）。
+   * 口径：①「敌军单体」= `random_single`（距离内均匀随机，仓库口径）；② 两段属性下降各挂一条
+   *   `attack_buff{amount:-56}` / `strategy_buff{amount:-56}`，`speedScaled:true` + 官方未给系数
+   *   → `growthRate` 留空（按基值）→ 登记 `OFFLINE_LEARNABLE_SKILLS`（下架）。
+   */
+  wufeng: {
+    id: 'wufeng',
+    name: '武锋',
+    type: 'active',
+    prepare: false,
+    range: 4,
+    triggerRate: 0.4,
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['damage', 'debuff_attack', 'debuff_strategy'],
+    output: [
+      { kind: 'physical_damage', rate: 209 },
+      { kind: 'inflict_status', status: { type: 'attack_buff', amount: -56, duration: 2, speedScaled: true } },
+      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -56, duration: 2, speedScaled: true } },
+    ],
+  },
+
+  /**
+   * 掠敌之利（B 追击·发动率 35%·目标「攻击目标」）：
+   * 普通攻击后，对攻击目标再次发动攻击（伤害率 170.0%），吸取目标 36.0 攻击属性，并附加于自身，持续 2 回合。
+   * 官方 https://stzb.163.com/m/skilllist/200786.html（id 200786；1 级 85% / 18）。
+   * 口径：「吸取」= 目标 `attack_buff −36` + 自身 `attack_buff +36`（各 2 回合，两条独立状态）；
+   *   追击战法 output 缺省目标池 = 本次追击的攻击目标（世仇先例），故减益段不写 target。
+   * 全文无「受 XX 属性影响」→ 上架。
+   */
+  luedi_zhili: {
+    id: 'luedi_zhili',
+    name: '掠敌之利',
+    type: 'pursuit',
+    range: 0,
+    triggerRate: 0.35,
+    tags: ['damage', 'debuff_attack', 'buff_attack'],
+    output: [
+      { kind: 'physical_damage', rate: 170 },
+      { kind: 'inflict_status', status: { type: 'attack_buff', amount: -36, duration: 2 } },
+      { kind: 'inflict_status', target: 'self', status: { type: 'attack_buff', amount: 36, duration: 2 } },
+    ],
+  },
 };

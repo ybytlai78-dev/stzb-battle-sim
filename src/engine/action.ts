@@ -1974,7 +1974,7 @@ export function triggerPassiveSkills(
     // （两轨减伤 + 援护），必须照常结算，否则整段 battle_start 效果丢失。
     const hurtCfg = skill.onHurt ? (Array.isArray(skill.onHurt) ? skill.onHurt : [skill.onHurt]) : [];
     const onHurtOwnsOutput = hurtCfg.some((c) => (c.output?.length ?? 0) > 0);
-    if (skill.onHurt && !onHurtOwnsOutput) {
+    if (skill.onHurt && !onHurtOwnsOutput && !skill.prepOutput) {
       ctx.events.push({
         type: 'skill_cast',
         unitId: unit.general.id,
@@ -3309,7 +3309,13 @@ function inflictStatusCore(
     // 显式叠层标记（官方文案写「可叠加」/「层数」，含 skill_range_buff 等数值型）→ 数值累加；其余默认刷新
     if (isExplicitStackCreate(create)) {
       if ('amount' in sameSource && 'amount' in create) {
+        // 层数上限（兵贵神速「防御 +10，可叠加 8 次」）：已达上限不再累加
+        const cap = (create as { maxStacks?: number }).maxStacks;
+        if (cap != null && ((sameSource as { stacks?: number }).stacks ?? 1) >= cap) return;
         sameSource.amount += create.amount;
+        if (cap != null) {
+          (sameSource as { stacks?: number }).stacks = ((sameSource as { stacks?: number }).stacks ?? 1) + 1;
+        }
         // 官方口径（疮痍累身截图）：同类属性增益重复施加 → 「【周泰】的攻击属性提高效果刷新了」
         if (type in ATTR_STAT_LABEL) {
           const label = ATTR_STAT_LABEL[type as keyof typeof ATTR_STAT_LABEL];
@@ -4215,10 +4221,11 @@ function pushStatus(
     if (type === 'damage_boost') (push as { direction: 'caused' | 'taken' }).direction = create.direction ?? 'taken';
     // 叠层计数（带上限的增减伤，银龙冲阵最多 3 层 / 张昭 竭忠尽智减伤最多 2 层）：首层记 1，同战法累加时 +1
     if ((type === 'damage_boost' || type === 'damage_reduce') && 'stacks' in create) (push as { stacks?: number }).stacks = create.stacks ?? 1;
-    // 叠层上限：damage_reduce 也纳入（拷贝 maxStacks；未显式给 stacks 初值时按「首层」初始化 stacks = 1，
+    // 叠层上限：damage_reduce / 属性类也纳入（拷贝 maxStacks；未显式给 stacks 初值时按「首层」初始化 stacks = 1，
     // 否则层计数不递增、同源守卫读到的永远是 1、封顶失效——破阵强袭同款坑）
-    if ((type === 'damage_boost' || type === 'damage_reduce') && 'maxStacks' in create && create.maxStacks != null) {
-      (push as { maxStacks?: number }).maxStacks = create.maxStacks;
+    const createMaxStacks = (create as { maxStacks?: number }).maxStacks;
+    if (createMaxStacks != null) {
+      (push as { maxStacks?: number }).maxStacks = createMaxStacks;
       if ((push as { stacks?: number }).stacks == null) (push as { stacks?: number }).stacks = 1;
     }
     if (type === 'damage_boost' && 'charges' in create && create.charges != null) {
@@ -7995,10 +8002,11 @@ function executeSkillOutputs(
             (create.type === 'attack_buff' || create.type === 'defense_buff' || create.type === 'strategy_buff' || create.type === 'speed_buff') &&
             ((create.strategyScaled && create.growthRate !== undefined) ||
               (create.attackScaled && create.growthRate !== undefined) ||
-              (create.defenseScaled && create.growthRate !== undefined))
+              (create.defenseScaled && create.growthRate !== undefined) ||
+              (create.speedScaled && create.growthRate !== undefined))
           ) {
-            // 属性 buff 受谋略 / 受攻击 / 受防御影响（其疾如风速度+41 / 魏武之世四维-15% / 道行险阻防御 −50 受攻击 /
-            // 鏖兵卫主防御 +50 受防御）：
+            // 属性 buff 受谋略 / 受攻击 / 受防御 / 受速度影响（其疾如风速度+41 / 魏武之世四维-15% / 道行险阻防御 −50 受攻击 /
+            // 鏖兵卫主防御 +50 受防御 / 武锋攻击·谋略 −56 受速度）：
             // 实际数值 = 基础 + 成长率×(生效属性-80)；按绝对值缩放后恢复符号
             // （减益类基础值为负，效果幅度随属性增强：如 -15% 谋略216 → -35%）
             // 百分比类（percent）按 1% 粒度「八舍九入」取整；点数类四舍五入
@@ -8006,7 +8014,9 @@ function executeSkillOutputs(
               ? effectiveStat(caster, 'attack')
               : create.defenseScaled
                 ? effectiveStat(caster, 'defense')
-                : effectiveStat(caster, 'strategy');
+                : create.speedScaled
+                  ? effectiveStat(caster, 'speed')
+                  : effectiveStat(caster, 'strategy');
             const scaled = scaledValue(Math.abs(create.amount), create.growthRate, attr);
             const amount = (create.percent ? roundRate(scaled) : Math.round(scaled)) * Math.sign(create.amount);
             inflictStatus(ctx, t, { ...create, amount }, skill.type, skill.id);

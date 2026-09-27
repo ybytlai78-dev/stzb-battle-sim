@@ -690,10 +690,10 @@ export type CreateStatus =
   /** amount 为谋略 80 时的基础值；strategyScaled=true 且给 growthRate 时，实际数值按 scaledValue 缩放。
    *  percent=true 时 amount 为百分比（如 15 = 15%），按目标当前生效属性（含点数增减后）结算。
    *  decayOnDeal：按 N 份「造成伤害」衰减（抚民励德 4）——携带者每次造成伤害（实际扣兵 > 0）后 −1 份。 */
-  | { type: 'attack_buff'; amount: number; duration: number; strategyScaled?: boolean; /** 受攻击缩放（道行险阻防御 −50）；growthRate 缺省时不缩放、用基值 */ attackScaled?: boolean; /** 受**防御**缩放（鏖兵卫主「防御 +50 受防御属性影响」）；growthRate 缺省时不缩放、用基值 */ defenseScaled?: boolean; growthRate?: number; percent?: boolean; /** 按 N 份「造成伤害」衰减（抚民励德 4）：amount = baseAmount × 剩余份数 / N */ decayOnDeal?: number; /** 显式「可叠加」（官方文案写「可叠加」/「层数」）：同源重复施加时数值累加；缺省刷新 */ stack?: true }
-  | { type: 'defense_buff'; amount: number; duration: number; strategyScaled?: boolean; attackScaled?: boolean; /** 受**防御**缩放（鏖兵卫主）；growthRate 缺省时不缩放、用基值 */ defenseScaled?: boolean; growthRate?: number; percent?: boolean; /** 按 N 份「造成伤害」衰减（抚民励德 4） */ decayOnDeal?: number; /** 显式「可叠加」：同源重复施加时数值累加；缺省刷新 */ stack?: true }
-  | { type: 'strategy_buff'; amount: number; duration: number; strategyScaled?: boolean; attackScaled?: boolean; defenseScaled?: boolean; growthRate?: number; percent?: boolean; /** 按 N 份「造成伤害」衰减（抚民励德 4） */ decayOnDeal?: number; stack?: true }
-  | { type: 'speed_buff'; amount: number; duration: number; strategyScaled?: boolean; attackScaled?: boolean; defenseScaled?: boolean; growthRate?: number; percent?: boolean; /** 按 N 份「造成伤害」衰减（抚民励德 4） */ decayOnDeal?: number; stack?: true }
+  | { type: 'attack_buff'; amount: number; duration: number; strategyScaled?: boolean; /** 受攻击缩放（道行险阻防御 −50）；growthRate 缺省时不缩放、用基值 */ attackScaled?: boolean; /** 受**防御**缩放（鏖兵卫主「防御 +50 受防御属性影响」）；growthRate 缺省时不缩放、用基值 */ defenseScaled?: boolean; /** 受**速度**缩放（武锋「攻击、谋略 −56 受速度」/ 兵贵神速「防御 +10 受速度」）；growthRate 缺省时不缩放、用基值 */ speedScaled?: boolean; growthRate?: number; percent?: boolean; /** 按 N 份「造成伤害」衰减（抚民励德 4）：amount = baseAmount × 剩余份数 / N */ decayOnDeal?: number; /** 层数上限（兵贵神速「可叠加 8 次」）；缺省不封顶 */ maxStacks?: number; /** 显式「可叠加」（官方文案写「可叠加」/「层数」）：同源重复施加时数值累加；缺省刷新 */ stack?: true }
+  | { type: 'defense_buff'; amount: number; duration: number; strategyScaled?: boolean; attackScaled?: boolean; /** 受**防御**缩放（鏖兵卫主）；growthRate 缺省时不缩放、用基值 */ defenseScaled?: boolean; /** 受**速度**缩放（武锋「攻击、谋略 −56 受速度」/ 兵贵神速「防御 +10 受速度」）；growthRate 缺省时不缩放、用基值 */ speedScaled?: boolean; growthRate?: number; percent?: boolean; /** 按 N 份「造成伤害」衰减（抚民励德 4） */ decayOnDeal?: number; /** 层数上限（兵贵神速「可叠加 8 次」）；缺省不封顶 */ maxStacks?: number; /** 显式「可叠加」：同源重复施加时数值累加；缺省刷新 */ stack?: true }
+  | { type: 'strategy_buff'; amount: number; duration: number; strategyScaled?: boolean; attackScaled?: boolean; defenseScaled?: boolean; /** 受**速度**缩放（武锋「攻击、谋略 −56 受速度」/ 兵贵神速「防御 +10 受速度」）；growthRate 缺省时不缩放、用基值 */ speedScaled?: boolean; growthRate?: number; percent?: boolean; /** 按 N 份「造成伤害」衰减（抚民励德 4） */ decayOnDeal?: number; /** 层数上限（兵贵神速「可叠加 8 次」）；缺省不封顶 */ maxStacks?: number; stack?: true }
+  | { type: 'speed_buff'; amount: number; duration: number; strategyScaled?: boolean; attackScaled?: boolean; defenseScaled?: boolean; /** 受**速度**缩放（武锋「攻击、谋略 −56 受速度」/ 兵贵神速「防御 +10 受速度」）；growthRate 缺省时不缩放、用基值 */ speedScaled?: boolean; growthRate?: number; percent?: boolean; /** 按 N 份「造成伤害」衰减（抚民励德 4） */ decayOnDeal?: number; /** 层数上限（兵贵神速「可叠加 8 次」）；缺省不封顶 */ maxStacks?: number; stack?: true }
   /** 受到恢复效果提升（勇挚刚毅 / 守静却敌）：rate 为 80 属性基准值（0.05 = +5%）；
    *  strategyScaled / defenseScaled + growthRate 给定时按属性缩放（公式同 damage_reduce），growthRate 缺省用基值；
    *  `stack: true` = 显式可叠加（同源重复施加累加 rate）。 */
@@ -1711,8 +1711,14 @@ export interface PassiveSkill extends BaseSkill {
    * 战法有效距离 skill.range 不变）。
    */
   rangeDecayPerRound?: { perRound: number; min: number };
-  /** 受击触发（同仇敌忾 / 舍身卫主）：战斗开始只登记，不立刻结算 output */
+  /** 受击触发（同仇敌忾 / 舍身卫主）：战斗开始只登记，不立刻结算 output；
+   *  `prepOutput: true` 时反过来——战法 output 属准备阶段段，照常在准备阶段结算（分险）。 */
   onHurt?: OnHurtConfig | OnHurtConfig[];
+  /**
+   * 战法 `output` 属**准备阶段**段：即使 `onHurt` 未自带 output（`onHurtOwnsOutput` 启发式为假）也照常结算。
+   * 用于「准备阶段挂常驻状态 + 另有受击钩子」的被动（分险：攻击距离 +1 常驻 + 受击 50% 本次伤害 −32%）。
+   */
+  prepOutput?: true;
   /**
    * 自身造成伤害后追加打击（京观垒冢，皇甫嵩「自身造成伤害时，有 70.0% 几率对目标额外发动一次攻击
    * （伤害率 200.0%）或策略攻击（伤害率 200.0%）」）：携带者每次造成伤害（实际扣兵 > 0）后按
@@ -2158,10 +2164,10 @@ export type Status =
    * 由 `strategyScaled + growthRate` 统一缩放（未确认 → 基值）。不按回合递减（remaining 仅占位）。
    */
   | { type: 'strategy_flux'; low: number; high: number; mid: number; convergeRounds: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
-  | { type: 'attack_buff'; amount: number; percent?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; /** 造成伤害衰减：满额数值（抚民励德 80） */ baseAmount?: number; /** 剩余份数（抚民励德 4→3→…） */ dealParts?: number; /** 份数初始值（4） */ dealPartsBase?: number }
-  | { type: 'defense_buff'; amount: number; percent?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; baseAmount?: number; dealParts?: number; dealPartsBase?: number }
-  | { type: 'strategy_buff'; amount: number; percent?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; /** 造成伤害衰减：满额数值（抚民励德 80） */ baseAmount?: number; /** 剩余份数（抚民励德 4→3→…）；无此字段则不按造成伤害衰减 */ dealParts?: number; /** 份数初始值（4），衰减公式分母 */ dealPartsBase?: number }
-  | { type: 'speed_buff'; amount: number; percent?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; baseAmount?: number; dealParts?: number; dealPartsBase?: number }
+  | { type: 'attack_buff'; amount: number; percent?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; /** 造成伤害衰减：满额数值（抚民励德 80） */ baseAmount?: number; /** 剩余份数（抚民励德 4→3→…） */ dealParts?: number; /** 份数初始值（4） */ dealPartsBase?: number; /** 层数（兵贵神速：每受到 1 次攻击伤害 +1 层，上限 maxStacks；缺省不计数） */ stacks?: number; maxStacks?: number }
+  | { type: 'defense_buff'; amount: number; percent?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; baseAmount?: number; dealParts?: number; dealPartsBase?: number; /** 层数（兵贵神速：每受到 1 次攻击伤害 +1 层，上限 maxStacks；缺省不计数） */ stacks?: number; maxStacks?: number }
+  | { type: 'strategy_buff'; amount: number; percent?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; /** 造成伤害衰减：满额数值（抚民励德 80） */ baseAmount?: number; /** 剩余份数（抚民励德 4→3→…）；无此字段则不按造成伤害衰减 */ dealParts?: number; /** 份数初始值（4），衰减公式分母 */ dealPartsBase?: number; /** 层数（兵贵神速：每受到 1 次攻击伤害 +1 层，上限 maxStacks；缺省不计数） */ stacks?: number; maxStacks?: number }
+  | { type: 'speed_buff'; amount: number; percent?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; baseAmount?: number; dealParts?: number; dealPartsBase?: number; /** 层数（兵贵神速：每受到 1 次攻击伤害 +1 层，上限 maxStacks；缺省不计数） */ stacks?: number; maxStacks?: number }
   | { type: 'damage_reduce'; rate: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; /** 每回合结束剩余份数（敛微穷极）；无此字段则不按回合衰减 */ roundParts?: number; /** 每回合份数初始值，衰减公式分母 */ roundPartsBase?: number; /** 当前剩余份数（谋议宏图 8→7→…）；无此字段则不按 1/8 衰减 */ eighths?: number; /** 8/8 时的满额减伤率，衰减时 rate = baseRate × eighths/8 */ baseRate?: number; /** 叠层计数（张昭 竭忠尽智「该效果可以叠加 1 次」= 2 层）：首层 1，同源重复施加累加 +1 */ stacks?: number; /** 同战法同过滤维叠层上限（2）：达到后同源重复施加被守卫拒绝，不再加 rate */ maxStacks?: number; /** 受击剩余份数（疮痍累身 12→11→…）；无此字段则不按受击衰减 */ fifths?: number; /** 受击份数初始值（疮痍累身 12） */ fifthsBase?: number; /** 造成伤害剩余份数（抚民励德 4→3→…）；无此字段则不按造成伤害衰减 */ dealParts?: number; /** 份数初始值（4） */ dealPartsBase?: number; /** 伤害来源过滤：basic=普攻（分类键小类「普通」）/ skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效（分类键小类「主动/追击/指挥」）；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省攻击+策略都吃（分类键「大类」，见 action.ts damageClassKey） */ damageType?: 'physical' | 'strategy'; /** 只对这些 DoT 类型生效（全主诿异：被施加的燃烧/恐慌/妖术诅咒伤害提升 20%）；缺省不限（非 DoT 伤害也吃） */ dotTypes?: DotType[]; /** 条件减伤（人公将军「敌方武将存在妖术效果时造成的攻击伤害降低 20%」）：仅当**携带者自身**带该状态时本减伤才生效 */ requireSelfStatus?: StatusType | StatusType[]; /** 宝物「强固」：**每回合首次**受到的伤害降低（该回合第一次实际扣兵享受，其余不吃） */ firstHitPerRound?: boolean; /** 宝物「威势」：仅当**当前行动者（伤害来源）初始统率 < 携带者初始统率**时生效 */ enemyCostBelowSelf?: boolean }
   /**
    * 受到恢复效果提升（勇挚刚毅）：携带者受到的任何恢复（主动 heal / 休整 rest / 持续急救 first_aid /
