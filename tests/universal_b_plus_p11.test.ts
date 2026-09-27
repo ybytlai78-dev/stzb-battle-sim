@@ -166,8 +166,9 @@ describe('久战熟谋（A 指挥：友军群体每造成一次策略伤害 → 
     expect(s.targetMode).toBe('group');
     expect(s.groupCount).toBe(2);
     expect(s.output).toHaveLength(0);
-    expect(s.allyDealStack?.damageType).toBe('strategy');
-    const st = s.allyDealStack?.status;
+    const stackCfg = Array.isArray(s.allyDealStack) ? s.allyDealStack[0] : s.allyDealStack;
+    expect(stackCfg?.damageType).toBe('strategy');
+    const st = stackCfg?.status;
     expect(st?.type).toBe('damage_boost');
     if (st?.type === 'damage_boost') {
       expect(st.rate).toBe(0.05);
