@@ -10879,4 +10879,188 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'inflict_status', target: 'self', status: { type: 'attack_buff', amount: 36, duration: 2 } },
     ],
   },
+
+  // ─── 典籍战法批次 3（2026-09-27）：绝水遏敌 200826 / 极火佐攻 200817 / 磐阵善守 200816 / 形兵之极 200813 ───
+
+  /**
+   * 绝水遏敌（A 准备主动·距离 4·发动率 50%·目标「敌军群体（有效距离内 2-3 个目标）」）：
+   * 1 回合准备，对敌军群体发动强力策略攻击（伤害率 230.0%，受谋略属性影响），并使其无法恢复兵力，持续 1 回合。
+   * 官方 https://stzb.163.com/m/skilllist/200826.html（id 200826；1 级 115%）。
+   * 口径：① `prepare: true`（1 回合准备）+ `groupCount: [2,3]`（官方「2-3 个目标」→ 每次随机抽 2~3，仓库先例）；
+   *   ②「无法恢复兵力」= `siege`（围困）状态 1 回合（仓库既有口径：围困拦截一切恢复）；
+   *   ③ 策略 230% 受谋略、官方未给系数 → `strategyScaled` + `growthRate` 留空（按基值）
+   *   → 登记 `OFFLINE_LEARNABLE_SKILLS`（下架）。
+   */
+  jueshui_edi: {
+    id: 'jueshui_edi',
+    name: '绝水遏敌',
+    type: 'active',
+    prepare: true,
+    range: 4,
+    triggerRate: 0.5,
+    targetMode: 'group',
+    groupCount: [2, 3],
+    targetSide: 'enemy',
+    tags: ['damage', 'siege'],
+    output: [
+      { kind: 'strategy_damage', rate: 230, strategyScaled: true },
+      { kind: 'inflict_status', status: { type: 'siege', duration: 1 } },
+    ],
+  },
+
+  /**
+   * 极火佐攻（A 准备主动·距离 4·发动率 50%·目标「敌军群体（有效距离内 2 个目标）」）：
+   * 1 回合准备，使敌方群体陷入燃烧状态（伤害率 200.0%，受谋略属性影响），持续 1 回合，
+   * 并使其受到下 1 次主动战法的伤害提升 26.0%（受谋略属性影响）。
+   * 官方 https://stzb.163.com/m/skilllist/200817.html（id 200817；1 级 100% / 13%）。
+   * 口径：① `prepare: true` + `groupCount: 2`；② 燃烧 DoT = `burning`（受谋略，官方未给系数 →
+   *   `growthRate` 必填给 0 = 按基值）；③「下 1 次主动战法伤害提升」= `damage_boost`
+   *   （`direction:'taken'` + `skillTypes:['active']` + `charges:1`，文伐先例：受击次数型、打出即消耗）。
+   * 成长率：燃烧 200% 与受伤提升 26% 均只写「受谋略属性影响」未给系数 → 登记 `OFFLINE_LEARNABLE_SKILLS`（下架）。
+   */
+  jihuo_zuogong: {
+    id: 'jihuo_zuogong',
+    name: '极火佐攻',
+    type: 'active',
+    prepare: true,
+    range: 4,
+    triggerRate: 0.5,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    tags: ['burning', 'damage_boost'],
+    output: [
+      { kind: 'inflict_status', status: { type: 'burning', duration: 1, rate: 200, growthRate: 0 } },
+      {
+        kind: 'inflict_status',
+        status: {
+          type: 'damage_boost',
+          rate: 0.26,
+          duration: 999,
+          direction: 'taken',
+          skillTypes: ['active'],
+          charges: 1,
+          strategyScaled: true,
+        },
+      },
+    ],
+  },
+
+  /**
+   * 磐阵善守（A 指挥·一类·距离 2·目标「我军单体」）：
+   * 战斗开始后前 4 回合，每回合使我军单体兵力最低的武将受到首次攻击和策略攻击的伤害大幅度降低，
+   * 并使我军随机单体受到下 1 次伤害时有 100.0% 几率进入规避状态，免疫该次伤害。
+   * 官方 https://stzb.163.com/m/skilllist/200816.html（id 200816；1 级无「100%」改动）。
+   * 口径：
+   *   ①「每回合」= `roundStartRepeat{ startRound:1, endRound:4 }`（一类指挥每回合行动阶段结算，鹤翼 / 反击之策先例）；
+   *   ②「兵力最低的武将」= `inflict_status.targetPick:'lowest_troops_ally'`（本轮新增，含施法者自身，heal 同款口径）；
+   *   ③「受到**首次**攻击和**首次**策略攻击的伤害大幅度降低」= 两条独立轨 `damage_reduce`
+   *      （`damageType: 'physical' | 'strategy'` + `charges: 1`，本回合各只吃第一次；「大幅度降低」按仓库
+   *      极大值口径 = 引擎伤害下限（减伤 90% → 实际保留 10%），同辕门射戟 / 迟智难酬「大幅度」口径，**推定**）；
+   *   ④「我军随机单体…进入规避状态」= `inflict_status`（`targetSide:'ally'` + `targetMode:'random_single'`）
+   *      挂 `evasion{ stacks:1 }`（雪奋短兵同款层数式必挡，消耗于下一次实际受击）。
+   * 全文无「受 XX 属性影响」→ 上架。
+   */
+  panzhen_shanshou: {
+    id: 'panzhen_shanshou',
+    name: '磐阵善守',
+    type: 'command',
+    phase: 'prep',
+    range: 2,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    retainAfterDeath: true,
+    tags: ['damage_reduce', 'evasion'],
+    output: [],
+    roundStartRepeat: {
+      startRound: 1,
+      endRound: 4,
+      output: [
+        {
+          kind: 'inflict_status',
+          targetPick: 'lowest_troops_ally',
+          status: { type: 'damage_reduce', rate: 0.9, duration: 1, damageType: 'physical', charges: 1 },
+        },
+        {
+          kind: 'inflict_status',
+          targetPick: 'lowest_troops_ally',
+          status: { type: 'damage_reduce', rate: 0.9, duration: 1, damageType: 'strategy', charges: 1 },
+        },
+        {
+          kind: 'inflict_status',
+          targetSide: 'ally',
+          targetMode: 'random_single',
+          status: { type: 'evasion', stacks: 1 },
+        },
+      ],
+    },
+  },
+
+  /**
+   * 形兵之极（B 指挥·一类·距离 2·目标「我军全体」）：
+   * 战斗中，我方出战 3 名武将兵系均不相同时，大营主动、追击主战法发动率提升 10.0%，
+   * 并于战斗前 4 回合，前锋受到的所有伤害下降 50.0%，中军每回合首次造成的所有伤害提高 40.0%。
+   * 官方 https://stzb.163.com/m/skilllist/200813.html（id 200813；1 级 5% / 25% / 20%）。
+   * 口径：
+   *   ① 阵容门闩「我方出战 3 名武将兵系均不相同」= `BaseSkill.teamTroopDistinct`（本轮新增；
+   *      与合纵连横 `teamFactionDistinct` 同判定点、按**有效兵系**比较，读部署名单不论 alive）；
+   *   ② 大营发动率 +10% = `trigger_boost`（`mainSkillOnly: true` + `skillTypes:['active','pursuit']`，
+   *      只对**主战法**的主动 / 追击生效）+ `positions:['大营']`；
+   *   ③ 前 4 回合前锋受伤 −50% = `damage_reduce{ rate:0.5, duration:4 }` + `positions:['前锋']`；
+   *   ④ 中军每回合首次伤害 +40% = `roundStartRepeat`（每回合重挂）`damage_boost`
+   *      （`direction:'caused'` + `charges:1` + `duration:1`，本回合首次造成伤害后消耗）+ `positions:['中军']`。
+   * 全文无「受 XX 属性影响」→ 上架。
+   */
+  xingbing_zhiji: {
+    id: 'xingbing_zhiji',
+    name: '形兵之极',
+    type: 'command',
+    phase: 'prep',
+    range: 2,
+    triggerRate: 1,
+    targetMode: 'all',
+    targetSide: 'ally',
+    teamTroopDistinct: true,
+    retainAfterDeath: true,
+    tags: ['trigger_boost', 'damage_reduce', 'damage_boost'],
+    output: [
+      {
+        kind: 'inflict_status',
+        targetSide: 'ally',
+        positions: ['大营'],
+        status: {
+          type: 'trigger_boost',
+          rate: 0.1,
+          duration: 999,
+          skillTypes: ['active', 'pursuit'],
+          mainSkillOnly: true,
+        },
+      },
+      {
+        kind: 'inflict_status',
+        targetSide: 'ally',
+        positions: ['前锋'],
+        status: { type: 'damage_reduce', rate: 0.5, duration: 4 },
+      },
+    ],
+    roundStartRepeat: {
+      startRound: 1,
+      endRound: 8,
+      output: [
+        {
+          kind: 'inflict_status',
+          targetSide: 'ally',
+          positions: ['中军'],
+          status: {
+            type: 'damage_boost',
+            rate: 0.4,
+            duration: 1,
+            direction: 'caused',
+            charges: 1,
+          },
+        },
+      ],
+    },
+  },
 };

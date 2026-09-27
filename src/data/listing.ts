@@ -161,6 +161,8 @@ export const OFFLINE_LEARNABLE_SKILLS: Record<string, string> = {
   wenqi: '策略攻击 60% 受谋略成长未确认（按基值不缩放；面板距离 1 → 引擎按「有效距离 3 以内」取 range 3 为推定）',
   bingui_shensu: '防御 +10 受速度成长未确认（按基值不缩放；骑兵过滤与 8 层上限固定）',
   wufeng: '攻击 / 谋略 −56 受速度成长未确认（按基值不缩放；209% 攻击段固定）',
+  jueshui_edi: '策略攻击 230% 受谋略成长未确认（按基值不缩放；围困 1 回合固定）',
+  jihuo_zuogong: '燃烧 200% / 受伤提升 26% 受谋略成长未确认（按基值不缩放）',
 };
 
 /**

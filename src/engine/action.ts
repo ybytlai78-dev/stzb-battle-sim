@@ -431,6 +431,16 @@ export function teamTroopsSame(team: UnitState[]): boolean {
 }
 
 /**
+ * 我军出战名单是否「3 名武将兵系**两两不同**」（形兵之极「我方出战 3 名武将兵系均不相同时」）。
+ * 读部署名单（不论 alive）；名单不足 3 人视为不满足；与 `teamFactionsDistinct` 同判定点，
+ * **按有效兵系**比较（二级兵种转换后取兵系）。
+ */
+export function teamTroopsDistinct(team: UnitState[]): boolean {
+  if (team.length < 3) return false;
+  return new Set(team.map((u) => effectiveTroopLine(u.general))).size === team.length;
+}
+
+/**
  * 段级条件判定（典藏战法【追加】，见 `OutputCondition`）：
  * `require` 全部满足 且 `unless` 全部不满足 才返回 true。
  * 未给出的条件维视为「不限」；`casterNames` 按武将名匹配（同名多张卡都算，缚父临危先例）；
@@ -888,6 +898,8 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
     )) continue;
     // 阵营条件（合纵连横）：我军出战 3 将阵营两两不同，否则整次不生效
     if (skill.teamFactionDistinct && !teamFactionsDistinct(unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam)) continue;
+    // 兵系条件（形兵之极）：我军出战 3 将兵系两两不同，否则整次不生效
+    if (skill.teamTroopDistinct && !teamTroopsDistinct(unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam)) continue;
     // 性别条件（美人计）：我军出战 3 将须全为指定性别，否则整次不生效
     if (skill.teamGenderFilter && !teamGendersMatch(unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam, skill.teamGenderFilter)) continue;
     ctx.events.push({
@@ -1209,7 +1221,7 @@ function triggerStrategyAdjacentBonus(
         breakdown,
         modifiers: mods,
       });
-      applyDamage(ctx, raw, capped, source, 'strategy', 'skill', mods);
+      applyDamage(ctx, raw, capped, source, 'strategy', 'skill', mods, l.skill.type);
     }
   }
 }
@@ -1879,7 +1891,7 @@ function executeRoundCommand(ctx: CombatContext, unit: UnitState, skill: Command
         breakdown,
         modifiers: mods,
       });
-      applyDamage(ctx, t, capped, source, 'physical', 'skill', mods);
+      applyDamage(ctx, t, capped, source, 'physical', 'skill', mods, skill.type);
     }
     if (attacked) consumeAttackCharges(ctx, source, { damageSource: 'skill', damageType: 'physical', skillType: 'command' });
   }
@@ -4233,6 +4245,10 @@ function pushStatus(
       const c = create.charges;
       (push as { charges?: number }).charges = Array.isArray(c) ? ctx.rng.intInclusive(c[0], c[1]) : c;
     }
+    // 次数型减伤（磐阵善守「受到首次攻击 / 策略攻击的伤害大幅降低」）
+    if (type === 'damage_reduce' && 'charges' in create && create.charges != null) {
+      (push as { charges?: number }).charges = create.charges;
+    }
     // 受击叠层（凤仪亭「自身攻击造成的伤害提高 20.0%，受到伤害后可额外叠加 3 次」）：
     // 冻结每层增量 perStack；受击 +1 层时 rate += perStack，达到 maxStacks 停止。
     if (type === 'damage_boost' && 'hurtStackPer' in create && create.hurtStackPer != null) {
@@ -5670,6 +5686,13 @@ function consumeTakenCharges(target: UnitState, hit: DamageHitContext): void {
     s.charges -= 1;
     if (s.charges <= 0) target.statuses = target.statuses.filter((x) => x !== s);
   }
+  // 次数型减伤（磐阵善守「受到首次攻击/策略攻击的伤害大幅降低」）：匹配伤害扣兵后 −1
+  for (const s of [...target.statuses]) {
+    if (s.type !== 'damage_reduce' || s.charges == null) continue;
+    if (!statusMatchesHit(s, hit)) continue;
+    s.charges -= 1;
+    if (s.charges <= 0) target.statuses = target.statuses.filter((x) => x !== s);
+  }
 }
 
 /**
@@ -6649,7 +6672,7 @@ function triggerDealPunish(ctx: CombatContext, source: UnitState): void {
       breakdown,
       modifiers: dpMods,
     });
-    applyDamage(ctx, source, capped, caster, 'strategy', 'skill', dpMods);
+    applyDamage(ctx, source, capped, caster, 'strategy', 'skill', dpMods, skill.type);
   }
 }
 
@@ -7271,6 +7294,10 @@ function executeSkillOutputs(
         // 始计「敌方兵力最多单体」：按**当前兵力**比较，无视距离
         const alive = enemies.filter((u) => u.alive);
         pool = alive.length ? [alive.reduce((best, u) => (u.troops > best.troops ? u : best))] : [];
+      } else if (pick === 'lowest_troops_ally') {
+        // 磐阵善守「我军兵力最低的武将」：按**当前兵力**比较，含施法者自身（heal 同款口径）
+        const alive = allies.filter((u) => u.alive);
+        pool = alive.length ? [alive.reduce((low, u) => (u.troops < low.troops ? u : low))] : [];
       } else {
         const [, mode, stat, side] = /^(highest|lowest)_(attack|defense|strategy)_(ally|enemy)$/.exec(pick) ?? [];
         if (mode && stat && side) {
@@ -7494,7 +7521,7 @@ function executeSkillOutputs(
                 breakdown,
                 modifiers: rideMods,
               });
-              applyDamage(ctx, t, capped, rider, damageType, 'skill', rideMods);
+              applyDamage(ctx, t, capped, rider, damageType, 'skill', rideMods, skill.type);
             }
             if (riderAttacked) consumeAttackCharges(ctx, rider, { damageSource: 'skill', damageType: 'physical', skillType: skill.type });
           }
@@ -7601,7 +7628,7 @@ function executeSkillOutputs(
               breakdown,
               modifiers: physMods,
             });
-            applyDamage(ctx, t, capped, source, 'physical', 'skill', physMods);
+            applyDamage(ctx, t, capped, source, 'physical', 'skill', physMods, skill.type);
             // 按造成伤害次数递增发动率（霸王渡江）：本战法每造成 1 次伤害计 1 层（上限 maxStacks）
             if (skill.chanceBoostPerDamage && capped > 0) {
               ctx.skillDamageCounters ??= new Map();
@@ -7763,7 +7790,7 @@ function executeSkillOutputs(
               breakdown,
               modifiers: stratMods,
             });
-            applyDamage(ctx, t, capped, stratActor, 'strategy', 'skill', stratMods);
+            applyDamage(ctx, t, capped, stratActor, 'strategy', 'skill', stratMods, skill.type);
             // 其徐如林：本侧施加的策略伤害生效后，对目标同侧相邻敌军额外造成一次策略伤害（原伤害率 × 比例）
             if (capped > 0) triggerStrategyAdjacentBonus(ctx, caster, t, rate);
           }
@@ -8222,7 +8249,7 @@ function executeSkillOutputs(
             breakdown,
             modifiers: posMods,
           });
-          applyDamage(ctx, t, capped, source, 'physical', 'skill', posMods);
+          applyDamage(ctx, t, capped, source, 'physical', 'skill', posMods, skill.type);
         }
         rememberDamageTargets(selectedIds);
         if (attacked) consumeAttackCharges(ctx, source, { damageSource: 'skill', damageType: 'physical', skillType: skill.type });
@@ -8824,6 +8851,8 @@ function executeSkillWithTargets(
   )) return;
   // 阵营条件（合纵连横）：我军出战 3 将阵营两两不同，否则整次不生效
   if (skill.teamFactionDistinct && !teamFactionsDistinct(unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam)) return;
+  // 兵系条件（形兵之极）：我军出战 3 将兵系两两不同，否则整次不生效
+  if (skill.teamTroopDistinct && !teamTroopsDistinct(unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam)) return;
   // 性别条件（美人计）：我军出战 3 将须全为指定性别，否则整次不生效
   if (skill.teamGenderFilter && !teamGendersMatch(unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam, skill.teamGenderFilter)) return;
 
@@ -9831,7 +9860,9 @@ export function applyDamage(
   damageType?: DamageType,
   damageSource?: 'basic' | 'skill',
   /** 本次伤害的增减伤归因（避锐治气累计净幅度用；缺省不累计——如分摊/结转等无归因路径） */
-  modifiers?: DamageModifiers
+  modifiers?: DamageModifiers,
+  /** 本次伤害的来源战法类型（极火佐攻「下 1 次主动战法伤害提升」的次数消耗需按 active 过滤；缺省不参与过滤） */
+  skillType?: SkillType
 ): void {  // 已阵亡单位不再吃伤害、不再走急救（阻止伤兵池膨胀后被救回）
   if (!target.alive) return;
   // 七擒七纵：我军前 N 次受到伤害实例的规避判定（共享计数；判定成败都消耗 1 次，第 N 次后惩罚）
@@ -9974,7 +10005,7 @@ export function applyDamage(
     if (source) decayOnDealStatuses(ctx, source);
     // 天子诏令：点名目标回合内累计受击达阈值 → 追加受伤提升 + 全属性下降
     decreePunish(ctx, target);
-    const hit: DamageHitContext = { damageSource, damageType };
+    const hit: DamageHitContext = { damageSource, damageType, skillType };
     // 单位累计造成伤害（七擒七纵「造成伤害累计最高的敌军单体」）与敌军伤害计数（正始之变）
     if (source) {
       ctx.damageDealtTotals ??= new Map();

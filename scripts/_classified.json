@@ -2962,5 +2962,57 @@
     "status": "implemented",
     "missingMechanics": "",
     "note": "典籍批次 p2：追击 170% + 目标 −36 攻击 / 自身 +36 攻击（两条独立状态）；上架"
+  },
+  {
+    "name": "绝水遏敌",
+    "quality": "A",
+    "type": "active",
+    "range": 4,
+    "triggerRate": "50%",
+    "targetDesc": "敌军群体（有效距离内2-3个目标）",
+    "effectDesc": "1回合准备，对敌军群体发动强力策略攻击（伤害率230.0%，受谋略属性影响），并使其无法恢复兵力，持续1回合",
+    "sources": "3个QUN5星武将兑换（典籍）",
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "典籍批次 p3：prepare + groupCount [2,3] + siege 1 回合；策略受谋略无系数 → 下架"
+  },
+  {
+    "name": "极火佐攻",
+    "quality": "A",
+    "type": "active",
+    "range": 4,
+    "triggerRate": "50%",
+    "targetDesc": "敌军群体（有效距离内2个目标）",
+    "effectDesc": "1回合准备，使敌方群体陷入燃烧状态（伤害率200.0%，受谋略属性影响），持续1回合，并使其受到下1次主动战法的伤害提升26.0%（受谋略属性影响）",
+    "sources": "3个HAN5星武将兑换（典籍）",
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "典籍批次 p3：burning growthRate 0 + taken damage_boost(skillTypes active, charges 1)；applyDamage 新增 skillType 参数供次数消耗按主动战法过滤；下架"
+  },
+  {
+    "name": "磐阵善守",
+    "quality": "A",
+    "type": "command",
+    "range": 2,
+    "triggerRate": null,
+    "targetDesc": "我军单体",
+    "effectDesc": "战斗开始后前4回合，每回合使我军单体兵力最低的武将受到首次攻击和策略攻击的伤害大幅度降低，并使我军随机单体受到下1次伤害时有100.0%几率进入规避状态，免疫该次伤害",
+    "sources": "3个WEI、SHU、WU5星武将兑换（典籍）",
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "典籍批次 p3：roundStartRepeat 1~4 + targetPick lowest_troops_ally（新增）+ damage_reduce charges（新增）+ evasion 1 层；上架"
+  },
+  {
+    "name": "形兵之极",
+    "quality": "B",
+    "type": "command",
+    "range": 2,
+    "triggerRate": null,
+    "targetDesc": "我军全体",
+    "effectDesc": "战斗中，我方出战3名武将兵系均不相同时，大营主动、追击主战法发动率提升10.0%，并于战斗前4回合，前锋受到的所有伤害下降50.0%，中军每回合首次造成的所有伤害提高40.0%",
+    "sources": "3个5星武将兑换（典籍）",
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "典籍批次 p3：teamTroopDistinct（新增门闩）+ trigger_boost(mainSkillOnly, active/pursuit) + damage_reduce 4 回合 + 每回合中军首次增伤 charges 1；上架"
   }
 ]
