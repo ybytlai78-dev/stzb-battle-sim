@@ -953,9 +953,12 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
 
     // 友军「造成匹配伤害后叠层」（久战熟谋）：准备阶段把状态挂到锁定友军身上（之后每次造成匹配伤害同源叠加）
     if (skill.allyDealStack) {
+      const stacks = Array.isArray(skill.allyDealStack) ? skill.allyDealStack : [skill.allyDealStack];
       for (const t of targets) {
         if (!t.alive) continue;
-        inflictStatus(ctx, t, skill.allyDealStack.status, skill.type, skill.id, unit.general.id);
+        for (const cfg of stacks) {
+          inflictStatus(ctx, t, cfg.status, skill.type, skill.id, unit.general.id);
+        }
       }
     }
 
@@ -2773,6 +2776,8 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
     if (rs.startRound != null && ctx.currentRound < rs.startRound) continue;
     if (rs.endRound != null && ctx.currentRound > rs.endRound) continue;
     if (rs.oddRounds && ctx.currentRound % 2 === 0) continue;
+    // 只在列出的回合执行（合众「每 2 回合」= 2/4/6/8；与一类指挥 roundStartRepeat 同口径）
+    if (rs.rounds && !rs.rounds.includes(ctx.currentRound)) continue;
     // 攻击距离门槛（雪奋短兵「攻击距离小于等于 1 时…每回合自身行动时」）：未降到门槛内则整段不结算
     if (rs.requireAttackRangeAtMost != null && attackRangeOf(unit) > rs.requireAttackRangeAtMost) continue;
     executeSkillOutputs(ctx, unit, p, [unit], rs.output);
@@ -6667,14 +6672,40 @@ function triggerDealFirstPerRound(ctx: CombatContext, source: UnitState, target:
  */
 function triggerAllyDealStack(ctx: CombatContext, source: UnitState, damageType?: DamageType): void {
   if (!source.alive) return;
+  const seen = new Set<string>();
   for (const s of [...source.statuses]) {
     const skill = resolveSkill(ctx, s.sourceSkillId);
-    const cfg = skill?.allyDealStack;
-    if (!skill || !cfg) continue;
-    if (cfg.damageType && cfg.damageType !== damageType) continue;
+    const raw = skill?.allyDealStack;
+    if (!skill || !raw) continue;
+    // 同一战法的状态可能有多条（反间：攻击 / 策略两条独立轨）——本次伤害只处理该战法一次
+    if (seen.has(skill.id)) continue;
+    seen.add(skill.id);
+    const cfgs = Array.isArray(raw) ? raw : [raw];
     const casterId = 'sourceUnitId' in s ? s.sourceUnitId : undefined;
-    inflictStatus(ctx, source, cfg.status, skill.type, skill.id, casterId);
-    if (!source.alive) return;
+    for (const cfg of cfgs) {
+      if (cfg.damageType && cfg.damageType !== damageType) continue;
+      if (cfg.rate != null) {
+        // 按几率叠层（反间 / 知己知彼）：走**原施法者**士气修正，逐次发 skill_trigger
+        const caster = casterId ? castUnit(ctx, casterId) : undefined;
+        const morale = caster ? effectiveMorale(caster) : 100;
+        const rate = moraleTriggerRate(morale, cfg.rate);
+        const success = ctx.rng.chance(rate);
+        ctx.events.push({
+          type: 'skill_trigger',
+          unitId: casterId ?? source.general.id,
+          targetId: source.general.id,
+          skillId: skill.id,
+          skillName: skill.name,
+          success,
+          rate: Math.round(rate * 100),
+          baseRate: Math.round(cfg.rate * 100),
+          morale,
+        });
+        if (!success) continue;
+      }
+      inflictStatus(ctx, source, cfg.status, skill.type, skill.id, casterId);
+      if (!source.alive) return;
+    }
   }
 }
 

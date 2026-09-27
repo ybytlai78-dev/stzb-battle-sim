@@ -959,7 +959,16 @@ interface BaseSkill {
    * 准备阶段把 `status` 挂到本战法锁定目标（友军）身上；此后该目标每次造成匹配伤害（实际扣兵 > 0）时
    * 把同一状态**同源再施加一次**——叠层/上限由状态自身 `maxStacks` 控制。
    */
-  allyDealStack?: { damageType?: DamageType; skillTypes?: SkillType[]; status: CreateStatus };
+  /**
+   * 目标「造成匹配伤害后同源叠层」（久战熟谋「我军群体」；反间 / 知己知彼「敌军群体」）：
+   * 准备阶段把 `status` 挂到本战法锁定目标身上；此后该目标每次造成匹配伤害（实际扣兵 > 0）时，
+   * 按 `rate`（缺省 1 = 必中；有值时走**原施法者**士气修正并发 `skill_trigger`）判定，
+   * 命中则把同一状态**同源再施加一次**——叠层/上限由状态自身 `maxStacks` 控制。
+   * 数组形式用于「攻击 / 策略两条独立轨」（反间、知己知彼）。
+   */
+  allyDealStack?:
+    | { damageType?: DamageType; skillTypes?: SkillType[]; status: CreateStatus; rate?: number }
+    | Array<{ damageType?: DamageType; skillTypes?: SkillType[]; status: CreateStatus; rate?: number }>;
   /**
    * 自身**主动主战法**发动后叠层，满层触发一次攻击并清空（乘间击隙「自身每发动主动主战法后，使自身造成的
    * 攻击伤害提升 15%，最多叠加 3 次。该效果每叠加 3 次后，对敌军群体发动 1 次攻击（240%），发动后攻击伤害

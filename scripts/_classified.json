@@ -2832,5 +2832,70 @@
     "status": "implemented",
     "missingMechanics": "",
     "note": "后出/漏录批次 p1：新增 CommandSkill.takenMagnitudeTrigger（受击增减伤净幅度满 50% 判定 + 回合末额外触发）"
+  },
+  {
+    "name": "合众",
+    "quality": "B",
+    "type": "passive",
+    "range": 1,
+    "triggerRate": null,
+    "targetDesc": "自己",
+    "effectDesc": "战斗中可以优先行动，每2回合恢复自身一定兵力（恢复率260.0%）",
+    "sources": "10个4星武将兑换（典籍）",
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "典籍批次 p1：priorityRounds 999 + 被动 roundStartRepeat.rounds[2,4,6,8]；无受属性段 → 上架"
+  },
+  {
+    "name": "疾战",
+    "quality": "B",
+    "type": "active",
+    "range": 1,
+    "triggerRate": "30%-40%",
+    "targetDesc": "自己",
+    "effectDesc": "使自身在本回合可以进行两次普通攻击，并免疫怯战效果",
+    "sources": "10个4星步兵武将兑换（典籍）",
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "典籍批次 p1：combo + cowardice_immune（各 1 回合）；发动率区间 [0.3,0.4]；上架"
+  },
+  {
+    "name": "并进",
+    "quality": "B",
+    "type": "active",
+    "range": 1,
+    "triggerRate": "40%",
+    "targetDesc": "自己",
+    "effectDesc": "使自身免疫怯战效果，同时进入分兵状态，普通攻击后同时对附近的敌军造成伤害（伤害率100.0%）持续1回合",
+    "sources": "10个4星武将兑换（典籍）",
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "典籍批次 p1：cowardice_immune + split{rate:100,duration:1}；无受属性段 → 上架"
+  },
+  {
+    "name": "励军",
+    "quality": "B",
+    "type": "active",
+    "range": 3,
+    "triggerRate": "35%",
+    "targetDesc": "敌军单体",
+    "effectDesc": "对敌军单体发动一次攻击（伤害率180.0%），并使自身主动战法的下一次伤害提高35.0%",
+    "sources": "10个4星武将兑换（典籍）",
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "典籍批次 p1：攻击 180% + 自身 damage_boost caused skillTypes[active] charges 1（一次性）；上架"
+  },
+  {
+    "name": "反间",
+    "quality": "A",
+    "type": "command",
+    "range": 4,
+    "triggerRate": null,
+    "targetDesc": "敌军群体（有效距离内2个目标）",
+    "effectDesc": "本场战斗中，敌军群体进行攻击或策略攻击造成伤害时，有70.0%的几率使其自身造成的该类型伤害下降8.0%，此效果最多叠加5次",
+    "sources": "3个WEI、SHU、WU5星武将兑换（典籍）",
+    "status": "implemented",
+    "missingMechanics": "",
+    "note": "典籍批次 p1：allyDealStack 扩展为数组 + 可选 rate（两条独立轨：实体/策略各 −8% ×5 层，70% 判定走施法者士气）；上架"
   }
 ]

@@ -10542,4 +10542,177 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       ],
     },
   },
+
+  // ═══════════════════════════════════════════════════════════════════
+  // 典籍战法批次（2026-09-27）：`dateyuan/通用战法待添加名单.md` §三（20 张，兑换典籍后拆解、任意武将可学）
+  // 官方数据来源 scripts/skill_extra.json：合众 200822 / 疾战 200819 / 并进 200827 / 励军 200821 / 反间 200818
+  // ═══════════════════════════════════════════════════════════════════
+
+  /**
+   * 合众（B 被动·距离 1·目标「自己」）：
+   * 战斗中可以优先行动，每 2 回合恢复自身一定兵力（恢复率 260.0%）。
+   * 官方 https://stzb.163.com/m/skilllist/200822.html（id 200822；1 级 130%）。
+   * 口径：
+   *   ①「优先行动」= `PassiveSkill.priorityRounds: 999`（甘宁 侵掠如火「全程先手」同款）；
+   *   ②「每 2 回合」= `roundStartRepeat.rounds: [2,4,6,8]`（引擎本轮为**被动** roundStartRepeat 补上
+   *      `rounds` 过滤——原先只有一类指挥支持；8 = 本仓库战斗上限回合，**推定**）；
+   *   ③ 恢复率 260% 官方未写受属性 → `strategyScaled:false, growthRate:0`（不缩放）。
+   * 全文无「受 XX 属性影响」→ 登记上架（**可学习战法池可见**）。
+   */
+  hezhong: {
+    id: 'hezhong',
+    name: '合众',
+    type: 'passive',
+    timing: 'battle_start',
+    range: 1,
+    triggerRate: 1,
+    targetMode: 'self',
+    priorityRounds: 999,
+    tags: ['heal'],
+    output: [],
+    roundStartRepeat: {
+      rounds: [2, 4, 6, 8],
+      output: [{ kind: 'heal', rate: 260, strategyScaled: false, growthRate: 0, target: 'self' }],
+    },
+  },
+
+  /**
+   * 疾战（B 主动·距离 1·目标「自己」·发动率 30%~40%）：
+   * 使自身在本回合可以进行两次普通攻击，并免疫怯战效果。
+   * 官方 https://stzb.163.com/m/skilllist/200819.html（id 200819；1 级同）。
+   * 口径：① 连击 `combo duration 1`（本回合）；② 免疫怯战 `cowardice_immune duration 1`
+   *   （魏武之泽同款状态）；③ 发动率为区间 → `triggerRate: [0.3, 0.4]` 每次 intInclusive 抽整百（仓库既有口径）。
+   * 全文无「受 XX 属性影响」→ 上架。
+   */
+  jizhan: {
+    id: 'jizhan',
+    name: '疾战',
+    type: 'active',
+    prepare: false,
+    range: 1,
+    triggerRate: [0.3, 0.4],
+    targetMode: 'self',
+    tags: ['combo', 'cowardice_immune'],
+    output: [
+      { kind: 'inflict_status', target: 'self', status: { type: 'combo', duration: 1 } },
+      { kind: 'inflict_status', target: 'self', status: { type: 'cowardice_immune', duration: 1 } },
+    ],
+  },
+
+  /**
+   * 并进（B 主动·距离 1·目标「自己」·发动率 40%）：
+   * 使自身免疫怯战效果，同时进入分兵状态，普通攻击后同时对附近的敌军造成伤害（伤害率 100.0%），持续 1 回合。
+   * 官方 https://stzb.163.com/m/skilllist/200827.html（id 200827；1 级 50%）。
+   * 口径：① 免疫怯战 `cowardice_immune duration 1`；② 分兵 `split{ rate:100, duration:1 }`
+   *   （「普通攻击后同时对附近敌军造成伤害」= 分兵；`rate` 官方未写受属性 → 不缩放）。
+   * 全文无「受 XX 属性影响」→ 上架。
+   */
+  bingjin: {
+    id: 'bingjin',
+    name: '并进',
+    type: 'active',
+    prepare: false,
+    range: 1,
+    triggerRate: 0.4,
+    targetMode: 'self',
+    tags: ['split', 'cowardice_immune'],
+    output: [
+      { kind: 'inflict_status', target: 'self', status: { type: 'cowardice_immune', duration: 1 } },
+      { kind: 'inflict_status', target: 'self', status: { type: 'split', rate: 100, duration: 1 } },
+    ],
+  },
+
+  /**
+   * 励军（B 主动·距离 3·目标「敌军单体」·发动率 35%）：
+   * 对敌军单体发动一次攻击（伤害率 180.0%），并使自身主动战法的下一次伤害提高 35.0%。
+   * 官方 https://stzb.163.com/m/skill_extra.json 条目 200821（1 级 90% / 17.5%）。
+   * 口径：「下一次伤害提高 35%」= `damage_boost`（caused + `skillTypes:['active']` + `charges:1`）——
+   *   一次性消耗（打出即移除，非叠层）；再次发动刷新为新的一次性效果（同源默认刷新）。
+   * 全文无「受 XX 属性影响」→ 上架。
+   */
+  lijun: {
+    id: 'lijun',
+    name: '励军',
+    type: 'active',
+    prepare: false,
+    range: 3,
+    triggerRate: 0.35,
+    // 「敌军单体」= 距离内均匀随机（仓库口径：`single` 是已废止的「最近优先」旧模式）
+    targetMode: 'random_single',
+    targetSide: 'enemy',
+    tags: ['damage', 'damage_boost'],
+    output: [
+      { kind: 'physical_damage', rate: 180 },
+      {
+        kind: 'inflict_status',
+        target: 'self',
+        status: {
+          type: 'damage_boost',
+          rate: 0.35,
+          duration: 999,
+          direction: 'caused',
+          skillTypes: ['active'],
+          charges: 1,
+        },
+      },
+    ],
+  },
+
+  /**
+   * 反间（A 指挥·一类·距离 4·目标「敌军群体（有效距离内 2 个目标）」）：
+   * 本场战斗中，敌军群体进行攻击或策略攻击造成伤害时，有 70.0% 的几率使其自身造成的该类型伤害下降 8.0%，
+   * 此效果最多叠加 5 次。
+   * 官方 https://stzb.163.com/m/skilllist/200818.html（id 200818；1 级 4%）。
+   * 口径：
+   *   ①「进行攻击或策略攻击造成伤害时…该类型伤害下降」= 两条**独立轨** `damage_boost`
+   *      （`direction:'caused'` + `damageType: 'physical' | 'strategy'`，`stack` 上限 5）——
+   *      与疮痍累身「受攻击/受策略两条衰减轨」同款独立计数；
+   *   ② 触发钩子复用并扩展 `CommandSkill.allyDealStack`（本轮改为**可传数组 + 可选 `rate`**）：
+   *      准备阶段把两条状态挂到锁定敌军身上，此后该敌军**每次造成匹配伤害后**按 `rate`（走**施法者**士气、
+   *      逐次发 `skill_trigger`）判定，命中则同源再施加一次（叠层 +1，封顶 5）；
+   *   ③「持续到战斗结束」= duration 999；6 名敌军各持独立层数。
+   * 全文无「受 XX 属性影响」→ 上架。
+   */
+  fanjian: {
+    id: 'fanjian',
+    name: '反间',
+    type: 'command',
+    phase: 'prep',
+    range: 4,
+    triggerRate: 1,
+    targetMode: 'group',
+    groupCount: 2,
+    targetSide: 'enemy',
+    retainAfterDeath: true,
+    tags: ['damage_boost'],
+    output: [],
+    allyDealStack: [
+      {
+        damageType: 'physical',
+        rate: 0.7,
+        status: {
+          type: 'damage_boost',
+          rate: -0.08,
+          duration: 999,
+          direction: 'caused',
+          damageType: 'physical',
+          stack: true,
+          maxStacks: 5,
+        },
+      },
+      {
+        damageType: 'strategy',
+        rate: 0.7,
+        status: {
+          type: 'damage_boost',
+          rate: -0.08,
+          duration: 999,
+          direction: 'caused',
+          damageType: 'strategy',
+          stack: true,
+          maxStacks: 5,
+        },
+      },
+    ],
+  },
 };
