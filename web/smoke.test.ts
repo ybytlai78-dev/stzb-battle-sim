@@ -133,7 +133,7 @@ describe('Web 战斗模拟器冒烟', () => {
     expect(document.querySelector('.hero-pool .filter-tag')).toBeTruthy();
     expect(document.querySelector('.team-panel.red h2')!.textContent).toBe('红队');
     expect(document.querySelector('.team-panel.blue h2')!.textContent).toBe('蓝队');
-    expect(document.querySelectorAll('.nav-link').length).toBe(5); // 战报 / 预设 / 战法 / 伤害测试 / 教程
+    expect(document.querySelectorAll('.nav-link').length).toBe(7); // 战报 / 预设 / 战法 / 伤害测试 / AI 顾问 / 教程 / 公告
     expect(document.querySelectorAll('.team-panel.red .slot').length).toBe(3);
     expect(document.querySelectorAll('.team-panel.blue .slot').length).toBe(3);
     expect(document.querySelectorAll('.hero-card').length).toBeGreaterThan(20);

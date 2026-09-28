@@ -6,9 +6,12 @@ import './styles.css';
 import './mobile.css';
 import './lab.css';
 import './tutorial.css';
+import './advisor.css';
 import { runBattle } from '../src/engine/combat';
 import type { General } from '../src/engine/types';
 import type { BattleReport } from '../src/engine/types';
+import { mountAdvisor, type AdvisorView } from './advisor/view';
+import { createAdvisorHost } from './advisorHost';
 import { buildGeneral, freePointBudget, getHeroById, heroIdOf } from './heroes';
 import {
   emptyEditor,
@@ -49,6 +52,8 @@ import { createBattleView } from './battleView';
 import { createBattleSummary, createStatsView } from './battleSummary';
 import { WIN_RATE_RUNS, openWinRatePanel } from './winRate';
 import { mountDamageLab, setDummyPreset } from './damageLab';
+import { SITE_VERSION } from './changelog';
+import { maybeAutoOpenAnnouncement, openAnnouncementPanel, syncAnnouncementBadge } from './announcement';
 
 // ─── 状态 ───
 const state: EditorState = emptyEditor();
@@ -61,12 +66,15 @@ let redMorale = 120;
 let blueMorale = 120;
 
 /**
- * 构建标记（显示在底栏，用来一眼确认手机上装的是哪一版）。
- * ⚠️ 改 android/app/build.gradle 的 versionName 时，这里同步改 —— 两边保持一致。
- * 起因：测试包 versionCode/versionName 长期不动，装机后分不清装的是新版还是旧版，
- * 只能靠肉眼猜 UI 有没有变。
+ * 底栏版本标记 = **主站版本**（`web/changelog.ts` 的 `SITE_VERSION`，即公告最新一条的版本号）。
+ *
+ * 改版本的正确姿势：在 `web/changelog.ts` 的 `ANNOUNCEMENTS` **最前面**加一条新版本公告 ——
+ * 底栏标记、公告栏标题、未读红点会一起跟着走（`web/changelog.test.ts` 会守住一致性），
+ * **不要在这里手改数字**。
+ * ⚠️ 与 `android/app/build.gradle` 的 `versionName`（安卓打包号）是两套号，含义不同，别互相改。
+ * （起因：测试包 versionCode/versionName 长期不动，装机后分不清装的是新版还是旧版。）
  */
-export const BUILD_TAG = 'v2.1';
+export const BUILD_TAG = `v${SITE_VERSION}`;
 
 const errBox = document.createElement('div');
 errBox.className = 'err-msg';
@@ -383,6 +391,23 @@ function refresh(): void {
   renderTeamEditor(editorRoot, state, handlers);
 }
 
+// ─── AI 顾问（右侧抽屉；懒挂载，只在第一次点开时创建） ───
+let advisorView: AdvisorView | null = null;
+
+function openAdvisor(): void {
+  if (!advisorView) {
+    advisorView = mountAdvisor(document.body, {
+      host: createAdvisorHost({
+        getTeam: () => state.red,
+        handlers,
+        refresh,
+        notify: (msg) => showNotice(msg),
+      }),
+    });
+  }
+  advisorView.open();
+}
+
 /** 站位顺序：红队（我方）与蓝队（敌方）都从上到下 大营/中军/前锋 */
 const RED_POSITIONS: General['position'][] = ['大营', '中军', '前锋'];
 const BLUE_POSITIONS: General['position'][] = ['大营', '中军', '前锋'];
@@ -582,7 +607,9 @@ export function initApp(root?: HTMLElement): void {
       <button type="button" class="nav-link" data-nav="presets" title="阵容预设：保存、搜索、一键上场">预设</button>
       <button type="button" class="nav-link" data-nav="skills">战法</button>
       <button type="button" class="nav-link" data-nav="lab">伤害测试</button>
+      <button type="button" class="nav-link" data-nav="advisor" title="AI 顾问：读配将区 → 调 L2/L3 搜索 → 给带实测数据的方案">AI 顾问</button>
       <button type="button" class="nav-link" data-nav="tutorial">教程</button>
+      <button type="button" class="nav-link" data-nav="notice" title="更新公告：每个版本的更新改动都在这里">公告</button>
     </nav>
   `;
   app.appendChild(header);
@@ -607,7 +634,7 @@ export function initApp(root?: HTMLElement): void {
     <label title="最大回合固定为 8，不可调整">最大回合 <span class="fixed">8（固定）</span></label>
     <label>我方士气 <input type="number" id="morale-red" value="${redMorale}" min="80" max="140" title="影响战法发动率：120 → 系数 1.12" /></label>
     <label>敌方士气 <input type="number" id="morale-blue" value="${blueMorale}" min="80" max="140" title="影响战法发动率：120 → 系数 1.12" /></label>
-    <span class="build-tag" title="构建标记：与 android/app/build.gradle 的 versionName 同步，用来确认装的是哪一版">${BUILD_TAG}</span>
+    <button type="button" class="build-tag" id="build-tag" title="主站版本（与公告同源）：点这里看更新公告。安卓打包号 versionName 见 android/app/build.gradle，两者不是同一个号">${BUILD_TAG}</button>
     <span class="spacer"></span>
     <button id="start" class="btn">开始模拟</button>
   `;
@@ -633,8 +660,18 @@ export function initApp(root?: HTMLElement): void {
   header.querySelector('[data-nav="lab"]')!.addEventListener('click', () => {
     labVisible ? exitLab() : enterLab();
   });
+  // AI 顾问（右侧抽屉）：读配将区 → 调 L2/L3 搜索 → 方案卡 → 一键应用
+  header.querySelector('[data-nav="advisor"]')!.addEventListener('click', () => openAdvisor());
   // 引擎使用指南（带截图的教程弹窗）
   header.querySelector('[data-nav="tutorial"]')!.addEventListener('click', () => openTutorialPanel());
+  // 更新公告（公告栏）：版本 → 更新改动，数据在 web/changelog.ts
+  header.querySelector('[data-nav="notice"]')!.addEventListener('click', () => openAnnouncementPanel());
+  // 底栏版本标记也点得开（它就是「当前版本号」，点进去看这个版本改了什么）
+  (controlBar.querySelector('#build-tag') as HTMLButtonElement).addEventListener('click', () => openAnnouncementPanel());
+
+  // 公告栏：版本号变化后首次进入自动弹一次（首次运行只静默记账，不打扰）→ 再同步一次未读红点
+  maybeAutoOpenAnnouncement();
+  syncAnnouncementBadge();
 }
 
 // ─── 伤害测试实验室视图（顶栏「伤害测试」导航切换）───
