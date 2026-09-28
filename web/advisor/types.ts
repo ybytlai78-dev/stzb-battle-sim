@@ -167,6 +167,8 @@ export interface AdvisorMessage {
   content: string;
   /** assistant 消息里请求的工具调用（tool 消息则不带） */
   toolCalls?: ToolCallRequest[];
+  /** role = 'tool' 时对应哪次调用（OpenAI 协议的 tool_call_id） */
+  toolCallId?: string;
 }
 
 export interface ToolCallRecord {
