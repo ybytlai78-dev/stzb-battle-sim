@@ -12,6 +12,7 @@
  * 注意：工具层的跑批是**真的**（干跑模式只把跑批换成毫秒返回的假实现，`?runs=` 可控）。
  */
 import { runAdvisorTurn, type AdvisorEvent } from './advisor/loop';
+import { TraceLine } from './advisor/trace';
 import { createLocalCache } from './advisor/cache';
 import { createBrowserTransport, createFakeTransport, type AdvisorSettings, type TokenUsage } from './advisor/transport';
 import { makeCtx, type ToolCtx } from './advisor/tools';
@@ -161,6 +162,7 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
       <div id="lab-progress" class="progress"></div>
 
       <h2>事件日志</h2>
+      <div id="lab-trace" class="trace-line"></div>
       <pre id="lab-log" class="log"></pre>
       <h2>本轮裁定</h2>
       <pre id="lab-verdict" class="log small">（还没跑）</pre>
@@ -171,7 +173,6 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
   const $ = <T extends HTMLElement>(id: string): T => root.querySelector(`#${id}`) as T;
   const log = $('lab-log');
   const cost = $('lab-cost');
-  const progressEl = $('lab-progress');
   const verdictEl = $('lab-verdict');
   const traceEl = $('lab-trace');
   const sendBtn = $<HTMLButtonElement>('lab-send');
@@ -185,28 +186,29 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
   let toolCount = 0;
   let battles = 0;
   let tokens = 0;
+  let trace = new TraceLine();
   let caps = { maxCalls: settings.maxCalls, maxTokens: settings.maxTokens };
   const onEvent = (e: AdvisorEvent): void => {
-    if (e.type === 'round') append(`— 第 ${e.index + 1} 轮 —`);
-    else if (e.type === 'delta') {
+    // 工具调用压成一行（与主站抽屉同口径）
+    if (e.type === 'round') {
+      /* 轮次不再单独占行 */
+    } else if (e.type === 'delta') {
       log.textContent += e.text;
       log.scrollTop = log.scrollHeight;
     } else if (e.type === 'tool_start') {
       toolCount += 1;
-      append(`▶ 调用 ${e.name}`);
+      trace.start(e.name);
     } else if (e.type === 'tool_end') {
       battles += e.battles;
-      progressEl.textContent = '';
-      append(e.error ? `✘ ${e.name} 报错：${e.error}` : `✔ ${e.name}（${e.battles} 场 / ${e.ms}ms）`);
+      trace.end(e.name, { battles: e.battles, ms: e.ms, cached: e.cached, ...(e.error ? { error: e.error } : {}) });
     } else if (e.type === 'tool_progress') {
-      // 长搜索（L2/L3 几十秒）——原地刷进度，不刷屏
-      const pct = e.total ? Math.round((e.done / e.total) * 100) : 0;
-      progressEl.textContent = `⏳ ${e.name}：真跑 ${e.done}/${e.total} 场（${pct}%）${e.label ? ' — ' + e.label : ''}`;
+      trace.progress(e.name, e.done, e.total, e.label);
     } else if (e.type === 'usage') {
       usage = e.usage;
       tokens += e.usage.totalTokens;
     }
-    cost.textContent = `本轮：${toolCount}/${caps.maxCalls} 次工具调用 · ${battles} 场 · token ${tokens}${usage ? '' : ''} / ${caps.maxTokens}`;
+    traceEl.textContent = trace.text();
+    cost.textContent = `本轮：${toolCount}/${caps.maxCalls} 次工具调用 · ${battles} 场 · 词元 ${tokens} / ${caps.maxTokens}`;
   };
 
   const renderVerdict = (turn: AdvisorTurn): void => {
@@ -251,14 +253,14 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
     running = true;
     log.textContent = '';
     verdictEl.textContent = '（跑着呢…）';
-    traceEl.textContent = '（空）';
+    traceEl.textContent = '';
     toolCount = 0;
     battles = 0;
     tokens = 0;
     usage = null;
+    trace = new TraceLine();
     caps = { maxCalls: s.maxCalls, maxTokens: s.maxTokens };
     cost.textContent = '';
-    progressEl.textContent = '';
     sendBtn.disabled = true;
     stopBtn.disabled = false;
     controller = new AbortController();

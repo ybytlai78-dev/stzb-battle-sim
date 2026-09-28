@@ -57,4 +57,16 @@ textarea { width: 100%; }
 }
 .trace-row { border-top: 1px solid var(--lab-line); padding: 6px 0; }
 .trace-row code { color: var(--lab-key); }
+/* 一行轨迹（工具调用全压在这一行） */
+.trace-line {
+  background: #0f0c08;
+  border: 1px solid var(--lab-line);
+  border-radius: 4px;
+  padding: 4px 8px;
+  margin-bottom: 6px;
+  color: var(--lab-key);
+  font: 12px/1.5 ui-monospace, Consolas, monospace;
+  white-space: nowrap;
+  overflow-x: auto;
+}
 .progress { min-height: 18px; color: var(--lab-key); font: 12px/1.5 ui-monospace, Consolas, monospace; }

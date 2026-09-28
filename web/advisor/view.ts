@@ -11,6 +11,7 @@ import { getHeroById, SLOTTED_HEROES } from '../heroes';
 import { cfgOf } from './gate';
 import { createLocalCache } from './cache';
 import { runAdvisorTurn, type AdvisorEvent } from './loop';
+import { evidenceZh, TraceLine } from './trace';
 import { createBrowserTransport, createFakeTransport, type AdvisorSettings, type TokenUsage } from './transport';
 import { makeCtx, type ToolCtx } from './tools';
 import { DEFAULT_BUDGET, DEFAULT_DUMMY, PLAN_POSITIONS, type AdvisorPlan, type AdvisorTurn, type PlanCheck } from './types';
@@ -132,9 +133,9 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
   let controller: AbortController | null = null;
   let usage: TokenUsage | null = null;
   let lastTurn: AdvisorTurn | null = null;
-  let toolCount = 0;
   let battles = 0;
   let tokens = 0;
+  let trace = new TraceLine();
 
   const wrap = document.createElement('div');
   wrap.className = 'advisor-drawer';
@@ -153,20 +154,20 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
         <details class="advisor-settings">
           <summary>设置（模型 / 额度）</summary>
           <div class="advisor-row">
-            <label>baseURL <input id="adv-base" value="${esc(settings.baseUrl)}" /></label>
-            <label>model <input id="adv-model" value="${esc(settings.model)}" /></label>
-            <label>key <input id="adv-key" type="password" value="${esc(settings.key)}" placeholder="sk-..." /></label>
+            <label>接口地址 <input id="adv-base" value="${esc(settings.baseUrl)}" /></label>
+            <label>模型 <input id="adv-model" value="${esc(settings.model)}" /></label>
+            <label>密钥 <input id="adv-key" type="password" value="${esc(settings.key)}" placeholder="sk-..." /></label>
           </div>
           <div class="advisor-row">
             <label class="advisor-chk"><input id="adv-fake" type="checkbox" /> 干跑（不联网）</label>
-            <label>调用上限 <input id="adv-maxcalls" type="number" min="1" max="500" value="${settings.maxCalls}" /></label>
+            <label>调用次数上限 <input id="adv-maxcalls" type="number" min="1" max="500" value="${settings.maxCalls}" /></label>
             <label>场次上限 <input id="adv-maxbattles" type="number" min="100" step="1000" value="${settings.maxBattles}" /></label>
-            <label>token 上限 <input id="adv-maxtokens" type="number" min="1000" step="10000" value="${settings.maxTokens}" /></label>
+            <label>词元上限 <input id="adv-maxtokens" type="number" min="1000" step="10000" value="${settings.maxTokens}" /></label>
           </div>
-          <p class="advisor-note">key 只存本机 localStorage，直连厂商。口径：对**标准木桩**（防御 ${DEFAULT_DUMMY.defense} / 谋略 ${DEFAULT_DUMMY.strategy} / 步 / ${DEFAULT_DUMMY.troops}）的伤害期望——不是打你对面那队。</p>
+          <p class="advisor-note">密钥只存在本机浏览器里，直连厂商。口径：对**标准木桩**（防御 ${DEFAULT_DUMMY.defense} / 谋略 ${DEFAULT_DUMMY.strategy} / 步 / ${DEFAULT_DUMMY.troops}）的伤害期望——不是打你对面那队。</p>
         </details>
+        <div class="advisor-trace"></div>
         <pre class="advisor-log"></pre>
-        <div class="advisor-progress"></div>
         <div class="advisor-plans"></div>
         <div class="advisor-cost"></div>
         <div class="advisor-input-row">
@@ -224,7 +225,7 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
       ? `<div class="pc-metric"><b>标准口径复算</b>（${rc.runs} 场 / 种子 ${rc.seed}）：核心将期望 <b>${num(rc.mean)}</b> ±${num(rc.halfWidth)}</div>`
       : '<div class="pc-metric bad">标准口径复算未完成</div>';
     const compare = search
-      ? `<div class="pc-metric">搜索口径（${esc(search.evidenceId)}，${search.runs} 场）：${num(search.mean)} ±${num(search.halfWidth)} → ${
+      ? `<div class="pc-metric">搜索口径（来自「${evidenceZh(search.evidenceId)}」，${search.runs} 场）：${num(search.mean)} ±${num(search.halfWidth)} → ${
           check.judge === 'consistent' ? '区间重叠，<b>一致</b>' : '复算明显更低，<b>对口径敏感，谨慎采纳</b>'
         }</div>`
       : '<div class="pc-metric bad">方案没引用任何实测证据（未验证）</div>';
@@ -260,23 +261,23 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
   }
 
   function onEvent(e: AdvisorEvent): void {
-    if (e.type === 'round') append(`\n— 第 ${e.index + 1} 轮 —\n`);
-    else if (e.type === 'delta') append(e.text);
-    else if (e.type === 'tool_start') {
-      toolCount += 1;
-      append(`\n▶ ${e.name}`);
-    } else if (e.type === 'tool_end') {
+    // 工具调用**压成一行**：轨迹行原地刷新，正文只写模型的话
+    if (e.type === 'tool_start') trace.start(e.name);
+    else if (e.type === 'tool_end') {
       battles += e.battles;
-      el('.advisor-progress').textContent = '';
-      append(e.error ? ` ✘ ${e.error}` : e.cached ? ' ✔（缓存命中，本轮没再跑）' : ` ✔（${e.battles} 场 / ${e.ms}ms）`);
-    } else if (e.type === 'tool_progress') {
-      const pct = e.total ? Math.round((e.done / e.total) * 100) : 0;
-      el('.advisor-progress').textContent = `⏳ ${e.name}：真跑 ${num(e.done)}/${num(e.total)} 场（${pct}%）`;
+      trace.end(e.name, { battles: e.battles, ms: e.ms, cached: e.cached, ...(e.error ? { error: e.error } : {}) });
+    } else if (e.type === 'tool_progress') trace.progress(e.name, e.done, e.total, e.label);
+    else if (e.type === 'delta') {
+      const log = el('.advisor-log');
+      log.textContent += e.text;
+      log.scrollTop = log.scrollHeight;
     } else if (e.type === 'usage') {
       usage = e.usage;
       tokens += e.usage.totalTokens;
     }
-    el('.advisor-cost').textContent = `本轮：${toolCount} 次工具调用 · ${num(battles)} 场 · token ${num(tokens)}${usage ? '' : ''}`;
+    if (trace.text()) el('.advisor-trace').textContent = trace.text();
+    el('.advisor-cost').textContent = `本轮：${trace.count} 次工具调用 · ${num(battles)} 场 · 词元 ${num(tokens)}`;
+    void usage;
   }
 
   async function send(text: string): Promise<void> {
@@ -291,13 +292,11 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
     }
     saveSettings(s);
     running = true;
-    toolCount = 0;
-    battles = 0;
     tokens = 0;
-    usage = null;
+    trace = new TraceLine();
     el('.advisor-log').textContent = '';
+    el('.advisor-trace').textContent = '';
     el('.advisor-plans').innerHTML = '';
-    el('.advisor-progress').textContent = '';
     el<HTMLTextAreaElement>('.advisor-input').value = '';
     el<HTMLButtonElement>('.advisor-send').disabled = true;
     el<HTMLButtonElement>('.advisor-stop').disabled = false;

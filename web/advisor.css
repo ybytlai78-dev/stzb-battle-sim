@@ -61,6 +61,18 @@
   font: 12px/1.55 ui-monospace, Consolas, monospace;
 }
 .advisor-progress { min-height: 16px; color: var(--gold, #c49a36); font: 11px/1.4 ui-monospace, Consolas, monospace; }
+/* 一行轨迹：工具调用全部压在这一行，原地刷新（用户 2026-09-29 口径） */
+.advisor-trace {
+  min-height: 18px;
+  padding: 4px 8px;
+  border: 1px solid var(--line, #3c3020);
+  border-radius: 4px;
+  background: var(--panel-2, #241f1d);
+  color: var(--gold-bright, #e6c67e);
+  font: 12px/1.5 ui-monospace, Consolas, monospace;
+  white-space: nowrap;
+  overflow-x: auto;
+}
 .advisor-cost { font-size: 11px; color: var(--text-dim, #8a827c); }
 
 .advisor-plans { display: flex; flex-direction: column; gap: 8px; max-height: 45%; overflow: auto; }

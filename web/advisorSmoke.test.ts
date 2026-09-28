@@ -84,10 +84,15 @@ describe('AI 顾问抽屉（主站内嵌）', () => {
     view.open();
     await view.__send('这队现在打木桩能打多少？');
 
+    // 工具调用**压成一行**（用户 2026-09-29 口径）：轨迹行两个工具、中文名、正文只放模型的话
+    const trace = root.querySelector('.advisor-trace')?.textContent ?? '';
+    expect(trace).toContain('读配置');
+    expect(trace).toContain('试跑');
+    expect(trace.split('·')).toHaveLength(2);
+    expect(trace).not.toContain('get_config');
     const log = root.querySelector('.advisor-log')?.textContent ?? '';
-    expect(log).toContain('▶ get_config');
-    expect(log).toContain('▶ simulate');
     expect(log).toContain('【顾问】');
+    expect(log).not.toContain('▶');
 
     const card = root.querySelector('.advisor-plan-card') as HTMLElement;
     expect(card).toBeTruthy();
@@ -99,6 +104,9 @@ describe('AI 顾问抽屉（主站内嵌）', () => {
     expect(cardText).toContain('标准口径复算');
     expect(cardText).toContain('7,317');
     expect(cardText).toContain('20260929');
+    // 证据用中文短标，不再摆英文编号
+    expect(cardText).toContain('试跑②');
+    expect(cardText).not.toContain('ev-2-simulate');
     // 三关通过 → 应用可点
     const applyBtn = card.querySelector('.advisor-apply') as HTMLButtonElement;
     expect(applyBtn.disabled).toBe(false);
