@@ -2888,14 +2888,15 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
   }
 
   // 混乱：禁主动战法 + 普攻 + 追击（但被动/指挥/DoT 已在上方判定完成）
-  if (hasStatus(unit, 'confusion')) {
+  // 木桩（BattleConfig.inertSides → unit.inert）：走同一个出口——不还手，但 DoT / 「目标下次行动前」延迟伤害照常
+  if (unit.inert || hasStatus(unit, 'confusion')) {
     ctx.events.push({
       type: 'no_attack_target',
       unitId: unit.general.id,
       name: unit.general.name,
-      reason: '混乱：无法行动',
+      reason: unit.inert ? '木桩：不还手（不普攻 / 不发动战法）' : '混乱：无法行动',
     });
-    endUnitAct(ctx, unit, actEndMarked, statusesAtActStart); // 混乱出口：状态照常递减
+    endUnitAct(ctx, unit, actEndMarked, statusesAtActStart); // 状态照常递减
     return;
   }
 

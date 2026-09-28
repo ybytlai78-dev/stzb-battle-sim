@@ -6,9 +6,9 @@
  */
 import { SKILL_REGISTRY } from '../src/data/skills';
 import { getTreasure } from '../src/data/treasures';
-import type { TreasureLoadout, TroopType } from '../src/engine/types';
+import type { General, Position, TreasureLoadout, TroopType } from '../src/engine/types';
 import type { GeneralTrait } from '../src/engine/secondaryTroop';
-import { baseStatsAt, freePointBudget, HERO_RECORDS, isFemale, isLearnableSkillListed, isMainSkill, SLOTTED_HEROES, SKILL_GRADES, TROOP_CHAR, troopCapacity } from './heroes';
+import { baseStatsAt, buildGeneral, freePointBudget, HERO_RECORDS, isFemale, isLearnableSkillListed, isMainSkill, SLOTTED_HEROES, SKILL_GRADES, TROOP_CHAR, troopCapacity } from './heroes';
 import type { HeroJson } from './heroes';
 import pinyinJson from './data/pinyin.json';
 import { simulateRounds, skillById, SLOT_LABEL, type ParseContext, type RoundModelResult, type RoundUnit, type SkillSlot } from './roundModel';
@@ -341,6 +341,35 @@ export function computeResult(cfg: ViewCfg, rounds?: number): RoundModelResult {
     rounds: rounds ?? cfg.rounds,
     manual: cfg.manual,
   });
+}
+
+/** 站位顺序：0=大营 1=中军 2=前锋（与 `unitTemplates` 一致） */
+const CFG_POSITIONS: Position[] = ['大营', '中军', '前锋'];
+
+/**
+ * ViewCfg → 引擎 `General[]`（真引擎战斗 `runBattle` 用）。
+ * 与 `buildUnits` 的区别：`buildUnits` 给解析模型（L2/L3），本函数给模拟器（L4 胜率 / L2 模拟测评）。
+ * 二级兵种转换截图暂不识别（见 `docs/截图识别-敌对队伍集.md` §八），故传 undefined；兵系特性 / 宝物照传。
+ */
+export function generalsOf(cfg: ViewCfg, morale: number): General[] {
+  return cfg.slots
+    .map((s, i) => {
+      const rec = HERO_RECORDS[s.heroId];
+      if (!rec) return undefined;
+      return buildGeneral(
+        s.heroId,
+        s.skillIds,
+        { attack: s.addAttack, strategy: s.addStrategy },
+        CFG_POSITIONS[i] ?? '中军',
+        0,
+        s.level,
+        morale,
+        undefined,
+        s.traits,
+        s.treasure ?? null
+      );
+    })
+    .filter((g): g is General => Boolean(g));
 }
 
 export interface ConfigPanelOpts {

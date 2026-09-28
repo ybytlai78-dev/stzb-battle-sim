@@ -65,8 +65,8 @@ export function runBattle(config: BattleConfig): BattleReport {
   const events: BattleEvent[] = [];
   const skills: Map<string, Skill> = new Map(Object.entries(SKILL_REGISTRY));
 
-  const myTeam = toUnitStates(teams.myTeam, 'my');
-  const enemyTeam = toUnitStates(teams.enemyTeam, 'enemy');
+  const myTeam = toUnitStates(teams.myTeam, 'my', config.inertSides?.includes('my') === true);
+  const enemyTeam = toUnitStates(teams.enemyTeam, 'enemy', config.inertSides?.includes('enemy') === true);
 
   const ctx: CombatContext = {
     rng,
@@ -134,10 +134,13 @@ export function runBattle(config: BattleConfig): BattleReport {
   }
   events.push({ type: 'prep_phase', phase: 'skill' });
   // 【战法】先判定全部 battle_start 被动（百战精兵等加属性），再判定一类指挥（持节镇西等读生效属性）
+  // 木桩（inertSides）不参与这两步：不还手就不该在准备阶段打出指挥伤害
   for (const unit of turnOrder) {
+    if (unit.inert) continue;
     triggerPassiveSkills(ctx, unit, 'battle_start');
   }
   for (const unit of turnOrder) {
+    if (unit.inert) continue;
     triggerCommandSkills(ctx, unit);
   }
   events.push({ type: 'preparation_end' });
@@ -238,7 +241,7 @@ export function runBattle(config: BattleConfig): BattleReport {
   };
 }
 
-function toUnitStates(generals: General[], side: 'my' | 'enemy'): UnitState[] {
+function toUnitStates(generals: General[], side: 'my' | 'enemy', inert = false): UnitState[] {
   return generals.map((g) => ({
     general: g,
     side,
@@ -249,6 +252,7 @@ function toUnitStates(generals: General[], side: 'my' | 'enemy'): UnitState[] {
     statuses: [],
     preparations: [],
     hasActedThisRound: false,
+    ...(inert ? { inert: true } : {}),
   }));
 }
 

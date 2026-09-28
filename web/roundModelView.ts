@@ -1,11 +1,22 @@
-/**
- * 回合期望模型页面（L2 视图）：配置队伍 → 每回合期望伤害 / 前三回合总伤 / 来源拆解。
+﻿/**
+ * 伤害期望模型页面（L2 视图）：配置队伍 → **模拟测评（真引擎）**：木桩不还手，粗筛 3 场 → 组合榜单前十
+ * → 决赛 ≥20 场 → 每套配置的伤害期望排行；下方解析式回合期望保留作对照。
  * 独立页 round-model.html，不并入主站（用户 2026-09-22 口径）。
  */
 import type { TroopType } from '../src/engine/types';
 import { HERO_RECORDS, TROOP_CHAR } from './heroes';
 import { renderRoundChart, renderRoundLegend, SOURCE_COLOR, fmt } from './roundChart';
 import { EFFECT_LABEL, SOURCE_ORDER, windowTotals, type RoundModelResult } from './roundModel';
+import {
+  autoCoreUnits,
+  estimateBattles,
+  runSimExpectationAsync,
+  simSlots,
+  FINAL_RUNS_MIN,
+  type SimExpectAsyncOptions,
+  type SimExpectResult,
+} from './simExpectation';
+import { simControlsHtml, simProgressHtml, simResultHtml } from './simExpectView';
 import { buildUnits, computeResult, defaultCfg, renderConfigPanel, type ViewCfg } from './teamConfig';
 
 /** 挂载页面（出错时把报错画进页面，避免只看到空白/半边 UI） */
@@ -33,8 +44,9 @@ function mountRoundModelInner(root: HTMLElement): void {
         <div>
           <h1>回合期望模型 · 前三回合总伤</h1>
           <p class="rm-sub">
-            解析式期望（非模拟）：<code>Σ 出手位 × 期望发动次数 × 单次伤害</code>。单次伤害回到引擎 <code>calcDamage</code>。
-            口径：<b>不含控制 / 规避 / 兵力截断 / 目标阵亡</b>（输出上界）。
+            <b>主口径 = 真引擎模拟测评</b>：靶子是<b>不还手的木桩 ×3</b>（不放战法、不普攻），
+            逐槽粗筛 3 场 → 组合榜单前十 → 决赛 ≥20 场，汇总出<b>每套配置的伤害期望排行</b>。
+            这里只算伤害期望——胜负判定是 L4 的事。下方解析式期望保留作对照（口径不含控制 / 规避 / 兵力截断）。
           </p>
         </div>
         <div class="rm-head-links">
@@ -46,8 +58,18 @@ function mountRoundModelInner(root: HTMLElement): void {
         <aside class="rm-card rm-side" id="rm-config"></aside>
         <main class="rm-main">
           <section class="rm-card rm-hero" id="rm-summary"></section>
+          <section class="rm-card rm-sim-card" id="rm-sim" data-state="idle">
+            <h2>模拟测评 · 伤害期望排行 <span class="rm-dim" id="rm-sim-hint"></span></h2>
+            <div id="rm-sim-controls"></div>
+            <div id="rm-sim-progress"></div>
+            <div id="rm-sim-result">
+              <div class="rm-note">点「开始模拟测评」：靶子是不还手的木桩（不放战法、不普攻）；
+              先逐槽粗筛（默认每个候选战法 3 场），再把整队组合排榜单（前 10 名）进决赛（默认每套 20 场），
+              最后按伤害期望排行。</div>
+            </div>
+          </section>
           <section class="rm-card">
-            <h2>每回合期望伤害（按来源堆叠）</h2>
+            <h2>每回合期望伤害（解析口径 · 按来源堆叠）</h2>
             <div class="rm-legend" id="rm-legend"></div>
             <div class="rm-chart" id="rm-chart"></div>
           </section>
@@ -76,6 +98,254 @@ function mountRoundModelInner(root: HTMLElement): void {
   const effectsEl = root.querySelector<HTMLElement>('#rm-effects')!;
   const warningsEl = root.querySelector<HTMLElement>('#rm-warnings')!;
   const warnCountEl = root.querySelector<HTMLElement>('#rm-warn-count')!;
+  const simEl = root.querySelector<HTMLElement>('#rm-sim')!;
+  const simControlsEl = root.querySelector<HTMLElement>('#rm-sim-controls')!;
+  const simProgressEl = root.querySelector<HTMLElement>('#rm-sim-progress')!;
+  const simResultEl = root.querySelector<HTMLElement>('#rm-sim-result')!;
+  const simHintEl = root.querySelector<HTMLElement>('#rm-sim-hint')!;
+
+  /* ──────────────────── 模拟测评（真引擎 · 伤害期望排行） ────────────────────
+   * 状态留在闭包里：改配置只重画解析口径那几张卡，模拟结果不丢；
+   * 配置与「跑结果时的配置」不一致时给一条「已过期」提示（不静默拿旧数字当新配置的结论）。 */
+  const simState: {
+    result: SimExpectResult | null;
+    signature: string;
+    running: boolean;
+    coarseRuns: number;
+    finalRuns: number;
+    unitKeep: number;
+    pairCarriers: number;
+    coarseTop: number;
+    maxCombos: number;
+    rankBy: 'total' | 'first3';
+    dummyTroops: number;
+    seed: number;
+    swapSides: boolean;
+    /** 上次渲染控件时的空槽位指纹（空槽变化才重建参与匹配 / 核心位勾选） */
+    slotSig: string;
+  } = {
+    result: null,
+    signature: '',
+    running: false,
+    coarseRuns: 3,
+    finalRuns: FINAL_RUNS_MIN,
+    unitKeep: 32,
+    pairCarriers: 10,
+    coarseTop: 32,
+    maxCombos: 1000,
+    rankBy: 'total',
+    dummyTroops: 150000,
+    seed: 20260922,
+    swapSides: true,
+    slotSig: '',
+  };
+
+  /** 配置指纹：判断已有模拟结果是否还对得上当前配置 */
+  function cfgSignature(c: ViewCfg): string {
+    return JSON.stringify([
+      c.slots.map((s) => [s.heroId, s.level, s.addAttack, s.addStrategy, s.troopType, s.skillIds.join(',')]),
+      c.morale,
+      c.enemy,
+      c.rounds,
+    ]);
+  }
+
+  /** 空槽位（渲染「核心位」勾选用）：与模块 `simSlots` 同口径 */
+  function emptySlotsOf(): Array<{ key: string; unit: number; slot: number; unitName: string }> {
+    return simSlots(cfg).map((s) => ({ key: `${s.unit}-${s.slot}`, unit: s.unit, slot: s.slot, unitName: s.unitName }));
+  }
+
+  /** 自动识别的核心将（未勾任何核心位时生效） */
+  function autoCoreName(): string {
+    return cfg.slots[autoCoreUnits(cfg)[0] ?? 0]
+      ? (HERO_RECORDS[cfg.slots[autoCoreUnits(cfg)[0] ?? 0].heroId]?.name ?? '—')
+      : '—';
+  }
+
+  /** 「参与匹配的将」默认 = 自动识别的核心将（用户可改勾选） */
+  function defaultMatchUnits(): number[] {
+    return autoCoreUnits(cfg);
+  }
+
+  /** 「核心位」默认 = 自动识别核心将的空槽 */
+  function defaultCoreSlotKeys(): string[] {
+    const core = new Set(autoCoreUnits(cfg));
+    return emptySlotsOf()
+      .filter((s) => core.has(s.unit))
+      .map((s) => s.key);
+  }
+
+  function simControlsInit(): Parameters<typeof simControlsHtml>[0] {
+    const emptySlots = emptySlotsOf();
+    const checkedMatch = Array.from(simEl.querySelectorAll<HTMLInputElement>('[data-sim-match]'))
+      .filter((el) => el.checked)
+      .map((el) => Number(el.dataset.simMatch));
+    const checkedCore = Array.from(simEl.querySelectorAll<HTMLInputElement>('[data-sim-core]'))
+      .filter((el) => el.checked)
+      .map((el) => el.dataset.simCore ?? '');
+    return {
+      coarseRuns: simState.coarseRuns,
+      finalRuns: simState.finalRuns,
+      unitKeep: simState.unitKeep,
+      pairCarriers: simState.pairCarriers,
+      coarseTop: simState.coarseTop,
+      maxCombos: simState.maxCombos,
+      rankBy: simState.rankBy,
+      dummyTroops: simState.dummyTroops,
+      seed: simState.seed,
+      swapSides: simState.swapSides,
+      units: cfg.slots.map((s, unit) => ({
+        unit,
+        name: HERO_RECORDS[s.heroId]?.name ?? s.heroId,
+        hasEmptySlot: emptySlots.some((e) => e.unit === unit),
+      })),
+      matchUnits: checkedMatch.length ? checkedMatch : defaultMatchUnits(),
+      emptySlots,
+      coreSlotKeys: checkedCore.length ? checkedCore : defaultCoreSlotKeys(),
+      autoCoreName: autoCoreName(),
+      estimate: estimateBattles(cfg, simOptionsForEstimate()),
+    };
+  }
+
+  /** 只用于估算的选项（读当前控件，不改状态） */
+  function simOptionsForEstimate(): SimExpectAsyncOptions {
+    const q = <T extends HTMLElement>(sel: string): T | null => simEl.querySelector<T>(sel);
+    return {
+      coarseRuns: Math.max(1, Math.floor(Number(q<HTMLInputElement>('#rm-sim-coarse')?.value) || simState.coarseRuns)),
+      finalRuns: Math.max(
+        FINAL_RUNS_MIN,
+        Math.floor(Number(q<HTMLInputElement>('#rm-sim-final')?.value) || simState.finalRuns)
+      ),
+      unitKeep: Math.max(1, Math.floor(Number(q<HTMLSelectElement>('#rm-sim-keep')?.value) || simState.unitKeep)),
+      pairCarriers: Math.max(1, Math.floor(Number(q<HTMLSelectElement>('#rm-sim-paircars')?.value) || simState.pairCarriers)),
+      coarseTop: Math.max(1, Math.floor(Number(q<HTMLSelectElement>('#rm-sim-top')?.value) || simState.coarseTop)),
+      maxCombos: Math.max(1, Math.floor(Number(q<HTMLInputElement>('#rm-sim-maxcombo')?.value) || simState.maxCombos)),
+      dummyTroops: Math.max(500, Math.floor(Number(q<HTMLInputElement>('#rm-sim-troops')?.value) || simState.dummyTroops)),
+      matchUnits: checkedMatchUnits(),
+    };
+  }
+
+  /** 勾选的「参与匹配的将」（一个都没勾 → 回落到默认 = 自动识别的核心将） */
+  function checkedMatchUnits(): number[] {
+    const checked = Array.from(simEl.querySelectorAll<HTMLInputElement>('[data-sim-match]'))
+      .filter((el) => el.checked)
+      .map((el) => Number(el.dataset.simMatch));
+    return checked.length ? checked : defaultMatchUnits();
+  }
+
+  /** 「核心位」勾选的槽位 → 去重后的 unit 列表（同一将两个槽都勾也只算一次；未勾 = 自动识别） */
+  function checkedCoreUnits(): number[] {
+    const keys = Array.from(simEl.querySelectorAll<HTMLInputElement>('[data-sim-core]'))
+      .filter((el) => el.checked)
+      .map((el) => el.dataset.simCore ?? '');
+    if (!keys.length) return autoCoreUnits(cfg);
+    return [...new Set(keys.map((k) => Number(k.split('-')[0])).filter((u) => Number.isFinite(u)))];
+  }
+
+  /** 从控件读参数（决赛场次下限 20 由模块再兜一层；这里同步回写，避免界面显示与实跑不一致） */
+  function simReadControls(): SimExpectAsyncOptions {
+    const q = <T extends HTMLElement>(sel: string): T | null => simEl.querySelector<T>(sel);
+    const coarseRuns = Math.max(1, Math.min(20, Math.floor(Number(q<HTMLInputElement>('#rm-sim-coarse')?.value) || 3)));
+    const finalRuns = Math.max(FINAL_RUNS_MIN, Math.floor(Number(q<HTMLInputElement>('#rm-sim-final')?.value) || FINAL_RUNS_MIN));
+    const unitKeep = Math.max(1, Math.floor(Number(q<HTMLSelectElement>('#rm-sim-keep')?.value) || 32));
+    const pairCarriers = Math.max(1, Math.floor(Number(q<HTMLSelectElement>('#rm-sim-paircars')?.value) || 10));
+    const coarseTop = Math.max(1, Math.floor(Number(q<HTMLSelectElement>('#rm-sim-top')?.value) || 10));
+    const maxCombos = Math.max(1, Math.floor(Number(q<HTMLInputElement>('#rm-sim-maxcombo')?.value) || 1000));
+    const rankBy = (q<HTMLSelectElement>('#rm-sim-rank')?.value === 'first3' ? 'first3' : 'total') as 'total' | 'first3';
+    const dummyTroops = Math.max(500, Math.floor(Number(q<HTMLInputElement>('#rm-sim-troops')?.value) || 150000));
+    const seed = Math.max(1, Math.floor(Number(q<HTMLInputElement>('#rm-sim-seed')?.value) || 20260922));
+    const swapSides = Boolean(q<HTMLInputElement>('#rm-sim-swap')?.checked);
+    const matchUnits = checkedMatchUnits();
+    const coreUnits = checkedCoreUnits();
+    // 回写：决赛场次被抬到下限时，输入框也要显示真实值
+    const finalInput = q<HTMLInputElement>('#rm-sim-final');
+    if (finalInput) finalInput.value = String(finalRuns);
+    Object.assign(simState, { coarseRuns, finalRuns, unitKeep, pairCarriers, coarseTop, maxCombos, rankBy, dummyTroops, seed, swapSides });
+    return {
+      coarseRuns,
+      finalRuns,
+      unitKeep,
+      pairCarriers,
+      coarseTop,
+      maxCombos,
+      rankBy,
+      dummyTroops,
+      matchUnits,
+      coreUnits,
+      baseSeed: seed,
+      swapSides,
+      yieldEvery: 25,
+    };
+  }
+
+  function updateStaleHint(): void {
+    if (!simState.result) {
+      simHintEl.textContent = '';
+      return;
+    }
+    const stale = simState.signature !== cfgSignature(cfg);
+    simHintEl.textContent = stale ? '· 结果为修改前的配置（配置已变，请重跑）' : '· 结果对应当前配置';
+    simHintEl.className = stale ? 'rm-down' : 'rm-dim';
+  }
+
+  /** 控件一改就刷新「预计真跑 N 场」（避免点了才发现要跑十分钟） */
+  function refreshEstimate(): void {
+    const el = simEl.querySelector<HTMLElement>('#rm-sim-est');
+    if (!el) return;
+    el.innerHTML = `预计真跑 <b>${estimateBattles(cfg, simOptionsForEstimate())}</b> 场`;
+  }
+
+  function renderSimControls(): void {
+    simControlsEl.innerHTML = simControlsHtml(simControlsInit());
+    simControlsEl
+      .querySelectorAll('input, select')
+      .forEach((node) => node.addEventListener('change', refreshEstimate));
+  }
+
+  /** 跑一批：逐槽粗筛 → 组合榜单 → 决赛排行 */
+  async function runSim(): Promise<void> {
+    if (simState.running) return;
+    simState.running = true;
+    const btn = simEl.querySelector<HTMLButtonElement>('#rm-sim-run');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '模拟中…';
+    }
+    simEl.dataset.state = 'running';
+    const opts = simReadControls();
+    const signature = cfgSignature(cfg);
+    let ticks = 0;
+    try {
+      const result = await runSimExpectationAsync(cfg, {
+        ...opts,
+        onProgress: (p) => {
+          ticks += 1;
+          if (ticks % 3 === 0 || p.phaseDone === p.phaseTotal) simProgressEl.innerHTML = simProgressHtml(p);
+        },
+      });
+      simState.result = result;
+      simState.signature = signature;
+      simResultEl.innerHTML = simResultHtml(result);
+      simProgressEl.innerHTML = '';
+      simEl.dataset.state = 'done';
+      updateStaleHint();
+    } catch (err) {
+      simResultEl.innerHTML = `<div class="rm-note rm-down">模拟测评失败：${String((err as Error)?.message ?? err)}</div>`;
+      simEl.dataset.state = 'error';
+    } finally {
+      simState.running = false;
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '开始模拟测评';
+      }
+    }
+  }
+
+  renderSimControls();
+  // 事件委托：参数区会随空槽位变化整体重建（renderSimControls），绑在容器上才不会随按钮一起被换掉
+  simControlsEl.addEventListener('click', (e) => {
+    if ((e.target as HTMLElement | null)?.id === 'rm-sim-run') void runSim();
+  });
 
   // ── 左栏：配置面板（共用模块 web/teamConfig.ts）──
   function renderConfig(): void {
@@ -262,6 +532,15 @@ function mountRoundModelInner(root: HTMLElement): void {
     renderSources(result);
     renderEffects(result);
     renderWarnings(result);
+    // 空槽位变了（填/清战法）→ 参与匹配 / 核心位的勾选项跟着重建，避免留下已失效的槽位
+    const slotSig = emptySlotsOf()
+      .map((s) => s.key)
+      .join(',');
+    if (slotSig !== simState.slotSig) {
+      simState.slotSig = slotSig;
+      renderSimControls();
+    }
+    updateStaleHint(); // 配置一改，模拟结果就标「过期」，不拿旧数字当新配置的结论
   }
 
   renderConfig();

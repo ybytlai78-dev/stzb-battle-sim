@@ -130,3 +130,60 @@ body {
 .rm-warn-card { border-color: #3a3226; }
 .rm-warn-list { margin: 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; }
 .rm-warn-list li { margin-bottom: 4px; }
+
+/* ── 模拟测评（两阶段真引擎）：参数条 / 进度 / 粗筛表 / 决赛表 / 比对结论 ── */
+.rm-sim-card { border-color: #26405a; }
+.rm-simbar {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  gap: 8px 10px; align-items: end; margin-bottom: 10px;
+}
+.rm-simbar label { display: grid; gap: 4px; font-size: 11.5px; color: var(--muted); }
+.rm-simbar select, .rm-simbar input {
+  background: #12151c; color: var(--ink); border: 1px solid var(--line); border-radius: 8px;
+  padding: 5px 7px; font-size: 12.5px; width: 100%; font-variant-numeric: tabular-nums;
+}
+.rm-simbar .rm-sim-check { display: flex; align-items: center; gap: 6px; padding-bottom: 7px; }
+.rm-simbar .rm-sim-check input { width: auto; }
+.rm-sim-wide { grid-column: span 2; }
+.rm-sim-run { align-self: end; background: #1d2a3d; border-color: #33506f; }
+.rm-sim-run:disabled { opacity: .6; cursor: progress; }
+
+.rm-sim-live { height: 8px; border-radius: 5px; background: #12151c; border: 1px solid var(--line); overflow: hidden; }
+.rm-sim-live i { display: block; height: 100%; background: linear-gradient(90deg, var(--blue), var(--green)); width: 0; }
+.rm-sim-status { font-size: 11.5px; margin-top: 5px; }
+
+/* 参与匹配的将 / 核心位 勾选区 */
+.rm-simscope {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 8px 16px;
+  margin: 10px 0 4px; padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: #14171e;
+}
+.rm-simscope-col { min-width: 0; }
+.rm-simscope-item {
+  display: flex; align-items: center; gap: 7px; font-size: 12px; color: var(--muted);
+  padding: 2px 0; cursor: pointer;
+}
+.rm-simscope-item input { width: auto; }
+.rm-simscope-item:hover { color: var(--ink); }
+
+.rm-sim-sum {
+  display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 12px 0 4px;
+  font-size: 12.5px; color: var(--muted);
+}
+.rm-sim-sum b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.rm-sim-section { margin-top: 14px; }
+.rm-sim-section h3 {
+  font-size: 12.5px; color: var(--gold); letter-spacing: .04em; margin: 0 0 8px; font-weight: 600;
+}
+.rm-sim-slot { margin-bottom: 12px; }
+.rm-sim-slot-head { font-size: 12px; color: var(--ink); margin-bottom: 4px; }
+.rm-sim-slot-head .rm-dim { font-weight: 400; margin-left: 6px; }
+.rm-sim-kept td { background: rgba(61, 220, 151, .06); }
+.rm-sim-detail { margin-top: 8px; border-top: 1px solid var(--line); padding-top: 6px; }
+.rm-sim-detail summary { cursor: pointer; font-size: 12px; color: var(--muted); }
+.rm-sim-detail summary:hover { color: var(--ink); }
+.rm-sim-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 8px; }
+@media (max-width: 900px) { .rm-sim-detail-grid { grid-template-columns: 1fr; } .rm-sim-wide { grid-column: auto; } }
+.rm-sim-verdict { border-top: 1px solid var(--line); padding-top: 10px; }
+.rm-sim-list { margin: 0; padding-left: 18px; color: var(--muted); font-size: 12.5px; }
+.rm-sim-list li { margin-bottom: 6px; }
+.rm-sim-list b { color: var(--ink); }

@@ -2094,6 +2094,12 @@ export interface BattleConfig {
   defenderSide?: Side;
   /** 是否野地作战（蛮兵：野地造成伤害 +18% / 城池 −8%）；缺省 undefined = 城池作战 */
   fieldBattle?: boolean;
+  /**
+   * 木桩方（可多侧）：该侧单位**不还手**——行动阶段不普攻、不发动主动战法、不追击，
+   * 也不参与准备阶段的 battle_start 被动 / 一类指挥；被动之外的 DoT 与「目标下次行动前」延迟伤害照常结算。
+   * 缺省 undefined = 双方都正常行动（既有战报逐字节不变）。L2 伤害期望测评用它做纯输出靶子。
+   */
+  inertSides?: Side[];
 }
 
 // ─── 战斗中的武将运行时状态 ───
@@ -2362,6 +2368,11 @@ export interface UnitState {
   hasActedThisRound?: boolean;
   /** 本回合是否已有一次主动战法实际释放成功。回合开始清 false */
   firstActiveSucceededThisRound?: boolean;
+  /**
+   * 木桩（L2 伤害期望测评，`BattleConfig.inertSides`）：行动阶段**不普攻、不发动主动战法、不追击**，
+   * 但仍照常结算被动 / 一类指挥 / DoT / 「目标下次行动前」的延迟伤害（否则测不出自己的 DoT 与延迟段伤害）。
+   */
+  inert?: boolean;
   /**
    * 部队加成合计点数（阵营/称号/兵种，准备阶段阵容步写入）。
    * 缺省视为四维 0；不走状态冲突。

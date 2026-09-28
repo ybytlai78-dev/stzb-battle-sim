@@ -2,12 +2,15 @@
  * 实战胜率页（L4 · 阶段 1）：我方队 × 对手队（对手池）→ 批量跑 → 只看统计，不渲染战报。
  * 标准见 web/battleSim.ts 头部注释（用户 2026-09-22 定稿）。
  */
-import type { General, Position } from '../src/engine/types';
-import { buildGeneral, HERO_RECORDS, SLOTTED_HEROES, TROOP_CHAR } from './heroes';
+import type { General } from '../src/engine/types';
+import { HERO_RECORDS } from './heroes';
 import { DEFAULT_ENV, runBatchAsync, type BatchStats, type SimEnv } from './battleSim';
 import { fmt } from './roundChart';
-import { renderConfigPanel, unitTemplates, type ViewCfg } from './teamConfig';
+import { generalsOf, renderConfigPanel, unitTemplates, type ViewCfg } from './teamConfig';
 import { importScanEntries } from './teamScanBrowser';
+
+/** ViewCfg → 引擎 General[] 已挪到共用层 `web/teamConfig.ts`（L2 模拟测评也要用同一套转换）；此处原样再导出，调用方零改动 */
+export { generalsOf };
 
 /** 对手池条目（可备注名） */
 export interface OpponentEntry {
@@ -24,30 +27,6 @@ interface SimState {
   pool: OpponentEntry[];
   runs: number;
   env: SimEnv;
-}
-
-const POS: Position[] = ['大营', '中军', '前锋'];
-
-/** ViewCfg → 引擎 General[]（同队唯一：武将不重复、战法不重复已在配置层提示） */
-export function generalsOf(cfg: ViewCfg, morale: number): General[] {
-  return cfg.slots
-    .map((s, i) => {
-      const rec = HERO_RECORDS[s.heroId];
-      if (!rec) return undefined;
-      return buildGeneral(
-        s.heroId,
-        s.skillIds,
-        { attack: s.addAttack, strategy: s.addStrategy },
-        POS[i] ?? '中军',
-        0,
-        s.level,
-        morale,
-        undefined, // 二级兵种转换：截图暂不识别（见 docs/截图识别-敌对队伍集.md §八）
-        s.traits, // 兵系通用特性（如 地利）
-        s.treasure ?? null // 佩戴宝物（稀世 + 锻造词条）
-      );
-    })
-    .filter((g): g is General => Boolean(g));
 }
 
 const POOL_KEY = 'dsh-battle-sim-opponents-v1';
@@ -475,5 +454,3 @@ function escapeHtml(s: string): string {
 function escapeAttr(s: string): string {
   return escapeHtml(s);
 }
-void SLOTTED_HEROES;
-void TROOP_CHAR;

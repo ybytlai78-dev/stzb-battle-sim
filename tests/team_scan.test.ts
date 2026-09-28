@@ -149,6 +149,8 @@ describe('反例：规则逐条拦截', () => {
 });
 
 describe('L4 透传：特性与宝物', () => {
+  // 这里要 `initHeroDB()`：本机 MySQL 不可达时它会先试连接再回退 JSON，全量并发跑批下这一步能到 5s 上下，
+  // 默认 5s 超时会偶发假失败（2026-09-28 复核：改动前后都出现过）→ 单独给这条放宽到 20s。
   it('SlotCfg.traits → General.secondaryTraits，且引擎按站位算地利加成', async () => {
     const { initHeroDB } = await import('../src/data/heroes');
     await initHeroDB();
@@ -161,7 +163,7 @@ describe('L4 透传：特性与宝物', () => {
     expect(gs[0].secondaryTraits).toContain('地利');
     expect(gs[1].position).toBe('中军');
     expect(traitStatBonus({ ...gs[1], position: '中军' } as never, 'defense')).toBe(10);
-  });
+  }, 20000);
 
   it('SlotCfg.treasure → General.treasure（宝物 id 与词条）', async () => {
     const { initHeroDB } = await import('../src/data/heroes');

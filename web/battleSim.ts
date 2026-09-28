@@ -12,10 +12,16 @@
  *  · 恢复口径 = 恢复兵力（heal.amount），报双方占比
  *  · 伤害口径 = 普攻 attack_hit + 战法 damage + DoT dot_tick + 分兵 split_damage（与战报统计一致；
  *    分兵按 creditToId（授予分兵的施法者）归属，缺省 sourceId）
+ *
+ * L2 伤害期望测评复用本模块的单场跑批（`runOne` / `RunRaw`）：
+ *  · `SimEnv.inertSides`（**我方视角**，`runOne` 随交换场地翻成引擎视角）→ 对手可以是**不还手的木桩**；
+ *  · `RunRaw` 另给 `myDamageByRound`（前三回合口径）/ `perSkillMine`（我方逐战法，敌我同名不串）/
+ *    `myFinalTroops` `enemyFinalTroops`（判断木桩是否被打空）。
  */
 import { ensureUniqueUnitIds, runBattle } from '../src/engine/combat';
 import type { BattleEvent, BattleReport, General } from '../src/engine/types';
 import { SKILL_REGISTRY } from '../src/data/skills';
+import type { Side } from '../src/engine/types';
 
 export interface SimEnv {
   maxRounds: number;
@@ -23,6 +29,11 @@ export interface SimEnv {
   swapSides: boolean;
   /** 基种子（固定 → 结果可复现） */
   baseSeed: number;
+  /**
+   * 不还手的一方（**我方视角**：'enemy' = 对手是木桩）——L2 伤害期望测评用。
+   * 交换场地时 `runOne` 会翻成引擎视角再传下去。
+   */
+  inertSides?: Side[];
 }
 
 export const DEFAULT_ENV: SimEnv = { maxRounds: 8, swapSides: true, baseSeed: 20260922 };
@@ -122,12 +133,22 @@ export interface RunRaw {
   rounds: number;
   myDamage: number;
   enemyDamage: number;
+  /** 我方逐回合伤害（下标 0 = 第 1 回合）：L2 模拟测评的「前三回合总伤」口径要用 */
+  myDamageByRound: number[];
   controlMine: number;
   controlEnemy: number;
   healMine: number;
   healEnemy: number;
   perUnit: Map<string, UnitAcc>;
+  /** 我方各将逐回合伤害（unitId → 下标 0 = 第 1 回合）：L2「核心将前三回合」口径要用 */
+  perUnitDamageByRound: Map<string, number[]>;
   perSkill: Map<string, SkillAcc>;
+  /** 我方「按战法」伤害合计（skillId → 我方造成的伤害）——L2 模拟测评的逐战法口径 */
+  perSkillMine: Map<string, number>;
+  /** 我方各单位剩余兵力（我方视角，顺序 = 我方队伍顺序） */
+  myFinalTroops: number[];
+  /** 对手各单位剩余兵力（我方视角）——L2 用它判断木桩是否被打空（伤害被截断） */
+  enemyFinalTroops: number[];
 }
 
 /**
@@ -161,12 +182,17 @@ export function collectRun(report: BattleReport, myIds: Set<string>): RunRaw {
     rounds: report.rounds,
     myDamage: 0,
     enemyDamage: 0,
+    myDamageByRound: [],
     controlMine: 0,
     controlEnemy: 0,
     healMine: 0,
     healEnemy: 0,
     perUnit: new Map(),
+    perUnitDamageByRound: new Map(),
     perSkill: new Map(),
+    perSkillMine: new Map(),
+    myFinalTroops: [],
+    enemyFinalTroops: [],
   };
   const unit = (id: string): UnitAcc => {
     let hit = acc.perUnit.get(id);
@@ -202,7 +228,41 @@ export function collectRun(report: BattleReport, myIds: Set<string>): RunRaw {
     (sumFinalVs(report.myTeam, report.finalMyTroops) + sumFinalVs(report.enemyTeam, report.finalEnemyTroops)) /
     (sumStartVs(report.myTeam) + sumStartVs(report.enemyTeam));
 
+  // 双方各单位剩余兵力（我方视角：按 myIds 归属，交换场地也成立）——木桩被打空的判定用
+  const collectTroops = (onlyMine: boolean): number[] => {
+    const out: number[] = [];
+    report.myTeam.forEach((g, i) => {
+      if (myIds.has(g.id) === onlyMine) out.push(report.finalMyTroops[i] ?? 0);
+    });
+    report.enemyTeam.forEach((g, i) => {
+      if (myIds.has(g.id) === onlyMine) out.push(report.finalEnemyTroops[i] ?? 0);
+    });
+    return out;
+  };
+  acc.myFinalTroops = collectTroops(true);
+  acc.enemyFinalTroops = collectTroops(false);
+
   let round = 1;
+  /** 我方伤害入账（总额 + 逐回合两处同步，保证 sum(myDamageByRound) === myDamage） */
+  const addMineDamage = (v: number): void => {
+    acc.myDamage += v;
+    const idx = Math.max(0, round - 1);
+    acc.myDamageByRound[idx] = (acc.myDamageByRound[idx] ?? 0) + v;
+  };
+  /** 我方「按战法」伤害（按施法方归属，敌我同名战法也不会串：perSkill 是按 skillId 合表的） */
+  const addMineSkillDamage = (skillId: string, v: number): void => {
+    acc.perSkillMine.set(skillId, (acc.perSkillMine.get(skillId) ?? 0) + v);
+  };
+  /** 我方某将的逐回合伤害（核心将前三回合口径） */
+  const addUnitRoundDamage = (unitId: string, v: number): void => {
+    const idx = Math.max(0, round - 1);
+    let arr = acc.perUnitDamageByRound.get(unitId);
+    if (!arr) {
+      arr = [];
+      acc.perUnitDamageByRound.set(unitId, arr);
+    }
+    arr[idx] = (arr[idx] ?? 0) + v;
+  };
   for (const ev of report.events as BattleEvent[]) {
     if (ev.type === 'round_start') {
       round = ev.round ?? round;
@@ -213,8 +273,10 @@ export function collectRun(report: BattleReport, myIds: Set<string>): RunRaw {
         const mine = myIds.has(ev.sourceId);
         unit(ev.sourceId).damage += ev.damage;
         unit(ev.targetId).taken += ev.damage;
-        if (mine) acc.myDamage += ev.damage;
-        else acc.enemyDamage += ev.damage;
+        if (mine) {
+          addMineDamage(ev.damage);
+          addUnitRoundDamage(ev.sourceId, ev.damage);
+        } else acc.enemyDamage += ev.damage;
         break;
       }
       case 'split_damage': {
@@ -224,9 +286,12 @@ export function collectRun(report: BattleReport, myIds: Set<string>): RunRaw {
         const mine = myIds.has(owner);
         unit(owner).damage += ev.damage;
         unit(ev.targetId).taken += ev.damage;
-        if (mine) acc.myDamage += ev.damage;
-        else acc.enemyDamage += ev.damage;
+        if (mine) {
+          addMineDamage(ev.damage);
+          addUnitRoundDamage(owner, ev.damage);
+        } else acc.enemyDamage += ev.damage;
         if (ev.skillId) skill(ev.skillId, name(owner), SKILL_REGISTRY[ev.skillId]?.name ?? ev.skillId).damage += ev.damage;
+        if (mine && ev.skillId) addMineSkillDamage(ev.skillId, ev.damage);
         break;
       }
       case 'damage': {
@@ -234,9 +299,12 @@ export function collectRun(report: BattleReport, myIds: Set<string>): RunRaw {
         const mine = myIds.has(owner);
         unit(owner).damage += ev.damage;
         unit(ev.targetId).taken += ev.damage;
-        if (mine) acc.myDamage += ev.damage;
-        else acc.enemyDamage += ev.damage;
+        if (mine) {
+          addMineDamage(ev.damage);
+          addUnitRoundDamage(owner, ev.damage);
+        } else acc.enemyDamage += ev.damage;
         if (ev.skillId) skill(ev.skillId, name(owner), ev.skillName ?? ev.skillId).damage += ev.damage;
+        if (mine && ev.skillId) addMineSkillDamage(ev.skillId, ev.damage);
         break;
       }
       case 'dot_tick': {
@@ -244,9 +312,12 @@ export function collectRun(report: BattleReport, myIds: Set<string>): RunRaw {
         const mine = myIds.has(caster);
         unit(caster).damage += ev.damage;
         unit(ev.targetId).taken += ev.damage;
-        if (mine) acc.myDamage += ev.damage;
-        else acc.enemyDamage += ev.damage;
+        if (mine) {
+          addMineDamage(ev.damage);
+          addUnitRoundDamage(caster, ev.damage);
+        } else acc.enemyDamage += ev.damage;
         skill(ev.skillId, name(caster), ev.skillId).damage += ev.damage;
+        if (mine) addMineSkillDamage(ev.skillId, ev.damage);
         break;
       }
       case 'heal': {
@@ -286,11 +357,15 @@ export function runOne(myTeam: General[], enemyTeam: General[], index: number, e
   const teams = ensureUniqueUnitIds(myTeam, enemyTeam);
   const left = swap ? teams.enemyTeam : teams.myTeam;
   const right = swap ? teams.myTeam : teams.enemyTeam;
+  // env.inertSides 是**我方视角**（'enemy' = 对手是木桩）；交换场地后引擎视角要跟着翻，
+  // 否则交换的那一半场次会变成「我方不还手」（L2 木桩口径直接反掉）
+  const inertSides = env.inertSides?.map((s): Side => (swap ? (s === 'my' ? 'enemy' : 'my') : s));
   const report = runBattle({
     myTeam: left,
     enemyTeam: right,
     maxRounds: env.maxRounds,
     seed: env.baseSeed + index,
+    ...(inertSides?.length ? { inertSides } : {}),
   } as never);
   // 我方单位 id 与「站在哪一侧」无关：取固定去重后的 myTeam（交换场地只换侧别）
   const myIds = new Set(teams.myTeam.map((g) => g.id));
