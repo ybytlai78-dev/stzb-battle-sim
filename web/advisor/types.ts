@@ -112,7 +112,10 @@ export interface ToolResult {
 }
 
 export interface ToolCost {
+  /** 固定场次代价（纯查表工具不填） */
   battles?: number;
+  /** 按实参估算场次（`simulate` 用：花多少取决于 runs）——优先于 `battles` */
+  battlesOf?: (args: unknown) => number;
   long?: boolean;
 }
 
