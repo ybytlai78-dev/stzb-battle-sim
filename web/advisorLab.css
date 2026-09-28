@@ -57,3 +57,4 @@ textarea { width: 100%; }
 }
 .trace-row { border-top: 1px solid var(--lab-line); padding: 6px 0; }
 .trace-row code { color: var(--lab-key); }
+.progress { min-height: 18px; color: var(--lab-key); font: 12px/1.5 ui-monospace, Consolas, monospace; }

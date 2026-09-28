@@ -33,12 +33,14 @@ function findMutualPair(): [string, string] {
 }
 
 describe('advisor tools', () => {
-  it('九个工具都在注册表里，且各有 name/description/schema/cost', () => {
+  it('十一个工具都在注册表里，且各有 name/description/schema/cost', () => {
     const tools = createTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       'get_config',
       'hero_detail',
       'list_skills',
+      'optimize_mates',
+      'optimize_skills',
       'search_hero',
       'search_skill',
       'simulate',
@@ -51,6 +53,96 @@ describe('advisor tools', () => {
       expect(t.schema).toBeTruthy();
       expect(t.cost).toBeTruthy();
     }
+  });
+
+  it('optimize_skills：把 L2 搜索当工具调（注入假搜索，验证榜单/预算/进度）', async () => {
+    const ctx = makeCtx({
+      fakeRuns: true,
+      deps: {
+        estimateSkillBattles: () => 8062,
+        optimizeSkills: async (_cfg, _opts, onProgress) => {
+          onProgress?.(4000, 8062);
+          onProgress?.(8062, 8062);
+          return {
+            battles: 8062,
+            ms: 57000,
+            tiesWithBest: 1,
+            rankAgreement: 0.73,
+            wipedCombos: 0,
+            candidateCount: 92,
+            candidateSkipped: 3,
+            matchLabel: '文鸯',
+            coreLabel: '文鸯',
+            noEmptySlot: false,
+            combosCapped: false,
+            finals: [
+              { rank: 1, label: '危崖困军 + 计险远近', mean: 26500, halfWidth: 1675, runs: 20, meanTotal: 74636, tieWithBest: false, wipedRuns: 0, picks: [{ unit: 0, slot: 1, unitName: '文鸯', skillId: 'a', skillName: '危崖困军' }], byUnit: [{ unit: 0, name: '文鸯', mean: 26500, core: true }] },
+              { rank: 2, label: '三术奇谋 + 深谋远虑', mean: 26000, halfWidth: 1500, runs: 20, meanTotal: 73000, tieWithBest: true, wipedRuns: 0, picks: [], byUnit: [] },
+            ],
+          } as never;
+        },
+      },
+    });
+    const events: string[] = [];
+    ctx.onProgress = (e) => events.push(`${e.name}:${e.done}/${e.total}`);
+    const r = await runTool('optimize_skills', {}, ctx);
+    const rows = (r.data as { rows: Array<{ mean: number; label: string }> }).rows;
+    expect(rows).toHaveLength(2);
+    expect(rows[0].mean).toBe(26500);
+    expect(r.brief).toContain('第 1 名'.slice(0, 3) === '第 1' ? '危崖困军' : '');
+    expect(r.brief).toContain('分不出来'); // 差距 500 < 半宽之和 3175
+    expect(r.stats.battles).toBe(8062);
+    expect(events).toEqual(['optimize_skills:4000/8062', 'optimize_skills:8062/8062']);
+  });
+
+  it('optimize_skills：预估场次超预算 → 拒绝执行，且把账算给模型看（可调小规模）', async () => {
+    const ctx = makeCtx({
+      fakeRuns: true,
+      budget: { maxBattles: 5000 },
+      deps: { estimateSkillBattles: () => 8062, optimizeSkills: async () => ({ finals: [] }) as never },
+    });
+    await expect(runTool('optimize_skills', {}, ctx)).rejects.toThrow(/预计 8062 场.*已用 0\/5000 场/s);
+  });
+
+  it('optimize_skills：预估场次就是计费依据（真实跑完后 budget.battles 记的是实跑数）', async () => {
+    const ctx = makeCtx({
+      fakeRuns: true,
+      deps: {
+        estimateSkillBattles: () => 900,
+        optimizeSkills: async () => ({ battles: 880, ms: 3000, finals: [{ rank: 1, label: 'X', mean: 100, halfWidth: 10, runs: 20, meanTotal: 300, tieWithBest: false, wipedRuns: 0, picks: [], byUnit: [] }], tiesWithBest: 0, rankAgreement: 1, wipedCombos: 0, candidateCount: 1, candidateSkipped: 0, matchLabel: 'm', coreLabel: 'c', noEmptySlot: false, combosCapped: false }) as never,
+      },
+    });
+    await runTool('optimize_skills', {}, ctx);
+    expect(ctx.budget.battles).toBe(900); // 计费按预估
+  });
+
+  it('optimize_mates：把 L3 搜索当工具调（含与当前队友的对照基线）', async () => {
+    const ctx = makeCtx({
+      fakeRuns: true,
+      deps: {
+        estimateMateBattles: () => 889,
+        optimizeMates: async () =>
+          ({
+            battles: 889,
+            ms: 2700,
+            baseline: { runs: 20, mean: 7000, meanTotal: 20000, damages: [] },
+            candidateCount: 40,
+            candidateSkipped: 3,
+            poolSkippedMutual: 1,
+            matchLabel: '中军 / 前锋',
+            coreLabel: '文鸯',
+            poolLabel: '上架武将',
+            noMatchSlot: false,
+            baselineIllegal: false,
+            options: { slotSkills: 'keep' },
+            finals: [{ rank: 1, label: '田丰 + 袁绍', mean: 7317, halfWidth: 651, runs: 20, meanTotal: 15503, wipedRuns: 0, picks: [{ unit: 1, unitName: '中军', heroId: 'h1', heroName: '田丰' }], byUnit: [] }],
+          }) as never,
+      },
+    });
+    const r = await runTool('optimize_mates', {}, ctx);
+    expect(r.summary).toContain('高 317');
+    expect(r.brief).toContain('对照基线');
+    expect(r.brief).toContain('控制型队友');
   });
 
   it('槽位缺 skillIds 不再崩（2026-09-29 实跑：模型给的方案缺字段 → 深处 undefined.filter）', async () => {
@@ -229,6 +321,27 @@ describe('advisor tools', () => {
       expect(r.brief).toContain('已下架');
       expect(r.brief).toContain('偏低');
     }
+  });
+
+  it('optimize_skills（真接线）：小范围真跑一次 L2 搜索，出榜单', async () => {
+    const heros = SLOTTED_HEROES.slice(0, 3).map((h) => h.id);
+    const plan: AdvisorPlan = {
+      slots: heros.map((heroId, i) => ({ position: (['大营', '中军', '前锋'] as const)[i], heroId, level: 40, skillIds: [] })),
+      coreUnitIds: [],
+      dummy: { ...DEFAULT_DUMMY },
+    };
+    const ctx = makeCtx({ fakeRuns: true }); // 只把单方案测评换成假的；搜索走真 L2
+    const r = await runTool(
+      'optimize_skills',
+      { plan, candidateSkillIds: [LEARNABLE_SKILL_IDS[0]], coarseRuns: 1, finalRuns: 20, coarseTop: 2, matchSlotKeys: ['0-1'] },
+      ctx
+    );
+    const d = r.data as { rows: Array<{ mean: number; runs: number }>; meta: { battles: number; candidateCount: number } };
+    expect(d.rows.length).toBeGreaterThan(0);
+    expect(d.rows[0].runs).toBeGreaterThanOrEqual(20);
+    expect(d.meta.battles).toBeGreaterThan(0);
+    expect(r.stats.battles).toBe(d.meta.battles);
+    expect(r.brief).toContain('排序口径');
   });
 
   it('list_skills：按出手位批量拉池子（分页 + 还有多少的提示）', async () => {

@@ -248,6 +248,10 @@ git commit -m "refactor(simExpectation): 抽出 runOnePlanBattle（口径单源�
 
 ### Task 3: 工具注册表 + 一期六个工具 + 预算护栏
 
+> **2026-09-29 修订**：工具数已从 6 扩到 **11**（`hero_detail` / `list_skills` / `simulate_many` / **`optimize_skills`** / **`optimize_mates`**），
+> 其中 L2/L3 两个搜索**提前到一期**（用户拍板："AI 就该调 L2/L3，不该自己一个个翻战法"）。
+> 落地实况与验证见 `docs/AI配将顾问-设计.md` 文末的「切片一补丁 1/2/3」；本节下面的六个工具是**初始形态**。
+
 **Files:**
 - Create: `web/advisor/tools.ts`
 - Create: `tests/advisor_tools.test.ts`

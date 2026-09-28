@@ -34,16 +34,22 @@ export const SYSTEM_PROMPT = `你是一个《率土之滨》战斗模拟器的�
 5. 主动声明边界：木桩不还手 → 控制 / 防御型队友的价值量不出来（那是 L4 胜率的事）；解析口径不含控制 / 规避 / 兵力截断。
 6. 工具报错就如实转述并改法，不许编一个结果圆过去。方案要先过 validate_plan 再报给用户。
 
-可用工具（共 9 个，检索类 0 场、simulate 每 20 场约 0.1 秒）：
+可用工具（共 11 个）：
+**搜索类（要"最强 / 最优"就用它们，一次跑完几千~上万场）**
+- **optimize_skills**：搜索「这套阵容带哪些战法伤害期望最高」（L2 三阶段：逐槽粗筛 → 组合粗筛 → 决赛 ≥20 场 + 自适应加跑），约 10~60 秒，返回排序榜单（含半宽、并列标记、每将贡献）。**凡"怎么配输出最高 / 最强"首选它。**
+- **optimize_mates**：搜索「围绕核心将换哪个队友最强」（L3），返回榜单 + 与当前队友的对照基线。问"和谁搭最强"用它。
+- simulate_many：**只在**你已经有几套确定想比的方案时用（≤8 套，一次对拍排序）。
+- simulate：单套方案真跑 N 场（默认 20，上限 200）拿明细。
+**信息类（毫秒级）**
 - get_config：读当前配将区配置（先调它，别猜）。
-- search_hero：按 名字 / 势力 / 兵种 / 主战法名 / 拼音 找武将，拿 id。
-- hero_detail：**武将档案**（阵营 / 兵种 / 攻击距离 / 40 级四维 / 成长率 / 主战法 + 官方描述 / 是否上架）。要给某个武将配队配战法，先调它。
-- search_skill：按 名字 / 出手位（主动/追击/被动/一类指挥/二类指挥/准备）/ 品级 / 效果标签 / **官方描述关键词** 搜战法。
-- list_skills：按出手位**批量拉池子**（分页）——比逐个词搜省调用次数。
-- skill_detail：一个战法的完整信息（含官方描述全文）。
+- search_hero / hero_detail：找武将、读档案（阵营 / 兵种 / 攻击距离 / 40 级四维 / 成长率 / 主战法 + 官方描述 / 是否上架）。
+- search_skill / list_skills / skill_detail：找战法、按出手位批量拉池、读单个战法详情。
 - validate_plan：校验方案合法性（武将/战法在库、每将 ≤2 可学战法、全队战法唯一、同队互斥）。
-- simulate：对不还手的木桩真跑 N 场（默认 20，单次上限 200），给核心将伤害期望 / 95% 半宽 / 每将 / 每战法明细。
-- **simulate_many**：**一次对拍最多 8 套方案**并按期望排序（含每套的每将贡献与"第 1 与第 2 是否真分得开"）——要比较多个搭配时用它，**不要一套一套地调 simulate**。
+
+工作方式（重要）：
+- **"某武将怎么配输出最大化"这种问题，正确姿势是**：先 search_hero + hero_detail 摸清这个将（吃物理还是谋略、兵种、主战法机制）→ 组 2~3 套候选阵容（他 + 两个合理队友）→ **对每套调一次 optimize_skills**（让 L2 去搜战法，不要自己一个个翻战法列表）→ 拿榜单里的数字下结论。队友不确定就先 optimize_mates。
+- **不要用"自己逐个 skill_detail + 手搓几套 simulate"代替搜索**：那是撞运气，而且烧调用次数。
+- 搜索很贵（几千~上万场）：**一次就够，别反复调同一个搜索**；要更确定就在同一套上加大 finalRuns 复跑。
 
 预算与节奏（**不要为了省额度而跳过该做的步骤**）：
 - 研究型问题（"某武将最强怎么配"）：先把档案（hero_detail）与候选池（list_skills / search_skill）补齐，再逐套 validate_plan → simulate 对比，把额度用在该用的地方。
@@ -63,6 +69,7 @@ export type AdvisorEvent =
   | { type: 'delta'; text: string }
   | { type: 'tool_start'; name: string }
   | { type: 'tool_end'; name: string; ms: number; battles: number; error?: string }
+  | { type: 'tool_progress'; name: string; done: number; total: number; label?: string }
   | { type: 'usage'; usage: TokenUsage }
   | { type: 'round'; index: number };
 
@@ -130,6 +137,9 @@ export async function runAdvisorTurn(input: TurnInput): Promise<AdvisorTurn> {
   let degraded = false;
   /** 超过 token 上限后置位：后续工具调用一律拒绝（但让模型把话说完） */
   let toolsDisabled = false;
+  // 长搜索（L2/L3）需要：取消信号 + 进度外抛
+  ctx.signal = signal;
+  ctx.onProgress = (e) => onEvent?.({ type: 'tool_progress', name: e.name, done: e.done, total: e.total, label: e.label });
 
   for (let round = 0; round < maxRounds; round += 1) {
     throwIfAborted(signal);

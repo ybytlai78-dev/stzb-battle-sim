@@ -128,8 +128,8 @@ export interface ToolResult {
 export interface ToolCost {
   /** 固定场次代价（纯查表工具不填） */
   battles?: number;
-  /** 按实参估算场次（`simulate` 用：花多少取决于 runs）——优先于 `battles` */
-  battlesOf?: (args: unknown) => number;
+  /** 按实参估算场次（`simulate` 用 `runs`；`optimize_*` 用 `estimateBattles` 预判）——优先于 `battles` */
+  battlesOf?: (args: unknown, ctx: unknown) => number;
   long?: boolean;
 }
 
@@ -168,17 +168,21 @@ export interface BudgetState extends Budget {
   startedAt: number;
 }
 
-/** 一轮对话的默认预算（2026-09-29 按用户口径抬额：不再为省 token 卡住模型） */
+/** 一轮对话的默认预算（2026-09-29 按用户口径抬额：**搜索是一等公民**，不再为省额度卡住模型）
+ *  —— L2 一次默认搜索约 8,000 场 / 约 60 秒，故场次与时间都要按"跑得起一次真搜索"来给。 */
 export const DEFAULT_BUDGET: Budget = {
-  maxBattles: 50000,
-  maxMs: 300000,
+  maxBattles: 200000,
+  maxMs: 900000,
   maxCalls: 40,
   maxTokens: 1000000,
 };
 
 export class BudgetExceeded extends Error {
-  constructor(public readonly why: 'battles' | 'ms' | 'calls') {
-    super(`已达本轮预算（${why}）——拒绝执行该工具`);
+  constructor(
+    public readonly why: 'battles' | 'ms' | 'calls',
+    message?: string
+  ) {
+    super(message ?? `已达本轮预算（${why}）——拒绝执行该工具`);
     this.name = 'BudgetExceeded';
   }
 }

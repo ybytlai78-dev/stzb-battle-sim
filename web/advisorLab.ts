@@ -24,9 +24,10 @@ const FAKE_RUNS = 20;
 /** 演示用队伍：优先 L2 实跑基线那三将，库里没有就取上架池前三 */
 const DEMO_HEROES = ['h102003', 'h672', 'h574'];
 
-/** 界面上的额度设置（用户 2026-09-29：别为省 token 卡住模型） */
+/** 界面上的额度设置（用户 2026-09-29：别为省 token 卡住模型；搜索是一等公民） */
 interface LabSettings extends AdvisorSettings {
   maxCalls: number;
+  maxBattles: number;
   maxTokens: number;
 }
 
@@ -42,13 +43,21 @@ function loadSettings(): LabSettings {
         model: p.model ?? '',
         key: p.key ?? '',
         maxCalls: p.maxCalls ?? DEFAULT_BUDGET.maxCalls,
+        maxBattles: p.maxBattles ?? DEFAULT_BUDGET.maxBattles,
         maxTokens: p.maxTokens ?? DEFAULT_BUDGET.maxTokens,
       };
     }
   } catch {
     /* localStorage 不可用 → 空设置 */
   }
-  return { baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat', key: '', maxCalls: DEFAULT_BUDGET.maxCalls, maxTokens: DEFAULT_BUDGET.maxTokens };
+  return {
+    baseUrl: 'https://api.deepseek.com/v1',
+    model: 'deepseek-chat',
+    key: '',
+    maxCalls: DEFAULT_BUDGET.maxCalls,
+    maxBattles: DEFAULT_BUDGET.maxBattles,
+    maxTokens: DEFAULT_BUDGET.maxTokens,
+  };
 }
 
 function saveSettings(s: LabSettings): void {
@@ -134,8 +143,9 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
       </div>
       <div class="row">
         <label>单轮工具调用上限 <input id="lab-maxcalls" type="number" min="1" max="500" value="${settings.maxCalls}" style="min-width:90px" /></label>
+        <label>单轮场次上限 <input id="lab-maxbattles" type="number" min="100" step="1000" value="${settings.maxBattles}" style="min-width:110px" /></label>
         <label>单轮 token 上限 <input id="lab-maxtokens" type="number" min="1000" step="10000" value="${settings.maxTokens}" style="min-width:120px" /></label>
-        <span class="muted small">其余护栏：累计 ${DEFAULT_BUDGET.maxBattles} 场 / ${Math.round(DEFAULT_BUDGET.maxMs / 1000)} 秒；超限 = 拒绝执行并把原因回灌给模型（不是静默截断）。</span>
+        <span class="muted small">时间上限 ${Math.round(DEFAULT_BUDGET.maxMs / 1000)} 秒；超限 = 拒绝执行并把"预计多少场、已用多少"回灌给模型（不是静默截断）。</span>
       </div>
       <p class="muted small">key 只存在本机 localStorage（<code>${SETTINGS_KEY}</code>），直连厂商，不经过任何服务器。</p>
 
@@ -147,6 +157,7 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
         <button id="lab-stop" class="btn" disabled>取消</button>
         <span id="lab-cost" class="muted small"></span>
       </div>
+      <div id="lab-progress" class="progress"></div>
 
       <h2>事件日志</h2>
       <pre id="lab-log" class="log"></pre>
@@ -159,6 +170,7 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
   const $ = <T extends HTMLElement>(id: string): T => root.querySelector(`#${id}`) as T;
   const log = $('lab-log');
   const cost = $('lab-cost');
+  const progressEl = $('lab-progress');
   const verdictEl = $('lab-verdict');
   const traceEl = $('lab-trace');
   const sendBtn = $<HTMLButtonElement>('lab-send');
@@ -183,7 +195,12 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
       append(`▶ 调用 ${e.name}`);
     } else if (e.type === 'tool_end') {
       battles += e.battles;
+      progressEl.textContent = '';
       append(e.error ? `✘ ${e.name} 报错：${e.error}` : `✔ ${e.name}（${e.battles} 场 / ${e.ms}ms）`);
+    } else if (e.type === 'tool_progress') {
+      // 长搜索（L2/L3 几十秒）——原地刷进度，不刷屏
+      const pct = e.total ? Math.round((e.done / e.total) * 100) : 0;
+      progressEl.textContent = `⏳ ${e.name}：真跑 ${e.done}/${e.total} 场（${pct}%）${e.label ? ' — ' + e.label : ''}`;
     } else if (e.type === 'usage') {
       usage = e.usage;
       tokens += e.usage.totalTokens;
@@ -217,6 +234,7 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
       model: $<HTMLInputElement>('lab-model').value.trim(),
       key: $<HTMLInputElement>('lab-key').value.trim(),
       maxCalls: Math.max(1, Math.floor(Number($<HTMLInputElement>('lab-maxcalls').value) || DEFAULT_BUDGET.maxCalls)),
+      maxBattles: Math.max(100, Math.floor(Number($<HTMLInputElement>('lab-maxbattles').value) || DEFAULT_BUDGET.maxBattles)),
       maxTokens: Math.max(1000, Math.floor(Number($<HTMLInputElement>('lab-maxtokens').value) || DEFAULT_BUDGET.maxTokens)),
     };
     const useFake = $<HTMLInputElement>('lab-fake').checked;
@@ -239,6 +257,7 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
     usage = null;
     caps = { maxCalls: s.maxCalls, maxTokens: s.maxTokens };
     cost.textContent = '';
+    progressEl.textContent = '';
     sendBtn.disabled = true;
     stopBtn.disabled = false;
     controller = new AbortController();
@@ -249,7 +268,7 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
     const ctx: ToolCtx = makeCtx({
       fakeRuns: false,
       deps: { getConfig: () => cfg },
-      budget: { maxCalls: s.maxCalls, maxTokens: s.maxTokens },
+      budget: { maxCalls: s.maxCalls, maxBattles: s.maxBattles, maxTokens: s.maxTokens },
     });
     const transport = fakeMode ? fakeScript(plan) : createBrowserTransport(s);
 
