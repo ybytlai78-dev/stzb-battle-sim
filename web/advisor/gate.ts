@@ -10,11 +10,19 @@
  */
 import { SKILL_REGISTRY } from '../../src/data/skills';
 import { HERO_RECORDS, getHeroById, isMainSkill } from '../heroes';
-import { DUMMY_TROOPS_DEFAULT } from '../simExpectation';
+import { DUMMY_TROOPS_DEFAULT, type PlanSummary } from '../simExpectation';
 import { LEARNABLE_SKILL_IDS, SKILL_SLOTS, defaultCfg, type ViewCfg } from '../teamConfig';
 import { browserTables } from '../teamScanBrowser';
 import { validateScan, type ScanJson } from '../teamScan';
-import { PLAN_POSITIONS, normalizePlan, type AdvisorPlan, type ProposedPlan, type ToolCallRecord } from './types';
+import {
+  PLAN_POSITIONS,
+  normalizePlan,
+  type AdvisorPlan,
+  type PlanCheck,
+  type ProposedPlan,
+  type RecomputeResult,
+  type ToolCallRecord,
+} from './types';
 
 export interface PlanIssue {
   /** 给 AI 自纠用的机器码（unknown_hero / duplicate_skill / mutual_exclusion / main_skill_in_slot / slot-position …） */
@@ -221,6 +229,85 @@ export function verifyPlanEvidence(plan: ProposedPlan, trace: ToolCallRecord[]):
 export function decideApply(v: { legal: boolean; verified: boolean; recomputed: boolean }): { enabled: boolean; reason?: string } {
   if (!v.legal) return { enabled: false, reason: '方案不合法（见错误清单）' };
   if (!v.verified) return { enabled: false, reason: '有数字或方案依据无法追溯（标「未验证」）' };
-  if (!v.recomputed) return { enabled: false, reason: '标准口径独立复算未接入（实施计划 Task 5）' };
+  if (!v.recomputed) return { enabled: false, reason: '标准口径独立复算未完成' };
   return { enabled: true };
+}
+
+// ─────────────────────────── 关 3 · 标准口径独立复算 ───────────────────────────
+
+/** 复算用的固定种子（**写死常量**：换时间/随机种子就不可复现、测试也锁不住） */
+export const ADVISOR_VERIFY_SEED = 20260929;
+/** 复算场次（固定 20） */
+export const ADVISOR_VERIFY_RUNS = 20;
+
+export interface RecomputeCtx {
+  evaluate(cfg: ViewCfg, runs: number, coreUnits?: number[], baseSeed?: number): PlanSummary;
+}
+
+/** 方案里的核心将 → `ViewCfg` 槽位下标（排序口径用） */
+export function coreIndices(plan: AdvisorPlan, cfg: ViewCfg): number[] | undefined {
+  const idx: number[] = [];
+  for (const id of plan.coreUnitIds) {
+    const i = cfg.slots.findIndex((s) => s.heroId === id);
+    if (i >= 0) idx.push(i);
+  }
+  return idx.length ? idx : undefined;
+}
+
+/** 关 3：**用标准口径独立再跑一遍**（固定种子 + 20 场 + 标准木桩），不采信 AI 那次搜索的数字 */
+export function recomputePlan(plan: AdvisorPlan, ctx: RecomputeCtx): RecomputeResult {
+  const cfg = cfgOf(plan);
+  const s = ctx.evaluate(cfg, ADVISOR_VERIFY_RUNS, coreIndices(plan, cfg), ADVISOR_VERIFY_SEED);
+  return { mean: s.mean, halfWidth: s.halfWidth, runs: s.runs, seed: ADVISOR_VERIFY_SEED };
+}
+
+/** 搜索口径值 vs 标准口径复算值：区间重叠 = 一致；复算明显更低 = 对口径敏感 */
+export function judgeRecompute(
+  search: { mean: number; halfWidth: number },
+  verify: { mean: number; halfWidth: number }
+): 'consistent' | 'sensitive' {
+  const overlap = Math.abs(search.mean - verify.mean) <= search.halfWidth + verify.halfWidth;
+  return overlap ? 'consistent' : 'sensitive';
+}
+
+/** 从证据明细里捞出「搜索口径值」（方案引用的第一份带数字的证据） */
+export function searchHintFromTrace(plan: ProposedPlan, trace: ToolCallRecord[]): { mean: number; halfWidth: number; runs: number; evidenceId: string } | null {
+  for (const id of plan.evidenceIds) {
+    const hit = trace.find((t) => t.evidenceId === id);
+    if (!hit) continue;
+    const d = hit.data as { mean?: number; halfWidth?: number; runs?: number; rows?: Array<{ mean: number; halfWidth: number; runs: number }> } | undefined;
+    if (d && typeof d.mean === 'number') return { mean: d.mean, halfWidth: d.halfWidth ?? 0, runs: d.runs ?? 0, evidenceId: id };
+    if (d?.rows?.length) {
+      const best = [...d.rows].sort((a, b) => b.mean - a.mean)[0];
+      return { mean: best.mean, halfWidth: best.halfWidth ?? 0, runs: best.runs ?? 0, evidenceId: id };
+    }
+  }
+  return null;
+}
+
+/** 对一个方案跑完三关，给出「能不能应用」 */
+export function checkPlan(plan: ProposedPlan, trace: ToolCallRecord[], ctx: RecomputeCtx): PlanCheck {
+  const v = validateAdvisorPlan(plan.plan);
+  const ev = verifyPlanEvidence(plan, trace);
+  let recompute: RecomputeResult | null = null;
+  try {
+    recompute = v.ok ? recomputePlan(v.normalized, ctx) : null;
+  } catch {
+    recompute = null; // 引擎拒绝（互斥等）→ 视为未复算，不给应用
+  }
+  const search = searchHintFromTrace(plan, trace);
+  const judge = recompute && search ? judgeRecompute(search, recompute) : null;
+  const verdict = { legal: v.ok, verified: ev.ok, recomputed: recompute !== null };
+  return {
+    title: plan.title,
+    plan: v.normalized,
+    legal: v.ok,
+    legalErrors: v.errors.map((e) => `${e.code}: ${e.message}`),
+    evidenceOk: ev.ok,
+    ...(ev.reason ? { evidenceReason: ev.reason } : {}),
+    recompute,
+    search,
+    judge,
+    apply: decideApply(verdict),
+  };
 }

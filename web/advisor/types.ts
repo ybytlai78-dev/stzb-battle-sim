@@ -225,10 +225,36 @@ export interface TurnVerdict {
   apply: { enabled: boolean; reason?: string };
 }
 
+/** 关 3 的复算结果（固定种子 + 20 场 + 标准木桩） */
+export interface RecomputeResult {
+  mean: number;
+  halfWidth: number;
+  runs: number;
+  seed: number;
+}
+
+/** 单个方案过完三关的结论（渲染层据此决定「应用」能不能点、卡上显示什么） */
+export interface PlanCheck {
+  title: string;
+  plan: AdvisorPlan;
+  legal: boolean;
+  legalErrors: string[];
+  evidenceOk: boolean;
+  evidenceReason?: string;
+  recompute: RecomputeResult | null;
+  /** 搜索口径值（来自方案引用的那份证据） */
+  search: { mean: number; halfWidth: number; runs: number; evidenceId: string } | null;
+  /** 搜索口径 vs 标准口径：区间重叠 = consistent；明显更低 = sensitive */
+  judge: 'consistent' | 'sensitive' | null;
+  apply: { enabled: boolean; reason?: string };
+}
+
 export interface AdvisorTurn {
   messages: AdvisorMessage[];
   toolCalls: ToolCallRecord[];
   plans: ProposedPlan[];
+  /** 每个方案的三关结论（与 plans 同序） */
+  checks: PlanCheck[];
   /** 展示用正文（已剥掉围栏 JSON 块） */
   answer: string;
   /** 厂商不支持工具调用 → 去掉 tools 重试过（无工具模式） */

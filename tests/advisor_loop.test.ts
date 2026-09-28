@@ -124,8 +124,8 @@ describe('advisor loop（精简版）', () => {
     expect(t.answer).toContain('解释');
   });
 
-  it('方案 + 真证据 → 计划被解析出来、合法且可溯源；关 3 未接入 → 应用仍禁用', async () => {
-    const ctx = makeCtx({ fakeRuns: true });
+  it('方案 + 真证据 → 计划被解析、合法、可溯源，且**关 3 标准口径复算**跑过 → 应用可用', async () => {
+    const ctx = makeCtx({ fakeRuns: true, coreDamage: 26500 });
     // 用**上架池**武将拼方案：合法方案才走得到「已验证」那一关
     const plan: AdvisorPlan = {
       slots: SLOTTED_HEROES.slice(0, 3).map((h, i) => ({
@@ -155,9 +155,11 @@ describe('advisor loop（精简版）', () => {
     expect(t.plans[0].evidenceIds[0]).toBe(t.toolCalls[0].evidenceId);
     expect(t.verdict.legal).toBe(true);
     expect(t.verdict.verified).toBe(true);
-    expect(t.verdict.recomputed).toBe(false);
-    expect(t.verdict.apply.enabled).toBe(false);
-    expect(t.verdict.apply.reason).toContain('复算');
+    expect(t.verdict.recomputed).toBe(true);
+    expect(t.verdict.apply.enabled).toBe(true);
+    expect(t.checks[0].recompute?.seed).toBe(20260929);
+    expect(t.checks[0].recompute?.runs).toBe(20);
+    expect(t.checks[0].judge).toBe('consistent');
     expect(t.answer).not.toContain('```json');
   });
 

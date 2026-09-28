@@ -11,7 +11,7 @@
  *   · 工具抛错**如实回灌**让模型自纠（不静默吞、不编结果）；
  *   · 取消（AbortSignal）在任何一次请求/工具执行前生效。
  */
-import { decideApply, validateAdvisorPlan, verifyClaims, verifyPlanEvidence } from './gate';
+import { checkPlan, verifyClaims, verifyPlanEvidence } from './gate';
 import { createTools, runTool, type ToolCtx } from './tools';
 import { advisorErrorCode, type AdvisorTransport, type TokenUsage, type ToolCall } from './transport';
 import {
@@ -224,14 +224,17 @@ export async function runAdvisorTurn(input: TurnInput): Promise<AdvisorTurn> {
   const parsed = parsePlans(answer);
   const claimCheck = verifyClaims(parsed.text, toolCalls);
   const planChecks = parsed.plans.map((p) => verifyPlanEvidence(p, toolCalls));
-  const legal = parsed.plans.length ? parsed.plans.every((p) => validateAdvisorPlan(p.plan).ok) : true;
+  // 关 3：对每个方案用**标准口径**独立复算（固定种子 + 20 场），不采信 AI 那次的搜索数字
+  const checks = parsed.plans.map((p) => checkPlan(p, toolCalls, { evaluate: ctx.deps.evaluate }));
+  const legal = checks.length ? checks.every((c) => c.legal) : true;
   const verified = claimCheck.ok && planChecks.every((c) => c.ok);
-  const verdict: TurnVerdict = {
-    legal,
-    verified,
-    // 关 3（标准口径独立复算）属实施计划 Task 5；未接入前不给「应用」开口子
-    recomputed: false,
-    apply: decideApply({ legal, verified, recomputed: false }),
-  };
-  return { messages, toolCalls, plans: parsed.plans, answer: parsed.text, degraded, verdict };
+  const recomputed = checks.length ? checks.every((c) => c.recompute !== null) : false;
+  const apply =
+    checks.length > 0
+      ? checks.every((c) => c.apply.enabled)
+        ? { enabled: true }
+        : { enabled: false, reason: checks.find((c) => !c.apply.enabled)?.apply.reason ?? '存在未通过的方案' }
+      : { enabled: false, reason: '本轮没有给出方案（只有文字结论）' };
+  const verdict: TurnVerdict = { legal, verified, recomputed, apply };
+  return { messages, toolCalls, plans: parsed.plans, checks, answer: parsed.text, degraded, verdict };
 }

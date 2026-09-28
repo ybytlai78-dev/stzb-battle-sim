@@ -29,7 +29,8 @@ import {
   type MateSimResult,
 } from '../simMate';
 import { HERO_OPTIONS, SKILL_OPTIONS, defaultCfg, type ViewCfg } from '../teamConfig';
-import { cfgOf, configToPlan, validateAdvisorPlan } from './gate';
+/** 方案里的核心将 → `ViewCfg` 槽位下标（给 `evaluate` 当排序口径用）—— 实现见 `gate.ts`（与关 3 共用） */
+import { cfgOf, configToPlan, coreIndices, validateAdvisorPlan } from './gate';
 import {
   BudgetExceeded,
   DEFAULT_BUDGET,
@@ -55,8 +56,8 @@ export const SIM_MANY_MAX = 8;
 export interface AdvisorDeps {
   /** 当前配将区配置（生产 = 主站面板；本切片 = 默认配置） */
   getConfig(): ViewCfg;
-  /** 单方案测评（生产 = `web/simExpectation.ts` 的 `evaluatePlan`） */
-  evaluate(cfg: ViewCfg, runs: number, coreUnits?: number[]): PlanSummary;
+  /** 单方案测评（生产 = `web/simExpectation.ts` 的 `evaluatePlan`）；`baseSeed` 供关 3 的固定种子复算用 */
+  evaluate(cfg: ViewCfg, runs: number, coreUnits?: number[], baseSeed?: number): PlanSummary;
   searchHeroes(q: string, limit: number): Array<{ id: string; name: string; label: string }>;
   searchSkills(q: string, limit: number): Array<{ id: string; name: string; label: string }>;
   skillDetail(id: string): unknown;
@@ -162,16 +163,6 @@ const EMPTY_HINT =
   '检索提示：战法可按 出手位（主动 / 追击 / 被动 / 一类指挥 / 二类指挥 / 准备）、品级（S/A/B/C/D）、效果标签、官方描述关键词 或名字检索；武将可按 名字 / 势力 / 兵种 / 主战法名 检索。空结果只说明这个词没命中，不代表库里没有。';
 
 // ─────────────────────────── 六个工具 ───────────────────────────
-
-/** 方案里的核心将 → `ViewCfg` 槽位下标（给 `evaluate` 当排序口径用） */
-function coreIndices(plan: AdvisorPlan, cfg: ViewCfg): number[] | undefined {
-  const idx: number[] = [];
-  for (const id of plan.coreUnitIds) {
-    const i = cfg.slots.findIndex((s) => s.heroId === id);
-    if (i >= 0) idx.push(i);
-  }
-  return idx.length ? idx : undefined;
-}
 
 /** 给模型看的紧凑明细（≤15 行）：每将 / 每战法场均贡献 —— 完整样本仍在 `data` 里给渲染层 */
 export function planBrief(s: PlanSummary): string {
@@ -816,7 +807,7 @@ export interface MakeCtxOpts {
 function realDeps(): AdvisorDeps {
   return {
     getConfig: () => defaultCfg(),
-    evaluate: (cfg, runs, coreUnits) => evaluatePlan(cfg, { runs, coreUnits }),
+    evaluate: (cfg, runs, coreUnits, baseSeed) => evaluatePlan(cfg, { runs, coreUnits, ...(baseSeed === undefined ? {} : { baseSeed }) }),
     searchHeroes: (q, limit) => matchRows(HERO_MATCH, q, limit).map((o) => ({ id: o.id, name: o.name, label: o.label })),
     searchSkills: (q, limit) => matchRows(SKILL_MATCH, q, limit).map((o) => ({ id: o.id, name: o.name, label: `${o.name}（${o.slot}·${o.grade}）` })),
     skillDetail: (id) => {

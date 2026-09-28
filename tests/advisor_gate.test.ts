@@ -5,8 +5,21 @@
  */
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
-import { collectNumbers, decideApply, verifyClaims, verifyPlanEvidence, withinTolerance } from '../web/advisor/gate';
-import type { ProposedPlan, ToolCallRecord } from '../web/advisor/types';
+import {
+  ADVISOR_VERIFY_RUNS,
+  ADVISOR_VERIFY_SEED,
+  checkPlan,
+  collectNumbers,
+  decideApply,
+  judgeRecompute,
+  recomputePlan,
+  searchHintFromTrace,
+  verifyClaims,
+  verifyPlanEvidence,
+  withinTolerance,
+} from '../web/advisor/gate';
+import type { AdvisorPlan, ProposedPlan, ToolCallRecord } from '../web/advisor/types';
+import { SLOTTED_HEROES } from '../web/heroes';
 
 const rec = (evidenceId: string, mean: number): ToolCallRecord => ({
   evidenceId,
@@ -70,5 +83,85 @@ describe('advisor gate · 关 2（数字溯源）', () => {
     expect(decideApply({ legal: true, verified: false, recomputed: true }).enabled).toBe(false);
     expect(decideApply({ legal: true, verified: true, recomputed: false })).toMatchObject({ enabled: false });
     expect(decideApply({ legal: true, verified: true, recomputed: true }).enabled).toBe(true);
+  });
+});
+
+describe('advisor gate · 关 3（标准口径独立复算）', () => {
+  // 用**上架池**的武将（合法方案才走得到关 3；h1/h2/h3 这类不在配将池里）
+  const plan = (): AdvisorPlan => ({
+    slots: SLOTTED_HEROES.slice(0, 3).map((h, i) => ({
+      position: (['大营', '中军', '前锋'] as const)[i],
+      heroId: h.id,
+      level: 40,
+      skillIds: [],
+    })),
+    coreUnitIds: [],
+    dummy: { defense: 150, strategy: 100, troopType: 'infantry', troops: 150000 },
+  });
+
+  it('复算用固定种子 + 20 场（写死常量，可复现）', () => {
+    const calls: Array<{ runs: number; seed?: number }> = [];
+    const r = recomputePlan(plan(), {
+      evaluate: (_cfg, runs, _core, seed) => {
+        calls.push({ runs, seed });
+        return { mean: 12345, halfWidth: 678, runs } as never;
+      },
+    });
+    expect(calls).toEqual([{ runs: ADVISOR_VERIFY_RUNS, seed: ADVISOR_VERIFY_SEED }]);
+    expect(r).toEqual({ mean: 12345, halfWidth: 678, runs: 20, seed: ADVISOR_VERIFY_SEED });
+  });
+
+  it('搜索口径 vs 复算：区间重叠 = 一致；复算明显更低 = 敏感', () => {
+    expect(judgeRecompute({ mean: 26500, halfWidth: 1000 }, { mean: 26000, halfWidth: 900 })).toBe('consistent');
+    expect(judgeRecompute({ mean: 26500, halfWidth: 100 }, { mean: 20000, halfWidth: 100 })).toBe('sensitive');
+  });
+
+  it('checkPlan：合法 + 有证据 + 复算成功 → 应用可用（并给出 judge）', () => {
+    const trace: ToolCallRecord[] = [
+      {
+        evidenceId: 'ev-1-simulate',
+        name: 'simulate',
+        args: {},
+        summary: 's',
+        data: { mean: 26500, halfWidth: 900, runs: 20 },
+        stats: { battles: 20, ms: 100, seed: 1 },
+      },
+    ];
+    const c = checkPlan(
+      { title: '方案A', plan: plan(), evidenceIds: ['ev-1-simulate'] },
+      trace,
+      { evaluate: (_cfg, runs) => ({ mean: 26400, halfWidth: 800, runs }) as never }
+    );
+    expect(c.legal).toBe(true);
+    expect(c.evidenceOk).toBe(true);
+    expect(c.recompute?.mean).toBe(26400);
+    expect(c.search?.evidenceId).toBe('ev-1-simulate');
+    expect(c.judge).toBe('consistent');
+    expect(c.apply.enabled).toBe(true);
+  });
+
+  it('checkPlan：引擎拒绝复算（互斥报错）→ 不给应用', () => {
+    const c = checkPlan({ title: 'x', plan: plan(), evidenceIds: [] }, [], {
+      evaluate: () => {
+        throw new Error('互斥');
+      },
+    });
+    expect(c.recompute).toBeNull();
+    expect(c.apply.enabled).toBe(false);
+  });
+
+  it('searchHintFromTrace：从 optimize_skills 的榜单里取最好一行当搜索口径值', () => {
+    const trace: ToolCallRecord[] = [
+      {
+        evidenceId: 'ev-2-optimize_skills',
+        name: 'optimize_skills',
+        args: {},
+        summary: 's',
+        data: { rows: [{ mean: 20000, halfWidth: 500, runs: 20 }, { mean: 26000, halfWidth: 700, runs: 20 }] },
+        stats: { battles: 8000, ms: 57000, seed: 1 },
+      },
+    ];
+    const hint = searchHintFromTrace({ title: 'x', plan: plan(), evidenceIds: ['ev-2-optimize_skills'] }, trace);
+    expect(hint).toMatchObject({ mean: 26000, halfWidth: 700, runs: 20 });
   });
 });
