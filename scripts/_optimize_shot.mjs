@@ -236,7 +236,94 @@ await shot('5b-mutual-notes.png');
 console.log(problems.length ? `PAGE PROBLEMS (${problems.length}):` : 'PAGE PROBLEMS: none');
 problems.slice(0, 10).forEach((p) => console.log(' -', p.slice(0, 300)));
 
+// ⑥ 回归（用户 2026-09-28 第 1 问）：L2 槽位级参与匹配 —— 只勾两个队友的「槽 2」时，
+//    结果里**只能出现这两个槽的战法**（此前勾「核心位」不影响搜索范围，六个空槽会被一起搜）。
+await goto(url);
+await evaluate(`(() => {
+  const set = (sel, v) => { const el = document.querySelector(sel); el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); };
+  set('[data-unit-hero="0"]', 'h704'); // 文鸯
+  set('[data-unit-hero="1"]', 'h498'); // 曹纯
+  set('[data-unit-hero="2"]', 'h27');  // 张辽
+  return 'ok';
+})()`);
+await sleep(400);
+await evaluate(`(() => {
+  // 先清空所有槽位勾选，再只勾「中军·槽2」「前锋·槽2」
+  document.querySelector('[data-sim-slots="none"]').click();
+  for (const key of ['1-1', '2-1']) {
+    const el = document.querySelector('[data-sim-slot="' + key + '"]');
+    el.checked = true;
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  const set = (sel, v) => { const el = document.querySelector(sel); el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); };
+  set('#rm-sim-coarse', '1'); set('#rm-sim-keep', '8'); set('#rm-sim-top', '8'); set('#rm-sim-final', '20'); set('#rm-sim-finalmax', '40');
+  return 'ok';
+})()`);
+console.log('state-6-before', await evaluate(stateDump));
+await evaluate(`document.querySelector('#rm-sim-run').click()`);
+for (let i = 0; i < 600; i += 1) {
+  const st = await evaluate(`document.querySelector('#op-panel').dataset.state`);
+  if (st === 'done' || st === 'error') {
+    console.log('l2 slot-level run state =', st, `(${i} polls)`);
+    break;
+  }
+  await sleep(500);
+}
+await sleep(400);
+const slotLevel = await evaluate(`(() => {
+  const t = (document.querySelector('#op-result')?.textContent ?? '').replace(/\\s+/g, ' ');
+  const finalsSection = Array.from(document.querySelectorAll('.rm-sim-section')).find((s) =>
+    (s.querySelector('h3')?.textContent ?? '').includes('③ 决赛排行')
+  );
+  const labels = Array.from(finalsSection?.querySelectorAll('tbody tr') ?? []).map((tr) =>
+    (tr.children[1]?.textContent ?? '').trim()
+  );
+  const slotBoxes = Array.from(document.querySelectorAll('[data-sim-slot]')).map((b) => (b.checked ? 1 : 0)).join('');
+  return JSON.stringify({
+    matchedSlots: slotBoxes,
+    head: t.slice(0, 240),
+    finalsRows: labels.length,
+    finalsLabels: labels.slice(0, 3),
+    adaptive: /自动加跑 (\\d+) 场/.exec(t)?.[1] ?? null,
+    ties: /重叠的有 (\\d+) 个/.exec(t)?.[1] ?? null,
+  });
+})()`);
+console.log('state-6-slot-level', slotLevel);
+await shot('6-l2-slot-level.png');
+await evaluate(`document.querySelector('.rm-sim-verdict')?.scrollIntoView({ block: 'start' })`);
+await sleep(300);
+await shot('6b-l2-notes.png');
+
+// ⑦ 顺带看一眼被改过的另一个页面（round-model.html）：槽位级勾选与「决赛上限」控件在，且不报错
+await goto(url.replace(/optimize\.html.*$/, 'round-model.html'));
+const roundModel = await evaluate(`JSON.stringify({
+  slots: document.querySelectorAll('[data-sim-slot]').length,
+  finalMax: Boolean(document.querySelector('#rm-sim-finalmax')),
+  adaptive: Boolean(document.querySelector('#rm-sim-adaptive')),
+  groupTitles: Array.from(document.querySelectorAll('.rm-group-title')).map((e) => e.textContent.trim().slice(0, 12)),
+  est: (document.querySelector('#rm-sim-est')?.textContent ?? '').trim(),
+})`);
+console.log('state-7-round-model', roundModel);
+await shot('7-round-model-slots.png');
+
+console.log(problems.length ? `PAGE PROBLEMS (${problems.length}):` : 'PAGE PROBLEMS: none');
+problems.slice(0, 10).forEach((p) => console.log(' -', p.slice(0, 300)));
+
 ws.close();
 child.kill();
-const bad = problems.length > 0 || JSON.parse(mutual).hasIllegalError || !JSON.parse(mutual).mutualNote;
+const s5 = JSON.parse(mutual);
+const s6 = JSON.parse(slotLevel);
+const s7 = JSON.parse(roundModel);
+const bad =
+  problems.length > 0 ||
+  s5.hasIllegalError ||
+  !s5.mutualNote ||
+  s6.matchedSlots !== '000101' || // 勾的正是「中军·槽2 + 前锋·槽2」（DOM 顺序 = 每个将两格）
+  !/2 个槽位/.test(s6.head) ||
+  s6.finalsRows === 0 ||
+  s6.finalsLabels.some((r) => r.includes('文鸯·')) || // 没勾的槽（文鸯两格）不该出现在结果里
+  s7.slots !== 6 ||
+  !s7.finalMax ||
+  !s7.adaptive ||
+  !s7.groupTitles.some((t) => t.includes('排序口径'));
 process.exit(bad ? 1 : 0);

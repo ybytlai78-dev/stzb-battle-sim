@@ -475,6 +475,46 @@ describe('⑥ 页面（optimize.html）：L2 / L3 共用左栏 + 两步衔接', 
     set('#mt-top', '8');
   }
 
+  it('L2 侧参与匹配 = 槽位级：勾哪个槽只搜哪个槽；左栏徽标 / 预计场次 / 「清空」语义跟着走', () => {
+    const root = mountPage();
+    const boxes = [...root.querySelectorAll<HTMLInputElement>('#op-controls [data-sim-slot]')];
+    expect(boxes.map((b) => b.dataset.simSlot)).toEqual(['0-0', '0-1', '1-0', '1-1', '2-0', '2-1']);
+    expect(boxes.every((b) => b.checked), '默认全勾 = 全部空槽').toBe(true);
+    expect(root.querySelector('#op-controls')!.textContent).toContain('参与匹配的槽位');
+    expect(root.querySelector('#op-controls')!.textContent).toContain('排序口径 · 核心将');
+
+    const estNum = (): number => {
+      const t = root.querySelector<HTMLElement>('#rm-sim-est')!.textContent ?? '';
+      return Number((/([\d,]+)/.exec(t)?.[1] ?? '0').replace(/,/g, ''));
+    };
+    const estAll = estNum();
+
+    // 只留两个队友的槽 2（用户 2026-09-28 的诉求：别再帮我全搜）
+    boxes.forEach((b) => {
+      b.checked = false;
+    });
+    for (const key of ['1-1', '2-1']) {
+      const el = root.querySelector<HTMLInputElement>(`[data-sim-slot="${key}"]`)!;
+      el.checked = true;
+      el.dispatchEvent(new Event('change'));
+    }
+    const cfgText = root.querySelector('#op-config')!.textContent ?? '';
+    expect(cfgText).toContain('L2 参与匹配 0/2 槽'); // 大营一个都没勾
+    expect(cfgText).toContain('L2 参与匹配 1/2 槽'); // 中军 / 前锋各勾了槽 2
+    expect(estNum(), '搜的槽少了，预计场次应下降').toBeLessThan(estAll);
+
+    // 「清空」= 一个槽都不搜（只测评当前配置），不是悄悄回落成「全搜」
+    root.querySelector<HTMLButtonElement>('[data-sim-slots="none"]')!.click();
+    const after = [...root.querySelectorAll<HTMLInputElement>('#op-controls [data-sim-slot]')];
+    expect(after.every((b) => !b.checked)).toBe(true);
+    expect(root.querySelector('#op-controls')!.textContent).toContain('一个槽位都没勾');
+
+    // 「全选」回到全部空槽
+    root.querySelector<HTMLButtonElement>('[data-sim-slots="all"]')!.click();
+    const back = [...root.querySelectorAll<HTMLInputElement>('#op-controls [data-sim-slot]')];
+    expect(back.every((b) => b.checked)).toBe(true);
+  });
+
   it('默认进 L2 模式：左栏配置面板只有一份；切到 L3 只换右侧筛选栏', () => {
     const root = mountPage();
 

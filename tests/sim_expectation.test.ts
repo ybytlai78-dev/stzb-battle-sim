@@ -26,12 +26,16 @@ import {
   FINAL_RUNS_MIN,
   legalCombos,
   pairAgreement,
+  parseSlotKey,
   runSimExpectation,
   simExpectationSteps,
   simSlots,
+  slotKey,
+  unitsOfSlotKeys,
   usedSkillIds,
   withSlotSkill,
   type SimExpectProgress,
+  type SimExpectResult,
   type UnitCoarse,
   type UnitOptionRow,
 } from '../web/simExpectation';
@@ -293,6 +297,79 @@ describe('参与匹配的将：只搜勾选的将，其余将战法不动', () =
     expect(simSlots(cfg, [2]).every((s) => s.unit === 2)).toBe(true);
     expect(simSlots(cfg, [2])).toHaveLength(2);
   });
+
+  it('◀ 槽位级参与匹配（用户 2026-09-28 口径）：勾哪个槽就只搜哪个槽', () => {
+    const cfg = threeSlotCfg(); // unit0 满、unit1 剩槽2、unit2 空两格
+    expect(simSlots(cfg).map((s) => slotKey(s.unit, s.slot))).toEqual(['1-1', '2-0', '2-1']);
+    // 只搜 2 号将的**槽 1**：此前只能按将过滤（勾了将 = 它所有空槽都进搜索），做不到这一条
+    expect(simSlots(cfg, undefined, ['2-0']).map((s) => slotKey(s.unit, s.slot))).toEqual(['2-0']);
+    expect(simSlots(cfg, undefined, ['1-1', '2-1'])).toHaveLength(2);
+    // 槽位 + 将两个过滤同时给：取交集
+    expect(simSlots(cfg, [2], ['2-1'])).toHaveLength(1);
+    expect(simSlots(cfg, [0], ['2-1'])).toHaveLength(0);
+    // 指纹工具
+    expect(parseSlotKey('2-1')).toEqual({ unit: 2, slot: 1 });
+    expect(parseSlotKey('x')).toBeNull();
+    expect(unitsOfSlotKeys(['2-1', '2-0', '1-1'])).toEqual([1, 2]);
+  });
+
+  it('只勾两个槽 → 只搜这两个槽（其余空槽一个都不进搜索）', () => {
+    const cfg = threeSlotCfg(); // 3 个空槽：1-1 / 2-0 / 2-1
+    const base = { candidateIds: FOUR_CANDIDATES, coarseRuns: 3, finalRuns: 20, unitKeep: 2, coarseTop: 2 };
+    const only2 = runSimExpectation(cfg, { ...base, adaptiveFinals: false, matchSlotKeys: ['2-0', '2-1'] });
+    expect(only2.matchSlotKeys).toEqual(['2-0', '2-1']);
+    expect(only2.matchUnits).toEqual([2]);
+    expect(only2.slots.every((s) => s.unit === 2)).toBe(true);
+    // 粗筛 / 组合榜单 / 决赛里只有 2 号将的槽位（1 号将的槽一个都没跑）
+    expect(only2.coarse).toHaveLength(1);
+    expect(only2.coarse.every((c) => c.unit === 2)).toBe(true);
+    expect(only2.combos.every((c) => c.picks.every((p) => p.unit === 2))).toBe(true);
+    expect(only2.finals.every((f) => f.picks.every((p) => p.unit === 2))).toBe(true);
+    // 估算口径：搜的槽少 → 场次少（且估算 ≥ 实际）
+    const est2 = estimateBattles(cfg, { ...base, matchSlotKeys: ['2-0', '2-1'] });
+    const estAll = estimateBattles(cfg, base);
+    expect(est2).toBeLessThan(estAll);
+    expect(est2).toBeGreaterThanOrEqual(only2.battles);
+  });
+
+  it('◀ 勾空 = 一个槽都不搜：直接测评当前配置（不是回落成「全搜」）', () => {
+    const cfg = threeSlotCfg();
+    const none = runSimExpectation(cfg, {
+      candidateIds: FOUR_CANDIDATES,
+      coarseRuns: 3,
+      finalRuns: 20,
+      unitKeep: 2,
+      coarseTop: 2,
+      matchSlotKeys: [], // 页面「清空」按钮 = 显式空数组
+    });
+    expect(none.slots).toHaveLength(0);
+    expect(none.matchSlotKeys).toEqual([]);
+    expect(none.matchUnits).toEqual([]);
+    expect(none.noEmptySlot).toBe(true); // 走「直接测评当前配置」的分支
+    expect(none.combos.length).toBeGreaterThan(0); // 当前配置仍会测评
+    expect(none.battles).toBeGreaterThan(0);
+    // 与「不限」（undefined）区分：不限 = 三个空槽全搜
+    expect(estimateBattles(cfg, { candidateIds: FOUR_CANDIDATES, matchSlotKeys: [] })).toBeLessThan(
+      estimateBattles(cfg, { candidateIds: FOUR_CANDIDATES })
+    );
+  });
+
+  it('◀ 自适应加跑：与榜首区间重叠就继续跑（关掉则一律只跑 finalRuns 场）', () => {
+    const cfg = twoSlotCfg();
+    const base = { candidateIds: FOUR_CANDIDATES, coarseRuns: 3, unitKeep: 4, coarseTop: 3 };
+    const off = runSimExpectation(cfg, { ...base, finalRuns: 20, finalRunsMax: 60, adaptiveFinals: false });
+    expect(off.adaptiveExtra).toBe(0);
+    expect(off.finals.every((f) => f.runs === 20)).toBe(true);
+    expect(off.tiesWithBest).toBeGreaterThanOrEqual(0);
+    expect(off.finals[0].tieWithBest, '榜首与自己不算并列').toBe(false);
+
+    const on = runSimExpectation(cfg, { ...base, finalRuns: 20, finalRunsMax: 60, adaptiveStep: 20, adaptiveFinals: true });
+    expect(on.finals.every((f) => f.runs >= 20 && f.runs <= 60)).toBe(true);
+    expect([0, 20, 40]).toContain(on.adaptiveExtra); // 步长 20、上限 60
+    if (on.tiesWithBest > 1) expect(on.adaptiveExtra, '有并列就该加跑').toBeGreaterThan(0);
+    // 加跑不改「真跑场次 = 各阶段之和」这条不变量
+    expect(on.battles).toBeGreaterThanOrEqual(off.battles);
+  });
 });
 
 describe('合法组合枚举（全队战法唯一，按「将选项」拼）', () => {
@@ -419,7 +496,7 @@ describe('三阶段：逐将粗筛 → 组合榜单 → 决赛排行', () => {
       expect(r.runs).toBe(2);
       expect(r.damages).toHaveLength(2);
     }
-    expect(res.finals.every((f) => f.runs === FINAL_RUNS_MIN)).toBe(true);
+    expect(res.finals.every((f) => f.runs >= FINAL_RUNS_MIN)).toBe(true); // 自适应加跑只会更多
     expect(res.battles).toBeGreaterThan(0);
   });
 
@@ -532,13 +609,15 @@ describe('三阶段：逐将粗筛 → 组合榜单 → 决赛排行', () => {
     expect(res.finals.length).toBeLessThanOrEqual(2);
   });
 
-  it('预计真跑场次 ≥ 实际场次（页面开跑前提示用）', () => {
+  it('预计真跑场次 ≥ 实际场次（页面开跑前提示用；含自适应加跑上限）', () => {
     const cfg = twoSlotCfg();
     const opts = { candidateIds: TWO_CANDIDATES, coarseRuns: 3, finalRuns: 20, unitKeep: 2, coarseTop: 2 };
     const estimate = estimateBattles(cfg, opts);
     const res = runSimExpectation(cfg, opts);
     expect(estimate).toBeGreaterThanOrEqual(res.battles);
-    expect(estimate).toBe(2 * 2 * 3 + 2 * 2 * 3 + 2 * 20);
+    // 口径：逐槽粗筛（2 槽 × 2 候选 × 3 场）+ 双槽配对（2 基准 × 2 候选 × 3 场）+ 决赛（2 支 × **上限** 200 场）
+    expect(estimate).toBe(2 * 2 * 3 + 2 * 2 * 3 + 2 * 200);
+    expect(res.battles).toBeLessThanOrEqual(estimate);
   });
 });
 
@@ -645,10 +724,12 @@ describe('进度事件：逐槽粗筛 → 组合粗筛 → 决赛，逐场上报
 });
 
 describe('视图层（web/simExpectView.ts）', () => {
-  it('参数区：粗筛 / 决赛 / 每将保留 / 配对基准 / 进决赛组合 / 木桩兵力都是可见可配的', () => {
+  it('参数区：粗筛 / 决赛 / 决赛上限 / 每将保留 / 配对基准 / 进决赛组合 / 木桩兵力都是可见可配的', () => {
     const html = simControlsHtml({
       coarseRuns: 3,
       finalRuns: 20,
+      finalRunsMax: 200,
+      adaptiveFinals: true,
       unitKeep: 10,
       pairCarriers: 10,
       coarseTop: 32,
@@ -657,12 +738,11 @@ describe('视图层（web/simExpectView.ts）', () => {
       dummyTroops: 150000,
       seed: 20260922,
       swapSides: true,
-      units: [
-        { unit: 0, name: '甲', hasEmptySlot: true },
-        { unit: 1, name: '乙', hasEmptySlot: false },
+      slots: [
+        { key: '0-1', unit: 0, slot: 1, unitName: '甲', position: '大营' },
+        { key: '0-2', unit: 0, slot: 2, unitName: '甲', position: '大营' },
       ],
-      matchUnits: [0],
-      emptySlots: [{ key: '0-1', unit: 0, slot: 1, unitName: '甲' }],
+      matchSlotKeys: ['0-1'],
       coreSlotKeys: ['0-1'],
       autoCoreName: '甲',
       estimate: 1234,
@@ -671,6 +751,8 @@ describe('视图层（web/simExpectView.ts）', () => {
     expect(html).toContain('value="3"');
     expect(html).toContain('id="rm-sim-final"');
     expect(html).toContain(`min="${FINAL_RUNS_MIN}"`);
+    expect(html).toContain('id="rm-sim-finalmax"'); // 决赛上限（自适应加跑）
+    expect(html).toContain('id="rm-sim-adaptive"');
     expect(html).toContain('id="rm-sim-keep"');
     expect(html).toContain('id="rm-sim-paircars"');
     expect(html).toContain('id="rm-sim-top"');
@@ -678,7 +760,41 @@ describe('视图层（web/simExpectView.ts）', () => {
     expect(html).toContain('id="rm-sim-run"');
     expect(html).toContain('不还手的木桩');
     expect(html).toContain('只填空槽');
-    expect(html).toContain('预计真跑 <b>1234</b> 场');
+    expect(html).toContain('预计最多真跑 <b>1234</b> 场');
+    // 参与匹配 = 槽位级勾选（勾哪个槽就只搜哪个槽）
+    expect(html).toContain('参与匹配的槽位');
+    expect(html).toContain('data-sim-slot="0-1"');
+    expect(html).toContain('data-sim-slot="0-2"');
+    expect(html).toContain('data-sim-slots="all"');
+    expect(html).toContain('data-sim-slots="none"');
+    // 排序口径的勾选框（不再是含糊的「核心位」）
+    expect(html).toContain('排序口径 · 核心将');
+    expect(html).toContain('data-sim-core="0-1"');
+  });
+
+  it('◀ 名次可信度：与榜首区间重叠的行标「并列」，并把加跑情况写进口径提示', () => {
+    const cfg = twoSlotCfg();
+    const res = runSimExpectation(cfg, { candidateIds: FOUR_CANDIDATES, coarseRuns: 3, finalRuns: 20, unitKeep: 4, coarseTop: 3 });
+    // 造一个「第 2 名与第 1 名区间重叠」的确定性结果（真实跑批是否重叠取决于数据，不能拿来断言语义）
+    const fake: SimExpectResult = {
+      ...res,
+      finals: res.finals.slice(0, 2).map((f, i) => ({
+        ...f,
+        rank: i + 1,
+        mean: 50000 - i * 120,
+        halfWidth: 900,
+        runs: 40,
+        tieWithBest: i > 0,
+      })),
+      tiesWithBest: 2,
+      adaptiveExtra: 20,
+    };
+    const html = simResultHtml(fake);
+    expect(html).toContain('与第 1 名并列');
+    expect(html).toContain('并列');
+    expect(html).toContain('自动加跑 <b>20</b> 场');
+    expect(html).toContain('名次的可信度');
+    expect(html).toContain('分不出来');
   });
 
   it('结果区：逐槽粗筛 / 组合榜单 / 决赛排行 / 口径提示四段齐全，不出现 undefined / NaN', () => {

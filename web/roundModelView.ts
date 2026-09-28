@@ -12,7 +12,9 @@ import {
   estimateBattles,
   runSimExpectationAsync,
   simSlots,
+  slotKey,
   FINAL_RUNS_MIN,
+  FINAL_RUNS_MAX,
   type SimExpectAsyncOptions,
   type SimExpectResult,
 } from './simExpectation';
@@ -114,6 +116,10 @@ function mountRoundModelInner(root: HTMLElement): void {
     running: boolean;
     coarseRuns: number;
     finalRuns: number;
+    /** 决赛上限（与榜首 95% 区间重叠时自适应加跑到这里） */
+    finalRunsMax: number;
+    /** 区间重叠是否自动加跑 */
+    adaptiveFinals: boolean;
     unitKeep: number;
     pairCarriers: number;
     coarseTop: number;
@@ -122,14 +128,18 @@ function mountRoundModelInner(root: HTMLElement): void {
     dummyTroops: number;
     seed: number;
     swapSides: boolean;
-    /** 上次渲染控件时的空槽位指纹（空槽变化才重建参与匹配 / 核心位勾选） */
+    /** 上次渲染控件时的空槽位指纹（空槽变化才重建参与匹配 / 排序口径勾选） */
     slotSig: string;
+    /** 「参与匹配的槽位」是否被人动过（没动过 = 默认全部空槽；动过且勾空 = 只测评不搜索） */
+    matchSlotTouched: boolean;
   } = {
     result: null,
     signature: '',
     running: false,
     coarseRuns: 3,
     finalRuns: FINAL_RUNS_MIN,
+    finalRunsMax: FINAL_RUNS_MAX,
+    adaptiveFinals: true,
     unitKeep: 32,
     pairCarriers: 10,
     coarseTop: 32,
@@ -139,6 +149,7 @@ function mountRoundModelInner(root: HTMLElement): void {
     seed: 20260922,
     swapSides: true,
     slotSig: '',
+    matchSlotTouched: false,
   };
 
   /** 配置指纹：判断已有模拟结果是否还对得上当前配置 */
@@ -151,9 +162,15 @@ function mountRoundModelInner(root: HTMLElement): void {
     ]);
   }
 
-  /** 空槽位（渲染「核心位」勾选用）：与模块 `simSlots` 同口径 */
-  function emptySlotsOf(): Array<{ key: string; unit: number; slot: number; unitName: string }> {
-    return simSlots(cfg).map((s) => ({ key: `${s.unit}-${s.slot}`, unit: s.unit, slot: s.slot, unitName: s.unitName }));
+  /** 空槽位（渲染「参与匹配的槽位 / 排序口径」勾选用）：与模块 `simSlots` 同口径 */
+  function emptySlotsOf(): Array<{ key: string; unit: number; slot: number; unitName: string; position: string }> {
+    return simSlots(cfg).map((s) => ({
+      key: slotKey(s.unit, s.slot),
+      unit: s.unit,
+      slot: s.slot,
+      unitName: s.unitName,
+      position: (['大营', '中军', '前锋'] as const)[s.unit] ?? '中军',
+    }));
   }
 
   /** 自动识别的核心将（未勾任何核心位时生效） */
@@ -163,12 +180,12 @@ function mountRoundModelInner(root: HTMLElement): void {
       : '—';
   }
 
-  /** 「参与匹配的将」默认 = 自动识别的核心将（用户可改勾选） */
-  function defaultMatchUnits(): number[] {
-    return autoCoreUnits(cfg);
+  /** 「参与匹配的槽位」默认 = 全部空槽（用户可改勾选） */
+  function defaultMatchSlotKeys(): string[] {
+    return emptySlotsOf().map((s) => s.key);
   }
 
-  /** 「核心位」默认 = 自动识别核心将的空槽 */
+  /** 「排序口径」默认 = 自动识别核心将的空槽 */
   function defaultCoreSlotKeys(): string[] {
     const core = new Set(autoCoreUnits(cfg));
     return emptySlotsOf()
@@ -178,15 +195,17 @@ function mountRoundModelInner(root: HTMLElement): void {
 
   function simControlsInit(): Parameters<typeof simControlsHtml>[0] {
     const emptySlots = emptySlotsOf();
-    const checkedMatch = Array.from(simEl.querySelectorAll<HTMLInputElement>('[data-sim-match]'))
+    const checkedSlotKeys = Array.from(simEl.querySelectorAll<HTMLInputElement>('[data-sim-slot]'))
       .filter((el) => el.checked)
-      .map((el) => Number(el.dataset.simMatch));
+      .map((el) => el.dataset.simSlot ?? '');
     const checkedCore = Array.from(simEl.querySelectorAll<HTMLInputElement>('[data-sim-core]'))
       .filter((el) => el.checked)
       .map((el) => el.dataset.simCore ?? '');
     return {
       coarseRuns: simState.coarseRuns,
       finalRuns: simState.finalRuns,
+      finalRunsMax: simState.finalRunsMax,
+      adaptiveFinals: simState.adaptiveFinals,
       unitKeep: simState.unitKeep,
       pairCarriers: simState.pairCarriers,
       coarseTop: simState.coarseTop,
@@ -195,13 +214,8 @@ function mountRoundModelInner(root: HTMLElement): void {
       dummyTroops: simState.dummyTroops,
       seed: simState.seed,
       swapSides: simState.swapSides,
-      units: cfg.slots.map((s, unit) => ({
-        unit,
-        name: HERO_RECORDS[s.heroId]?.name ?? s.heroId,
-        hasEmptySlot: emptySlots.some((e) => e.unit === unit),
-      })),
-      matchUnits: checkedMatch.length ? checkedMatch : defaultMatchUnits(),
-      emptySlots,
+      slots: emptySlots,
+      matchSlotKeys: checkedSlotKeys.length ? checkedSlotKeys : defaultMatchSlotKeys(),
       coreSlotKeys: checkedCore.length ? checkedCore : defaultCoreSlotKeys(),
       autoCoreName: autoCoreName(),
       estimate: estimateBattles(cfg, simOptionsForEstimate()),
@@ -217,21 +231,28 @@ function mountRoundModelInner(root: HTMLElement): void {
         FINAL_RUNS_MIN,
         Math.floor(Number(q<HTMLInputElement>('#rm-sim-final')?.value) || simState.finalRuns)
       ),
+      finalRunsMax: Math.max(
+        FINAL_RUNS_MIN,
+        Math.floor(Number(q<HTMLInputElement>('#rm-sim-finalmax')?.value) || simState.finalRunsMax)
+      ),
+      adaptiveFinals: q<HTMLInputElement>('#rm-sim-adaptive')?.checked !== false,
       unitKeep: Math.max(1, Math.floor(Number(q<HTMLSelectElement>('#rm-sim-keep')?.value) || simState.unitKeep)),
       pairCarriers: Math.max(1, Math.floor(Number(q<HTMLSelectElement>('#rm-sim-paircars')?.value) || simState.pairCarriers)),
       coarseTop: Math.max(1, Math.floor(Number(q<HTMLSelectElement>('#rm-sim-top')?.value) || simState.coarseTop)),
       maxCombos: Math.max(1, Math.floor(Number(q<HTMLInputElement>('#rm-sim-maxcombo')?.value) || simState.maxCombos)),
       dummyTroops: Math.max(500, Math.floor(Number(q<HTMLInputElement>('#rm-sim-troops')?.value) || simState.dummyTroops)),
-      matchUnits: checkedMatchUnits(),
+      matchSlotKeys: checkedMatchSlotKeys(),
     };
   }
 
-  /** 勾选的「参与匹配的将」（一个都没勾 → 回落到默认 = 自动识别的核心将） */
-  function checkedMatchUnits(): number[] {
-    const checked = Array.from(simEl.querySelectorAll<HTMLInputElement>('[data-sim-match]'))
+  /** 勾选的「参与匹配的槽位」（没动过勾选 = 全部空槽；勾空 = 一个都不搜，只测评当前配置） */
+  function checkedMatchSlotKeys(): string[] {
+    if (!simState.matchSlotTouched) return defaultMatchSlotKeys();
+    const all = new Set(defaultMatchSlotKeys());
+    return Array.from(simEl.querySelectorAll<HTMLInputElement>('[data-sim-slot]'))
       .filter((el) => el.checked)
-      .map((el) => Number(el.dataset.simMatch));
-    return checked.length ? checked : defaultMatchUnits();
+      .map((el) => el.dataset.simSlot ?? '')
+      .filter((k) => all.has(k));
   }
 
   /** 「核心位」勾选的槽位 → 去重后的 unit 列表（同一将两个槽都勾也只算一次；未勾 = 自动识别） */
@@ -248,6 +269,11 @@ function mountRoundModelInner(root: HTMLElement): void {
     const q = <T extends HTMLElement>(sel: string): T | null => simEl.querySelector<T>(sel);
     const coarseRuns = Math.max(1, Math.min(20, Math.floor(Number(q<HTMLInputElement>('#rm-sim-coarse')?.value) || 3)));
     const finalRuns = Math.max(FINAL_RUNS_MIN, Math.floor(Number(q<HTMLInputElement>('#rm-sim-final')?.value) || FINAL_RUNS_MIN));
+    const finalRunsMax = Math.max(
+      finalRuns,
+      Math.floor(Number(q<HTMLInputElement>('#rm-sim-finalmax')?.value) || FINAL_RUNS_MAX)
+    );
+    const adaptiveFinals = q<HTMLInputElement>('#rm-sim-adaptive')?.checked !== false;
     const unitKeep = Math.max(1, Math.floor(Number(q<HTMLSelectElement>('#rm-sim-keep')?.value) || 32));
     const pairCarriers = Math.max(1, Math.floor(Number(q<HTMLSelectElement>('#rm-sim-paircars')?.value) || 10));
     const coarseTop = Math.max(1, Math.floor(Number(q<HTMLSelectElement>('#rm-sim-top')?.value) || 10));
@@ -256,22 +282,39 @@ function mountRoundModelInner(root: HTMLElement): void {
     const dummyTroops = Math.max(500, Math.floor(Number(q<HTMLInputElement>('#rm-sim-troops')?.value) || 150000));
     const seed = Math.max(1, Math.floor(Number(q<HTMLInputElement>('#rm-sim-seed')?.value) || 20260922));
     const swapSides = Boolean(q<HTMLInputElement>('#rm-sim-swap')?.checked);
-    const matchUnits = checkedMatchUnits();
+    const matchSlotKeys = checkedMatchSlotKeys();
     const coreUnits = checkedCoreUnits();
     // 回写：决赛场次被抬到下限时，输入框也要显示真实值
     const finalInput = q<HTMLInputElement>('#rm-sim-final');
     if (finalInput) finalInput.value = String(finalRuns);
-    Object.assign(simState, { coarseRuns, finalRuns, unitKeep, pairCarriers, coarseTop, maxCombos, rankBy, dummyTroops, seed, swapSides });
-    return {
+    const finalMaxInput = q<HTMLInputElement>('#rm-sim-finalmax');
+    if (finalMaxInput) finalMaxInput.value = String(finalRunsMax);
+    Object.assign(simState, {
       coarseRuns,
       finalRuns,
+      finalRunsMax,
+      adaptiveFinals,
       unitKeep,
       pairCarriers,
       coarseTop,
       maxCombos,
       rankBy,
       dummyTroops,
-      matchUnits,
+      seed,
+      swapSides,
+    });
+    return {
+      coarseRuns,
+      finalRuns,
+      finalRunsMax,
+      adaptiveFinals,
+      unitKeep,
+      pairCarriers,
+      coarseTop,
+      maxCombos,
+      rankBy,
+      dummyTroops,
+      matchSlotKeys,
       coreUnits,
       baseSeed: seed,
       swapSides,
@@ -289,18 +332,34 @@ function mountRoundModelInner(root: HTMLElement): void {
     simHintEl.className = stale ? 'rm-down' : 'rm-dim';
   }
 
-  /** 控件一改就刷新「预计真跑 N 场」（避免点了才发现要跑十分钟） */
+  /** 控件一改就刷新「预计最多真跑 N 场」（避免点了才发现要跑十分钟） */
   function refreshEstimate(): void {
     const el = simEl.querySelector<HTMLElement>('#rm-sim-est');
     if (!el) return;
-    el.innerHTML = `预计真跑 <b>${estimateBattles(cfg, simOptionsForEstimate())}</b> 场`;
+    el.innerHTML = `预计最多真跑 <b>${estimateBattles(cfg, simOptionsForEstimate())}</b> 场（含加跑上限）`;
   }
 
   function renderSimControls(): void {
     simControlsEl.innerHTML = simControlsHtml(simControlsInit());
-    simControlsEl
-      .querySelectorAll('input, select')
-      .forEach((node) => node.addEventListener('change', refreshEstimate));
+    simControlsEl.querySelectorAll('input, select').forEach((node) =>
+      node.addEventListener('change', () => {
+        if ((node as HTMLElement).matches?.('[data-sim-slot]')) simState.matchSlotTouched = true;
+        refreshEstimate();
+      })
+    );
+    // 「参与匹配的槽位」全选 / 清空（清空 = 一个都不搜，只测评当前配置）
+    simControlsEl.querySelectorAll<HTMLButtonElement>('[data-sim-slots]').forEach((btn) =>
+      btn.addEventListener('click', () => {
+        const all = btn.dataset.simSlots === 'all';
+        simControlsEl.querySelectorAll<HTMLInputElement>('[data-sim-slot]').forEach((el) => {
+          el.checked = all;
+        });
+        simState.matchSlotTouched = true;
+        // 勾选状态变了要重画（清空时给「只测评当前配置」的提示）
+        renderSimControls();
+        refreshEstimate();
+      })
+    );
   }
 
   /** 跑一批：逐槽粗筛 → 组合榜单 → 决赛排行 */

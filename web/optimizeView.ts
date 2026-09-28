@@ -12,9 +12,11 @@ import { HERO_RECORDS, TROOP_CHAR } from './heroes';
 import {
   autoCoreUnits,
   estimateBattles,
+  FINAL_RUNS_MAX,
   FINAL_RUNS_MIN,
   runSimExpectationAsync,
   simSlots,
+  slotKey,
   type SimExpectAsyncOptions,
   type SimExpectResult,
 } from './simExpectation';
@@ -73,6 +75,9 @@ function mountOptimizeInner(root: HTMLElement): void {
     error: '',
     coarseRuns: 3,
     finalRuns: FINAL_RUNS_MIN,
+    /** 决赛上限（与榜首区间重叠时自适应加跑） */
+    finalRunsMax: FINAL_RUNS_MAX,
+    adaptiveFinals: true,
     unitKeep: 32,
     pairCarriers: 10,
     coarseTop: 32,
@@ -81,8 +86,9 @@ function mountOptimizeInner(root: HTMLElement): void {
     dummyTroops: 150000,
     seed: 20260922,
     swapSides: true,
-    /** 勾选状态（空 = 用默认：参与匹配 = 自动识别的核心将；核心位 = 核心将的空槽） */
-    uiMatchUnits: [] as number[],
+    /** 勾选状态（未动过 = 默认全部空槽 / 自动识别核心将；动过之后以勾选为准，勾空 = 只测评不搜索） */
+    uiMatchSlotKeys: [] as string[],
+    uiMatchSlotTouched: false,
     uiCoreSlotKeys: [] as string[],
     slotSig: '',
     note: '',
@@ -160,18 +166,28 @@ function mountOptimizeInner(root: HTMLElement): void {
 
   // ─────────────────────── 勾选状态的读 / 写 ───────────────────────
 
-  /** 空槽位（L2 的「核心位」勾选用）：与模块 `simSlots` 同口径 */
-  function emptySlotsOf(): Array<{ key: string; unit: number; slot: number; unitName: string }> {
-    return simSlots(cfg).map((s) => ({ key: `${s.unit}-${s.slot}`, unit: s.unit, slot: s.slot, unitName: s.unitName }));
+  /** 空槽位（L2 的「参与匹配的槽位 / 排序口径」勾选用）：与模块 `simSlots` 同口径 */
+  function emptySlotsOf(): Array<{ key: string; unit: number; slot: number; unitName: string; position: string }> {
+    return simSlots(cfg).map((s) => ({
+      key: slotKey(s.unit, s.slot),
+      unit: s.unit,
+      slot: s.slot,
+      unitName: s.unitName,
+      position: POSITIONS[s.unit] ?? '中军',
+    }));
   }
 
   function autoCoreName(): string {
     return HERO_RECORDS[cfg.slots[autoCoreUnits(cfg)[0] ?? 0]?.heroId ?? '']?.name ?? '—';
   }
 
-  /** L2 参与匹配的将（空 = 默认自动识别的核心将） */
-  const l2MatchUnits = (): number[] => (l2.uiMatchUnits.length ? l2.uiMatchUnits : autoCoreUnits(cfg));
-  /** L2 核心位（空 = 默认核心将的空槽） */
+  /** L2 参与匹配的槽位（没动过勾选 = 全部空槽；勾空 = 一个都不搜，只测评当前配置） */
+  const l2MatchSlotKeys = (): string[] => {
+    const all = emptySlotsOf().map((s) => s.key);
+    if (!l2.uiMatchSlotTouched) return all;
+    return l2.uiMatchSlotKeys.filter((k) => all.includes(k)); // 已被填上的槽位不再算
+  };
+  /** L2 核心将（排序口径；空 = 默认自动识别） */
   const l2CoreUnits = (): number[] => {
     if (l2.uiCoreSlotKeys.length) {
       return [...new Set(l2.uiCoreSlotKeys.map((k) => Number(k.split('-')[0])).filter((u) => Number.isFinite(u)))];
@@ -191,9 +207,10 @@ function mountOptimizeInner(root: HTMLElement): void {
   /** 勾选变化 → 存进模式状态（面板重建后不丢） */
   function syncUiFromDom(): void {
     if (mode === 'l2') {
-      l2.uiMatchUnits = [...controlsEl.querySelectorAll<HTMLInputElement>('[data-sim-match]')]
+      l2.uiMatchSlotKeys = [...controlsEl.querySelectorAll<HTMLInputElement>('[data-sim-slot]')]
         .filter((el) => el.checked)
-        .map((el) => Number(el.dataset.simMatch));
+        .map((el) => el.dataset.simSlot ?? '');
+      l2.uiMatchSlotTouched = true;
       l2.uiCoreSlotKeys = [...controlsEl.querySelectorAll<HTMLInputElement>('[data-sim-core]')]
         .filter((el) => el.checked)
         .map((el) => el.dataset.simCore ?? '');
@@ -222,13 +239,10 @@ function mountOptimizeInner(root: HTMLElement): void {
       dummyTroops: l2.dummyTroops,
       seed: l2.seed,
       swapSides: l2.swapSides,
-      units: cfg.slots.map((s, unit) => ({
-        unit,
-        name: HERO_RECORDS[s.heroId]?.name ?? s.heroId,
-        hasEmptySlot: emptySlots.some((e) => e.unit === unit),
-      })),
-      matchUnits: l2MatchUnits(),
-      emptySlots,
+      finalRunsMax: l2.finalRunsMax,
+      adaptiveFinals: l2.adaptiveFinals,
+      slots: emptySlots,
+      matchSlotKeys: l2MatchSlotKeys(),
       coreSlotKeys: l2.uiCoreSlotKeys.length
         ? l2.uiCoreSlotKeys
         : emptySlots.filter((s) => autoCoreUnits(cfg).includes(s.unit)).map((s) => s.key),
@@ -243,12 +257,17 @@ function mountOptimizeInner(root: HTMLElement): void {
     return {
       coarseRuns: Math.max(1, Math.floor(Number(q<HTMLInputElement>('#rm-sim-coarse')?.value) || l2.coarseRuns)),
       finalRuns: Math.max(FINAL_RUNS_MIN, Math.floor(Number(q<HTMLInputElement>('#rm-sim-final')?.value) || l2.finalRuns)),
+      finalRunsMax: Math.max(
+        FINAL_RUNS_MIN,
+        Math.floor(Number(q<HTMLInputElement>('#rm-sim-finalmax')?.value) || l2.finalRunsMax)
+      ),
+      adaptiveFinals: q<HTMLInputElement>('#rm-sim-adaptive')?.checked !== false,
       unitKeep: Math.max(1, Math.floor(Number(q<HTMLSelectElement>('#rm-sim-keep')?.value) || l2.unitKeep)),
       pairCarriers: Math.max(1, Math.floor(Number(q<HTMLSelectElement>('#rm-sim-paircars')?.value) || l2.pairCarriers)),
       coarseTop: Math.max(1, Math.floor(Number(q<HTMLSelectElement>('#rm-sim-top')?.value) || l2.coarseTop)),
       maxCombos: Math.max(1, Math.floor(Number(q<HTMLInputElement>('#rm-sim-maxcombo')?.value) || l2.maxCombos)),
       dummyTroops: Math.max(500, Math.floor(Number(q<HTMLInputElement>('#rm-sim-troops')?.value) || l2.dummyTroops)),
-      matchUnits: l2MatchUnits(),
+      matchSlotKeys: l2MatchSlotKeys(),
     };
   }
 
@@ -257,6 +276,11 @@ function mountOptimizeInner(root: HTMLElement): void {
     const q = <T extends HTMLElement>(sel: string): T | null => controlsEl.querySelector<T>(sel);
     const coarseRuns = Math.max(1, Math.min(20, Math.floor(Number(q<HTMLInputElement>('#rm-sim-coarse')?.value) || 3)));
     const finalRuns = Math.max(FINAL_RUNS_MIN, Math.floor(Number(q<HTMLInputElement>('#rm-sim-final')?.value) || FINAL_RUNS_MIN));
+    const finalRunsMax = Math.max(
+      finalRuns,
+      Math.floor(Number(q<HTMLInputElement>('#rm-sim-finalmax')?.value) || FINAL_RUNS_MAX)
+    );
+    const adaptiveFinals = q<HTMLInputElement>('#rm-sim-adaptive')?.checked !== false;
     const unitKeep = Math.max(1, Math.floor(Number(q<HTMLSelectElement>('#rm-sim-keep')?.value) || 32));
     const pairCarriers = Math.max(1, Math.floor(Number(q<HTMLSelectElement>('#rm-sim-paircars')?.value) || 10));
     const coarseTop = Math.max(1, Math.floor(Number(q<HTMLSelectElement>('#rm-sim-top')?.value) || 32));
@@ -267,17 +291,34 @@ function mountOptimizeInner(root: HTMLElement): void {
     const swapSides = Boolean(q<HTMLInputElement>('#rm-sim-swap')?.checked);
     const finalInput = q<HTMLInputElement>('#rm-sim-final');
     if (finalInput) finalInput.value = String(finalRuns);
-    Object.assign(l2, { coarseRuns, finalRuns, unitKeep, pairCarriers, coarseTop, maxCombos, rankBy, dummyTroops, seed, swapSides });
-    return {
+    const finalMaxInput = q<HTMLInputElement>('#rm-sim-finalmax');
+    if (finalMaxInput) finalMaxInput.value = String(finalRunsMax);
+    Object.assign(l2, {
       coarseRuns,
       finalRuns,
+      finalRunsMax,
+      adaptiveFinals,
       unitKeep,
       pairCarriers,
       coarseTop,
       maxCombos,
       rankBy,
       dummyTroops,
-      matchUnits: l2MatchUnits(),
+      seed,
+      swapSides,
+    });
+    return {
+      coarseRuns,
+      finalRuns,
+      finalRunsMax,
+      adaptiveFinals,
+      unitKeep,
+      pairCarriers,
+      coarseTop,
+      maxCombos,
+      rankBy,
+      dummyTroops,
+      matchSlotKeys: l2MatchSlotKeys(),
       coreUnits: l2CoreUnits(),
       baseSeed: seed,
       swapSides,
@@ -584,6 +625,15 @@ function mountOptimizeInner(root: HTMLElement): void {
     renderResult();
     renderSummary();
     renderStaleHint();
+    refreshBadges();
+  }
+
+  /** 左栏徽标（「L2 参与匹配 x/y 槽」等）单独刷：勾选变化不动配置面板本体（否则会清掉搜索框输入） */
+  function refreshBadges(): void {
+    configEl.querySelectorAll<HTMLElement>('.rm-unit').forEach((unitEl, i) => {
+      const badge = unitEl.querySelector<HTMLElement>('.rm-badge');
+      if (badge) badge.textContent = badgeText(i);
+    });
   }
 
   /** 刷新「预计真跑 N 场」文案（参数改动后） */
@@ -602,7 +652,7 @@ function mountOptimizeInner(root: HTMLElement): void {
   function bindControlChanges(): void {
     controlsEl.querySelectorAll<HTMLInputElement | HTMLSelectElement>('input, select').forEach((node) => {
       node.addEventListener('change', () => {
-        if (node.matches('[data-sim-match],[data-sim-core],[data-mt-match],[data-mt-core]')) {
+        if (node.matches('[data-sim-slot],[data-sim-core],[data-mt-match],[data-mt-core]')) {
           syncUiFromDom();
           renderAll();
           return;
@@ -622,9 +672,19 @@ function mountOptimizeInner(root: HTMLElement): void {
 
   // 按钮走事件委托：参数区会整体重建，绑在容器上才不会随按钮一起被换掉
   controlsEl.addEventListener('click', (e) => {
-    const id = (e.target as HTMLElement | null)?.id;
+    const target = e.target as HTMLElement | null;
+    const id = target?.id;
     if (id === 'rm-sim-run') void runL2();
     else if (id === 'mt-run') void runL3();
+    else if (target?.dataset?.simSlots === 'all' || target?.dataset?.simSlots === 'none') {
+      // 「参与匹配的槽位」全选 / 清空（清空 = 不勾任何槽 → 回落到全部空槽，避免跑出 0 场）
+      const all = target.dataset.simSlots === 'all';
+      controlsEl.querySelectorAll<HTMLInputElement>('[data-sim-slot]').forEach((el) => {
+        el.checked = all;
+      });
+      syncUiFromDom();
+      renderAll();
+    }
   });
 
   modesEl.addEventListener('click', (e) => {
@@ -646,27 +706,34 @@ function mountOptimizeInner(root: HTMLElement): void {
   });
 
   // ── 左栏：配置面板（两个模式共用的唯一实例）──
+  /** 单位徽标文案（L2 看「参与匹配了几个槽」，L3 看「核心 / 队友位」） */
+  function badgeText(i: number): string {
+    if (mode === 'l2') {
+      const core = l2CoreUnits().includes(i);
+      const mine = emptySlotsOf().filter((s) => s.unit === i);
+      const matched = mine.filter((s) => l2MatchSlotKeys().includes(s.key)).length;
+      const tag = mine.length ? `L2 参与匹配 ${matched}/${mine.length} 槽` : '无空槽';
+      return `${core ? '核心将·排序口径' : '队友'} · ${tag}`;
+    }
+    if (l3CoreUnits().includes(i)) return '核心将·排序口径（固定不动）';
+    return l3MatchUnits().includes(i) ? `队友位 ${POSITIONS[i] ?? ''} · L3 参与匹配` : '队友 · 不参与匹配';
+  }
+
   function renderConfig(): void {
     renderConfigPanel(configEl, cfg, {
-      unitBadge: (i) => {
-        if (mode === 'l2') {
-          const core = l2CoreUnits().includes(i);
-          const matched = l2MatchUnits().includes(i);
-          return `${core ? '核心将·排序口径' : '队友'}${matched ? ' · L2 参与匹配' : ' · 不参与匹配'}`;
-        }
-        if (l3CoreUnits().includes(i)) return '核心将·排序口径（固定不动）';
-        return l3MatchUnits().includes(i) ? `队友位 ${POSITIONS[i] ?? ''} · L3 参与匹配` : '队友 · 不参与匹配';
-      },
+      unitBadge: (i) => badgeText(i),
       onChange: () => {
         l2.note = '';
         l3.note = '';
-        // 空槽位变了（填 / 清战法）→ L2 的「核心位」勾选项按新空槽重建（旧 key 已失效）
+        // 空槽位变了（填 / 清战法）→ L2 的槽位 / 排序口径勾选项按新空槽重建（旧 key 已失效）
         const slotSig = emptySlotsOf()
           .map((s) => s.key)
           .join(',');
         if (slotSig !== l2.slotSig) {
           l2.slotSig = slotSig;
           l2.uiCoreSlotKeys = [];
+          l2.uiMatchSlotKeys = [];
+          l2.uiMatchSlotTouched = false;
         }
         renderAll();
       },

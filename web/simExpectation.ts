@@ -66,6 +66,24 @@ export interface SimExpectOptions {
   coreUnits?: number[];
   /** 参与匹配的将（缺省 = 所有带空槽的将）；其余将的战法原样保留、不参与搜索（对齐 L3 的 `unitIdxs`） */
   matchUnits?: number[];
+  /**
+   * **参与匹配的槽位**（`"${unit}-${slot}"`；缺省 = 上面 `matchUnits` 范围内的全部空槽）。
+   * 用户 2026-09-28 口径：勾选要搜的具体槽位——「我只想搜两个队友的槽 2」这种要求，
+   * 按将过滤做不到（勾了将 = 它的**所有**空槽都进搜索）。给了 `matchSlotKeys` 就以它为准，
+   * `matchUnits` 退化为「这些槽位所属的将」（标签用）。
+   */
+  matchSlotKeys?: string[];
+  /** 决赛场次上限（自适应加跑用；默认 200）。决赛低于 `FINAL_RUNS_MIN` 仍一律抬回 20 */
+  finalRunsMax: number;
+  /**
+   * **区间重叠时自动加跑**（默认开）：初赛 `finalRuns` 场后，与榜首 95% 区间重叠的组合
+   * （含榜首自己）每次加 `adaptiveStep` 场继续跑，直到区间分开或到达 `finalRunsMax`。
+   * 为什么需要：3 场粗筛 + 20 场决赛的半宽常有 ±2~5%，而榜首与第二名的真实差距可能只有 1~2%
+   * —— 不精算就会把「噪声第一」当结论（用户 2026-09-28 报的「掠敌之利排第一」就是这个）。
+   */
+  adaptiveFinals: boolean;
+  /** 自适应加跑的步长（默认 20 场/次） */
+  adaptiveStep: number;
   /** 木桩单只兵力（默认 150000）：太小会把我们的伤害截断，期望偏低 */
   dummyTroops: number;
   /** 候选战法池覆盖（缺省 = 全部可学战法）；测试 / 脚本收窄用 */
@@ -85,6 +103,10 @@ export const COARSE_RUNS_DEFAULT = 3;
 export const DUMMY_TROOPS_DEFAULT = 150000;
 /** 进决赛的组合数缺省（用户 2026-09-28：**32 支**） */
 export const COARSE_TOP_DEFAULT = 32;
+/** 决赛场次上限缺省（自适应加跑最多跑到这里；用户 2026-09-28：默认 200） */
+export const FINAL_RUNS_MAX = 200;
+/** 自适应加跑步长（场/次） */
+export const ADAPTIVE_STEP = 20;
 
 export const SIM_EXPECT_DEFAULTS: SimExpectOptions = {
   coarseRuns: COARSE_RUNS_DEFAULT,
@@ -98,6 +120,9 @@ export const SIM_EXPECT_DEFAULTS: SimExpectOptions = {
   maxRounds: DEFAULT_ENV.maxRounds,
   baseSeed: DEFAULT_ENV.baseSeed,
   swapSides: DEFAULT_ENV.swapSides,
+  finalRunsMax: FINAL_RUNS_MAX,
+  adaptiveFinals: true,
+  adaptiveStep: ADAPTIVE_STEP,
 };
 
 /** 木桩基准（面板给防御 / 谋略 / 兵种，其余取基准值） */
@@ -121,6 +146,12 @@ function resolveOptions(opts: Partial<SimExpectOptions> = {}): SimExpectOptions 
     maxCombos: Math.max(1, Math.floor(merged.maxCombos)),
     dummyTroops: Math.max(1, Math.floor(merged.dummyTroops)),
     maxRounds: Math.max(1, Math.floor(merged.maxRounds)),
+    finalRunsMax: Math.max(
+      Math.max(FINAL_RUNS_MIN, Math.floor(merged.finalRuns)),
+      Math.floor(merged.finalRunsMax ?? FINAL_RUNS_MAX)
+    ),
+    adaptiveStep: Math.max(1, Math.floor(merged.adaptiveStep ?? ADAPTIVE_STEP)),
+    adaptiveFinals: merged.adaptiveFinals !== false,
   };
 }
 
@@ -142,19 +173,42 @@ function heroNameOf(cfg: ViewCfg, unit: number): string {
  * 参与匹配的空槽位：`skillIds[k]` 为空的位置。
  * 宽度取 `max(SKILL_SLOTS, skillIds.length)`：面板配置是「主战法 + 2 个可学战法」（长度 ≤ 2），
  * 而截图识别的配置把主战法也记在 `skillIds[0]`（长度 3）——只按 `SKILL_SLOTS` 扫会漏掉最后一格。
- * `matchUnits` 给了就只算这些将的空槽（其余将的战法原样保留、不参与搜索，对齐 L3 的 `unitIdxs`）。
+ * `matchUnits` 给了就只算这些将的空槽（其余将的战法原样保留、不参与搜索，对齐 L3 的 `unitIdxs`）；
+ * `matchSlotKeys` 给了就再收窄到这些**具体槽位**（用户 2026-09-28 口径：勾哪个槽就只搜哪个槽）——
+ * 注意 `[]`（显式给空数组）表示**一个槽都不搜**（页面「清空」= 只测评当前配置），与 `undefined`（不限）不同。
  */
-export function simSlots(cfg: ViewCfg, matchUnits?: number[]): SimSlot[] {
+export function simSlots(cfg: ViewCfg, matchUnits?: number[], matchSlotKeys?: string[]): SimSlot[] {
   const allowed = matchUnits?.length ? new Set(matchUnits) : undefined;
+  const slotKeys = matchSlotKeys === undefined ? undefined : new Set(matchSlotKeys);
   const out: SimSlot[] = [];
   cfg.slots.forEach((s, unit) => {
     if (allowed && !allowed.has(unit)) return;
     const width = Math.max(SKILL_SLOTS, s.skillIds.length);
     for (let slot = 0; slot < width; slot += 1) {
-      if (!s.skillIds[slot]) out.push({ unit, slot, unitName: heroNameOf(cfg, unit) });
+      if (s.skillIds[slot]) continue;
+      if (slotKeys && !slotKeys.has(slotKey(unit, slot))) continue;
+      out.push({ unit, slot, unitName: heroNameOf(cfg, unit) });
     }
   });
   return out;
+}
+
+/** 槽位指纹：页面勾选项与 `matchSlotKeys` 共用（`"${unit}-${slot}"`） */
+export function slotKey(unit: number, slot: number): string {
+  return `${unit}-${slot}`;
+}
+
+/** 解析槽位指纹；格式不对返回 null */
+export function parseSlotKey(key: string): { unit: number; slot: number } | null {
+  const m = /^(\d+)-(\d+)$/.exec(key);
+  if (!m) return null;
+  return { unit: Number(m[1]), slot: Number(m[2]) };
+}
+
+/** 槽位指纹列表 → 所属将的下标（升序、去重）——参与匹配的将标签用 */
+export function unitsOfSlotKeys(keys: string[]): number[] {
+  const units = keys.map((k) => parseSlotKey(k)?.unit).filter((u): u is number => u !== undefined);
+  return [...new Set(units)].sort((a, b) => a - b);
 }
 
 /**
@@ -416,6 +470,8 @@ export interface FinalRow {
   deltaFirst3: number;
   /** 决赛排行名次（按场均期望，1 起） */
   rank: number;
+  /** 与榜首的 95% 区间是否重叠（true = 与第一名「并列」，名次不可当结论） */
+  tieWithBest: boolean;
 }
 
 export interface SimExpectResult {
@@ -428,6 +484,8 @@ export interface SimExpectResult {
   dummyLabel: string;
   /** 参与匹配的将（空 = 所有带空槽的将） */
   matchUnits: number[];
+  /** 参与匹配的槽位指纹（`"${unit}-${slot}"`；勾哪个槽就只搜哪个槽） */
+  matchSlotKeys: string[];
   /** 排序目标的核心将（unit 下标 + 名字）；自动识别结果也落在这里 */
   coreUnits: number[];
   coreLabel: string;
@@ -447,6 +505,10 @@ export interface SimExpectResult {
   finals: FinalRow[];
   /** 真跑场次合计 */
   battles: number;
+  /** 自适应加跑额外跑的场次（0 = 榜首与后续名次一开始就分得开） */
+  adaptiveExtra: number;
+  /** 决赛里与榜首区间重叠（并列）的组合数 */
+  tiesWithBest: number;
   /** 粗筛榜单排序与决赛排序的成对一致率（1 = 完全一致） */
   rankAgreement: number;
   /** 决赛里有几个组合出现「木桩被打空」（>0 → 提示加大木桩兵力） */
@@ -567,6 +629,80 @@ const scoreOf = (opts: SimExpectOptions, core: number, coreFirst3: number): numb
   opts.rankBy === 'first3' ? coreFirst3 : core;
 
 /**
+ * 决赛每套配置的累计状态：自适应加跑要在**原样本**上继续跑（不是重跑），
+ * 所以把队伍 / 样本留在状态里，`finalRowOf` 只做纯汇总。
+ */
+interface FinalSampleState {
+  combo: ComboRow;
+  variant: ViewCfg;
+  teams: ReturnType<typeof ensureUniqueUnitIds>;
+  myIds: string[];
+  nameById: Map<string, string>;
+  raws: RunRaw[];
+  damages: number[];
+  first3s: number[];
+}
+
+/** 由累计样本汇总出决赛排行的一行（纯函数；加跑后重算同一行） */
+function finalRowOf(st: FinalSampleState, coreIds: string[]): FinalRow {
+  const runs = st.raws.length;
+  const unitAcc = new Map<string, number>();
+  const skillAcc = new Map<string, number>();
+  for (const raw of st.raws) {
+    for (const [id, v] of raw.perUnit) if (st.myIds.includes(id)) unitAcc.set(id, (unitAcc.get(id) ?? 0) + v.damage);
+    for (const [sid, v] of raw.perSkillMine) skillAcc.set(sid, (skillAcc.get(sid) ?? 0) + v);
+  }
+  const coreIdSet = new Set(coreIds);
+  const byUnit = st.myIds
+    .map((id) => ({
+      unit: st.teams.myTeam.findIndex((g) => g.id === id),
+      name: st.nameById.get(id) ?? id,
+      mean: (unitAcc.get(id) ?? 0) / (runs || 1),
+      core: coreIdSet.has(id),
+    }))
+    .sort((a, b) => b.mean - a.mean);
+  const bySkill = [...skillAcc.entries()]
+    .map(([skillId, sum]) => ({ skillId, name: skillName(skillId), mean: sum / (runs || 1) }))
+    .sort((a, b) => b.mean - a.mean);
+
+  // 与旧解析模型对照（同一配置、同一回合口径）；解析值是**全队总伤**，故用全队均值比
+  const analytic = computeResult(st.variant);
+  const analyticTotal = analytic.total;
+  const analyticFirst3 = windowTotals(analytic, 3).total;
+  const m = mean(st.damages);
+  const m3 = mean(st.first3s);
+  const totalMean = mean(st.raws.map((r) => r.myDamage));
+  return {
+    picks: st.combo.picks,
+    label: st.combo.label,
+    runs,
+    damages: st.damages,
+    mean: m,
+    meanFirst3: m3,
+    meanTotal: totalMean,
+    sd: sd(st.damages),
+    halfWidth: st.damages.length > 1 ? (1.96 * sd(st.damages)) / Math.sqrt(st.damages.length) : 0,
+    min: st.damages.length ? Math.min(...st.damages) : 0,
+    max: st.damages.length ? Math.max(...st.damages) : 0,
+    median: median(st.damages),
+    byUnit,
+    bySkill,
+    // 木桩被打空 = 伤害被兵力截断（期望偏低），如实上报
+    wipedRuns: st.raws.filter((r) => r.enemyFinalTroops.some((t) => t <= 0)).length,
+    coarseMean: st.combo.meanCore,
+    coarseRank: st.combo.rank,
+    coarseBias: st.combo.meanCore ? (m - st.combo.meanCore) / st.combo.meanCore : 0,
+    analyticTotal,
+    analyticFirst3,
+    deltaTotal: analyticTotal ? (totalMean - analyticTotal) / analyticTotal : 0,
+    deltaFirst3: analyticFirst3 ? (m3 - analyticFirst3) / analyticFirst3 : 0,
+    rank: 0,
+    /** 与榜首的 95% 区间是否重叠（同一次运行内、排完名后统一回填） */
+    tieWithBest: false,
+  };
+}
+
+/**
  * 三阶段模拟测评（生成器版）：每真跑一场就 `yield` 一次进度 ——
  * 同步版一次跑完（脚本），异步版按步让出主线程（页面进度条）。手法同仓库既有 `searchLoadoutSteps`。
  * **排序口径 = 核心将伤害期望**（`coreUnits`；缺省自动识别）——见 `SimExpectOptions.coreUnits` 的说明。
@@ -578,10 +714,18 @@ export function* simExpectationSteps(
   const opts = resolveOptions({ maxRounds: cfg.rounds, ...options });
   const t0 = Date.now();
   const slotsAll = simSlots(cfg);
-  const matchUnits = opts.matchUnits?.length
-    ? [...new Set(opts.matchUnits)].filter((u) => u >= 0 && u < cfg.slots.length)
-    : [...new Set(slotsAll.map((s) => s.unit))];
-  const slots = simSlots(cfg, matchUnits);
+  // 参与匹配的槽位：`matchSlotKeys` 优先（勾哪个槽就只搜哪个槽；显式 `[]` = 一个都不搜），否则按 `matchUnits` 的全部空槽
+  const keysGiven = opts.matchSlotKeys !== undefined;
+  const matchSlotKeys = (opts.matchSlotKeys ?? []).filter((k) => {
+    const p = parseSlotKey(k);
+    return Boolean(p) && p!.unit >= 0 && p!.unit < cfg.slots.length;
+  });
+  const matchUnits = keysGiven
+    ? unitsOfSlotKeys(matchSlotKeys)
+    : opts.matchUnits?.length
+      ? [...new Set(opts.matchUnits)].filter((u) => u >= 0 && u < cfg.slots.length)
+      : [...new Set(slotsAll.map((s) => s.unit))];
+  const slots = simSlots(cfg, matchUnits.length ? matchUnits : undefined, keysGiven ? matchSlotKeys : undefined);
   const coreUnits = opts.coreUnits?.length
     ? [...new Set(opts.coreUnits)].filter((u) => u >= 0 && u < cfg.slots.length)
     : autoCoreUnits(cfg);
@@ -815,20 +959,26 @@ export function* simExpectationSteps(
   const finals: FinalRow[] = [];
   const finalPhaseTotal = advancing.length * opts.finalRuns;
   let finalDone = 0;
+  const states: FinalSampleState[] = [];
   for (const combo of advancing) {
     const picks = combo.picks;
     const variant = picks.length ? withPicks(cfg, picks) : cfg;
     const teams = ensureUniqueUnitIds(generalsOf(variant, cfg.morale), enemyTeam);
-    const myIds = teams.myTeam.map((g) => g.id);
-    const nameById = new Map(teams.myTeam.map((g) => [g.id, g.name]));
-    const damages: number[] = [];
-    const first3s: number[] = [];
-    const raws: RunRaw[] = [];
+    const st: FinalSampleState = {
+      combo,
+      variant,
+      teams,
+      myIds: teams.myTeam.map((g) => g.id),
+      nameById: new Map(teams.myTeam.map((g) => [g.id, g.name])),
+      raws: [],
+      damages: [],
+      first3s: [],
+    };
     for (let i = 0; i < opts.finalRuns; i += 1) {
-      const raw = runOne(teams.myTeam, teams.enemyTeam, i, envOf(opts));
-      raws.push(raw);
-      damages.push(coreDamageOf(raw, coreIds));
-      first3s.push(coreFirst3Of(raw, coreIds));
+      const raw = runOne(st.teams.myTeam, st.teams.enemyTeam, i, envOf(opts));
+      st.raws.push(raw);
+      st.damages.push(coreDamageOf(raw, coreIds));
+      st.first3s.push(coreFirst3Of(raw, coreIds));
       finalDone += 1;
       battle += 1;
       yield {
@@ -836,67 +986,60 @@ export function* simExpectationSteps(
         phaseDone: finalDone,
         phaseTotal: finalPhaseTotal,
         battle,
-        label: `决赛 ${finals.length + 1}/${advancing.length} 第 ${i + 1}/${opts.finalRuns} 场：${combo.label}`,
+        label: `决赛 ${states.length + 1}/${advancing.length} 第 ${i + 1}/${opts.finalRuns} 场：${combo.label}`,
       };
     }
+    states.push(st);
+    finals.push(finalRowOf(st, coreIds));
+  }
 
-    // 逐将 / 逐战法场均伤害（逐将按我方 id；逐战法按施法方归属，见 RunRaw.perSkillMine）
-    const unitAcc = new Map<string, number>();
-    const skillAcc = new Map<string, number>();
-    for (const raw of raws) {
-      for (const [id, v] of raw.perUnit) if (myIds.includes(id)) unitAcc.set(id, (unitAcc.get(id) ?? 0) + v.damage);
-      for (const [sid, v] of raw.perSkillMine) skillAcc.set(sid, (skillAcc.get(sid) ?? 0) + v);
+  /**
+   * 自适应加跑（用户 2026-09-28 口径）：与榜首 95% 区间重叠的组合（含榜首）每次 +`adaptiveStep` 场，
+   * 直到区间两两分开或到 `finalRunsMax`。3 场粗筛 + 20 场决赛的半宽常有 ±2~5%，
+   * 而真实差距可能只有 1~2% —— 不精算就会把「噪声第一」当成结论。
+   */
+  let adaptiveExtra = 0;
+  const tiesWith = (row: FinalRow, other: FinalRow): boolean =>
+    row !== other && Math.abs(row.mean - other.mean) < row.halfWidth + other.halfWidth;
+  if (opts.adaptiveFinals && finals.length > 1) {
+    for (;;) {
+      const room = opts.finalRunsMax - (opts.finalRuns + adaptiveExtra);
+      if (room <= 0) break;
+      const best = finals.reduce((a, b) => (b.mean > a.mean ? b : a), finals[0]);
+      const contenders = finals.filter((f) => f === best || tiesWith(f, best));
+      if (contenders.length < 2) break; // 只有榜首自己 → 没有需要分开的名次
+      const batch = Math.min(opts.adaptiveStep, room);
+      for (const row of contenders) {
+        const st = states[finals.indexOf(row)];
+        const from = st.raws.length;
+        for (let i = from; i < from + batch; i += 1) {
+          const raw = runOne(st.teams.myTeam, st.teams.enemyTeam, i, envOf(opts));
+          st.raws.push(raw);
+          st.damages.push(coreDamageOf(raw, coreIds));
+          st.first3s.push(coreFirst3Of(raw, coreIds));
+          battle += 1;
+          yield {
+            phase: 'final',
+            phaseDone: finalPhaseTotal,
+            phaseTotal: finalPhaseTotal,
+            battle,
+            label: `精算（区间重叠，自动加跑到 ${opts.finalRunsMax} 场）第 ${i + 1} 场：${st.combo.label}`,
+          };
+        }
+        finals[finals.indexOf(row)] = finalRowOf(st, coreIds);
+      }
+      adaptiveExtra += batch;
+      finals.sort((a, b) => b.mean - a.mean);
     }
-    const coreIdSet = new Set(coreIds);
-    const byUnit = myIds
-      .map((id) => ({
-        unit: teams.myTeam.findIndex((g) => g.id === id),
-        name: nameById.get(id) ?? id,
-        mean: (unitAcc.get(id) ?? 0) / opts.finalRuns,
-        core: coreIdSet.has(id),
-      }))
-      .sort((a, b) => b.mean - a.mean);
-    const bySkill = [...skillAcc.entries()]
-      .map(([skillId, sum]) => ({ skillId, name: skillName(skillId), mean: sum / opts.finalRuns }))
-      .sort((a, b) => b.mean - a.mean);
-
-    // 与旧解析模型对照（同一配置、同一回合口径）；解析值是**全队总伤**，故用全队均值比
-    const analytic = computeResult(variant);
-    const analyticTotal = analytic.total;
-    const analyticFirst3 = windowTotals(analytic, 3).total;
-    const m = mean(damages);
-    const m3 = mean(first3s);
-    const totalMean = mean(raws.map((r) => r.myDamage));
-    finals.push({
-      picks,
-      label: combo.label,
-      runs: opts.finalRuns,
-      damages,
-      mean: m,
-      meanFirst3: m3,
-      meanTotal: totalMean,
-      sd: sd(damages),
-      halfWidth: damages.length > 1 ? (1.96 * sd(damages)) / Math.sqrt(damages.length) : 0,
-      min: damages.length ? Math.min(...damages) : 0,
-      max: damages.length ? Math.max(...damages) : 0,
-      median: median(damages),
-      byUnit,
-      bySkill,
-      // 木桩被打空 = 伤害被兵力截断（期望偏低），如实上报
-      wipedRuns: raws.filter((r) => r.enemyFinalTroops.some((t) => t <= 0)).length,
-      coarseMean: combo.meanCore,
-      coarseRank: combo.rank,
-      coarseBias: combo.meanCore ? (m - combo.meanCore) / combo.meanCore : 0,
-      analyticTotal,
-      analyticFirst3,
-      deltaTotal: analyticTotal ? (totalMean - analyticTotal) / analyticTotal : 0,
-      deltaFirst3: analyticFirst3 ? (m3 - analyticFirst3) / analyticFirst3 : 0,
-      rank: 0,
-    });
   }
   finals.sort((a, b) => b.mean - a.mean);
   finals.forEach((row, i) => {
     row.rank = i + 1;
+  });
+  // 与榜首的区间是否重叠（页面标「并列」用：差多少算数，看区间不看名次）
+  const top = finals[0];
+  finals.forEach((row) => {
+    row.tieWithBest = Boolean(top) && tiesWith(row, top);
   });
 
   return {
@@ -906,6 +1049,7 @@ export function* simExpectationSteps(
     candidateSkipped: Math.max(0, basePool - pool.length),
     dummyLabel: dummyLabel(cfg.enemy, opts.dummyTroops),
     matchUnits,
+    matchSlotKeys: slots.map((s) => slotKey(s.unit, s.slot)),
     coreUnits,
     coreLabel,
     matchLabel: coreLabelOf(cfg, matchUnits),
@@ -917,6 +1061,8 @@ export function* simExpectationSteps(
     comboFallback,
     finals,
     battles: battle,
+    adaptiveExtra,
+    tiesWithBest: finals.filter((f) => f.tieWithBest).length,
     rankAgreement: pairAgreement(
       finals.map((f) => f.coarseMean),
       finals.map((f) => f.mean)
@@ -963,10 +1109,14 @@ export function estimateBattles(cfg: ViewCfg, options: Partial<SimExpectOptions>
   const opts = resolveOptions({ maxRounds: cfg.rounds, ...options });
   const slotsAll = simSlots(cfg);
   if (!slotsAll.length) return opts.coarseRuns + opts.finalRuns;
-  const matchUnits = opts.matchUnits?.length
-    ? [...new Set(opts.matchUnits)].filter((u) => u >= 0 && u < cfg.slots.length)
-    : [...new Set(slotsAll.map((s) => s.unit))];
-  const slots = simSlots(cfg, matchUnits);
+  const keysGiven = opts.matchSlotKeys !== undefined;
+  const matchSlotKeys = opts.matchSlotKeys ?? [];
+  const matchUnits = keysGiven
+    ? unitsOfSlotKeys(matchSlotKeys)
+    : opts.matchUnits?.length
+      ? [...new Set(opts.matchUnits)].filter((u) => u >= 0 && u < cfg.slots.length)
+      : [...new Set(slotsAll.map((s) => s.unit))];
+  const slots = simSlots(cfg, matchUnits.length ? matchUnits : undefined, keysGiven ? matchSlotKeys : undefined);
   const pool = candidateSkills(cfg, opts).length;
   // ① 逐将粗筛：单挂一圈人人有份；双槽将再加一圈「搭子基准 × 全部候选」的配对
   const plans = matchUnits
@@ -978,6 +1128,7 @@ export function estimateBattles(cfg: ViewCfg, options: Partial<SimExpectOptions>
   // ② 组合数上界 = unitKeep^参与匹配的将数（守唯一会略少），再用 maxCombos 截断
   const comboUpper = Math.min(opts.maxCombos, Math.pow(opts.unitKeep, plans.length));
   const comboPhase = comboUpper * opts.coarseRuns;
-  const finalPhase = Math.min(opts.coarseTop, comboUpper) * opts.finalRuns;
+  // ③ 决赛：按**上限** `finalRunsMax` 估（区间重叠会自适应加跑，实际多在 finalRuns 附近）
+  const finalPhase = Math.min(opts.coarseTop, comboUpper) * opts.finalRunsMax;
   return singlePhase + pairPhase + comboPhase + finalPhase;
 }
