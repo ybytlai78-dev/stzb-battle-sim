@@ -63,6 +63,17 @@ function setup(opts: { badEvidence?: boolean } = {}) {
   return { view, applied, root, plan };
 }
 
+/** 轮询等待条件成立（确认条是异步出现的，不能用固定 sleep） */
+async function waitFor<T>(fn: () => T | null, timeoutMs = 3000): Promise<T> {
+  const t0 = Date.now();
+  for (;;) {
+    const v = fn();
+    if (v) return v;
+    if (Date.now() - t0 > timeoutMs) throw new Error('等待超时');
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
+
 describe('AI 顾问抽屉（主站内嵌）', () => {
   beforeEach(() => {
     localStorage.clear();
@@ -124,6 +135,46 @@ describe('AI 顾问抽屉（主站内嵌）', () => {
     const applyBtn = card.querySelector('.advisor-apply') as HTMLButtonElement;
     expect(applyBtn.disabled).toBe(true);
     expect(card.textContent).toContain('未验证');
+  });
+
+  it('报价 + 确认：长搜索先报场次/耗时，点「开始」才真跑', async () => {
+    const { view, root, applied } = setup();
+    view.open();
+    // 把阈值调到 1 场，好让干跑脚本那次 20 场也走确认
+    (root.querySelector('#adv-askfrom') as HTMLInputElement).value = '1';
+    const p = view.__send('这队现在打木桩能打多少？');
+    const bar = await waitFor(() => {
+      const b = root.querySelector('.advisor-confirm') as HTMLElement | null;
+      return b && !b.hidden ? b : null;
+    });
+    expect(bar.textContent).toContain('即将执行');
+    expect(bar.textContent).toContain('预计');
+    expect(bar.textContent).toContain('试跑');
+    expect(root.querySelector('.advisor-trace')?.textContent).toContain('等你确认');
+    (bar.querySelector('.advisor-go') as HTMLButtonElement).click();
+    await p;
+    expect(root.querySelector('.advisor-plan-card')).toBeTruthy();
+    const applyBtn = root.querySelector('.advisor-apply') as HTMLButtonElement;
+    expect(applyBtn.disabled).toBe(false);
+    applyBtn.click();
+    expect(applied).toHaveLength(1);
+  });
+
+  it('报价 + 确认：点「不跑」→ 该工具没真跑（0 场）并记成失败', async () => {
+    const { view, root } = setup();
+    view.open();
+    (root.querySelector('#adv-askfrom') as HTMLInputElement).value = '1';
+    const p = view.__send('这队现在打木桩能打多少？');
+    const bar = await waitFor(() => {
+      const b = root.querySelector('.advisor-confirm') as HTMLElement | null;
+      return b && !b.hidden ? b : null;
+    });
+    (bar.querySelector('.advisor-skip') as HTMLButtonElement).click();
+    await p;
+    const trace = root.querySelector('.advisor-trace')?.textContent ?? '';
+    expect(trace).toContain('✘');
+    expect(trace).toContain('用户拒绝');
+    expect(root.querySelector('.advisor-cost')?.textContent).toContain('0 场'); // 没跑就不算场次
   });
 
   it('没填 key 且非干跑：不发请求，直接提示', async () => {

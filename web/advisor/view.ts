@@ -14,7 +14,7 @@ import { runAdvisorTurn, type AdvisorEvent } from './loop';
 import { evidenceZh, TraceLine } from './trace';
 import { createBrowserTransport, createFakeTransport, type AdvisorSettings, type TokenUsage } from './transport';
 import { makeCtx, type ToolCtx } from './tools';
-import { DEFAULT_BUDGET, DEFAULT_DUMMY, PLAN_POSITIONS, type AdvisorPlan, type AdvisorTurn, type PlanCheck } from './types';
+import { DEFAULT_BUDGET, DEFAULT_CONFIRM_BATTLES, DEFAULT_DUMMY, PLAN_POSITIONS, type AdvisorPlan, type AdvisorTurn, type PlanCheck, type SearchQuote } from './types';
 import type { AdvisorHost } from '../advisorHost';
 
 const SETTINGS_KEY = 'dsh-advisor-settings-v1';
@@ -24,6 +24,10 @@ interface ViewSettings extends AdvisorSettings {
   maxCalls: number;
   maxBattles: number;
   maxTokens: number;
+  /** 长搜索前先问（用户 2026-09-29 口径：报价 + 确认） */
+  askBeforeSearch: boolean;
+  /** 超过多少场才问 */
+  askFrom: number;
 }
 
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string);
@@ -43,6 +47,8 @@ function loadSettings(): ViewSettings {
         maxCalls: p.maxCalls ?? DEFAULT_BUDGET.maxCalls,
         maxBattles: p.maxBattles ?? DEFAULT_BUDGET.maxBattles,
         maxTokens: p.maxTokens ?? DEFAULT_BUDGET.maxTokens,
+        askBeforeSearch: p.askBeforeSearch ?? true,
+        askFrom: p.askFrom ?? DEFAULT_CONFIRM_BATTLES,
       };
     }
   } catch {
@@ -55,6 +61,8 @@ function loadSettings(): ViewSettings {
     maxCalls: DEFAULT_BUDGET.maxCalls,
     maxBattles: DEFAULT_BUDGET.maxBattles,
     maxTokens: DEFAULT_BUDGET.maxTokens,
+    askBeforeSearch: true,
+    askFrom: DEFAULT_CONFIRM_BATTLES,
   };
 }
 
@@ -160,6 +168,10 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
           </div>
           <div class="advisor-row">
             <label class="advisor-chk"><input id="adv-fake" type="checkbox" /> 干跑（不联网）</label>
+            <label class="advisor-chk"><input id="adv-ask" type="checkbox" ${settings.askBeforeSearch ? 'checked' : ''} /> 长搜索先问我</label>
+            <label>超过 <input id="adv-askfrom" type="number" min="1" step="500" value="${settings.askFrom}" style="min-width:80px" /> 场先问</label>
+          </div>
+          <div class="advisor-row">
             <label>调用次数上限 <input id="adv-maxcalls" type="number" min="1" max="500" value="${settings.maxCalls}" /></label>
             <label>场次上限 <input id="adv-maxbattles" type="number" min="100" step="1000" value="${settings.maxBattles}" /></label>
             <label>词元上限 <input id="adv-maxtokens" type="number" min="1000" step="10000" value="${settings.maxTokens}" /></label>
@@ -167,6 +179,7 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
           <p class="advisor-note">密钥只存在本机浏览器里，直连厂商。口径：对**标准木桩**（防御 ${DEFAULT_DUMMY.defense} / 谋略 ${DEFAULT_DUMMY.strategy} / 步 / ${DEFAULT_DUMMY.troops}）的伤害期望——不是打你对面那队。</p>
         </details>
         <div class="advisor-trace"></div>
+        <div class="advisor-confirm" hidden></div>
         <pre class="advisor-log"></pre>
         <div class="advisor-plans"></div>
         <div class="advisor-cost"></div>
@@ -200,8 +213,29 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
       maxCalls: Math.max(1, Math.floor(Number(el<HTMLInputElement>('#adv-maxcalls').value) || DEFAULT_BUDGET.maxCalls)),
       maxBattles: Math.max(100, Math.floor(Number(el<HTMLInputElement>('#adv-maxbattles').value) || DEFAULT_BUDGET.maxBattles)),
       maxTokens: Math.max(1000, Math.floor(Number(el<HTMLInputElement>('#adv-maxtokens').value) || DEFAULT_BUDGET.maxTokens)),
+      askBeforeSearch: el<HTMLInputElement>('#adv-ask').checked,
+      askFrom: Math.max(1, Math.floor(Number(el<HTMLInputElement>('#adv-askfrom').value) || DEFAULT_CONFIRM_BATTLES)),
     };
     return s;
+  }
+
+  /** 报价 + 确认：挂一个气条，点「开始」才返回 true（取消/中断按不跑处理，避免挂住） */
+  function askConfirm(q: SearchQuote): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      const bar = el('.advisor-confirm');
+      bar.hidden = false;
+      bar.innerHTML = `<span>即将执行 —— ${esc(q.label)}</span><button type="button" class="btn primary advisor-go">开始</button><button type="button" class="btn advisor-skip">不跑</button>`;
+      el('.advisor-trace').textContent = `${trace.text()} · ⏳ 等你确认`;
+      const finish = (v: boolean): void => {
+        bar.hidden = true;
+        bar.innerHTML = '';
+        el('.advisor-trace').textContent = trace.text();
+        resolve(v);
+      };
+      bar.querySelector('.advisor-go')!.addEventListener('click', () => finish(true));
+      bar.querySelector('.advisor-skip')!.addEventListener('click', () => finish(false));
+      controller?.signal.addEventListener('abort', () => finish(false), { once: true });
+    });
   }
 
   function append(line: string): void {
@@ -316,6 +350,11 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
         cache: createLocalCache(),
       });
     const transport = opts.transport ?? (fake ? fakeScript(fakePick.plan, fakePick.demo) : createBrowserTransport(s));
+    // 报价 + 确认：长搜索开跑前问一句（用户可在设置里关掉或改阈值）
+    if (s.askBeforeSearch) {
+      ctx.confirm = opts.ctx?.confirm ?? askConfirm;
+      ctx.confirmFrom = s.askFrom;
+    }
     try {
       const turn = await runAdvisorTurn({ userText: q, ctx, transport, signal: controller.signal, onEvent });
       renderTurn(turn);

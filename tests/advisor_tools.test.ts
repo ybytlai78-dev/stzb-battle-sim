@@ -467,6 +467,66 @@ describe('advisor tools', () => {
     expect(r.brief).toContain('整体搜索');
   });
 
+  it('报价 + 确认：用户点「不跑」→ 工具拒绝执行、**没真跑**、额度退回', async () => {
+    let ran = 0;
+    const asked: Array<{ battles: number; label: string }> = [];
+    const ctx = makeCtx({
+      fakeRuns: true,
+      deps: {
+        estimateSkillBattles: () => 8000,
+        optimizeSkills: async () => {
+          ran += 1;
+          return { finals: [] } as never;
+        },
+      },
+    });
+    ctx.confirm = async (q) => {
+      asked.push({ battles: q.battles, label: q.label });
+      return false;
+    };
+    await expect(runTool('optimize_skills', {}, ctx)).rejects.toThrow(/用户拒绝了这次搜索/);
+    expect(asked).toHaveLength(1);
+    expect(asked[0].battles).toBe(8000);
+    expect(asked[0].label).toContain('搜战法');
+    expect(asked[0].label).toContain('约');
+    expect(ran).toBe(0); // 一次都没跑
+    expect(ctx.budget.battles).toBe(0); // 额度退回
+    expect(ctx.budget.calls).toBe(0);
+  });
+
+  it('报价 + 确认：用户点「开始」→ 照常跑；低于阈值不问', async () => {
+    const asked: string[] = [];
+    const ctx = makeCtx({ fakeRuns: true, deps: { estimateSkillBattles: () => 8000, optimizeSkills: async () => ({ battles: 8000, ms: 1000, finals: [] }) as never } });
+    ctx.confirm = async (q) => {
+      asked.push(q.label);
+      return true;
+    };
+    await runTool('optimize_skills', {}, ctx);
+    expect(asked).toHaveLength(1); // 贵 → 问了
+    expect(ctx.budget.battles).toBe(8000);
+    // simulate 默认 20 场，低于 2000 → 不打扰用户
+    const ctx2 = makeCtx({ fakeRuns: true });
+    let asked2 = 0;
+    ctx2.confirm = async () => {
+      asked2 += 1;
+      return true;
+    };
+    await runTool('simulate', { plan: ctx2.deps.__plan, runs: 20 }, ctx2);
+    expect(asked2).toBe(0);
+  });
+
+  it('报价 + 确认：阈值可调（confirmFrom = 1 → 20 场也问）', async () => {
+    const ctx = makeCtx({ fakeRuns: true });
+    ctx.confirmFrom = 1;
+    let asked = 0;
+    ctx.confirm = async () => {
+      asked += 1;
+      return true;
+    };
+    await runTool('simulate', { plan: ctx.deps.__plan, runs: 20 }, ctx);
+    expect(asked).toBe(1);
+  });
+
   it('list_skills：按出手位批量拉池子（分页 + 还有多少的提示）', async () => {
     const ctx = makeCtx({ fakeRuns: true });
     const r = await runTool('list_skills', { slot: '被动', limit: 5 }, ctx);

@@ -135,6 +135,26 @@ export interface ToolCost {
   long?: boolean;
 }
 
+/** 长搜索的「报价」：开跑前给用户看的一行字 */
+export interface SearchQuote {
+  /** 工具名（界面自己映射中文名） */
+  tool: string;
+  /** 预计真跑场次 */
+  battles: number;
+  /** 预计耗时（毫秒，按实测≈6ms/场折算，界面上会说「约」） */
+  estMs: number;
+  /** 人话描述，例如「搜战法：预计 8,062 场 / 约 48 秒」 */
+  label: string;
+}
+
+/** 确认钩子：返回 true 才真跑；false / 取消 → 工具拒绝执行并把原因回灌给模型 */
+export type ConfirmFn = (q: SearchQuote) => Promise<boolean>;
+
+/** 超过这个场次才打扰用户（≈12 秒）：检索类与 simulate 不会触发 */
+export const DEFAULT_CONFIRM_BATTLES = 2000;
+/** 每场耗时的折算常数（实测 L2 默认 8,062 场 / 57 秒 ≈ 7ms；取 6 略保守） */
+export const MS_PER_BATTLE = 6;
+
 export interface ToolSpec<A = unknown, C = unknown> {
   name: string;
   /** 给 LLM 看：什么时候用、边界、代价 */

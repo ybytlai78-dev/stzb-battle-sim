@@ -87,6 +87,21 @@
 .advisor-verify-note { font-size: 11px; color: var(--text-dim, #8a827c); }
 .dim { color: var(--text-dim, #8a827c); }
 
+/* 报价 + 确认条：长搜索开跑前先问一句（点「开始」才真跑） */
+.advisor-confirm {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  border: 1px solid var(--gold, #c49a36);
+  border-radius: 4px;
+  background: #2a2214;
+  color: var(--gold-bright, #e6c67e);
+  font-size: 12px;
+}
+.advisor-confirm[hidden] { display: none; }
+
 .advisor-input-row { display: flex; flex-direction: column; gap: 6px; }
 .advisor-input {
   width: 100%; resize: vertical;

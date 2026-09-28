@@ -70,3 +70,18 @@ textarea { width: 100%; }
   overflow-x: auto;
 }
 .progress { min-height: 18px; color: var(--lab-key); font: 12px/1.5 ui-monospace, Consolas, monospace; }
+/* 报价 + 确认条 */
+.confirm-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  border: 1px solid var(--lab-key);
+  border-radius: 4px;
+  background: #2a2214;
+  color: var(--lab-key);
+  font-size: 12px;
+}
+.confirm-bar[hidden] { display: none; }

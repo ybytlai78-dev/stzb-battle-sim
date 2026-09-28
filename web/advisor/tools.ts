@@ -34,14 +34,18 @@ import { HERO_OPTIONS, SKILL_OPTIONS, defaultCfg, type ViewCfg } from '../teamCo
 /** 方案里的核心将 → `ViewCfg` 槽位下标（给 `evaluate` 当排序口径用）—— 实现见 `gate.ts`（与关 3 共用） */
 import { cacheKey, hitToResult, type AdvisorCache } from './cache';
 import { cfgOf, configToPlan, coreIndices, validateAdvisorPlan } from './gate';
+import { toolZh } from './trace';
 import {
   BudgetExceeded,
   DEFAULT_BUDGET,
+  DEFAULT_CONFIRM_BATTLES,
   DEFAULT_DUMMY,
+  MS_PER_BATTLE,
   normalizePlan,
   type AdvisorPlan,
   type Budget,
   type BudgetState,
+  type ConfirmFn,
   type PlanSlot,
   type ToolResult,
   type ToolSpec,
@@ -101,6 +105,10 @@ export interface ToolCtx {
   onProgress?: (e: { name: string; done: number; total: number; label?: string }) => void;
   /** 跑批缓存（缺省不缓存；页面传 `createLocalCache()`） */
   cache?: AdvisorCache | null;
+  /** 「报价 + 确认」钩子：长搜索开跑前问用户（返回 false = 不跑，原因回灌给模型） */
+  confirm?: ConfirmFn;
+  /** 超过这个场次才问（缺省 `DEFAULT_CONFIRM_BATTLES` = 2000 场 ≈ 12 秒） */
+  confirmFrom?: number;
 }
 
 /** 缓存键：同一工具 + 同一方案 + 同一参数 + 同一种子（引擎确定性 → 同输入必同输出） */
@@ -1043,7 +1051,8 @@ export function toolByName(name: string): ToolSpec<never, ToolCtx> {
   return hit;
 }
 
-/** 执行一个工具：先过预算护栏（`cost.battlesOf` 按实参 + 真实 `estimateBattles` 预估场次） */
+/** 执行一个工具：先过预算护栏（`cost.battlesOf` 按实参 + 真实 `estimateBattles` 预估场次），
+ *  **长搜索再过一道「报价 + 确认」**（用户 2026-09-29 口径：开跑前先报场次/耗时，点「开始」才跑）。 */
 export async function runTool(name: string, args: unknown, ctx: ToolCtx): Promise<ToolResult> {
   const tool = toolByName(name);
   const battles = tool.cost.battlesOf?.(args, ctx) ?? tool.cost.battles ?? 0;
@@ -1059,6 +1068,21 @@ export async function runTool(name: string, args: unknown, ctx: ToolCtx): Promis
       );
     }
     throw e;
+  }
+  // 报价 + 确认：只拦"贵"的（≥ 阈值且确实要真跑），检索类与 simulate 不打扰用户
+  const gate = ctx.confirmFrom ?? DEFAULT_CONFIRM_BATTLES;
+  if (ctx.confirm && battles >= gate) {
+    const estMs = battles * MS_PER_BATTLE;
+    const label = `${toolZh(name)}：预计 ${battles.toLocaleString('en-US')} 场 / 约 ${Math.max(1, Math.round(estMs / 1000))} 秒`;
+    const ok = await ctx.confirm({ tool: name, battles, estMs, label });
+    if (!ok) {
+      // 退回额度（这一轮等于没跑）
+      ctx.budget.battles -= battles;
+      ctx.budget.calls -= 1;
+      throw new Error(
+        `用户拒绝了这次搜索（${label}）——不要重试同样的规模：改用更小的范围（candidateSkillIds / candidateHeroIds / 更小的 finalRuns）重试，或者只用已有结果作答，并把「要不要跑完整搜索」交给用户决定`
+      );
+    }
   }
   return tool.run(args as never, ctx);
 }

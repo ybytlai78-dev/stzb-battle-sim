@@ -162,6 +162,7 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
       <div id="lab-progress" class="progress"></div>
 
       <h2>事件日志</h2>
+      <div id="lab-confirm" class="confirm-bar" hidden></div>
       <div id="lab-trace" class="trace-line"></div>
       <pre id="lab-log" class="log"></pre>
       <h2>本轮裁定</h2>
@@ -175,6 +176,7 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
   const cost = $('lab-cost');
   const verdictEl = $('lab-verdict');
   const traceEl = $('lab-trace');
+  const confirmEl = $('lab-confirm');
   const sendBtn = $<HTMLButtonElement>('lab-send');
   const stopBtn = $<HTMLButtonElement>('lab-stop');
 
@@ -274,6 +276,21 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
       budget: { maxCalls: s.maxCalls, maxBattles: s.maxBattles, maxTokens: s.maxTokens },
       cache: createLocalCache(),
     });
+    // 报价 + 确认（实验页用固定阈值：超过 2000 场先问）
+    ctx.confirm = (q) =>
+      new Promise<boolean>((resolve) => {
+        const bar = confirmEl;
+        bar.hidden = false;
+        bar.innerHTML = `<span>即将执行 —— ${esc(q.label)}</span><button type="button" class="btn primary lab-go">开始</button><button type="button" class="btn lab-skip">不跑</button>`;
+        const finish = (v: boolean): void => {
+          bar.hidden = true;
+          bar.innerHTML = '';
+          resolve(v);
+        };
+        bar.querySelector('.lab-go')!.addEventListener('click', () => finish(true));
+        bar.querySelector('.lab-skip')!.addEventListener('click', () => finish(false));
+        controller?.signal.addEventListener('abort', () => finish(false), { once: true });
+      });
     const transport = fakeMode ? fakeScript(plan) : createBrowserTransport(s);
 
     append(`【你】${$<HTMLTextAreaElement>('lab-q').value.trim()}`);
