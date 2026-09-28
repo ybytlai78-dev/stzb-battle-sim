@@ -328,5 +328,6 @@ npm run web                     # 起服务后打开 http://localhost:5173/advis
 | 崩溃修复 + 报错可用 | `normalizePlan` 全字段容错（缺 `skillIds` / `level` / `coreUnitIds` 一律按空或默认处理，**不在深处抛异常**）；`assertPlanShape` 改成**逐字段点名报错**（"plan.slots[1].skillIds 必须是字符串数组…"、"plan.slots[0].heroId 缺失：不确定就先 search_hero"）——让模型一次改对 |
 | 新工具 `simulate_many` | **一次对拍最多 8 套**方案并按核心将期望排序，返回对比表 + 每套的每将贡献 + **"第 1 与第 2 差多少、半宽之和多少、是否分得出来"**；预算按 `套数 × 场次` 计费（9 次调用压成 1 次） |
 | 提示词 | 工具清单 8 → 9；写明"要比较多个搭配用 `simulate_many`，**不要一套一套地调 simulate**" |
+| 下架武将告警 | `hero_detail` 返回 `listed` 与 **`offlineReason`**，并在 summary/brief 里写明「⚠️ 该武将**已下架**：<原因>——模拟数值会系统性偏低，只能看方向」。触发原因：用户问的文鸯 `h704` 正是下架武将（主战法「盛气横凌」已实现、受属性缩放的成长率未确认），模型此前不知道这件事，会把偏低的数当结论 |
 
-**验证**：顾问测试 59 → **62**（缺字段不崩 / 字段错点名报错 / simulate_many 排序与计费）；`tsc` 两份 clean；全量 `npm test` **224 files / 2409 tests 全绿**。
+**验证**：顾问测试 59 → **63**（缺字段不崩 / 字段错点名报错 / simulate_many 排序与计费 / 下架告警）；`tsc` 两份 clean；全量 `npm test` **224 files / 2409 tests 全绿**（下架告警那次 +1 后为 2410，见提交说明）。

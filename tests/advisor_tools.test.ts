@@ -217,6 +217,20 @@ describe('advisor tools', () => {
     expect((no.data as { found: boolean }).found).toBe(false);
   });
 
+  it('hero_detail：下架武将（文鸯 h704）必须带「已下架」告警 —— 成长率未确认，数值偏低', async () => {
+    const ctx = makeCtx({ fakeRuns: true });
+    const r = await runTool('hero_detail', { id: 'h704' }, ctx);
+    const d = r.data as { found: boolean; name: string; listed: boolean; mainSkillName: string };
+    expect(d.found).toBe(true);
+    expect(d.name).toBe('文鸯');
+    expect(d.mainSkillName).toBe('盛气横凌');
+    if (!d.listed) {
+      expect(r.summary).toContain('已下架');
+      expect(r.brief).toContain('已下架');
+      expect(r.brief).toContain('偏低');
+    }
+  });
+
   it('list_skills：按出手位批量拉池子（分页 + 还有多少的提示）', async () => {
     const ctx = makeCtx({ fakeRuns: true });
     const r = await runTool('list_skills', { slot: '被动', limit: 5 }, ctx);

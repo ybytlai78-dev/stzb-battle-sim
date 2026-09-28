@@ -12,7 +12,7 @@
  * 依赖注入：跑批 / 检索都由 `ToolCtx.deps` 传入 → 测试注入毫秒返回的假实现，全链路可离线测。
  */
 import { SKILL_REGISTRY } from '../../src/data/skills';
-import { baseStatsAt, getHeroById, HEROES, skillDesc, SKILL_GRADES, TROOP_CHAR, type HeroJson } from '../heroes';
+import { baseStatsAt, getHeroById, HEROES, offlineReason, skillDesc, SKILL_GRADES, TROOP_CHAR, type HeroJson } from '../heroes';
 import { SLOT_LABEL } from '../roundModel';
 import { evaluatePlan, type PlanSummary } from '../simExpectation';
 import { HERO_OPTIONS, SKILL_OPTIONS, defaultCfg, type ViewCfg } from '../teamConfig';
@@ -384,16 +384,21 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
           found?: boolean;
           name?: string;
           troopType?: string;
+          listed?: boolean;
+          offlineReason?: string | null;
           mainSkillName?: string;
           mainSkillDesc?: string;
           stats40?: { attack: number; defense: number; strategy: number; speed: number };
         };
+        const warn = d.found && d.listed === false ? `⚠️ 该武将**已下架**：${d.offlineReason ?? ''}——用它的模拟数值会系统性偏低，只能看方向，别当结论。` : '';
         return {
           evidenceId: nextEvidenceId(ctx, 'hero_detail'),
           summary: d.found
-            ? `${d.name}（${d.troopType}）：主战法「${d.mainSkillName}」；40 级 攻 ${d.stats40?.attack} / 防 ${d.stats40?.defense} / 谋 ${d.stats40?.strategy} / 速 ${d.stats40?.speed}`
+            ? `${d.name}（${d.troopType}${d.listed === false ? '·已下架' : ''}）：主战法「${d.mainSkillName}」；40 级 攻 ${d.stats40?.attack} / 防 ${d.stats40?.defense} / 谋 ${d.stats40?.strategy} / 速 ${d.stats40?.speed}`
             : `武将「${args?.id}」不在库`,
-          brief: d.found ? `主战法「${d.mainSkillName}」：${d.mainSkillDesc ?? ''}` : EMPTY_HINT,
+          brief: d.found
+            ? [`主战法「${d.mainSkillName}」：${d.mainSkillDesc ?? ''}`, warn].filter(Boolean).join('\n')
+            : EMPTY_HINT,
           data: d,
           stats: { battles: 0, ms: 0, seed: ctx.seed },
         };
@@ -512,6 +517,7 @@ function realDeps(): AdvisorDeps {
       const rec = getHeroById(id) as (HeroJson & { skillDesc?: string; attackRange?: number; rarity?: string }) | undefined;
       if (!rec) return { found: false, id };
       const st = baseStatsAt(rec as never, 40);
+      const listed = HEROES.some((h) => h.id === id);
       return {
         found: true,
         id,
@@ -520,7 +526,9 @@ function realDeps(): AdvisorDeps {
         troopType: TROOP_CHAR[rec.troopType] ?? rec.troopType,
         attackRange: rec.attackRange ?? null,
         rarity: rec.rarity ?? null,
-        listed: HEROES.some((h) => h.id === id),
+        listed,
+        /** 下架原因（主战法已实现但受属性缩放的成长率未确认 → 模拟数值偏低，只能看方向） */
+        offlineReason: listed ? null : (rec.mainSkillId ? offlineReason({ mainSkillId: rec.mainSkillId }) ?? '未登记原因' : '未登记原因'),
         stats40: st,
         growth: {
           attack: (rec as unknown as { growthAttack?: number }).growthAttack ?? null,
