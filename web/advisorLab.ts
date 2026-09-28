@@ -192,6 +192,21 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
 
   const send = async (): Promise<void> => {
     if (running) return;
+    const s: AdvisorSettings = {
+      baseUrl: $<HTMLInputElement>('lab-base').value.trim(),
+      model: $<HTMLInputElement>('lab-model').value.trim(),
+      key: $<HTMLInputElement>('lab-key').value.trim(),
+    };
+    const useFake = $<HTMLInputElement>('lab-fake').checked;
+    // 前置校验：真模型模式缺设置就别发请求（否则只会得到一句 401，白等）
+    if (!useFake && (!s.key || !s.baseUrl || !s.model)) {
+      log.textContent = '';
+      append('【提示】真模型模式需要 baseURL / model / key 三者齐全（key 只存本机 localStorage）。');
+      append('想先看链路演示，就勾上「干跑（假传输）」。');
+      verdictEl.textContent = '未发出请求：设置不全';
+      traceEl.textContent = '（空）';
+      return;
+    }
     running = true;
     log.textContent = '';
     verdictEl.textContent = '（跑着呢…）';
@@ -204,9 +219,8 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
     stopBtn.disabled = false;
     controller = new AbortController();
 
-    const s: AdvisorSettings = { baseUrl: $<HTMLInputElement>('lab-base').value.trim(), model: $<HTMLInputElement>('lab-model').value.trim(), key: $<HTMLInputElement>('lab-key').value.trim() };
     saveSettings(s);
-    fakeMode = $<HTMLInputElement>('lab-fake').checked;
+    fakeMode = useFake;
     const plan = demoPlan(cfg);
     const ctx: ToolCtx = makeCtx({ fakeRuns: false, deps: { getConfig: () => cfg } });
     const transport = fakeMode ? fakeScript(plan) : createBrowserTransport(s);

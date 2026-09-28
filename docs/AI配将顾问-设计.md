@@ -229,6 +229,7 @@ type AdvisorTurn = {
 ## 12. 已知风险与开放问题
 
 1. **浏览器直连的可用性**：各家对浏览器侧调用的 CORS / 安全策略不一致 → baseURL 可配置；被拦时走本地代理脚本兜底。实施第一步先用真实厂商 key 做一次连通性验证（**不写进测试**，测试一律用假 transport）。
+   → **2026-09-29 实测（预检 `OPTIONS`，不带 key）**：DeepSeek 与 OpenAI 均回 `access-control-allow-origin` 且**回显 Origin**（`http://localhost:5173` 与 `http://127.0.0.1:5173` 都通）。**本地直连可行 → Task 9 的本地代理暂时不需要**；只有换域名部署、或厂商日后收紧策略时才要做。
 2. **工具调用能力**：国产模型对 function calling 的支持参差 → 降级「无工具模式」必须实现且被测到。
 3. **预算默认值**（20,000 场 / 120 秒 / 单轮最多 8 次工具调用）是初始值，跑几次真实对话后按体感调。
 4. **上下文长度**：`summary` 限 200 字是为了控 context，若发现 AI 因摘要过短答不准，先扩到 400 字再考虑分层摘要。
@@ -274,5 +275,11 @@ npm run web                     # 起服务后打开 http://localhost:5173/advis
 # 干跑（不联网、不花 token，链路完全一样）：.../advisor-lab.html?fake=1
 # 真模型：在页面上填 baseURL / model / key（只存本机 localStorage）
 ```
+
+**2026-09-29 追加（用户首跑后）**
+
+- 用户在浏览器里跑通干跑链路（截图留档）：`get_config` 0 场 → `simulate` 20 场 / 71ms → 关 1 / 关 2 通过、关 3 未接入、「应用」禁用。**注意：干跑模式不调用模型**，所以"AI 能不能把数据讲清楚"这一半仍待用户用真 key 验证。
+- **CORS 风险已探明**：DeepSeek / OpenAI 预检都对本地两个 Origin 回显 `access-control-allow-origin` → 本地直连可行，代理脚本暂不需要（见 §12 风险 1）。
+- 补了**前置校验**：真模型模式缺 baseURL / model / key 时不发请求，直接在页面上说明（否则只会白等一句 401）。无头自检复跑：护栏文案正确、干跑链路结果不变、`pageerror = 0`。
 
 **下一步（按计划继续时）**：Task 5 关 3（标准口径复算 `ADVISOR_VERIFY_SEED = 20260929` / 20 场）→ Task 6 完整 loop（持久化、预算提示）→ Task 7 `cache.ts` → Task 8 主站抽屉（含 `web/smoke.test.ts` 的 nav 6→7）。
