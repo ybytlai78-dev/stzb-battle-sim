@@ -79,9 +79,12 @@ function mountOptimizerInner(root: HTMLElement): void {
           <p class="rm-sub">
             代价函数 = L2 回合期望模型（引擎 <code>calcDamage</code> 直采）。搜的是<b>输出上界口径</b>下的最优解：
             不含控制 / 规避 / 兵力截断。每步束搜索保留前 N 个中间态，避免贪心掉进局部最优。
+            <br />（<b>模拟口径</b>的「L2 优化战法 / L3 优化武将」已迁到
+            <a href="/optimize.html">组合优化页 optimize.html</a>：队友位当成空槽、成对评估、真引擎跑批。）
           </p>
         </div>
         <div class="rm-head-links">
+          <a class="rm-back" href="/optimize.html">组合优化（L2/L3 · 模拟口径）→</a>
           <a class="rm-back" href="/round-model.html">回合模型 →</a>
           <a class="rm-back" href="/damage-model.html">单次伤害模型 →</a>
           <a class="rm-back" href="/index.html">返回配将</a>

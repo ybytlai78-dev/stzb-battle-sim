@@ -1,0 +1,33 @@
+/* 组合优化页（独立页 optimize.html 专用）：只有「L2 / L3 模式切换」这点新增样式；
+   其余全部复用 roundModel.css 的 .rm-* 面板（左栏配置面板与 L2 页同款）。 */
+
+.op-modes {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
+}
+.op-mode {
+  background: #14171e;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+}
+.op-mode:hover { color: var(--ink); border-color: #3a4a63; }
+.op-mode.on {
+  color: var(--ink);
+  border-color: var(--blue);
+  background: #1b2230;
+  box-shadow: inset 0 -2px 0 var(--blue);
+}
+.op-mode-hint { font-size: 12px; color: var(--dim); }
+
+/* 左栏「核心将 / 队友位」徽标（unitBadge 输出）用现成的 .rm-badge，这里只调一点间距 */
+.rm-badge { letter-spacing: .04em; }

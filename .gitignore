@@ -12,3 +12,6 @@ dist/
 已识别敌对队伍集/*.jpg
 已识别敌对队伍集/*.jpeg
 已识别敌对队伍集/*.webp
+
+# 页面视觉自检产物（scripts/_optimize_shot.mjs 等）：截图不入库
+shots*/

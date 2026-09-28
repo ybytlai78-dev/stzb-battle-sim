@@ -50,6 +50,7 @@ function mountRoundModelInner(root: HTMLElement): void {
           </p>
         </div>
         <div class="rm-head-links">
+          <a class="rm-back" href="/optimize.html">组合优化（L2/L3）→</a>
           <a class="rm-back" href="/damage-model.html">单次伤害模型 →</a>
           <a class="rm-back" href="/index.html">返回配将</a>
         </div>

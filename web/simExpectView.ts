@@ -194,8 +194,8 @@ function combosHtml(result: SimExpectResult): string {
   </div>`;
 }
 
-/** ③ 决赛排行：每套配置的伤害期望 */
-function finalsHtml(result: SimExpectResult): string {
+/** ③ 决赛排行：每套配置的伤害期望（`applyButtons` = 双模式页 optimize.html 用：每行给一个「应用」） */
+function finalsHtml(result: SimExpectResult, applyButtons = false): string {
   if (!result.finals.length) {
     return `<div class="rm-sim-section"><h3>③ 决赛排行</h3><div class="rm-note">没有可用的决赛组合（候选全被队内已占用，或空槽位的保留名单拼不出合法组合）。</div></div>`;
   }
@@ -213,6 +213,7 @@ function finalsHtml(result: SimExpectResult): string {
         <td class="rm-num">${fmt(f.meanFirst3)}</td>
         <td class="rm-num rm-dim">${f.coarseRank}</td>
         <td class="rm-num ${f.coarseBias >= 0 ? 'rm-up' : 'rm-down'}">${pct(f.coarseBias)}</td>
+        ${applyButtons ? `<td><button class="rm-btn rm-btn-ghost" type="button" data-sim-apply="${f.rank - 1}">应用</button></td>` : ''}
       </tr>`
     )
     .join('');
@@ -251,11 +252,16 @@ function finalsHtml(result: SimExpectResult): string {
     <table class="rm-table">
       <thead><tr>
         <th>排行</th><th>整队战法组合</th><th>场次</th><th>核心将期望</th><th>95% 半宽</th><th>标准差</th>
-        <th>单场区间</th><th>全队总伤</th><th>核心将·前三</th><th>粗筛名次</th><th>粗筛偏差</th>
+        <th>单场区间</th><th>全队总伤</th><th>核心将·前三</th><th>粗筛名次</th><th>粗筛偏差</th>${applyButtons ? '<th></th>' : ''}
       </tr></thead>
       <tbody>${rows}</tbody>
     </table>
     ${details}
+    ${
+      applyButtons
+        ? '<div class="rm-note">点「应用」= 把该行的战法写进左栏对应槽位（只写这一套，可继续微调后再跑）。</div>'
+        : ''
+    }
   </div>`;
 }
 
@@ -309,7 +315,7 @@ function notesHtml(result: SimExpectResult): string {
 }
 
 /** 结果整体：概览 + 逐槽粗筛 + 组合榜单 + 决赛排行 + 口径提示 */
-export function simResultHtml(result: SimExpectResult): string {
+export function simResultHtml(result: SimExpectResult, opts: { applyButtons?: boolean } = {}): string {
   const head = `<div class="rm-sim-sum">
     <span>参与匹配 <b>${esc(result.matchLabel)}</b></span>
     <span>排序口径 <b>核心将·${esc(result.coreLabel)}</b></span>
@@ -321,7 +327,7 @@ export function simResultHtml(result: SimExpectResult): string {
     <span>耗时 <b>${(result.ms / 1000).toFixed(1)}</b> s</span>
     ${result.noEmptySlot ? '<span class="rm-dim">（无空槽：直接测评当前配置）</span>' : ''}
   </div>`;
-  return head + slotHtml(result) + combosHtml(result) + finalsHtml(result) + notesHtml(result);
+  return head + slotHtml(result) + combosHtml(result) + finalsHtml(result, opts.applyButtons === true) + notesHtml(result);
 }
 
 /** 单条结果的摘要行（脚本 / 文档复用同一套文案口径） */
