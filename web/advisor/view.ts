@@ -9,6 +9,7 @@
 import { SKILL_REGISTRY } from '../../src/data/skills';
 import { getHeroById, SLOTTED_HEROES } from '../heroes';
 import { cfgOf } from './gate';
+import { createLocalCache } from './cache';
 import { runAdvisorTurn, type AdvisorEvent } from './loop';
 import { createBrowserTransport, createFakeTransport, type AdvisorSettings, type TokenUsage } from './transport';
 import { makeCtx, type ToolCtx } from './tools';
@@ -267,7 +268,7 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
     } else if (e.type === 'tool_end') {
       battles += e.battles;
       el('.advisor-progress').textContent = '';
-      append(e.error ? ` ✘ ${e.error}` : ` ✔（${e.battles} 场 / ${e.ms}ms）`);
+      append(e.error ? ` ✘ ${e.error}` : e.cached ? ' ✔（缓存命中，本轮没再跑）' : ` ✔（${e.battles} 场 / ${e.ms}ms）`);
     } else if (e.type === 'tool_progress') {
       const pct = e.total ? Math.round((e.done / e.total) * 100) : 0;
       el('.advisor-progress').textContent = `⏳ ${e.name}：真跑 ${num(e.done)}/${num(e.total)} 场（${pct}%）`;
@@ -312,6 +313,8 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
         // 每次工具调用都重新读面板（`get_config` 要拿"此刻"的配置，不是开局快照）
         deps: { getConfig: () => cfgOf(opts.host.readTeam()) },
         budget: { maxCalls: s.maxCalls, maxBattles: s.maxBattles, maxTokens: s.maxTokens },
+        // 跑批缓存：一次 L2 搜索 ≈8,000 场 / 60 秒，重复问不该重跑（刷新页面也还在）
+        cache: createLocalCache(),
       });
     const transport = opts.transport ?? (fake ? fakeScript(fakePick.plan, fakePick.demo) : createBrowserTransport(s));
     try {

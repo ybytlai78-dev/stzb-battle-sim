@@ -30,6 +30,7 @@ import {
 } from '../simMate';
 import { HERO_OPTIONS, SKILL_OPTIONS, defaultCfg, type ViewCfg } from '../teamConfig';
 /** 方案里的核心将 → `ViewCfg` 槽位下标（给 `evaluate` 当排序口径用）—— 实现见 `gate.ts`（与关 3 共用） */
+import { cacheKey, hitToResult, type AdvisorCache } from './cache';
 import { cfgOf, configToPlan, coreIndices, validateAdvisorPlan } from './gate';
 import {
   BudgetExceeded,
@@ -94,6 +95,25 @@ export interface ToolCtx {
   signal?: AbortSignal;
   /** 长任务的进度外抛（loop 转成事件、界面显示进度条） */
   onProgress?: (e: { name: string; done: number; total: number; label?: string }) => void;
+  /** 跑批缓存（缺省不缓存；页面传 `createLocalCache()`） */
+  cache?: AdvisorCache | null;
+}
+
+/** 缓存键：同一工具 + 同一方案 + 同一参数 + 同一种子（引擎确定性 → 同输入必同输出） */
+function cacheKeyFor(name: string, payload: unknown, options: unknown, seed: number): string {
+  return cacheKey(name, { payload, options, seed });
+}
+
+/** 命中就直接返回（**新 evidenceId**：证据编号是本轮的，不能复用旧编号） */
+function cachedResult(ctx: ToolCtx, key: string, name: string): ToolResult | null {
+  const hit = ctx.cache?.get(key);
+  return hit ? hitToResult(hit, nextEvidenceId(ctx, name), ctx.seed) : null;
+}
+
+/** 跑完写缓存（只存 summary/brief/data 与真实代价） */
+function remember(ctx: ToolCtx, key: string, r: ToolResult): ToolResult {
+  ctx.cache?.set(key, { summary: r.summary, ...(r.brief ? { brief: r.brief } : {}), data: r.data, battles: r.stats.battles, ms: r.stats.ms });
+  return r;
 }
 
 /** 长任务跑到一半检查取消：抛 AbortError，由 loop 如实上报 */
@@ -377,23 +397,38 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
       },
       cost: {
         battles: SIM_RUNS_DEFAULT,
-        battlesOf: (args: unknown) =>
-          Math.max(1, Math.floor((args as { runs?: number })?.runs ?? SIM_RUNS_DEFAULT)),
+        battlesOf: (args: unknown, ctx: unknown) => {
+          const c = ctx as ToolCtx;
+          const a = args as { plan?: unknown; runs?: number };
+          const runs = Math.max(1, Math.floor(a?.runs ?? SIM_RUNS_DEFAULT));
+          try {
+            const cfg = cfgOf(assertPlanShape(a?.plan));
+            if (c.cache?.has(cacheKeyFor('simulate', cfg, { runs }, c.seed))) return 0;
+          } catch {
+            /* 方案不合法：让它照常走到工具里报可读的错 */
+          }
+          return runs;
+        },
       },
       async run(args: { plan: unknown; runs?: number }, ctx) {
         const runs = Math.max(1, Math.floor(args?.runs ?? SIM_RUNS_DEFAULT));
         if (runs > SIM_RUNS_MAX) throw new Error(`runs 超上限 ${SIM_RUNS_MAX}（收到 ${runs}）`);
         const plan = assertPlanShape(args?.plan);
         const cfg = cfgOf(plan);
+        const key = cacheKeyFor('simulate', cfg, { runs }, ctx.seed);
+        const cached = cachedResult(ctx, key, 'simulate');
+        if (cached) return cached;
         const t0 = Date.now();
         const s = ctx.deps.evaluate(cfg, runs, coreIndices(plan, cfg));
-        return {
+        const result: ToolResult = {
           evidenceId: nextEvidenceId(ctx, 'simulate'),
           summary: `真跑 ${s.runs} 场：核心将伤害期望 ${Math.round(s.mean)} ±${Math.round(s.halfWidth)}（95% 半宽）；全队总伤 ${Math.round(s.meanTotal)}；木桩被打空 ${s.wipedRuns} 场`,
           brief: planBrief(s),
           data: { ...s, plan: normalizePlan(plan), runs: s.runs },
           stats: { battles: s.runs, ms: Date.now() - t0, seed: ctx.seed },
         };
+        remember(ctx, key, result);
+        return result;
       },
     },
     {
@@ -418,10 +453,18 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
       },
       cost: {
         battles: SIM_RUNS_DEFAULT,
-        battlesOf: (args: unknown) => {
-          const a = args as { plans?: unknown[]; runs?: number };
+        battlesOf: (args: unknown, ctx: unknown) => {
+          const c = ctx as ToolCtx;
+          const a = args as { plans?: Array<{ plan?: unknown }>; runs?: number };
+          const runs = Math.max(1, Math.floor(a?.runs ?? SIM_RUNS_DEFAULT));
           const n = Array.isArray(a?.plans) ? Math.max(1, a.plans.length) : 1;
-          return n * Math.max(1, Math.floor(a?.runs ?? SIM_RUNS_DEFAULT));
+          try {
+            const cfgs = (a?.plans ?? []).map((x) => cfgOf(assertPlanShape(x?.plan ?? x)));
+            if (c.cache?.has(cacheKeyFor('simulate_many', cfgs, { runs }, c.seed))) return 0;
+          } catch {
+            /* 结构不对：让它照常走到工具里报可读的错 */
+          }
+          return n * runs;
         },
       },
       async run(args: { plans?: Array<{ label?: string; plan: unknown }>; runs?: number }, ctx) {
@@ -430,6 +473,9 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
         if (list.length > SIM_MANY_MAX) throw new Error(`plans 最多 ${SIM_MANY_MAX} 套（收到 ${list.length}）：先粗筛再精算`);
         const runs = Math.max(1, Math.floor(args?.runs ?? SIM_RUNS_DEFAULT));
         if (runs > SIM_RUNS_MAX) throw new Error(`runs 超上限 ${SIM_RUNS_MAX}（收到 ${runs}）`);
+        const key = cacheKeyFor('simulate_many', list.map((x) => cfgOf(assertPlanShape(x?.plan ?? x))), { runs }, ctx.seed);
+        const cached = cachedResult(ctx, key, 'simulate_many');
+        if (cached) return cached;
         const t0 = Date.now();
         const rows = list.map((item, i) => {
           const plan = assertPlanShape(item?.plan ?? item);
@@ -466,13 +512,13 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
         ]
           .filter(Boolean)
           .join('\n');
-        return {
+        return remember(ctx, key, {
           evidenceId: nextEvidenceId(ctx, 'simulate_many'),
           summary: `对拍 ${rows.length} 套 × ${runs} 场：第 1 名「${ranked[0].label}」核心将期望 ${Math.round(ranked[0].mean)} ±${Math.round(ranked[0].halfWidth)}（总伤 ${Math.round(ranked[0].meanTotal)}）`,
           brief,
           data: { runs, rows, rankedLabels: ranked.map((r) => r.label) },
           stats: { battles: runs * rows.length, ms: Date.now() - t0, seed: ctx.seed },
-        };
+        });
       },
     },
     {
@@ -497,12 +543,16 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
         battlesOf: (args, ctx) => {
           const c = ctx as ToolCtx;
           const { cfg, options } = skillSearchSetup(args as never, c);
+          if (c.cache?.has(cacheKeyFor('optimize_skills', cfg, options, c.seed))) return 0; // 命中不花场次
           return c.deps.estimateSkillBattles(cfg, options);
         },
       },
       async run(args: { topN?: number } & Parameters<typeof skillSearchSetup>[0], ctx) {
         const { cfg, options } = skillSearchSetup(args, ctx);
         const est = ctx.deps.estimateSkillBattles(cfg, options);
+        const key = cacheKeyFor('optimize_skills', cfg, options, ctx.seed);
+        const cached = cachedResult(ctx, key, 'optimize_skills');
+        if (cached) return cached;
         const t0 = Date.now();
         const res = await ctx.deps.optimizeSkills(cfg, options, forwardProgress(ctx, 'optimize_skills'), ctx.signal);
         const topN = Math.min(10, Math.max(1, Math.floor(Number(args?.topN) || 5)));
@@ -518,7 +568,7 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
           picks: f.picks.map((p) => ({ unit: p.unit, unitName: p.unitName, slot: p.slot, skillId: p.skillId, skillName: p.skillName })),
           byUnit: f.byUnit,
         }));
-        return {
+        return remember(ctx, key, {
           evidenceId: nextEvidenceId(ctx, 'optimize_skills'),
           summary: rows.length
             ? `搜索完成（真跑 ${res.battles} 场 / ${Math.round(res.ms / 1000)}s）：第 1 名「${rows[0].label}」核心将期望 ${Math.round(rows[0].mean)} ±${Math.round(rows[0].halfWidth)}（${rows[0].runs} 场）`
@@ -556,7 +606,7 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
             },
           },
           stats: { battles: res.battles, ms: Date.now() - t0, seed: ctx.seed },
-        };
+        });
       },
     },
     {
@@ -583,12 +633,16 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
         battlesOf: (args, ctx) => {
           const c = ctx as ToolCtx;
           const { cfg, options } = mateSearchSetup(args as never, c);
+          if (c.cache?.has(cacheKeyFor('optimize_mates', cfg, options, c.seed))) return 0;
           return c.deps.estimateMateBattles(cfg, options);
         },
       },
       async run(args: { topN?: number } & Parameters<typeof mateSearchSetup>[0], ctx) {
         const { cfg, options } = mateSearchSetup(args, ctx);
         const est = ctx.deps.estimateMateBattles(cfg, options);
+        const key = cacheKeyFor('optimize_mates', cfg, options, ctx.seed);
+        const cached = cachedResult(ctx, key, 'optimize_mates');
+        if (cached) return cached;
         const t0 = Date.now();
         const res = await ctx.deps.optimizeMates(cfg, options, forwardProgress(ctx, 'optimize_mates'), ctx.signal);
         const topN = Math.min(10, Math.max(1, Math.floor(Number(args?.topN) || 5)));
@@ -604,7 +658,7 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
           byUnit: f.byUnit,
         }));
         const gain = rows.length && res.baseline ? rows[0].mean - res.baseline.mean : 0;
-        return {
+        return remember(ctx, key, {
           evidenceId: nextEvidenceId(ctx, 'optimize_mates'),
           summary: rows.length
             ? `队友搜索完成（真跑 ${res.battles} 场 / ${Math.round(res.ms / 1000)}s）：第 1 名「${rows[0].label}」核心将期望 ${Math.round(rows[0].mean)} ±${Math.round(rows[0].halfWidth)}，比当前队友${gain >= 0 ? '高' : '低'} ${Math.abs(Math.round(gain))}`
@@ -643,7 +697,7 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
             },
           },
           stats: { battles: res.battles, ms: Date.now() - t0, seed: ctx.seed },
-        };
+        });
       },
     },
     {
@@ -799,6 +853,8 @@ export interface MakeCtxOpts {
   coreDamage?: number;
   budget?: Partial<Budget>;
   seed?: number;
+  /** 跑批缓存（页面传 `createLocalCache()`；缺省不缓存） */
+  cache?: AdvisorCache | null;
   /** 覆盖依赖（生产不传） */
   deps?: Partial<AdvisorDeps>;
 }
@@ -907,6 +963,7 @@ export function makeCtx(opts: MakeCtxOpts = {}): ToolCtx & { deps: AdvisorDeps &
     budget: { ...budget, battles: 0, ms: 0, calls: 0, tokens: 0, startedAt: Date.now() },
     evidenceSeq: { n: 0 },
     seed,
+    cache: opts.cache ?? null,
   };
   // 仅测试：默认合法方案 + 按武将名拼方案（`fakeRuns: false` 的生产路径不会用到）
   return Object.assign(ctx, {

@@ -12,6 +12,7 @@
  * 注意：工具层的跑批是**真的**（干跑模式只把跑批换成毫秒返回的假实现，`?runs=` 可控）。
  */
 import { runAdvisorTurn, type AdvisorEvent } from './advisor/loop';
+import { createLocalCache } from './advisor/cache';
 import { createBrowserTransport, createFakeTransport, type AdvisorSettings, type TokenUsage } from './advisor/transport';
 import { makeCtx, type ToolCtx } from './advisor/tools';
 import { DEFAULT_BUDGET, DEFAULT_DUMMY, type AdvisorPlan, type AdvisorTurn } from './advisor/types';
@@ -269,6 +270,7 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
       fakeRuns: false,
       deps: { getConfig: () => cfg },
       budget: { maxCalls: s.maxCalls, maxBattles: s.maxBattles, maxTokens: s.maxTokens },
+      cache: createLocalCache(),
     });
     const transport = fakeMode ? fakeScript(plan) : createBrowserTransport(s);
 

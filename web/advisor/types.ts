@@ -103,10 +103,12 @@ export function parsePlans(answer: string): { plans: ProposedPlan[]; text: strin
 // ─────────────────────────── 工具协议 ───────────────────────────
 
 export interface ToolStats {
-  /** 真跑场次（0 = 纯查表工具） */
+  /** 真跑场次（0 = 纯查表工具，或结果来自缓存） */
   battles: number;
   ms: number;
   seed: number;
+  /** 结果来自缓存（本轮没有真跑） */
+  cached?: boolean;
 }
 
 export interface ToolResult {

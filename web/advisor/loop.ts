@@ -68,7 +68,7 @@ export function budgetHint(b: Budget): string {
 export type AdvisorEvent =
   | { type: 'delta'; text: string }
   | { type: 'tool_start'; name: string }
-  | { type: 'tool_end'; name: string; ms: number; battles: number; error?: string }
+  | { type: 'tool_end'; name: string; ms: number; battles: number; cached?: boolean; error?: string }
   | { type: 'tool_progress'; name: string; done: number; total: number; label?: string }
   | { type: 'usage'; usage: TokenUsage }
   | { type: 'round'; index: number };
@@ -199,7 +199,7 @@ export async function runAdvisorTurn(input: TurnInput): Promise<AdvisorTurn> {
       try {
         const r = await runTool(c.name, c.args, ctx);
         toolCalls.push({ evidenceId: r.evidenceId, name: c.name, args: c.args, summary: r.summary, data: r.data, stats: r.stats });
-        onEvent?.({ type: 'tool_end', name: c.name, ms: Date.now() - t0, battles: r.stats.battles });
+        onEvent?.({ type: 'tool_end', name: c.name, ms: Date.now() - t0, battles: r.stats.battles, cached: r.stats.cached });
         messages.push({
           role: 'tool',
           toolCallId: c.id,
