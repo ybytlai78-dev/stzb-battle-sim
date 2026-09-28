@@ -477,6 +477,8 @@ git commit -m "feat(advisor): OpenAI 兼容流式 transport 与假 transport"
 
 ### Task 5: 校验门关 2 / 关 3（数字溯源 + 标准口径复算）
 
+> ✅ **2026-09-29 已落地（关 2 + 关 3）**：`gate.ts` 的 `ADVISOR_VERIFY_SEED / ADVISOR_VERIFY_RUNS / recomputePlan / judgeRecompute / searchHintFromTrace / checkPlan`；loop 产出 `AdvisorTurn.checks`，`decideApply` 的第三个条件从此有真值。落地记录见 `docs/AI配将顾问-设计.md`「切片二」。
+
 **Files:**
 - Modify: `web/advisor/gate.ts`（Task 3 已创建并实现关 1）
 - Create: `tests/advisor_gate.test.ts`
@@ -807,6 +809,10 @@ git commit -m "feat(advisor): 跑批缓存与会话/设置持久化"
 ---
 
 ### Task 8: 抽屉 UI + 主站接线 + 端到端冒烟
+
+> ✅ **2026-09-29 已落地**（**仅本地，不部署**）：`web/advisor/view.ts` + `web/advisor.css`（顶栏第 7 入口「AI 顾问」→ 右侧抽屉 / 方案卡 / 应用按钮）+ `web/advisorHost.ts`（读 `state.red`、写回配将区、失败如实回报）+ `web/advisorSmoke.test.ts`（4 个）+ `tests/advisor_host.test.ts`（5 个）；`web/smoke.test.ts` 导航 6 → 7。
+> 未做（按用户口径）：**不部署** → `ANNOUNCEMENTS` 不加条目、`SITE_VERSION` 不动。
+> 落地记录（含真机验收数据）见 `docs/AI配将顾问-设计.md`「切片二」。
 
 **Files:**
 - Create: `web/advisor/view.ts`

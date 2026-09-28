@@ -263,6 +263,8 @@ type AdvisorTurn = {
 | `web/advisor/loop.ts` | ✅ 精简版对话循环（`SYSTEM_PROMPT` 六条硬规则 + 两个格式约定、工具回灌、错误自纠、工具次数上限、取消、无工具降级） |
 | `web/simExpectation.ts` | ✅ 新增 `evaluatePlan` ＋ 抽出 `aggregateSamples`（决赛 `finalRowOf` 与顾问共用同一份汇总；L2 既有 42 用例全绿证明行为不变） |
 | `advisor-lab.html` + `web/advisorLab.ts` + `web/advisorLab.css` | ✅ 最小文本界面（**独立页，未并入主站**）：设置区 / 提问 / 事件日志 / 裁定 / 证据清单；`?fake=1` 干跑不联网 |
+| `web/advisor/view.ts` + `web/advisor.css` | ✅ **主站右侧抽屉**（2026-09-29 接入，仅本地不部署）：流式日志 / 进度 / 方案卡（配置表 + 标准口径复算 + 搜索口径对照 + judge）/「应用到配将区」 |
+| `web/advisorHost.ts` | ✅ 主站侧胶水：读 `state.red` → 方案；方案 → `onPickHero`/`onSetLevel`/`onAddSkill` 写回配将区（失败如实回报） |
 
 **测试**：新增 6 个文件 51 个用例（types 6 / runplan 6 / tools 15 / transport 8 / gate 8 / loop 8），全绿；`tsc` 两份配置 clean；`golden.json` 未受影响。
 
@@ -319,6 +321,23 @@ npm run web                     # 起服务后打开 http://localhost:5173/advis
 **验证**：顾问测试 51 → **59**（新增 hero_detail / list_skills / 检索扩面 / 0 命中提示 / brief / 次数上限来自预算 / token 记账与上限）；全量 `npm test` **224 files / 2406 tests 全绿**；`tsc` 两份 clean；无头浏览器复跑 advisor-lab：护栏与干跑链路均正常、`pageerror = 0`，成本行现在长这样：`本轮：2/40 次工具调用 · 20 场 · token 0 / 1000000`。
 
 **仍未做（决定"最强"这类问题能不能真答出来）**：`optimize_skills` / `optimize_mates`（二期）——**没有搜索工具，模型只能"试几套手搓方案做对比"，给不出穷举意义的最优**。这是下一步最该做的。
+
+### 落地记录 · 切片二（2026-09-29，接入主站，仅本地不部署）
+
+**用户口径**："先接入主站，只接到本地端口的主站不部署到网站。"
+
+**做了两件事**
+
+| 改动 | 内容 |
+|---|---|
+| **关 3 · 标准口径独立复算**（实施计划 Task 5） | `gate.ts` 新增 `ADVISOR_VERIFY_SEED = 20260929` / `ADVISOR_VERIFY_RUNS = 20` / `recomputePlan`（**固定种子 + 20 场 + 标准木桩**，不采信 AI 那次搜索的数字）/ `judgeRecompute`（搜索口径 vs 复算口径：区间重叠 = `consistent`，复算明显更低 = `sensitive`）/ `searchHintFromTrace`（从方案引用的证据里取搜索口径值）/ `checkPlan`（一个方案跑完三关 → `apply.enabled`）。loop 据此产出 `AdvisorTurn.checks`（与 `plans` 同序），`decideApply` 的第三个条件从此有真值 |
+| **主站抽屉**（实施计划 Task 8） | `web/advisor/view.ts` + `web/advisor.css`：顶栏第 7 个入口「AI 顾问」→ 右侧抽屉（流式正文 / 工具轨迹 / 长搜索进度 / 成本行 / 设置折叠区）。**方案卡**：三将配置表 + 关 3 复算值（带种子）+ 搜索口径对照 + judge + 「应用到配将区」（三关不过则禁用并显示原因）。`web/advisorHost.ts` 承担主站胶水：`readTeam()` 读 `state.red`，`applyPlan()` 走 `onPickHero`/`onSetLevel`/`onAddSkill` 写回并 `refresh()`，被互斥/重复拦下时**如实回报"部分未应用"而不是假装成功** |
+
+**真机验收**（无头 Chromium，`http://127.0.0.1:5173/`）：导航 7 项 ✓ → 点「AI 顾问」开抽屉 ✓（无 key 自动勾干跑）→ 提问 → `get_config`（0 场）→ `simulate`（20 场 / 99ms）→ 方案卡出现「**标准口径复算（20 场 / 种子 20260929）：核心将期望 14,024 ±1,590**」与「搜索口径（ev-2-simulate，20 场）：14,124 ±1,855 → 区间重叠，**一致**」→ 点「应用到配将区」→ **左侧红队三槽由空变为 XP关兴＆张苞 / 颜良＆文丑 / SP赵云**，顶部提示「已把方案写入配将区（红队）」；`pageerror = 0`、console 报错 0。
+
+**验收口径**：`web/advisorSmoke.test.ts`（4 个：抽屉开合 / 一问到底三关通过且应用可点 / 伪造 evidenceId → 关 2 不通过 → 按钮禁用 / 缺 key 不发请求）+ `tests/advisor_host.test.ts`（5 个：读配将区 / 换将改等级重设战法 / 同将换战法先删后加 / 主站拦下时如实回报 / 空方案不改动）+ `tests/advisor_gate.test.ts` 关 3 五个新用例；`web/smoke.test.ts` 导航断言 6 → **7**。
+
+**未做（有意）**：**不部署**（用户口径）→ 因此 `web/changelog.ts` 的 `ANNOUNCEMENTS` **不加条目**、`SITE_VERSION` **不动**（公告 = 版本真源，没上线就不该动）；`cache.ts` 会话持久化、`optimize_both` 联动搜索、评测集仍在待办。
 
 ### 落地记录 · 切片一补丁 2（2026-09-29，文鸯那次实跑）
 
