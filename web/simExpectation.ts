@@ -1,4 +1,4 @@
-﻿/**
+/**
  * L2 伤害期望模型 · 模拟测评（两阶段真引擎）
  * ---------------------------------------------------------------------------
  * 目的（用户 2026-09-28 口径）：**算出「这支队伍带哪些战法伤害期望最高」**。
@@ -643,20 +643,56 @@ interface FinalSampleState {
   first3s: number[];
 }
 
-/** 由累计样本汇总出决赛排行的一行（纯函数；加跑后重算同一行） */
-function finalRowOf(st: FinalSampleState, coreIds: string[]): FinalRow {
-  const runs = st.raws.length;
+/**
+ * 一套**固定方案**跑 N 场后的汇总（AI 配将顾问复用：`web/advisor/tools.ts` 的 `simulate` 工具）。
+ * 字段口径与 `FinalRow` 一致（mean=核心将伤害期望 / meanTotal=全队总伤 / halfWidth=95% 半宽 / byUnit / bySkill / wipedRuns），
+ * 去掉的只有搜索特有的 rank / coarse\* / analytic\* / tieWithBest 那些列。
+ */
+export interface PlanSummary {
+  runs: number;
+  damages: number[];
+  mean: number;
+  meanFirst3: number;
+  meanTotal: number;
+  sd: number;
+  halfWidth: number;
+  min: number;
+  max: number;
+  median: number;
+  byUnit: Array<{ unit: number; name: string; mean: number; core: boolean }>;
+  bySkill: Array<{ skillId: string; name: string; mean: number }>;
+  wipedRuns: number;
+}
+
+interface SampleAggregateInput {
+  teams: ReturnType<typeof ensureUniqueUnitIds>;
+  myIds: string[];
+  nameById: Map<string, string>;
+  raws: RunRaw[];
+  /** 核心将伤害 / 场（排序口径；多选取和） */
+  damages: number[];
+  /** 核心将前三回合伤害 / 场 */
+  first3s: number[];
+  coreIds: string[];
+}
+
+/**
+ * **唯一的汇总口径**（纯函数）：决赛排行（`finalRowOf`）与 AI 顾问的单方案测评（`evaluatePlan`）都走这里，
+ * 避免出现两套「怎么算期望、怎么算半宽」的实现。
+ */
+function aggregateSamples(inp: SampleAggregateInput): PlanSummary {
+  const runs = inp.raws.length;
   const unitAcc = new Map<string, number>();
   const skillAcc = new Map<string, number>();
-  for (const raw of st.raws) {
-    for (const [id, v] of raw.perUnit) if (st.myIds.includes(id)) unitAcc.set(id, (unitAcc.get(id) ?? 0) + v.damage);
+  for (const raw of inp.raws) {
+    for (const [id, v] of raw.perUnit) if (inp.myIds.includes(id)) unitAcc.set(id, (unitAcc.get(id) ?? 0) + v.damage);
     for (const [sid, v] of raw.perSkillMine) skillAcc.set(sid, (skillAcc.get(sid) ?? 0) + v);
   }
-  const coreIdSet = new Set(coreIds);
-  const byUnit = st.myIds
+  const coreIdSet = new Set(inp.coreIds);
+  const byUnit = inp.myIds
     .map((id) => ({
-      unit: st.teams.myTeam.findIndex((g) => g.id === id),
-      name: st.nameById.get(id) ?? id,
+      unit: inp.teams.myTeam.findIndex((g) => g.id === id),
+      name: inp.nameById.get(id) ?? id,
       mean: (unitAcc.get(id) ?? 0) / (runs || 1),
       core: coreIdSet.has(id),
     }))
@@ -664,42 +700,102 @@ function finalRowOf(st: FinalSampleState, coreIds: string[]): FinalRow {
   const bySkill = [...skillAcc.entries()]
     .map(([skillId, sum]) => ({ skillId, name: skillName(skillId), mean: sum / (runs || 1) }))
     .sort((a, b) => b.mean - a.mean);
+  return {
+    runs,
+    damages: inp.damages,
+    mean: mean(inp.damages),
+    meanFirst3: mean(inp.first3s),
+    meanTotal: mean(inp.raws.map((r) => r.myDamage)),
+    sd: sd(inp.damages),
+    halfWidth: inp.damages.length > 1 ? (1.96 * sd(inp.damages)) / Math.sqrt(inp.damages.length) : 0,
+    min: inp.damages.length ? Math.min(...inp.damages) : 0,
+    max: inp.damages.length ? Math.max(...inp.damages) : 0,
+    median: median(inp.damages),
+    byUnit,
+    bySkill,
+    // 木桩被打空 = 伤害被兵力截断（期望偏低），如实上报
+    wipedRuns: inp.raws.filter((r) => r.enemyFinalTroops.some((t) => t <= 0)).length,
+  };
+}
 
+/** 由累计样本汇总出决赛排行的一行（纯函数；加跑后重算同一行） */
+function finalRowOf(st: FinalSampleState, coreIds: string[]): FinalRow {
+  const s = aggregateSamples({
+    teams: st.teams,
+    myIds: st.myIds,
+    nameById: st.nameById,
+    raws: st.raws,
+    damages: st.damages,
+    first3s: st.first3s,
+    coreIds,
+  });
   // 与旧解析模型对照（同一配置、同一回合口径）；解析值是**全队总伤**，故用全队均值比
   const analytic = computeResult(st.variant);
   const analyticTotal = analytic.total;
   const analyticFirst3 = windowTotals(analytic, 3).total;
-  const m = mean(st.damages);
-  const m3 = mean(st.first3s);
-  const totalMean = mean(st.raws.map((r) => r.myDamage));
   return {
     picks: st.combo.picks,
     label: st.combo.label,
-    runs,
-    damages: st.damages,
-    mean: m,
-    meanFirst3: m3,
-    meanTotal: totalMean,
-    sd: sd(st.damages),
-    halfWidth: st.damages.length > 1 ? (1.96 * sd(st.damages)) / Math.sqrt(st.damages.length) : 0,
-    min: st.damages.length ? Math.min(...st.damages) : 0,
-    max: st.damages.length ? Math.max(...st.damages) : 0,
-    median: median(st.damages),
-    byUnit,
-    bySkill,
-    // 木桩被打空 = 伤害被兵力截断（期望偏低），如实上报
-    wipedRuns: st.raws.filter((r) => r.enemyFinalTroops.some((t) => t <= 0)).length,
+    runs: s.runs,
+    damages: s.damages,
+    mean: s.mean,
+    meanFirst3: s.meanFirst3,
+    meanTotal: s.meanTotal,
+    sd: s.sd,
+    halfWidth: s.halfWidth,
+    min: s.min,
+    max: s.max,
+    median: s.median,
+    byUnit: s.byUnit,
+    bySkill: s.bySkill,
+    wipedRuns: s.wipedRuns,
     coarseMean: st.combo.meanCore,
     coarseRank: st.combo.rank,
-    coarseBias: st.combo.meanCore ? (m - st.combo.meanCore) / st.combo.meanCore : 0,
+    coarseBias: st.combo.meanCore ? (s.mean - st.combo.meanCore) / st.combo.meanCore : 0,
     analyticTotal,
     analyticFirst3,
-    deltaTotal: analyticTotal ? (totalMean - analyticTotal) / analyticTotal : 0,
-    deltaFirst3: analyticFirst3 ? (m3 - analyticFirst3) / analyticFirst3 : 0,
+    deltaTotal: analyticTotal ? (s.meanTotal - analyticTotal) / analyticTotal : 0,
+    deltaFirst3: analyticFirst3 ? (s.meanFirst3 - analyticFirst3) / analyticFirst3 : 0,
     rank: 0,
     /** 与榜首的 95% 区间是否重叠（同一次运行内、排完名后统一回填） */
     tieWithBest: false,
   };
+}
+
+/**
+ * **单方案测评**（AI 配将顾问的 `simulate` 工具入口）：给定一套固定 `ViewCfg`（不搜任何槽位），
+ * 对**不还手的木桩**真跑 `runs` 场（默认 = `finalRuns`，≥20），按**核心将伤害期望**汇总。
+ * 与 L2 搜索共用同一批原语：`dummyTeamFromEnemy` / `ensureUniqueUnitIds` / `runOne` / `envOf`（种子 = baseSeed + 场次、奇数场交换场地）/ `aggregateSamples`。
+ */
+export function evaluatePlan(cfg: ViewCfg, options: Partial<SimExpectOptions> & { runs?: number } = {}): PlanSummary {
+  const { runs: runsOverride, ...simOpts } = options;
+  const opts = resolveOptions({ maxRounds: cfg.rounds, ...simOpts });
+  const runs = Math.max(1, Math.floor(runsOverride ?? opts.finalRuns));
+  const coreUnits = opts.coreUnits?.length
+    ? [...new Set(opts.coreUnits)].filter((u) => u >= 0 && u < cfg.slots.length)
+    : autoCoreUnits(cfg);
+  const myGenerals = generalsOf(cfg, cfg.morale);
+  const coreIds = coreUnits.map((u) => myGenerals[u]?.id).filter((id): id is string => Boolean(id));
+  const enemyTeam = dummyTeamFromEnemy(cfg.enemy, cfg.morale, opts.dummyTroops);
+  const teams = ensureUniqueUnitIds(generalsOf(cfg, cfg.morale), enemyTeam);
+  const raws: RunRaw[] = [];
+  const damages: number[] = [];
+  const first3s: number[] = [];
+  for (let i = 0; i < runs; i += 1) {
+    const raw = runOne(teams.myTeam, teams.enemyTeam, i, envOf(opts));
+    raws.push(raw);
+    damages.push(coreDamageOf(raw, coreIds));
+    first3s.push(coreFirst3Of(raw, coreIds));
+  }
+  return aggregateSamples({
+    teams,
+    myIds: teams.myTeam.map((g) => g.id),
+    nameById: new Map(teams.myTeam.map((g) => [g.id, g.name])),
+    raws,
+    damages,
+    first3s,
+    coreIds,
+  });
 }
 
 /**
