@@ -739,6 +739,9 @@ git commit -m "feat(advisor): 对话循环（系统提示词 / trace / 预算 / 
 
 ### Task 7: 跑批缓存 + 会话与设置持久化
 
+> ✅ **2026-09-29 落地（缓存部分）**：`web/advisor/cache.ts`（键 = 工具+方案+参数+种子；命中即 **0 场计费**、重新分配 evidenceId、`stats.cached`；`createLocalCache()` 落 localStorage 并 LRU 淘汰）；工具层四个重工具（`simulate` / `simulate_many` / `optimize_skills` / `optimize_mates`）全部接线；抽屉与实验页已接上。测试 `tests/advisor_cache.test.ts`（9 个）。
+> 仍未做：**会话持久化**（多轮对话与 trace 落盘、刷新可续）——settings 早已落 localStorage。
+
 **Files:**
 - Create: `web/advisor/cache.ts`
 - Create: `tests/advisor_cache.test.ts`
