@@ -33,7 +33,7 @@ function findMutualPair(): [string, string] {
 }
 
 describe('advisor tools', () => {
-  it('八个工具都在注册表里，且各有 name/description/schema/cost', () => {
+  it('九个工具都在注册表里，且各有 name/description/schema/cost', () => {
     const tools = createTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       'get_config',
@@ -42,6 +42,7 @@ describe('advisor tools', () => {
       'search_hero',
       'search_skill',
       'simulate',
+      'simulate_many',
       'skill_detail',
       'validate_plan',
     ]);
@@ -50,6 +51,38 @@ describe('advisor tools', () => {
       expect(t.schema).toBeTruthy();
       expect(t.cost).toBeTruthy();
     }
+  });
+
+  it('槽位缺 skillIds 不再崩（2026-09-29 实跑：模型给的方案缺字段 → 深处 undefined.filter）', async () => {
+    const ctx = makeCtx({ fakeRuns: true });
+    const loose = { slots: [{ position: '大营', heroId: 'h498' }, { position: '中军', heroId: 'h27' }, { position: '前锋', heroId: 'h672' }] };
+    const r = await runTool('simulate', { plan: loose, runs: 5 }, ctx);
+    expect((r.data as { runs: number }).runs).toBe(5);
+    // level 补 40、skillIds 补空数组
+    const normalized = (r.data as { plan: { slots: Array<{ level: number; skillIds: string[] }> } }).plan;
+    expect(normalized.slots[0].level).toBe(40);
+    expect(normalized.slots[0].skillIds).toEqual([]);
+  });
+
+  it('skillIds 不是数组 → 报错信息直接点名字段（模型能一次改对，不必盲试）', async () => {
+    const ctx = makeCtx({ fakeRuns: true });
+    await expect(
+      runTool('simulate', { plan: { slots: [{ position: '大营', heroId: 'h498', skillIds: 'jishi' }] } }, ctx)
+    ).rejects.toThrow(/skillIds 必须是字符串数组/);
+    await expect(runTool('simulate', { plan: { slots: [{ position: '大营' }] } }, ctx)).rejects.toThrow(/heroId 缺失/);
+  });
+
+  it('simulate_many：一次对拍多套并按期望排序（省调用次数）', async () => {
+    const ctx = makeCtx({ fakeRuns: true, coreDamage: 26500 });
+    const plan = ctx.deps.__plan;
+    const r = await runTool('simulate_many', { plans: [{ label: 'A', plan }, { label: 'B', plan }], runs: 20 }, ctx);
+    const d = r.data as { runs: number; rows: Array<{ label: string; mean: number }>; rankedLabels: string[] };
+    expect(d.rows).toHaveLength(2);
+    expect(d.runs).toBe(20);
+    expect(r.stats.battles).toBe(40); // 2 套 × 20 场
+    expect(r.brief).toContain('排序');
+    expect(r.brief).toContain('分不出来');
+    await expect(runTool('simulate_many', { plans: [] }, ctx)).rejects.toThrow(/plans 不能为空/);
   });
 
   it('get_config 返回当前配置的方案形状（三槽 + 靶子）', async () => {

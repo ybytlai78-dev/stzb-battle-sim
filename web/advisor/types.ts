@@ -46,17 +46,25 @@ export interface ProposedPlan {
 
 export const DEFAULT_DUMMY: DummySpec = { defense: 150, strategy: 100, troopType: 'infantry', troops: 150000 };
 
-/** 规范化：按 大营→中军→前锋 排序、level 缺省补 40、去掉空战法、dummy 缺省合并 */
+/** 规范化：按 大营→中军→前锋 排序、level 缺省补 40、去掉空战法、dummy 缺省合并。
+ *  **容错**（2026-09-29 实跑教训：模型给的槽位常缺 `skillIds`）：字段缺失一律按空/默认处理，
+ *  结构性问题由 `validateAdvisorPlan` 报出来，**不要在这里抛异常**——一个 undefined 就能让整条链崩。 */
 export function normalizePlan(plan: AdvisorPlan): AdvisorPlan {
-  const slots = [...plan.slots]
+  const rawSlots = Array.isArray(plan?.slots) ? plan.slots : [];
+  const slots = rawSlots
+    .filter((s) => s && typeof s === 'object')
     .map((s) => ({
       position: s.position,
-      heroId: s.heroId,
-      level: s.level > 0 ? s.level : 40,
-      skillIds: s.skillIds.filter((x) => Boolean(x)),
+      heroId: String(s.heroId ?? ''),
+      level: Number(s.level) > 0 ? Number(s.level) : 40,
+      skillIds: (Array.isArray(s.skillIds) ? s.skillIds : []).filter((x) => Boolean(x)).map(String),
     }))
     .sort((a, b) => PLAN_POSITIONS.indexOf(a.position) - PLAN_POSITIONS.indexOf(b.position));
-  return { slots, coreUnitIds: [...plan.coreUnitIds], dummy: { ...DEFAULT_DUMMY, ...plan.dummy } };
+  return {
+    slots,
+    coreUnitIds: (Array.isArray(plan?.coreUnitIds) ? plan.coreUnitIds : []).filter(Boolean).map(String),
+    dummy: { ...DEFAULT_DUMMY, ...(plan?.dummy ?? {}) },
+  };
 }
 
 /** 缓存键：与槽位顺序无关（规范化后拼），与场次 / 种子有关 */

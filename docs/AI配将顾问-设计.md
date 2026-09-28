@@ -92,6 +92,7 @@ type ToolResult = {
 | `get_config` | 主站配将区当前配置快照（`teamConfig` 口径） | 毫秒 | 一期 |
 | `validate_plan` | `web/teamScan.ts` 校验口径 + 互斥规则 | 毫秒 | 一期 |
 | `simulate(plan, runs≤200)` | `generalsOf` + 引擎 `runBattle`（L2 木桩口径） | 20 场 ≈ 0.1s | 一期 |
+| **`simulate_many(plans≤8, runs)`** | 一次对拍多套方案并按期望排序（含"分不分得出来"） | 套数 × 场次 | **2026-09-29 补**（实跑暴露：模型一套一套手搓 `simulate`，9 次调用才比 9 套） |
 | `search_hero(q)` / `search_skill(q)` | 既有数据表 + 拼音搜索 | 毫秒 | 一期 |
 | `skill_detail(id)` | `SKILL_REGISTRY` + 品级/描述表 | 毫秒 | 一期 |
 | **`hero_detail(id)`** | 武将档案：阵营 / 兵种 / 攻击距离 / 40 级四维 / 成长 / 主战法 + 官方描述 | 毫秒 | **2026-09-29 补**（首跑暴露：模型此前只能拿到 id，配不了队） |
@@ -312,3 +313,20 @@ npm run web                     # 起服务后打开 http://localhost:5173/advis
 **验证**：顾问测试 51 → **59**（新增 hero_detail / list_skills / 检索扩面 / 0 命中提示 / brief / 次数上限来自预算 / token 记账与上限）；全量 `npm test` **224 files / 2406 tests 全绿**；`tsc` 两份 clean；无头浏览器复跑 advisor-lab：护栏与干跑链路均正常、`pageerror = 0`，成本行现在长这样：`本轮：2/40 次工具调用 · 20 场 · token 0 / 1000000`。
 
 **仍未做（决定"最强"这类问题能不能真答出来）**：`optimize_skills` / `optimize_mates`（二期）——**没有搜索工具，模型只能"试几套手搓方案做对比"，给不出穷举意义的最优**。这是下一步最该做的。
+
+### 落地记录 · 切片一补丁 2（2026-09-29，文鸯那次实跑）
+
+**用户实测**："文鸯的如何搭配队伍和战法输出最大化？" —— 研究流程走通了（`get_config` → `search_hero` → `hero_detail` → `list_skills` → `skill_detail` → 组方案 → `validate_plan` → `simulate`），但暴露两个真问题：
+
+1. **`simulate` 崩溃**：`Cannot read properties of undefined (reading 'filter')`。根因 = 模型给的槽位缺 `skillIds`，`normalizePlan` 直接 `.filter` 炸掉；而且报错文本对模型毫无价值 → 它盲试了 **4 次同样的错**才改对。
+2. **40 次调用依然不够**：28 次花在逐个查战法，剩下 12 次**一套一套手搓对拍**（9 次单独的 `simulate`）→ 最后撞上 `已达本轮预算（calls）`。
+
+**本补丁**
+
+| 改动 | 内容 |
+|---|---|
+| 崩溃修复 + 报错可用 | `normalizePlan` 全字段容错（缺 `skillIds` / `level` / `coreUnitIds` 一律按空或默认处理，**不在深处抛异常**）；`assertPlanShape` 改成**逐字段点名报错**（"plan.slots[1].skillIds 必须是字符串数组…"、"plan.slots[0].heroId 缺失：不确定就先 search_hero"）——让模型一次改对 |
+| 新工具 `simulate_many` | **一次对拍最多 8 套**方案并按核心将期望排序，返回对比表 + 每套的每将贡献 + **"第 1 与第 2 差多少、半宽之和多少、是否分得出来"**；预算按 `套数 × 场次` 计费（9 次调用压成 1 次） |
+| 提示词 | 工具清单 8 → 9；写明"要比较多个搭配用 `simulate_many`，**不要一套一套地调 simulate**" |
+
+**验证**：顾问测试 59 → **62**（缺字段不崩 / 字段错点名报错 / simulate_many 排序与计费）；`tsc` 两份 clean；全量 `npm test` **224 files / 2409 tests 全绿**。

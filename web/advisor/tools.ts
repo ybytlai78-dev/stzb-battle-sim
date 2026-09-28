@@ -25,6 +25,7 @@ import {
   type AdvisorPlan,
   type Budget,
   type BudgetState,
+  type PlanSlot,
   type ToolResult,
   type ToolSpec,
 } from './types';
@@ -33,6 +34,8 @@ import {
 export const SIM_RUNS_MAX = 200;
 /** `simulate` 缺省场次 */
 export const SIM_RUNS_DEFAULT = 20;
+/** `simulate_many` 一次最多对拍几套 */
+export const SIM_MANY_MAX = 8;
 
 // ─────────────────────────── 上下文 / 依赖 ───────────────────────────
 
@@ -176,10 +179,36 @@ const PLAN_SCHEMA = {
   required: ['slots'],
 } as const;
 
+/**
+ * 方案结构校验：**错误信息必须能让模型一次改对**。
+ * 2026-09-29 实跑教训：模型给的槽位缺 `skillIds` 时，原来只在深处抛 `Cannot read properties of undefined`，
+ * 它看不懂就盲试了 4 次同样的错。现在每个字段单独报，并说明缺什么、期望什么。
+ */
 function assertPlanShape(plan: unknown): AdvisorPlan {
-  const p = plan as AdvisorPlan | undefined;
-  if (!p || !Array.isArray(p.slots)) throw new Error('plan 结构不对：需要 { slots: [{ position, heroId, level, skillIds }], coreUnitIds, dummy }');
-  return { slots: p.slots, coreUnitIds: p.coreUnitIds ?? [], dummy: { ...DEFAULT_DUMMY, ...(p.dummy ?? {}) } };
+  const p = plan as Partial<AdvisorPlan> | undefined;
+  if (!p || typeof p !== 'object' || !Array.isArray(p.slots)) {
+    throw new Error('plan 结构不对：需要 { slots: [{ position, heroId, level?, skillIds? }], coreUnitIds?, dummy? }');
+  }
+  const slots = p.slots.map((raw, i) => {
+    const s = raw as Partial<PlanSlot> | undefined;
+    if (!s || typeof s !== 'object') throw new Error(`plan.slots[${i}] 不是对象`);
+    if (!s.heroId) throw new Error(`plan.slots[${i}].heroId 缺失：要武将 id（如 h498），不确定就先 search_hero`);
+    if (!s.position) throw new Error(`plan.slots[${i}].position 缺失：必须是 大营 / 中军 / 前锋`);
+    if (s.skillIds !== undefined && !Array.isArray(s.skillIds)) {
+      throw new Error(`plan.slots[${i}].skillIds 必须是字符串数组（可省略；最多 2 个可学战法，如 ["jishi","shenmou_yuanlv"]）`);
+    }
+    return {
+      position: s.position,
+      heroId: String(s.heroId),
+      level: Number(s.level) > 0 ? Number(s.level) : 40,
+      skillIds: (s.skillIds ?? []).filter(Boolean).map(String),
+    };
+  });
+  return {
+    slots,
+    coreUnitIds: Array.isArray(p.coreUnitIds) ? p.coreUnitIds.filter(Boolean).map(String) : [],
+    dummy: { ...DEFAULT_DUMMY, ...(p.dummy ?? {}) },
+  };
 }
 
 export function createTools(): ToolSpec<never, ToolCtx>[] {
@@ -227,7 +256,11 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
         properties: { plan: PLAN_SCHEMA, runs: { type: 'integer', minimum: 1, maximum: SIM_RUNS_MAX } },
         required: ['plan'],
       },
-      cost: { battles: SIM_RUNS_DEFAULT, battlesOf: (args: unknown) => Math.max(1, Math.floor((args as { runs?: number })?.runs ?? SIM_RUNS_DEFAULT)) },
+      cost: {
+        battles: SIM_RUNS_DEFAULT,
+        battlesOf: (args: unknown) =>
+          Math.max(1, Math.floor((args as { runs?: number })?.runs ?? SIM_RUNS_DEFAULT)),
+      },
       async run(args: { plan: unknown; runs?: number }, ctx) {
         const runs = Math.max(1, Math.floor(args?.runs ?? SIM_RUNS_DEFAULT));
         if (runs > SIM_RUNS_MAX) throw new Error(`runs 超上限 ${SIM_RUNS_MAX}（收到 ${runs}）`);
@@ -241,6 +274,85 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
           brief: planBrief(s),
           data: { ...s, plan: normalizePlan(plan), runs: s.runs },
           stats: { battles: s.runs, ms: Date.now() - t0, seed: ctx.seed },
+        };
+      },
+    },
+    {
+      name: 'simulate_many',
+      description:
+        '**一次对拍多套方案**（最多 8 套，每套 runs 场，默认 20），按核心将伤害期望排序返回对比表（含每套的每将贡献）。想比较几个搭配时用它，**不要一套一套地调 simulate**（省调用次数）。',
+      schema: {
+        type: 'object',
+        properties: {
+          plans: {
+            type: 'array',
+            description: '2~8 套方案；每套结构与 simulate 的 plan 相同',
+            items: {
+              type: 'object',
+              properties: { label: { type: 'string' }, plan: PLAN_SCHEMA },
+              required: ['plan'],
+            },
+          },
+          runs: { type: 'integer', minimum: 1, maximum: SIM_RUNS_MAX },
+        },
+        required: ['plans'],
+      },
+      cost: {
+        battles: SIM_RUNS_DEFAULT,
+        battlesOf: (args: unknown) => {
+          const a = args as { plans?: unknown[]; runs?: number };
+          const n = Array.isArray(a?.plans) ? Math.max(1, a.plans.length) : 1;
+          return n * Math.max(1, Math.floor(a?.runs ?? SIM_RUNS_DEFAULT));
+        },
+      },
+      async run(args: { plans?: Array<{ label?: string; plan: unknown }>; runs?: number }, ctx) {
+        const list = Array.isArray(args?.plans) ? args.plans : [];
+        if (!list.length) throw new Error('plans 不能为空：给 2~8 套方案（每套 { label?, plan }）');
+        if (list.length > SIM_MANY_MAX) throw new Error(`plans 最多 ${SIM_MANY_MAX} 套（收到 ${list.length}）：先粗筛再精算`);
+        const runs = Math.max(1, Math.floor(args?.runs ?? SIM_RUNS_DEFAULT));
+        if (runs > SIM_RUNS_MAX) throw new Error(`runs 超上限 ${SIM_RUNS_MAX}（收到 ${runs}）`);
+        const t0 = Date.now();
+        const rows = list.map((item, i) => {
+          const plan = assertPlanShape(item?.plan ?? item);
+          const cfg = cfgOf(plan);
+          const s = ctx.deps.evaluate(cfg, runs, coreIndices(plan, cfg));
+          return {
+            index: i + 1,
+            label: String(item?.label ?? `方案${i + 1}`),
+            heroIds: plan.slots.map((x) => x.heroId),
+            mean: s.mean,
+            halfWidth: s.halfWidth,
+            meanTotal: s.meanTotal,
+            runs: s.runs,
+            sd: s.sd,
+            wipedRuns: s.wipedRuns,
+            byUnit: s.byUnit,
+            topSkills: s.bySkill.slice(0, 3),
+            skillIds: plan.slots.flatMap((x) => x.skillIds),
+          };
+        });
+        const ranked = [...rows].sort((a, b) => b.mean - a.mean);
+        const brief = [
+          `按核心将伤害期望排序（各 ${runs} 场）：`,
+          ...ranked.map(
+            (r, k) =>
+              `${k + 1}. ${r.label} — mean ${Math.round(r.mean)} ±${Math.round(r.halfWidth)}｜总伤 ${Math.round(r.meanTotal)}｜${r.byUnit
+                .slice(0, 3)
+                .map((u) => `${u.name} ${Math.round(u.mean)}`)
+                .join(' / ')}`
+          ),
+          ranked.length > 1
+            ? `第 1 与第 2 的差距：${Math.round(ranked[0].mean - ranked[1].mean)}（两者半宽之和 ${Math.round(ranked[0].halfWidth + ranked[1].halfWidth)} —— 差距小于半宽之和就是「分不出来」）`
+            : '',
+        ]
+          .filter(Boolean)
+          .join('\n');
+        return {
+          evidenceId: nextEvidenceId(ctx, 'simulate_many'),
+          summary: `对拍 ${rows.length} 套 × ${runs} 场：第 1 名「${ranked[0].label}」核心将期望 ${Math.round(ranked[0].mean)} ±${Math.round(ranked[0].halfWidth)}（总伤 ${Math.round(ranked[0].meanTotal)}）`,
+          brief,
+          data: { runs, rows, rankedLabels: ranked.map((r) => r.label) },
+          stats: { battles: runs * rows.length, ms: Date.now() - t0, seed: ctx.seed },
         };
       },
     },
