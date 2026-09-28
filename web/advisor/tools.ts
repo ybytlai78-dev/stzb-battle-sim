@@ -23,8 +23,10 @@ import {
   type SimExpectResult,
 } from '../simExpectation';
 import {
+  clearSlotSkills,
   estimateMateBattles as estimateMateBattlesReal,
   runSimMateAsync,
+  withSlotHero,
   type MateSimOptions,
   type MateSimResult,
 } from '../simMate';
@@ -82,6 +84,8 @@ export interface AdvisorDeps {
   ): Promise<MateSimResult>;
   /** L3 开跑前的场次预估 */
   estimateMateBattles(cfg: ViewCfg, options: Partial<MateSimOptions>): number;
+  /** 把一套队友组合落到配置上（`clearSkills` = 清空这些位的可学战法，交给下一轮战法搜索去填） */
+  applyCombo(cfg: ViewCfg, picks: Array<{ unit: number; heroId: string }>, clearSkills: boolean): ViewCfg;
 }
 
 export interface ToolCtx {
@@ -285,6 +289,59 @@ function searchBrief(inp: {
   }
   lines.push(`并列行数：${inp.tiesWithBest}（与榜首 95% 区间重叠的都算并列，别把噪声级差距说成结论）`);
   return lines.join('\n');
+}
+
+/** 从 `args.plan`（缺省 = 当前配将区）构造 cfg + 「整体搜最优」的两套参数 */
+function bothSetup(
+  args: {
+    plan?: unknown;
+    rounds?: number;
+    mateTop?: number;
+    finalRuns?: number;
+    coarseRuns?: number;
+    coarseTop?: number;
+    matchUnits?: number[];
+    candidateHeroIds?: string[];
+    candidateSkillIds?: string[];
+  },
+  ctx: ToolCtx
+): {
+  cfg: ViewCfg;
+  mateOptions: Partial<MateSimOptions>;
+  skillOptions: Partial<SimExpectOptions>;
+  rounds: number;
+  mateTop: number;
+} {
+  const plan = args?.plan === undefined ? configToPlan(ctx.deps.getConfig()) : assertPlanShape(args.plan);
+  const cfg = cfgOf(plan);
+  const finalRuns = Math.max(20, Math.floor(Number(args?.finalRuns) || 20));
+  const coarseRuns = Math.max(1, Math.floor(Number(args?.coarseRuns) || 2));
+  // 交替搜索里 L2 会跑好几遍 → 每遍收窄（进决赛的组合数少一点），总场次才压得住
+  const coarseTop = Math.max(2, Math.min(64, Math.floor(Number(args?.coarseTop) || 8)));
+  const mateOptions: Partial<MateSimOptions> = { finalRuns, coarseRuns, coarseTop: Math.max(4, coarseTop), slotSkills: 'keep' };
+  const skillOptions: Partial<SimExpectOptions> = { finalRuns, coarseRuns, coarseTop };
+  if (Array.isArray(args?.matchUnits) && args.matchUnits.length) mateOptions.matchUnits = args.matchUnits.map(Number);
+  if (Array.isArray(args?.candidateHeroIds) && args.candidateHeroIds.length) mateOptions.candidateIds = args.candidateHeroIds.map(String);
+  if (Array.isArray(args?.candidateSkillIds) && args.candidateSkillIds.length) skillOptions.candidateIds = args.candidateSkillIds.map(String);
+  const core = coreIndices(plan, cfg);
+  if (core) {
+    mateOptions.coreUnits = core;
+    skillOptions.coreUnits = core;
+  }
+  return {
+    cfg,
+    mateOptions,
+    skillOptions,
+    rounds: Math.max(1, Math.min(3, Math.floor(Number(args?.rounds) || 2))),
+    mateTop: Math.max(1, Math.min(4, Math.floor(Number(args?.mateTop) || 3))),
+  };
+}
+
+/** 预估总场次：队友一轮 + 每套队友一次战法搜索；要跑第 2 轮就再加「队友 + 战法」各一次 */
+function estimateBoth(ctx: ToolCtx, s: ReturnType<typeof bothSetup>): number {
+  const mate = ctx.deps.estimateMateBattles(s.cfg, s.mateOptions);
+  const skill = ctx.deps.estimateSkillBattles(s.cfg, s.skillOptions);
+  return mate + s.mateTop * skill + (s.rounds > 1 ? mate + skill : 0);
 }
 
 const PLAN_SCHEMA = {
@@ -701,6 +758,168 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
       },
     },
     {
+      name: 'optimize_both',
+      description:
+        '**一次把「某将 + 配谁 + 带什么战法」搜完（队友搜索 ↔ 战法搜索交替两轮）**：先搜队友 → 对前几套各搜一次战法 → 拿最好的回头再搜一轮队友。约 30~120 秒、上万场。只有"完整最强配置/输出最大化"这类问题才用它；只想知道战法用 optimize_skills、只想知道队友用 optimize_mates。',
+      schema: {
+        type: 'object',
+        properties: {
+          plan: PLAN_SCHEMA,
+          rounds: { type: 'integer', minimum: 1, maximum: 3, description: '交替轮数（默认 2）' },
+          mateTop: { type: 'integer', minimum: 1, maximum: 4, description: '每轮取前几套队友进战法搜索（默认 3）' },
+          finalRuns: { type: 'integer', minimum: 20, maximum: 200, description: '决赛场次（默认 20）' },
+          coarseRuns: { type: 'integer', minimum: 1, maximum: 10, description: '粗筛场次（默认 2；只用于淘汰）' },
+          coarseTop: { type: 'integer', minimum: 2, maximum: 64, description: '进决赛的战法组合数（默认 8）' },
+          matchUnits: { type: 'array', items: { type: 'integer' }, description: '参与匹配的队友位下标（最多 2 个）' },
+          candidateHeroIds: { type: 'array', items: { type: 'string' }, description: '队友只在这些武将里选（缩小范围能省很多时间）' },
+          candidateSkillIds: { type: 'array', items: { type: 'string' }, description: '战法只在这些里搜' },
+          topN: { type: 'integer', minimum: 1, maximum: 10, description: '返回前几名（默认 5）' },
+        },
+        required: [],
+      },
+      cost: {
+        long: true,
+        battlesOf: (args, ctx) => {
+          const c = ctx as ToolCtx;
+          const s = bothSetup(args as never, c);
+          if (c.cache?.has(cacheKeyFor('optimize_both', s.cfg, { m: s.mateOptions, k: s.skillOptions, r: s.rounds, t: s.mateTop }, c.seed))) return 0;
+          return estimateBoth(c, s);
+        },
+      },
+      async run(args: { topN?: number } & Parameters<typeof bothSetup>[0], ctx) {
+        const s = bothSetup(args, ctx);
+        const est = estimateBoth(ctx, s);
+        const key = cacheKeyFor('optimize_both', s.cfg, { m: s.mateOptions, k: s.skillOptions, r: s.rounds, t: s.mateTop }, ctx.seed);
+        const cached = cachedResult(ctx, key, 'optimize_both');
+        if (cached) return cached;
+        const t0 = Date.now();
+        const prog = (label: string) => (done: number, total: number) => {
+          throwIfAborted(ctx.signal);
+          ctx.onProgress?.({ name: 'optimize_both', done, total, label });
+        };
+        interface Cand {
+          stage: string;
+          label: string;
+          heroIds: string[];
+          cfg: ViewCfg;
+          mean: number;
+          halfWidth: number;
+          runs: number;
+          meanTotal: number;
+          byUnit: Array<{ unit: number; name: string; mean: number; core: boolean }>;
+          skillLabel: string;
+        }
+        const cands: Cand[] = [];
+        let spent = 0; // 本工具自己真跑的场次（预算里记的是整轮累计，不能拿来当自己的代价）
+
+        // ── 第 1 轮：队友 → 每套各搜一次战法 ──
+        const mate1 = await ctx.deps.optimizeMates(s.cfg, s.mateOptions, prog('第 1 轮 · 搜队友'), ctx.signal);
+        spent += mate1.battles;
+        const combos = mate1.finals.slice(0, s.mateTop);
+        for (let i = 0; i < combos.length; i += 1) {
+          const c = combos[i];
+          const cfg2 = ctx.deps.applyCombo(s.cfg, c.picks.map((p) => ({ unit: p.unit, heroId: p.heroId })), true);
+          const sk = await ctx.deps.optimizeSkills(cfg2, s.skillOptions, prog(`第 1 轮 · 搜战法（${i + 1}/${combos.length}）`), ctx.signal);
+          spent += sk.battles;
+          const best = sk.finals[0];
+          const cfgWithSkills = best ? withSkillPicks(cfg2, best.picks) : cfg2;
+          cands.push({
+            stage: '第 1 轮',
+            label: `${c.label}${best ? ` + ${best.label}` : ''}`,
+            heroIds: cfgWithSkills.slots.map((x) => x.heroId),
+            cfg: cfgWithSkills,
+            mean: best?.mean ?? 0,
+            halfWidth: best?.halfWidth ?? 0,
+            runs: best?.runs ?? 0,
+            meanTotal: best?.meanTotal ?? 0,
+            byUnit: (best?.byUnit ?? []) as Cand['byUnit'],
+            skillLabel: best?.label ?? '（没搜到战法）',
+          });
+        }
+        cands.sort((a, b) => b.mean - a.mean);
+
+        // ── 第 2 轮：拿榜首（带战法）回头再搜一轮队友；更好就对它再搜一次战法 ──
+        if (s.rounds > 1 && cands.length) {
+          const top = cands[0];
+          const mate2 = await ctx.deps.optimizeMates(
+            top.cfg,
+            { ...s.mateOptions, slotSkills: 'keep' },
+            prog('第 2 轮 · 搜队友（固定战法）'),
+            ctx.signal
+          );
+          spent += mate2.battles;
+          const c2 = mate2.finals[0];
+          if (c2) {
+            const cfg3 = ctx.deps.applyCombo(top.cfg, c2.picks.map((p) => ({ unit: p.unit, heroId: p.heroId })), false);
+            const sk2 = await ctx.deps.optimizeSkills(cfg3, s.skillOptions, prog('第 2 轮 · 搜战法'), ctx.signal);
+            spent += sk2.battles;
+            const best2 = sk2.finals[0];
+            const cfg4 = best2 ? withSkillPicks(cfg3, best2.picks) : cfg3;
+            cands.push({
+              stage: '第 2 轮',
+              label: `${c2.label}${best2 ? ` + ${best2.label}` : ''}`,
+              heroIds: cfg4.slots.map((x) => x.heroId),
+              cfg: cfg4,
+              mean: best2?.mean ?? c2.mean,
+              halfWidth: best2?.halfWidth ?? c2.halfWidth,
+              runs: best2?.runs ?? c2.runs,
+              meanTotal: best2?.meanTotal ?? c2.meanTotal,
+              byUnit: (best2?.byUnit ?? c2.byUnit) as Cand['byUnit'],
+              skillLabel: best2?.label ?? '（沿用上一轮战法）',
+            });
+          }
+        }
+
+        // 去重（同一套三将 + 同一套战法只留最好的一次），再排序
+        const uniq = new Map<string, Cand>();
+        for (const c of cands) {
+          const sig = `${c.heroIds.join('|')}::${c.skillLabel}`;
+          const old = uniq.get(sig);
+          if (!old || c.stage === '第 2 轮') uniq.set(sig, c);
+        }
+        const ranked = [...uniq.values()].sort((a, b) => b.mean - a.mean);
+        const topN = Math.min(10, Math.max(1, Math.floor(Number(args?.topN) || 5)));
+        const rows = ranked.slice(0, topN);
+        const first = rows[0];
+        const plan6 = first ? configToPlan(first.cfg) : null;
+        const line = (c: Cand, i: number): string =>
+          `${i + 1}. [${c.stage}] ${c.label} — 核心将期望 ${Math.round(c.mean)} ±${Math.round(c.halfWidth)}（${c.runs} 场）｜全队总伤 ${Math.round(c.meanTotal)}`;
+        const brief = [
+          `整体搜索：${s.rounds} 轮交替（队友 → 战法${s.rounds > 1 ? ' → 队友 → 战法' : ''}）；真跑 ${rows.length} 套进榜`,
+          ...rows.map(line),
+          rows.length > 1
+            ? `第 1 与第 2 差距 ${Math.abs(Math.round(rows[0].mean - rows[1].mean))}，半宽之和 ${Math.round(rows[0].halfWidth + rows[1].halfWidth)} → ${
+                Math.abs(rows[0].mean - rows[1].mean) <= rows[0].halfWidth + rows[1].halfWidth ? '**分不出来**' : '分得开'
+              }`
+            : '',
+          `队伍：${first ? first.heroIds.join(' / ') : '—'}；战法：${first?.skillLabel ?? '—'}`,
+        ]
+          .filter(Boolean)
+          .join('\n');
+        return remember(ctx, key, {
+          evidenceId: nextEvidenceId(ctx, 'optimize_both'),
+          summary: first
+            ? `整体搜索完成（${rows.length} 套进榜）：第 1 名「${first.label}」核心将期望 ${Math.round(first.mean)} ±${Math.round(first.halfWidth)}（${first.runs} 场）`
+            : '整体搜索没有产出可排行的结果',
+          brief,
+          data: {
+            rows,
+            plan: plan6,
+            meta: {
+              rounds: s.rounds,
+              mateTop: s.mateTop,
+              estimate: est,
+              mateLabel: mate1.matchLabel,
+              coreLabel: mate1.coreLabel,
+              candidates: mate1.candidateCount,
+              stageCount: cands.length,
+            },
+          },
+          stats: { battles: spent, ms: Date.now() - t0, seed: ctx.seed },
+        });
+      },
+    },
+    {
       name: 'search_hero',
       description:
         '按 名字 / 势力 / 兵种 / 主战法名 / id / 拼音 检索武将（空白分词 AND），返回候选与 id。拿不准 id 时先搜。空结果会给换词提示，不要拿同一个词反复重试。',
@@ -922,7 +1141,25 @@ function realDeps(): AdvisorDeps {
       });
     },
     estimateMateBattles: (cfg, options) => estimateMateBattlesReal(cfg, options),
+    applyCombo: (cfg, picks, clearSkills) => {
+      let out = cfg;
+      for (const p of picks) out = withSlotHero(out, p.unit, p.heroId, !clearSkills);
+      return clearSkills ? clearSlotSkills(out, picks.map((p) => p.unit)) : out;
+    },
   };
+}
+
+/** 把一套战法选择落到配置上（`ComboPick.slot` = 该将的可学槽下标）
+ *  空槽显式补 `''`（**不留稀疏洞**：洞在 JSON 里会变成 null，落盘/回灌都难看） */
+function withSkillPicks(cfg: ViewCfg, picks: Array<{ unit: number; slot: number; skillId: string }>): ViewCfg {
+  const out: ViewCfg = { ...cfg, slots: cfg.slots.map((s) => ({ ...s, skillIds: [...s.skillIds] })) };
+  for (const p of picks) {
+    const slot = out.slots[p.unit];
+    if (!slot) continue;
+    for (let k = 0; k <= p.slot; k += 1) if (slot.skillIds[k] === undefined) slot.skillIds[k] = '';
+    slot.skillIds[p.slot] = p.skillId;
+  }
+  return out;
 }
 
 /** 假跑批：字段与 `PlanSummary` 对齐，毫秒返回 */

@@ -33,12 +33,13 @@ function findMutualPair(): [string, string] {
 }
 
 describe('advisor tools', () => {
-  it('十一个工具都在注册表里，且各有 name/description/schema/cost', () => {
+  it('十二个工具都在注册表里，且各有 name/description/schema/cost', () => {
     const tools = createTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       'get_config',
       'hero_detail',
       'list_skills',
+      'optimize_both',
       'optimize_mates',
       'optimize_skills',
       'search_hero',
@@ -53,6 +54,97 @@ describe('advisor tools', () => {
       expect(t.schema).toBeTruthy();
       expect(t.cost).toBeTruthy();
     }
+  });
+
+  it('optimize_both：队友 ↔ 战法交替两轮（先搜队友→逐套搜战法→回头再搜队友）', async () => {
+    const order: string[] = [];
+    let skillRound = 0;
+    const ctx = makeCtx({
+      fakeRuns: true,
+      deps: {
+        estimateMateBattles: () => 900,
+        estimateSkillBattles: () => 2500,
+        applyCombo: (cfg, picks, clear) => {
+          const out = { ...cfg, slots: cfg.slots.map((s) => ({ ...s, skillIds: [...s.skillIds] })) };
+          for (const p of picks) out.slots[p.unit] = { ...out.slots[p.unit], heroId: p.heroId, ...(clear ? { skillIds: [] } : {}) };
+          return out;
+        },
+        optimizeMates: async (cfg) => {
+          order.push(`mates:${cfg.slots[1].heroId}`);
+          return {
+            battles: 900,
+            ms: 2700,
+            matchLabel: '中军 / 前锋',
+            coreLabel: '核心将',
+            candidateCount: 40,
+            baseline: { runs: 20, mean: 5000, meanTotal: 20000, damages: [] },
+            options: { slotSkills: 'keep' },
+            finals: [
+              { rank: 1, label: '田丰 + 袁绍', mean: 7000, halfWidth: 300, runs: 20, meanTotal: 20000, wipedRuns: 0, picks: [{ unit: 1, unitName: '中军', heroId: 'h1', heroName: '田丰' }], byUnit: [] },
+              { rank: 2, label: '张辽 + 乐进', mean: 6500, halfWidth: 300, runs: 20, meanTotal: 19000, wipedRuns: 0, picks: [{ unit: 1, unitName: '中军', heroId: 'h2', heroName: '张辽' }], byUnit: [] },
+            ],
+          } as never;
+        },
+        optimizeSkills: async (cfg) => {
+          skillRound += 1;
+          // 记录「中军是谁」+「核心将已配几个战法」：第 2 轮应当带着第 1 轮搜到的战法(_1_)再搜
+          order.push(`skills:${cfg.slots[1].heroId}:${cfg.slots[0].skillIds.filter(Boolean).length}`);
+          // 第 2 轮（队友换成 h1 之后）给更高的期望 → 验证「榜单会收录更优的第 2 轮结果」
+          const mean = cfg.slots[1].heroId === 'h1' ? 7317 : 6000;
+          return {
+            battles: 2500,
+            ms: 20000,
+            tiesWithBest: 0,
+            rankAgreement: 1,
+            wipedCombos: 0,
+            candidateCount: 20,
+            candidateSkipped: 0,
+            matchLabel: '核心将',
+            coreLabel: '核心将',
+            noEmptySlot: false,
+            combosCapped: false,
+            finals: [
+              {
+                rank: 1,
+                label: '危崖困军 + 计险远近',
+                mean,
+                halfWidth: 300,
+                runs: 20,
+                meanTotal: 15000,
+                tieWithBest: false,
+                wipedRuns: 0,
+                picks: [{ unit: 0, slot: 1, unitName: '核心将', skillId: 's1', skillName: '危崖困军' }],
+                byUnit: [{ unit: 0, name: '核心将', mean, core: true }],
+              },
+            ],
+          } as never;
+        },
+      },
+    });
+    const r = await runTool('optimize_both', { rounds: 2, mateTop: 2, finalRuns: 20 }, ctx);
+    const d = r.data as { rows: Array<{ stage: string; mean: number; heroIds: string[] }>; plan: { slots: Array<{ heroId: string; skillIds: string[] }> } };
+    // 调用顺序：队友 → 两套战法 → 再队友 → 再战法（首轮队友位是面板原配置的中军）
+    expect(order.join(' | ')).toBe('mates:h5 | skills:h1:0 | skills:h2:0 | mates:h1 | skills:h1:1');
+    expect(skillRound).toBe(3);
+    // 第 2 轮更高分被收录并排到第一
+    expect(d.rows[0].mean).toBe(7317);
+    expect(d.rows[0].stage).toBe('第 2 轮');
+    expect(d.rows.length).toBeGreaterThanOrEqual(2);
+    // 返回的 plan 是可直接应用的三将三战法（战法槽按位写，空槽为 ''）
+    expect(d.plan.slots[1].heroId).toBe('h1');
+    expect(d.plan.slots[0].skillIds.filter(Boolean)).toEqual(['s1']);
+    expect(r.stats.battles).toBe(900 + 2500 * 2 + 900 + 2500); // 本工具自己真跑的场次
+    expect(r.brief).toContain('整体搜索');
+    expect(r.brief).toContain('第 2 轮');
+  });
+
+  it('optimize_both：预估场次超预算 → 拒绝执行并给出调小建议', async () => {
+    const ctx = makeCtx({
+      fakeRuns: true,
+      budget: { maxBattles: 1000 },
+      deps: { estimateMateBattles: () => 900, estimateSkillBattles: () => 2500 },
+    });
+    await expect(runTool('optimize_both', { mateTop: 3, rounds: 2 }, ctx)).rejects.toThrow(/预计 \d+ 场/);
   });
 
   it('optimize_skills：把 L2 搜索当工具调（注入假搜索，验证榜单/预算/进度）', async () => {
@@ -342,6 +434,37 @@ describe('advisor tools', () => {
     expect(d.meta.battles).toBeGreaterThan(0);
     expect(r.stats.battles).toBe(d.meta.battles);
     expect(r.brief).toContain('排序口径');
+  });
+
+  it('optimize_both（真接线）：极小范围真跑一轮「队友 → 战法」，出榜单', async () => {
+    const heros = SLOTTED_HEROES.slice(0, 3).map((h) => h.id);
+    const plan: AdvisorPlan = {
+      slots: heros.map((heroId, i) => ({ position: (['大营', '中军', '前锋'] as const)[i], heroId, level: 40, skillIds: [] })),
+      coreUnitIds: [],
+      dummy: { ...DEFAULT_DUMMY },
+    };
+    const other = SLOTTED_HEROES[3]?.id ?? heros[2];
+    const ctx = makeCtx({ fakeRuns: true }); // 单方案测评换假的；两套搜索走真实现
+    const r = await runTool(
+      'optimize_both',
+      {
+        plan,
+        rounds: 1,
+        mateTop: 1,
+        coarseRuns: 1,
+        finalRuns: 20,
+        coarseTop: 2,
+        matchUnits: [1],
+        candidateHeroIds: [other],
+        candidateSkillIds: [LEARNABLE_SKILL_IDS[0]],
+      },
+      ctx
+    );
+    const d = r.data as { rows: Array<{ mean: number; heroIds: string[] }>; plan: AdvisorPlan; meta: { estimate: number } };
+    expect(d.rows.length).toBeGreaterThan(0);
+    expect(d.plan.slots).toHaveLength(3);
+    expect(r.stats.battles).toBeGreaterThan(0);
+    expect(r.brief).toContain('整体搜索');
   });
 
   it('list_skills：按出手位批量拉池子（分页 + 还有多少的提示）', async () => {
