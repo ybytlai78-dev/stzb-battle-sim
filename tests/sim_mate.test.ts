@@ -18,15 +18,18 @@ import {
   candidateHeroes,
   clearSlotSkills,
   estimateMateBattles,
+  heroesMutuallyExclusive,
   heroPoolBase,
   legalHeroCombos,
   MATE_SIM_DEFAULTS,
   mateSlots,
   MAX_MATCH_UNITS,
+  mutualGroupOf,
   picksLegal,
   runSimMate,
   simMateSteps,
   slotForHero,
+  teamHeroesLegal,
   withHeroPicks,
   withSlotHero,
   type MateGroupCoarse,
@@ -567,5 +570,129 @@ describe('⑥ 页面（optimize.html）：L2 / L3 共用左栏 + 两步衔接', 
     expect(text).toContain('决赛排行');
     expect(text).toContain('23'); // 3 场粗筛 + 20 场决赛
     expect(root.querySelector('#op-result [data-sim-apply]'), 'L2 结果行也有「应用」').toBeTruthy();
+  });
+});
+
+describe('⑦ 同队互斥（引擎配队规则）：候选与组合先剔掉，不让跑批中途抛「配队非法」', () => {
+  const ZHAOYUN = 'zhaoyun';
+  const SP_ZHAOYUN = 'sp_zhaoyun';
+  const JIANGWEI = 'h74';
+  const SP_JIANGWEI = 'sp_jiangwei';
+
+  it('规则口径：赵云 ↔ SP赵云、姜维 ↔ SP姜维 互斥；其余同名武将不互斥；重复上阵不合法', () => {
+    expect(mutualGroupOf(ZHAOYUN)).toBe('赵云');
+    expect(mutualGroupOf(SP_ZHAOYUN)).toBe('赵云');
+    expect(mutualGroupOf(JIANGWEI)).toBe('姜维');
+    expect(mutualGroupOf(SP_JIANGWEI)).toBe('姜维');
+    expect(heroesMutuallyExclusive(ZHAOYUN, SP_ZHAOYUN)).toBe(true);
+    expect(heroesMutuallyExclusive(JIANGWEI, SP_JIANGWEI)).toBe(true);
+    expect(heroesMutuallyExclusive(ZHAOYUN, JIANGWEI)).toBe(false);
+    expect(heroesMutuallyExclusive('h451', 'h26'), '关羽蜀/魏不再互斥').toBe(false);
+    expect(teamHeroesLegal([ZHAOYUN, SP_ZHAOYUN])).toBe(false);
+    expect(teamHeroesLegal([ZHAOYUN, SP_ZHAOYUN, JIANGWEI])).toBe(false);
+    expect(teamHeroesLegal([ZHAOYUN, JIANGWEI, SP_JIANGWEI])).toBe(false);
+    expect(teamHeroesLegal([ZHAOYUN, JIANGWEI, 'h3'])).toBe(true);
+    expect(teamHeroesLegal(['h3', 'h3']), '同一武将不得占两个位').toBe(false);
+  });
+
+  it('◀ 用户实测场景：核心将 = 赵云 + 候选含 SP赵云 → 不再抛「配队非法」，SP赵云被剔出候选池', () => {
+    const cfg = baseCfg(['zhaoyun', 'h5', 'h16']);
+    const res = runSimMate(cfg, {
+      ...FAST,
+      candidateIds: [SP_ZHAOYUN, POOL[0], POOL[1]],
+      matchUnits: [1, 2],
+      coreUnits: [0],
+      unitKeep: 4,
+      coarseTop: 2,
+    });
+    expect(res.poolSkippedMutual, 'SP赵云与固定将赵云互斥 → 池里剔掉').toBe(1);
+    expect(res.candidateCount).toBe(2);
+    expect(res.errors, '不应再有跑批异常').toEqual([]);
+    // 任何选项 / 组合 / 决赛都不含「赵云 + SP赵云」
+    const heroSets = [
+      ...res.groups[0].rows.map((r) => r.picks.map((p) => p.heroId)),
+      ...res.combos.map((c) => c.picks.map((p) => p.heroId)),
+      ...res.finals.map((f) => f.picks.map((p) => p.heroId)),
+    ];
+    expect(heroSets.length).toBeGreaterThan(0);
+    for (const set of heroSets) expect(teamHeroesLegal([...set, ZHAOYUN])).toBe(true);
+  });
+
+  it('成对评估里「基准 ↔ 候选撞组」的一对会被跳过（赵云 × SP赵云），并计入 skippedIllegal', () => {
+    const cfg = baseCfg(); // 队内无赵云 / 姜维 → 候选池本身不剔
+    const res = runSimMate(cfg, {
+      ...FAST,
+      candidateIds: [ZHAOYUN, SP_ZHAOYUN, JIANGWEI, SP_JIANGWEI],
+      matchUnits: [1, 2],
+      coreUnits: [0],
+      pairCarriers: 4,
+      unitKeep: 10,
+      coarseTop: 2,
+    });
+    expect(res.poolSkippedMutual).toBe(0);
+    expect(res.skippedIllegal, '撞组的配对会被跳过').toBeGreaterThan(0);
+    expect(res.errors).toEqual([]);
+    for (const r of res.groups[0].rows) expect(teamHeroesLegal(r.picks.map((p) => p.heroId))).toBe(true);
+    for (const f of res.finals) expect(teamHeroesLegal(f.picks.map((p) => p.heroId))).toBe(true);
+  });
+
+  it('当前配置本身违规（赵云 + SP赵云同队，SP赵云在被匹配的位）→ 不抛错、基线跳过，匹配照常继续', () => {
+    const cfg = baseCfg(['zhaoyun', 'sp_zhaoyun', 'h16']);
+    const res = runSimMate(cfg, {
+      ...FAST,
+      candidateIds: [JIANGWEI, POOL[0]],
+      matchUnits: [1], // 换掉 SP赵云 这一位
+      coreUnits: [0],
+      unitKeep: 2,
+      coarseTop: 1,
+    });
+    expect(res.baselineIllegal).toBe(true);
+    expect(res.baseline.runs).toBe(0);
+    expect(res.errors).toEqual([]);
+    expect(res.groups[0].rows.length).toBeGreaterThan(0); // 换掉冲突将之后照常评估
+    expect(res.finals.length).toBeGreaterThan(0);
+    for (const f of res.finals) expect(teamHeroesLegal(f.picks.map((p) => p.heroId))).toBe(true);
+  });
+
+  it('整队都非法（冲突发生在固定位上）→ 不抛错，但也搜不出合法选项（如实上报，页面给提示）', () => {
+    const cfg = baseCfg(['zhaoyun', 'sp_zhaoyun', 'h16']);
+    const res = runSimMate(cfg, {
+      ...FAST,
+      candidateIds: [JIANGWEI, POOL[0]],
+      matchUnits: [2], // 冲突在 0/1 号位（固定不动）→ 任何候选都救不了
+      coreUnits: [0],
+      unitKeep: 2,
+      coarseTop: 1,
+    });
+    expect(res.baselineIllegal).toBe(true);
+    expect(res.finals).toHaveLength(0);
+    expect(res.errors).toEqual([]);
+  });
+
+  it('视图 HTML：口径提示写出互斥剔除与跳过数；违规基线给红字提示', () => {
+    const cfg = baseCfg(['zhaoyun', 'h5', 'h16']);
+    const res = runSimMate(cfg, {
+      ...FAST,
+      candidateIds: [SP_ZHAOYUN, POOL[0]],
+      matchUnits: [1],
+      coreUnits: [0],
+      unitKeep: 2,
+      coarseTop: 1,
+    });
+    const html = mateResultHtml(res);
+    expect(html).toContain('同队互斥已剔掉');
+    expect(html).toContain('赵云 ↔ SP赵云');
+    expect(html).toContain('互斥剔除 1');
+    expect(html).not.toContain('undefined');
+
+    const illegalBase = runSimMate(baseCfg(['zhaoyun', 'sp_zhaoyun', 'h16']), {
+      ...FAST,
+      candidateIds: [JIANGWEI, POOL[0]],
+      matchUnits: [2],
+      coreUnits: [0],
+      unitKeep: 2,
+      coarseTop: 1,
+    });
+    expect(mateResultHtml(illegalBase)).toContain('当前配置本身违反互斥规则');
   });
 });

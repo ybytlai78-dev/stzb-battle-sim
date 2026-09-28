@@ -189,9 +189,54 @@ await sleep(400);
 console.log('state-4-handoff', await evaluate(stateDump));
 await shot('4-handoff-l2.png');
 
+// ⑤ 回归：队里有赵云（互斥组「赵云」）→ 候选池含 SP赵云，跑批不能抛「配队非法」（用户 2026-09-28 卡点）
+await goto(url);
+await evaluate(`(() => {
+  const sel = document.querySelector('[data-unit-hero="0"]');
+  sel.value = 'zhaoyun';
+  sel.dispatchEvent(new Event('change', { bubbles: true }));
+  return 'ok';
+})()`);
+await sleep(400);
+await evaluate(`document.querySelector('.op-mode[data-mode="l3"]').click()`);
+await sleep(300);
+await evaluate(`(() => {
+  const set = (sel, v) => { const el = document.querySelector(sel); el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); };
+  set('#mt-coarse', '1'); set('#mt-paircars', '3'); set('#mt-keep', '10'); set('#mt-top', '8');
+  return 'ok';
+})()`);
+console.log('state-5-before', await evaluate(stateDump));
+await evaluate(`document.querySelector('#mt-run').click()`);
+for (let i = 0; i < 240; i += 1) {
+  const st = await evaluate(`document.querySelector('#op-panel').dataset.state`);
+  if (st === 'done' || st === 'error') {
+    console.log('l3 mutual-case run state =', st, `(${i} polls)`);
+    break;
+  }
+  await sleep(500);
+}
+await sleep(400);
+const mutual = await evaluate(`(() => {
+  const t = document.querySelector('#op-result').textContent.replace(/\\s+/g, ' ');
+  // 注意：口径提示里本身有「配队非法」四个字（解释互斥已被剔除）→ 只认真正的报错文案
+  return JSON.stringify({
+    hasIllegalError: t.includes('配队非法：') || t.includes('队友匹配失败') || t.includes('模拟测评失败'),
+    mutualNote: t.includes('同队互斥已剔掉'),
+    poolMutual: /互斥剔除 (\\d+)/.exec(document.querySelector('#op-result').textContent)?.[1] ?? null,
+    head: t.slice(0, 200),
+  });
+})()`);
+console.log('state-5-mutual', mutual);
+await shot('5-mutual-exclusion.png');
+// 口径提示在页面底部 → 滚到 ④ 段再拍一张，肉眼复核「互斥已剔除」那几条
+await evaluate(`document.querySelector('.rm-sim-verdict').scrollIntoView({ block: 'start' })`);
+await sleep(300);
+await shot('5b-mutual-notes.png');
+
 console.log(problems.length ? `PAGE PROBLEMS (${problems.length}):` : 'PAGE PROBLEMS: none');
 problems.slice(0, 10).forEach((p) => console.log(' -', p.slice(0, 300)));
 
 ws.close();
 child.kill();
-process.exit(problems.length ? 1 : 0);
+const bad = problems.length > 0 || JSON.parse(mutual).hasIllegalError || !JSON.parse(mutual).mutualNote;
+process.exit(bad ? 1 : 0);

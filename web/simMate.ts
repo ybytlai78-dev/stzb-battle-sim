@@ -246,6 +246,53 @@ export function picksLegal(picks: Array<{ heroId: string }>): boolean {
   return true;
 }
 
+/* ─────────────────── 同队互斥（引擎配队规则，缺了会让整轮跑批抛错） ───────────────────
+ * 引擎 `runBattle` 会先做互斥校验，同 `mutualExclusionGroup` 的武将同队直接抛「配队非法：互斥冲突」——
+ * 现只有两组：**赵云 ↔ SP赵云**、**姜维 ↔ SP姜维**（其余同名武将如关羽蜀/魏可同队，见 src/data/hero-utils.ts）。
+ * L3 的候选池与成对组合必须自己先排除这些组合：否则一遇到「核心将带赵云 + 候选 SP赵云」，
+ * 整轮跑批会在跑到那一项时抛出，前面的场次全白跑（用户 2026-09-28 实测就是这么卡住的）。
+ */
+
+/** 互斥组名（无组 = null） */
+export function mutualGroupOf(heroId: string): string | null {
+  return HERO_RECORDS[heroId]?.mutualExclusionGroup ?? null;
+}
+
+/** 两个武将是否互斥（同组不可同队） */
+export function heroesMutuallyExclusive(a: string, b: string): boolean {
+  const g = mutualGroupOf(a);
+  return Boolean(g) && g === mutualGroupOf(b);
+}
+
+/** 队内武将组合是否合法：不重复 + 无互斥（与引擎 `validateMutualExclusion` 同一口径） */
+export function teamHeroesLegal(heroIds: Array<string | undefined | null>): boolean {
+  const ids = heroIds.filter((v): v is string => Boolean(v));
+  if (new Set(ids).size !== ids.length) return false;
+  const seen = new Set<string>();
+  for (const id of ids) {
+    const g = mutualGroupOf(id);
+    if (!g) continue;
+    if (seen.has(g)) return false;
+    seen.add(g);
+  }
+  return true;
+}
+
+/** 当前配置的武将组合是否合法 */
+export function cfgHeroesLegal(cfg: ViewCfg): boolean {
+  return teamHeroesLegal(cfg.slots.map((s) => s.heroId));
+}
+
+/** 候选与给定武将列表是否互斥（返回冲突武将名；没有则 null） */
+export function mutualConflictIn(heroId: string, others: Array<string | undefined>): string | null {
+  const g = mutualGroupOf(heroId);
+  if (!g) return null;
+  for (const o of others) {
+    if (o && mutualGroupOf(o) === g) return heroName(o);
+  }
+  return null;
+}
+
 // ─────────────────────── 结果结构 ───────────────────────
 
 export interface MatePick {
@@ -352,10 +399,18 @@ export interface MateSimResult {
   matchSlots: MateSlot[];
   /** 没有可匹配的队友位（核心将占满 / 队伍不足 2 人）时 true：退化为直接测评当前配置 */
   noMatchSlot: boolean;
-  /** 候选武将数（已排除队内已上阵） */
+  /** 候选武将数（已排除队内已上阵、以及与「不参与匹配的将」互斥的武将） */
   candidateCount: number;
   /** 底座池里被排除的武将数（队内已上阵） */
   candidateSkipped: number;
+  /** 候选池里因**同队互斥**被剔除的武将数（赵云 ↔ SP赵云、姜维 ↔ SP姜维） */
+  poolSkippedMutual: number;
+  /** 粗筛 / 组合 / 决赛里因「互斥或重复上阵」被跳过的选项与组合数 */
+  skippedIllegal: number;
+  /** 当前配置本身就违反互斥规则（基线没跑，先让用户在左栏改掉） */
+  baselineIllegal: boolean;
+  /** 真跑里出现过的异常消息（前置校验之外的引擎规则；有值页面会提示） */
+  errors: string[];
   /** 候选池口径文案：「上架武将」/「含下架武将」 */
   poolLabel: string;
   dummyLabel: string;
@@ -421,17 +476,29 @@ const median = (xs: number[]): number => {
 const scoreOf = (opts: MateSimOptions, core: number, coreFirst3: number): number =>
   opts.rankBy === 'first3' ? coreFirst3 : core;
 
-/** 跑 n 场（配对种子 = baseSeed + 场次），**每场 yield 一次**（页面进度条用） */
+/** 跑 n 场（配对种子 = baseSeed + 场次），**每场 yield 一次**（页面进度条用）。
+ *  `onError`：单场抛错时记一笔并停掉这一项（互斥之类的引擎规则已被前置校验挡住，
+ *  这里只是不让「跑到一半抛错」把整轮几十分钟的跑批作废）。 */
 function* runBattleSteps(
   cfg: ViewCfg,
   enemyTeam: General[],
   n: number,
-  opts: MateSimOptions
+  opts: MateSimOptions,
+  onError?: (e: unknown) => void
 ): Generator<RunSample, void, void> {
-  const teams = ensureUniqueUnitIds(generalsOf(cfg, cfg.morale), enemyTeam);
-  for (let i = 0; i < n; i += 1) {
-    const raw = runOne(teams.myTeam, teams.enemyTeam, i, envOf(opts));
-    yield { total: raw.myDamage, first3: first3Damage(raw), raw };
+  try {
+    const teams = ensureUniqueUnitIds(generalsOf(cfg, cfg.morale), enemyTeam);
+    for (let i = 0; i < n; i += 1) {
+      try {
+        const raw = runOne(teams.myTeam, teams.enemyTeam, i, envOf(opts));
+        yield { total: raw.myDamage, first3: first3Damage(raw), raw };
+      } catch (e) {
+        onError?.(e);
+        return;
+      }
+    }
+  } catch (e) {
+    onError?.(e);
   }
 }
 
@@ -494,11 +561,29 @@ export function* simMateSteps(cfg: ViewCfg, options: Partial<MateSimOptions> = {
   const coreIds = coreUnits.map((u) => myGenerals[u]?.id).filter((id): id is string => Boolean(id));
   const coreLabel = coreLabelOf(cfg, coreUnits);
   const matchLabel = matchSlots.map((s) => s.unitName).join(' / ');
-  const pool = candidateHeroes(cfg, opts);
+  /*
+   * 候选池：底座池 − 队内已上阵 − **与「不参与匹配的将」互斥的武将**。
+   * 后者是引擎的配队规则（赵云 ↔ SP赵云、姜维 ↔ SP姜维）：不先剔掉，跑到那一项就会抛「配队非法」，
+   * 整轮跑批作废（用户 2026-09-28 实测卡点）。
+   */
+  const fixedHeroIds = cfg.slots
+    .map((s, i) => (matchedUnits.includes(i) ? '' : s.heroId))
+    .filter((id): id is string => Boolean(id));
+  const poolAll = candidateHeroes(cfg, opts);
+  const pool = poolAll.filter((id) => !mutualConflictIn(id, fixedHeroIds));
+  const poolSkippedMutual = poolAll.length - pool.length;
   const basePoolSize = heroPoolBase(opts).filter((id) => HERO_RECORDS[id]).length;
   const enemyTeam = dummyTeamFromEnemy(cfg.enemy, cfg.morale, opts.dummyTroops);
   const poolLabel = opts.includeOffline ? '上架 + 下架武将' : '上架武将';
   let battle = 0;
+  /** 因「同队互斥 / 重复上阵」被跳过的选项与组合数（如实上报，不是静默漏跑） */
+  let skippedIllegal = 0;
+  /** 真跑里出现的异常（理论上被前置校验挡住；有值就说明引擎又多了一条规则，页面上会提示） */
+  const errors: string[] = [];
+  const noteError = (e: unknown): void => {
+    const msg = String((e as Error)?.message ?? e);
+    if (!errors.includes(msg) && errors.length < 5) errors.push(msg);
+  };
 
   /** 由逐场样本汇总出「队友位选项」的成绩行（纯函数，跑批在外面逐场 yield） */
   const rowFromSamples = (
@@ -537,22 +622,28 @@ export function* simMateSteps(cfg: ViewCfg, options: Partial<MateSimOptions> = {
   let slotDone = 0;
 
   // ⓪ 对照基线：当前队友 + 匹配位战法槽清空（= L3 交给 L2 的起始状态）
+  //   当前配置本身就违反互斥规则时不跑（引擎会抛错），改为如实标记 baselineIllegal
+  const baselineLegal = cfgHeroesLegal(l3Base);
   const baselineSamples: RunSample[] = [];
-  for (const sample of runBattleSteps(l3Base, enemyTeam, opts.finalRuns, opts)) {
-    baselineSamples.push(sample);
-    slotDone += 1;
-    battle += 1;
-    yield {
-      phase: 'slot',
-      phaseDone: slotDone,
-      phaseTotal: slotPhaseTotal,
-      battle,
-      label: `对照基线（当前队友 · 匹配位战法槽已清空）第 ${baselineSamples.length}/${opts.finalRuns} 场`,
-    };
+  if (baselineLegal) {
+    for (const sample of runBattleSteps(l3Base, enemyTeam, opts.finalRuns, opts, noteError)) {
+      baselineSamples.push(sample);
+      slotDone += 1;
+      battle += 1;
+      yield {
+        phase: 'slot',
+        phaseDone: slotDone,
+        phaseTotal: slotPhaseTotal,
+        battle,
+        label: `对照基线（当前队友 · 匹配位战法槽已清空）第 ${baselineSamples.length}/${opts.finalRuns} 场`,
+      };
+    }
+  } else {
+    slotDone += opts.finalRuns;
   }
   const baselineDamages = baselineSamples.map((x) => coreDamageOf(x.raw, coreIds));
   const baseline: MateBaseline = {
-    runs: opts.finalRuns,
+    runs: baselineLegal ? opts.finalRuns : 0,
     mean: mean(baselineDamages),
     meanTotal: mean(baselineSamples.map((x) => x.total)),
     damages: baselineDamages,
@@ -568,8 +659,14 @@ export function* simMateSteps(cfg: ViewCfg, options: Partial<MateSimOptions> = {
       const rows: MateOptionRow[] = [];
       for (const heroId of pool) {
         const variant = withSlotHero(l3Base, ms.unit, heroId);
+        // 该候选与「留在队里的将」（含另一个队友位的当前武将）互斥 / 重复 → 跳过（只推进度）
+        if (!cfgHeroesLegal(variant)) {
+          slotDone += opts.coarseRuns;
+          skippedIllegal += 1;
+          continue;
+        }
         const samples: RunSample[] = [];
-        for (const sample of runBattleSteps(variant, enemyTeam, opts.coarseRuns, opts)) {
+        for (const sample of runBattleSteps(variant, enemyTeam, opts.coarseRuns, opts, noteError)) {
           samples.push(sample);
           slotDone += 1;
           battle += 1;
@@ -625,8 +722,14 @@ export function* simMateSteps(cfg: ViewCfg, options: Partial<MateSimOptions> = {
               { unit: carrierSlot.unit, heroId: carrierHero },
               { unit: otherSlot.unit, heroId: cand },
             ]);
+            // 互斥（赵云 ↔ SP赵云：基准与候选撞组）→ 跳过这一对，只推进度
+            if (!cfgHeroesLegal(variant)) {
+              slotDone += opts.coarseRuns;
+              skippedIllegal += 1;
+              continue;
+            }
             const samples: RunSample[] = [];
-            for (const sample of runBattleSteps(variant, enemyTeam, opts.coarseRuns, opts)) {
+            for (const sample of runBattleSteps(variant, enemyTeam, opts.coarseRuns, opts, noteError)) {
               samples.push(sample);
               slotDone += 1;
               battle += 1;
@@ -689,8 +792,14 @@ export function* simMateSteps(cfg: ViewCfg, options: Partial<MateSimOptions> = {
   let comboDone = 0;
   for (const picks of comboPicks) {
     const variant = picks.length ? withHeroPicks(l3Base, picks) : l3Base;
+    // 保留名单理论上已合法；这里再兜一层（例如以后叠了新的配队规则）
+    if (!cfgHeroesLegal(variant)) {
+      comboDone += opts.coarseRuns;
+      skippedIllegal += 1;
+      continue;
+    }
     const samples: RunSample[] = [];
-    for (const sample of runBattleSteps(variant, enemyTeam, opts.coarseRuns, opts)) {
+    for (const sample of runBattleSteps(variant, enemyTeam, opts.coarseRuns, opts, noteError)) {
       samples.push(sample);
       comboDone += 1;
       battle += 1;
@@ -754,6 +863,11 @@ export function* simMateSteps(cfg: ViewCfg, options: Partial<MateSimOptions> = {
   for (const combo of advancing) {
     const picks = combo.picks.map((p) => ({ unit: p.unit, heroId: p.heroId }));
     const variant = picks.length ? withHeroPicks(l3Base, picks) : l3Base;
+    if (!cfgHeroesLegal(variant)) {
+      finalDone += opts.finalRuns;
+      skippedIllegal += 1;
+      continue;
+    }
     const teams = ensureUniqueUnitIds(generalsOf(variant, cfg.morale), enemyTeam);
     const myIds = teams.myTeam.map((g) => g.id);
     const nameById = new Map(teams.myTeam.map((g) => [g.id, g.name]));
@@ -761,7 +875,14 @@ export function* simMateSteps(cfg: ViewCfg, options: Partial<MateSimOptions> = {
     const first3s: number[] = [];
     const raws: RunRaw[] = [];
     for (let i = 0; i < opts.finalRuns; i += 1) {
-      const raw = runOne(teams.myTeam, teams.enemyTeam, i, envOf(opts));
+      let raw: RunRaw;
+      try {
+        raw = runOne(teams.myTeam, teams.enemyTeam, i, envOf(opts));
+      } catch (e) {
+        noteError(e);
+        finalDone += opts.finalRuns - i;
+        break;
+      }
       raws.push(raw);
       damages.push(coreDamageOf(raw, coreIds));
       first3s.push(coreFirst3Of(raw, coreIds));
@@ -775,6 +896,7 @@ export function* simMateSteps(cfg: ViewCfg, options: Partial<MateSimOptions> = {
         label: `决赛 ${finals.length + 1}/${advancing.length} 第 ${i + 1}/${opts.finalRuns} 场：${combo.label}`,
       };
     }
+    if (!damages.length) continue; // 整项都跑不出来（异常）→ 不进排行
 
     const unitAcc = new Map<string, number>();
     const skillAcc = new Map<string, number>();
@@ -827,7 +949,11 @@ export function* simMateSteps(cfg: ViewCfg, options: Partial<MateSimOptions> = {
     matchSlots,
     noMatchSlot: matchSlots.length === 0,
     candidateCount: matchSlots.length ? pool.length : 0,
-    candidateSkipped: Math.max(0, basePoolSize - pool.length),
+    candidateSkipped: Math.max(0, basePoolSize - poolAll.length),
+    poolSkippedMutual,
+    skippedIllegal,
+    baselineIllegal: !baselineLegal,
+    errors,
     poolLabel,
     dummyLabel: dummyLabel(cfg.enemy, opts.dummyTroops),
     coreUnits,
@@ -892,7 +1018,12 @@ export function estimateMateBattles(cfg: ViewCfg, options: Partial<MateSimOption
     ? [...new Set(opts.coreUnits)].filter((u) => u >= 0 && u < cfg.slots.length)
     : autoCoreUnits(cfg);
   const slots = mateSlots(cfg, opts.matchUnits, coreUnits);
-  const pool = candidateHeroes(cfg, opts).length;
+  const matchedUnits = slots.map((s) => s.unit);
+  // 与跑批同一口径：先剔掉与「不参与匹配的将」互斥的候选（赵云 ↔ SP赵云），再估场次
+  const fixedHeroIds = cfg.slots
+    .map((s, i) => (matchedUnits.includes(i) ? '' : s.heroId))
+    .filter((id): id is string => Boolean(id));
+  const pool = candidateHeroes(cfg, opts).filter((id) => !mutualConflictIn(id, fixedHeroIds)).length;
   const baselinePhase = opts.finalRuns;
   if (!slots.length) return baselinePhase + opts.coarseRuns + opts.finalRuns;
   const singlePhase = slots.length * pool * opts.coarseRuns;

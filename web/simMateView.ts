@@ -99,7 +99,8 @@ export function mateControlsHtml(init: MateControlsInit): string {
     <div class="rm-note">
       靶子 = <b>不还手的木桩 ×3</b>（不放战法、不普攻）——与 L2 同一个靶子，所以两层的数字可以直接比。<br />
       <b>L3 搜的是武将、不搜战法</b>：<b>匹配位的战法槽会被清空</b>（战法归 L2 配），候选武将按「等级沿用该位、加点清零、
-      兵种取本体、不带宝物 / 特性」进场；未勾选的将（核心等）原样保留。<br />
+      兵种取本体、不带宝物 / 特性」进场；未勾选的将（核心等）原样保留。候选池 = 上架池 − 队内已上阵 −
+      <b>与固定将互斥的</b>（引擎配队规则：赵云 ↔ SP赵云、姜维 ↔ SP姜维 不可同队）。<br />
       流程 = ${
         pairMode
           ? `① <b>成对评估</b>（勾了 2 个队友位）：先跑一圈单挂拿「搭子基准」（每个位前 ${init.pairCarriers} 名），
@@ -270,10 +271,40 @@ function finalsHtml(result: MateSimResult): string {
   </div>`;
 }
 
+/**
+ * 「配队规则」相关的三条提示（互斥剔除 / 当前配置违规 / 真跑异常）——
+ * **单独抽出**：没有决赛结果时（例如整队都违反互斥）整个 ④ 段不能消失，否则最该看到提示的时候反而空白。
+ */
+function guardNotesHtml(result: MateSimResult): string {
+  return `<li><b>同队互斥已剔掉</b>：引擎规定同「互斥组」的武将不可同队（现只有
+        <b>赵云 ↔ SP赵云</b>、<b>姜维 ↔ SP姜维</b>；其余同名武将如关羽蜀/魏可同队）。候选池里与「不参与匹配的将」
+        互斥的武将已剔除${result.poolSkippedMutual ? `（本次 ${result.poolSkippedMutual} 个）` : ''}；成对 / 组合里撞组的也会被跳过${
+    result.skippedIllegal ? `（本次跳过 ${result.skippedIllegal} 项）` : ''
+  } —— 不会让跑批中途抛「配队非法」。</li>${
+    result.baselineIllegal
+      ? `<li><span class="rm-down"><b>当前配置本身违反互斥规则</b>（如同时上了赵云与 SP赵云）→ 对照基线没跑；
+              请先在左栏把冲突的将改掉，再重新匹配。</span></li>`
+      : ''
+  }${
+    result.errors.length
+      ? `<li><span class="rm-down"><b>真跑里出现过异常</b>：${result.errors.map(esc).join('；')} —— 已跳过出错的项，但建议把这条报给我。</span></li>`
+      : ''
+  }`;
+}
+
 /** ④ 口径与提示：木桩不还手 / 截断告警 / 3 场噪声 / 榜首显著性 / 对照基线 */
 function notesHtml(result: MateSimResult): string {
+  const guards = guardNotesHtml(result);
   const best = result.finals[0];
-  if (!best) return '';
+  if (!best) {
+    return `<div class="rm-sim-section rm-sim-verdict">
+    <h3>④ 口径与提示</h3>
+    <ul class="rm-sim-list">
+      <li><span class="rm-down">没有评估出任何合法组合</span>（候选池为空、候选全部与队内互斥、或当前配置本身就违规）。</li>
+      ${guards}
+    </ul>
+  </div>`;
+  }
   const worstBias = result.finals.reduce((a, b) => (Math.abs(a.coarseBias) > Math.abs(b.coarseBias) ? a : b), result.finals[0]);
   const cv = best.mean ? best.sd / best.mean : 0;
   const second = result.finals[1];
@@ -317,6 +348,7 @@ function notesHtml(result: MateSimResult): string {
              想看更全就把「配对基准」调大（场次成正比）。`
           : '这次只勾了 1 个队友位（单槽粗筛）；勾 2 个位会切成成对评估。'
       }</li>
+      ${guards}
     </ul>
   </div>`;
 }
@@ -326,7 +358,9 @@ export function mateResultHtml(result: MateSimResult): string {
   const head = `<div class="rm-sim-sum">
     <span>参与匹配 <b>${esc(result.matchLabel || '（无队友位）')}</b></span>
     <span>排序口径 <b>核心将·${esc(result.coreLabel)}</b></span>
-    <span>候选武将 <b>${result.candidateCount}</b> 个<span class="rm-dim">（${esc(result.poolLabel)}，排除队内已上阵 ${result.candidateSkipped}）</span></span>
+    <span>候选武将 <b>${result.candidateCount}</b> 个<span class="rm-dim">（${esc(result.poolLabel)}，排除队内已上阵 ${result.candidateSkipped}${
+      result.poolSkippedMutual ? `，互斥剔除 ${result.poolSkippedMutual}` : ''
+    }）</span></span>
     <span>${
       result.groups[0]?.mode === 'pair' ? '成对评估' : '单槽粗筛'
     } <b>${result.groups[0]?.rows.length ?? 0}</b> 个选项</span>
