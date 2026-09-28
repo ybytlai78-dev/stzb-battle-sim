@@ -14,7 +14,7 @@ import { DUMMY_TROOPS_DEFAULT } from '../simExpectation';
 import { LEARNABLE_SKILL_IDS, SKILL_SLOTS, defaultCfg, type ViewCfg } from '../teamConfig';
 import { browserTables } from '../teamScanBrowser';
 import { validateScan, type ScanJson } from '../teamScan';
-import { PLAN_POSITIONS, normalizePlan, type AdvisorPlan } from './types';
+import { PLAN_POSITIONS, normalizePlan, type AdvisorPlan, type ProposedPlan, type ToolCallRecord } from './types';
 
 export interface PlanIssue {
   /** 给 AI 自纠用的机器码（unknown_hero / duplicate_skill / mutual_exclusion / main_skill_in_slot / slot-position …） */
@@ -150,4 +150,77 @@ export function validateAdvisorPlan(plan: AdvisorPlan): PlanVerdict {
   for (const issue of scan.issues) if (issue.level === 'error') errors.push({ code: issue.rule, message: issue.message, slotIndex: issue.slot });
 
   return { ok: errors.length === 0, errors, normalized };
+}
+
+// ─────────────────────────── 关 2 · 数字溯源 ───────────────────────────
+
+/** 相对容差（0.5%）：防止「26,500 写成 2.65 万」被误杀 */
+export const TOLERANCE_REL = 0.005;
+/** 绝对容差（1）：小数舍入不算撒谎，但 26,500 说成 31,000 混不过去 */
+export const TOLERANCE_ABS = 1;
+
+export function withinTolerance(claimed: number, actual: number): boolean {
+  return Math.abs(claimed - actual) <= Math.max(TOLERANCE_REL * Math.abs(actual), TOLERANCE_ABS);
+}
+
+/** 深度遍历工具明细里的全部数字（供溯源比对；纯数字字符串也算） */
+export function collectNumbers(data: unknown): number[] {
+  const out: number[] = [];
+  const walk = (v: unknown): void => {
+    if (typeof v === 'number') {
+      if (Number.isFinite(v)) out.push(v);
+    } else if (typeof v === 'string') {
+      const t = v.trim();
+      if (/^-?\d+(?:\.\d+)?$/.test(t)) out.push(Number(t));
+    } else if (Array.isArray(v)) {
+      v.forEach(walk);
+    } else if (v && typeof v === 'object') {
+      Object.values(v as Record<string, unknown>).forEach(walk);
+    }
+  };
+  walk(data);
+  return out;
+}
+
+export interface ClaimFailure {
+  value: number;
+  evidenceId: string;
+  reason: string;
+}
+
+/**
+ * 核对回答里的数字引用：格式 `数字[[evidenceId]]`（系统提示词写死了这个格式）。
+ * `evidenceId` 必须在本轮 trace 里，且数字要在**那次工具返回的明细**里找得到。
+ */
+export function verifyClaims(answer: string, trace: ToolCallRecord[]): { ok: boolean; failures: ClaimFailure[] } {
+  const failures: ClaimFailure[] = [];
+  const re = /(-?\d[\d,]*(?:\.\d+)?)\s*\[\[([^\]]+)\]\]/g;
+  for (const m of answer.matchAll(re)) {
+    const value = Number(m[1].replace(/,/g, ''));
+    const id = m[2].trim();
+    const hit = trace.find((t) => t.evidenceId === id);
+    if (!hit) {
+      failures.push({ value, evidenceId: id, reason: 'evidenceId 不存在于本轮 trace' });
+      continue;
+    }
+    if (!collectNumbers(hit.data).some((n) => withinTolerance(value, n))) {
+      failures.push({ value, evidenceId: id, reason: '该次工具返回里找不到这个数字' });
+    }
+  }
+  return { ok: failures.length === 0, failures };
+}
+
+/** 方案自带的证据引用同样要核：一个证据都不带的方案 = 未验证（没跑过的方案不许应用） */
+export function verifyPlanEvidence(plan: ProposedPlan, trace: ToolCallRecord[]): { ok: boolean; reason?: string } {
+  if (!plan.evidenceIds.length) return { ok: false, reason: '方案未附实测依据（evidenceIds 为空）' };
+  const missing = plan.evidenceIds.filter((id) => !trace.some((t) => t.evidenceId === id));
+  return missing.length ? { ok: false, reason: `方案引用的证据不存在：${missing.join('、')}` } : { ok: true };
+}
+
+/** 三道关缺一不可（关 3 未接入时 `recomputed: false` → 应用保持禁用，不假装通过） */
+export function decideApply(v: { legal: boolean; verified: boolean; recomputed: boolean }): { enabled: boolean; reason?: string } {
+  if (!v.legal) return { enabled: false, reason: '方案不合法（见错误清单）' };
+  if (!v.verified) return { enabled: false, reason: '有数字或方案依据无法追溯（标「未验证」）' };
+  if (!v.recomputed) return { enabled: false, reason: '标准口径独立复算未接入（实施计划 Task 5）' };
+  return { enabled: true };
 }
