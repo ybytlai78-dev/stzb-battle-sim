@@ -3,7 +3,7 @@
 > **活跃工具线（2026-09-22 起）**：伤害分析工具 L1~L4 —— 单次伤害数学模型 / **伤害期望模型（2026-09-28 起 = 真引擎模拟测评：不还手木桩靶子 + 槽位级参与匹配 + 战法组合榜单 + 自适应加跑/并列标记 + 决赛排行）** / **组合优化（2026-09-28 起拆成两半：L2 优化战法 = 空战法槽；L3 优化武将 = 队友位当那个空槽、勾 2 个位按成对组合粗筛、候选先剔同队互斥、候选可带着该位已配战法进场）** / 实战胜率批量模拟。
 > 独立页（`damage-model.html`、`round-model.html`、**`optimize.html`（L2/L3 双模式页：左栏配置共用并同步，只换右侧筛选栏）**、`optimizer.html`（旧的解析口径组合优化器，保留）、`battle-sim.html`）**未并入主站**；
 > 口径与待办见 **`docs/会话交接-伤害分析工具.md`**（新会话接活请先读它）；L2 模拟测评的实跑报告见 **`docs/L2模拟期望测评报告.md`**。
-> **AI 配将顾问（2026-09-29 接入主站，仅本地不部署）**：顶栏第 7 个入口「AI 顾问」→ 右侧抽屉（`web/advisor/view.ts` + `web/advisor.css` + `web/advisorHost.ts` 写回配将区）。核心在 `web/advisor/*`（类型 / 校验门三关 / **11 个工具，含 L2 `optimize_skills` 与 L3 `optimize_mates`** / 传输 / 对话循环 / **跑批缓存**）；纪律 = **AI 不下场算数**（数字只来自工具返回，方案卡显示的是关 3 标准口径复算值）；**评测**分两层：离线确定性在 `tests/advisor_eval.test.ts`（用例目录 `web/advisor/evalCases.ts`），真模型跑分 `ADVISOR_KEY=sk-xxx npx tsx scripts/advisor_eval.mts`（出记分卡到 `docs/顾问评测记分卡-*.md`）；口径与落地记录见 **`docs/AI配将顾问-设计.md`**，任务分解见 `docs/AI配将顾问-实施计划.md`；独立实验页 `advisor-lab.html` 保留。
+> **AI 配将顾问（2026-09-29 接入主站，仅本地不部署）**：顶栏第 7 个入口「AI 顾问」→ 右侧抽屉（`web/advisor/view.ts` + `web/advisor.css` + `web/advisorHost.ts` 写回配将区）。核心在 `web/advisor/*`（类型 / 校验门三关 / **12 个工具，含 L2 `optimize_skills`、L3 `optimize_mates`、交替搜索 `optimize_both`** / 传输 / 对话循环 / 跑批缓存 / 一行轨迹）；纪律 = **AI 不下场算数**（数字只来自工具返回，方案卡显示的是关 3 标准口径复算值）；**界面口径**：工具调用压成一行、文案中文（工具中文名与 `TraceLine` 在 `web/advisor/trace.ts`）；**评测**分两层：离线确定性在 `tests/advisor_eval.test.ts`（用例目录 `web/advisor/evalCases.ts`），真模型跑分 `ADVISOR_KEY=sk-xxx npx tsx scripts/advisor_eval.mts`（出记分卡到 `docs/顾问评测记分卡-*.md`）；口径与落地记录见 **`docs/AI配将顾问-设计.md`**，任务分解见 `docs/AI配将顾问-实施计划.md`；独立实验页 `advisor-lab.html` 保留。
 
 本文件为 Claude Code 在本仓库工作时提供指引。
 
@@ -88,6 +88,17 @@ npx tsc --noEmit                    # 类型检查（strict）
 本将每次行动开始先结算准备槽 —— `left > 1` 则 −1 继续准备，`left === 1` 则 `prepare_end` 释放并从槽内移除；
 随后逐槽判定主动战法，**准备中的战法与「本回合刚释放」的战法跳过判定，其余（瞬发 / 其他准备战法）照常判定**。
 例：双准备 A/B → 第 1 回合 A 成功 / B 失败 → 第 2 回合释放 A 并继续判 B（B 成功后登记自己的槽）→ 第 3 回合释放 B。
+
+**被动判定顺序（用户口径）**：同优先级（同为被动）看**战法顺序** —— 按槽位顺序逐槽结算，槽 1（主战法）先判定、装配战法按添加顺序
+（与 `web/teamEditor.ts` 的「同类型内主战法先判定、装配战法按添加顺序」一致）；**每槽内**先 `output`（`timing:'round_start'` 段，`battle_start` 段只在准备阶段跑一次）
+再该槽的 `roundStartRepeat`。典型：孙策【主·霸王渡江】（槽 1·`roundStartRepeat` 三连击）先判定、【击势】（槽 2·`round_start` 挂增伤）后判定
+→ **主战法吃不到击势的增伤/无视防御**（击势只惠及同一行动内其后的普攻 / 主动 / 追击）。
+⚠️ 实现上必须是**一趟按 `passiveSkillIds` 顺序**的循环（旧实现是「全部 round_start 段 → 全部 roundStartRepeat 段」两趟，跨槽会错序）。
+「每回合行动时恢复 N 次」（`recoverEachRound`，胜敌益强）仍是该循环之后单独结算（自身恢复，与其他被动的增减伤无交互）。
+
+**行动中施加的状态递减（用户口径 2026-09-20）**：第 2 组 = 控制 / 属性 / **增减伤 / 无视防御**（`NEXT_ACT_TICK_TYPES`）
+→ 携带者**下次行动开始时**递减、再下一次行动开始时移除（`duration 1` 行动中给自己挂 = 只覆盖本次行动）；
+第 1 组（DoT / 治愈）与其余行动计数型仍「携带者行动结束后递减」。击势的增伤与无视防御因此**同寿**（都是「到下次行动前」）。
 
 同速站位先手：前锋 > 中军 > 大营。带 `priorityRounds`（先驱突击）的单位优先行动：回合内先分组按速度排序（优先组先、其余组后）。
 
