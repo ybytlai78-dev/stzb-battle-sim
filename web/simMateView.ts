@@ -6,6 +6,7 @@
 import { fmt } from './roundChart';
 import { FINAL_RUNS_MIN } from './simExpectation';
 import type { MateProgress, MateSimResult } from './simMate';
+import { heroMainSkillName } from './simMate';
 
 const esc = (s: string): string => s.replace(/[&<>"]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[m] ?? m));
 const pct = (v: number, digits = 1): string => `${v >= 0 ? '+' : ''}${(v * 100).toFixed(digits)}%`;
@@ -22,6 +23,12 @@ export interface MateControlsInit {
   seed: number;
   swapSides: boolean;
   includeOffline: boolean;
+  /** 候选进场带不带该位已配战法（`keep` 缺省 / `clear` 白板） */
+  slotSkills: 'keep' | 'clear';
+  /** 匹配位现在已配的战法名（每组一个；用来提示「白板进场」与显示本次基准） */
+  baseSkills: string[][];
+  /** 有 L2 结果时给一个「把 L2 榜首那套战法填进左栏」的按钮（两步衔接的反向入口） */
+  l2BestLabel?: string;
   /** 候选池规模（上架 / 含下架），写进提示文案 */
   poolSizes: { listed: number; all: number };
   /** 三个位：名字 + 站位 + 是否核心 + 可否参与匹配（非核心位） */
@@ -67,7 +74,16 @@ export function mateControlsHtml(init: MateControlsInit): string {
         <option value="listed" ${init.includeOffline ? '' : 'selected'}>上架武将（${init.poolSizes.listed}）</option>
         <option value="all" ${init.includeOffline ? 'selected' : ''}>上架 + 下架（${init.poolSizes.all}）</option>
       </select></label>
+      <label>候选带入战法<select id="mt-slotskills">
+        <option value="keep" ${init.slotSkills === 'keep' ? 'selected' : ''}>保留该位已配战法</option>
+        <option value="clear" ${init.slotSkills === 'clear' ? 'selected' : ''}>清空（白板进场）</option>
+      </select></label>
       <label class="rm-sim-check"><input id="mt-swap" type="checkbox" ${init.swapSides ? 'checked' : ''} /> 交换场地</label>
+      ${
+        init.l2BestLabel
+          ? `<button class="rm-btn rm-btn-ghost" type="button" id="mt-usel2" title="把 L2 跑出来的榜首战法填进左栏：候选就带着这套战法被评估">⇦ 填入 L2 榜首战法</button>`
+          : ''
+      }
       <button class="rm-btn rm-sim-run" type="button" id="mt-run">开始匹配队友</button>
     </div>
     <div class="rm-simscope">
@@ -98,9 +114,18 @@ export function mateControlsHtml(init: MateControlsInit): string {
     </div>
     <div class="rm-note">
       靶子 = <b>不还手的木桩 ×3</b>（不放战法、不普攻）——与 L2 同一个靶子，所以两层的数字可以直接比。<br />
-      <b>L3 搜的是武将、不搜战法</b>：<b>匹配位的战法槽会被清空</b>（战法归 L2 配），候选武将按「等级沿用该位、加点清零、
-      兵种取本体、不带宝物 / 特性」进场；未勾选的将（核心等）原样保留。候选池 = 上架池 − 队内已上阵 −
+      <b>L3 搜的是武将、不搜战法</b>：候选武将按「等级沿用该位、加点清零、兵种取本体、不带宝物 / 特性」进场；
+      战法看上面的「<b>候选带入战法</b>」——<b>保留</b>（缺省）= 候选**带着该位现在配的那套战法**被评估
+      （先把两个队友位配好战法、或先在 L2 跑一轮让它填，再回来跑 L3：这样「靠战法吃饭的辅助」才不会被低估）；
+      <b>清空</b> = 候选白板进场，只反映主战法与白板属性（战法留给 L2 那一步配）。未勾选的将（核心等）原样保留。
+      候选池 = 上架池 − 队内已上阵 −
       <b>与固定将互斥的</b>（引擎配队规则：赵云 ↔ SP赵云、姜维 ↔ SP姜维 不可同队）。<br />
+      ${
+        init.slotSkills === 'keep' && init.baseSkills.every((s) => s.length === 0)
+          ? `<span class="rm-down"><b>注意：两个队友位现在是空的 ⇒ 等于白板进场</b>，靠战法放大的辅助（曹纯 / 张辽 这类）会被低估 ——
+             先给这两个位配好战法（或先在 L2 跑一轮，把榜首那套「应用」到左栏），再回来匹配队友。</span><br />`
+          : ''
+      }
       流程 = ${
         pairMode
           ? `① <b>成对评估</b>（勾了 2 个队友位）：先跑一圈单挂拿「搭子基准」（每个位前 ${init.pairCarriers} 名），
@@ -135,6 +160,7 @@ function groupHtml(result: MateSimResult): string {
             <td>${r.kept ? '<span class="rm-strong">★ </span>' : ''}${esc(r.label)}${
               r.from === 'pair' ? '' : '<span class="rm-dim">（单挂）</span>'
             }</td>
+            <td class="rm-dim">${r.picks.map((p) => esc(heroMainSkillName(p.heroId))).join(' + ')}</td>
             <td class="rm-num rm-dim">${r.damages.map((d) => fmt(d)).join(' / ')}</td>
             <td class="rm-num rm-strong">${fmt(r.meanCore)}</td>
             <td class="rm-num rm-dim">${fmt(r.meanTotal)}</td>
@@ -153,7 +179,7 @@ function groupHtml(result: MateSimResult): string {
       } 个</span>
         </div>
         <table class="rm-table">
-          <thead><tr><th>名次</th><th>${g.mode === 'pair' ? '武将组合（两个位一起）' : '候选武将'}</th><th>逐场（核心将伤害）</th><th>核心将·整局</th><th>全队·整局</th><th>核心将·前三</th><th></th></tr></thead>
+          <thead><tr><th>名次</th><th>${g.mode === 'pair' ? '武将组合（两个位一起）' : '候选武将'}</th><th>主战法</th><th>逐场（核心将伤害）</th><th>核心将·整局</th><th>全队·整局</th><th>核心将·前三</th><th></th></tr></thead>
           <tbody>${rows}</tbody>
         </table>
         ${g.rows.length > 12 ? `<div class="rm-note">只显示前 12 名，其余 ${g.rows.length - 12} 个已淘汰。</div>` : ''}
@@ -164,7 +190,13 @@ function groupHtml(result: MateSimResult): string {
     result.groups[0]?.mode === 'pair'
       ? `两个队友位按**成对组合**评估（先跑单挂拿搭子基准，再用基准 × 全部候选配对；带满搭档才见效的武将不会被单挂成绩误杀）`
       : `单槽粗筛（每个候选武将在该位真跑 ${result.options.coarseRuns} 场）`
-  } × ${result.options.coarseRuns} 场（排序列 = 核心将「${esc(result.coreLabel)}」伤害）</h3>${blocks}</div>`;
+  } × ${result.options.coarseRuns} 场（排序列 = 核心将「${esc(result.coreLabel)}」伤害${
+    result.slotSkills === 'keep' && result.baseSkillNames.some((s) => s.length)
+      ? `；候选带着该位已配战法进场：${result.baseSkillNames
+          .map((s, i) => `${esc(result.groups[0]?.unitNames[i] ?? '')}${s.length ? `·${s.map(esc).join('+')}` : '·空'}`)
+          .join(' ｜ ')}`
+      : '；候选白板进场（只算主战法）'
+  }）</h3>${blocks}</div>`;
 }
 
 /** ② 组合粗筛榜单：整队武将组合 + 3 场伤害，前 N 套进决赛 */
@@ -316,6 +348,17 @@ function notesHtml(result: MateSimResult): string {
     <ul class="rm-sim-list">
       <li><b>这一层搜的是武将</b>：参与匹配的队友位 = <b>${esc(result.matchLabel)}</b>，
         其余将（核心等）原样保留、一位都不动；<b>匹配位的战法槽在试跑前已清空</b>（战法由 L2 那一步配）。</li>
+      <li><b>候选进场带什么战法</b>：${
+        result.slotSkills === 'keep'
+          ? `本次 = <b>保留该位已配战法</b>，候选是<b>带着这套</b>被评估的：${result.baseSkillNames
+              .map((s, i) => `${esc(result.groups[0]?.unitNames[i] ?? `位${i + 1}`)}·${s.length ? s.map(esc).join('+') : '<b>空</b>'}`)
+              .join(' ｜ ')}。${
+              result.baseSkillNames.every((s) => s.length === 0)
+                ? '<span class="rm-down">两位都空着 ⇒ 等于白板进场：只算主战法 + 白板属性，靠战法放大的辅助（曹纯 / 张辽 这类）会被低估。先去 L2 跑一轮、用「填入 L2 榜首战法」，或手动给这两个位配好战法，再回来匹配。</span>'
+                : '（想换基准就改左栏这两格的战法，或换「清空（白板进场）」口径重跑。）'
+            }`
+          : '本次 = <b>清空（白板进场）</b>：候选只带主战法与白板属性，战法留给 L2 那一步配 —— 这个口径会低估「靠战法吃饭」的辅助。'
+      }</li>
       <li><b>靶子</b>：${esc(result.dummyLabel)}，<b>不还手</b>（不放战法、不普攻）——与 L2 同一个靶子，
         所以 L3 选完队友切 L2 时数字可以直接比；代价是<b>防御 / 控制型队友的价值量不出来</b>（这是「伤害期望」口径的边界，
         胜率与防御体系看 L4）。</li>

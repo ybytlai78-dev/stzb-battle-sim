@@ -294,6 +294,12 @@ await evaluate(`document.querySelector('.rm-sim-verdict')?.scrollIntoView({ bloc
 await sleep(300);
 await shot('6b-l2-notes.png');
 
+// ⑥b 同一会话里 L2 已跑过 → L3 面板应出现「⇦ 填入 L2 榜首战法」（两步衔接的反向入口）
+await evaluate(`document.querySelector('.op-mode[data-mode="l3"]').click()`);
+await sleep(300);
+const l2Bridge = await evaluate(`JSON.stringify({ useL2: Boolean(document.querySelector('#mt-usel2')) })`);
+console.log('state-6b-l2-bridge', l2Bridge);
+
 // ⑦ 顺带看一眼被改过的另一个页面（round-model.html）：槽位级勾选与「决赛上限」控件在，且不报错
 await goto(url.replace(/optimize\.html.*$/, 'round-model.html'));
 const roundModel = await evaluate(`JSON.stringify({
@@ -306,6 +312,63 @@ const roundModel = await evaluate(`JSON.stringify({
 console.log('state-7-round-model', roundModel);
 await shot('7-round-model-slots.png');
 
+// ⑧ 回归（用户 2026-09-29）：「候选带入战法」口径 —— 先给两个队友位配好战法，再跑 L3，
+//    结果里要写明本次基准战法、① 表要有「主战法」列，并且给一个「⇦ 填入 L2 榜首战法」的入口。
+await goto(url);
+await evaluate(`(() => {
+  const set = (sel, v) => { const el = document.querySelector(sel); el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); };
+  set('[data-unit-hero="0"]', 'h704'); // 文鸯（核心）
+  set('[data-unit-hero="1"]', 'h498'); // 曹纯
+  set('[data-unit-hero="2"]', 'h27');  // 张辽
+  return 'ok';
+})()`);
+await sleep(300);
+await evaluate(`(() => {
+  const set = (sel, v) => { const el = document.querySelector(sel); el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); };
+  // 中军位：长兵方阵 + 疏数；前锋位：先声夺人 + 攻其不备（用户上一轮 L2 榜首那套）
+  set('[data-unit-skill="1-0"]', 'changbing_fangzhen'); set('[data-unit-skill="1-1"]', 'shushu');
+  set('[data-unit-skill="2-0"]', 'xiansheng_duoren'); set('[data-unit-skill="2-1"]', 'gongqi_bubei');
+  return 'ok';
+})()`);
+await sleep(300);
+await evaluate(`document.querySelector('.op-mode[data-mode="l3"]').click()`);
+await sleep(300);
+await evaluate(`(() => {
+  const set = (sel, v) => { const el = document.querySelector(sel); el.value = v; el.dispatchEvent(new Event('change', { bubbles: true })); };
+  set('#mt-coarse', '1'); set('#mt-keep', '10'); set('#mt-top', '8');
+  return 'ok';
+})()`);
+const slotSkillsBefore = await evaluate(`JSON.stringify({
+  mode: document.querySelector('#mt-slotskills')?.value ?? null,
+  note: (document.querySelector('.rm-note')?.textContent ?? '').includes('保留'),
+})`);
+console.log('state-8-before', slotSkillsBefore);
+await evaluate(`document.querySelector('#mt-run').click()`);
+for (let i = 0; i < 600; i += 1) {
+  const st = await evaluate(`document.querySelector('#op-panel').dataset.state`);
+  if (st === 'done' || st === 'error') {
+    console.log('l3 slot-skills run state =', st, `(${i} polls)`);
+    break;
+  }
+  await sleep(500);
+}
+await sleep(400);
+const slotSkills = await evaluate(`(() => {
+  const t = (document.querySelector('#op-result')?.textContent ?? '').replace(/\\s+/g, ' ');
+  const heads = Array.from(document.querySelectorAll('#op-result table thead tr')).map((tr) => tr.textContent.replace(/\\s+/g, ''));
+  return JSON.stringify({
+    hasMainSkillCol: heads.some((h) => h.includes('主战法')),
+    kitNote: t.includes('候选进场带什么战法') && t.includes('保留该位已配战法'),
+    kitNames: /长兵方阵|疏数|先声夺人/.test(t),
+    head: t.slice(0, 180),
+  });
+})()`);
+console.log('state-8-slot-skills', slotSkills);
+await shot('8-l3-slot-skills.png');
+await evaluate(`document.querySelector('#op-result .rm-sim-section')?.scrollIntoView({ block: 'start' })`);
+await sleep(300);
+await shot('8b-l3-main-skill-col.png');
+
 console.log(problems.length ? `PAGE PROBLEMS (${problems.length}):` : 'PAGE PROBLEMS: none');
 problems.slice(0, 10).forEach((p) => console.log(' -', p.slice(0, 300)));
 
@@ -314,6 +377,7 @@ child.kill();
 const s5 = JSON.parse(mutual);
 const s6 = JSON.parse(slotLevel);
 const s7 = JSON.parse(roundModel);
+const s8 = JSON.parse(slotSkills);
 const bad =
   problems.length > 0 ||
   s5.hasIllegalError ||
@@ -325,5 +389,10 @@ const bad =
   s7.slots !== 6 ||
   !s7.finalMax ||
   !s7.adaptive ||
-  !s7.groupTitles.some((t) => t.includes('排序口径'));
+  !s7.groupTitles.some((t) => t.includes('排序口径')) ||
+  JSON.parse(slotSkillsBefore).mode !== 'keep' ||
+  !JSON.parse(l2Bridge).useL2 ||
+  !s8.hasMainSkillCol ||
+  !s8.kitNote ||
+  !s8.kitNames;
 process.exit(bad ? 1 : 0);

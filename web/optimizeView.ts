@@ -25,6 +25,7 @@ import {
   estimateMateBattles,
   heroPoolBase,
   MAX_MATCH_UNITS,
+  skillName,
   mateSlots,
   runSimMateAsync,
   slotForHero,
@@ -110,6 +111,8 @@ function mountOptimizeInner(root: HTMLElement): void {
     seed: 20260922,
     swapSides: true,
     includeOffline: false,
+    /** 候选进场带不带该位已配战法（默认带：靠战法放大的辅助才不会被低估） */
+    slotSkills: 'keep' as 'keep' | 'clear',
     /** 勾选状态（空 = 用默认：参与匹配 = 非核心将的全部位，最多 2 个；核心位 = 自动识别） */
     uiMatchUnits: [] as number[],
     uiCoreUnits: [] as number[],
@@ -399,6 +402,9 @@ function mountOptimizeInner(root: HTMLElement): void {
       seed: l3.seed,
       swapSides: l3.swapSides,
       includeOffline: l3.includeOffline,
+      slotSkills: l3.slotSkills,
+      baseSkills: l3MatchUnits().map((u) => (cfg.slots[u]?.skillIds ?? []).map((id) => skillName(id))),
+      l2BestLabel: l2.result?.finals[0]?.label,
       poolSizes,
       units: cfg.slots.map((s, unit) => {
         const isCore = core.has(unit);
@@ -428,6 +434,7 @@ function mountOptimizeInner(root: HTMLElement): void {
       maxCombos: Math.max(1, Math.floor(Number(q<HTMLInputElement>('#mt-maxcombo')?.value) || l3.maxCombos)),
       dummyTroops: Math.max(500, Math.floor(Number(q<HTMLInputElement>('#mt-troops')?.value) || l3.dummyTroops)),
       includeOffline: q<HTMLSelectElement>('#mt-pool')?.value === 'all',
+      slotSkills: q<HTMLSelectElement>('#mt-slotskills')?.value === 'clear' ? 'clear' : 'keep',
       matchUnits: l3MatchUnits(),
       coreUnits: l3CoreUnits(),
     };
@@ -446,9 +453,10 @@ function mountOptimizeInner(root: HTMLElement): void {
     const seed = Math.max(1, Math.floor(Number(q<HTMLInputElement>('#mt-seed')?.value) || 20260922));
     const swapSides = Boolean(q<HTMLInputElement>('#mt-swap')?.checked);
     const includeOffline = q<HTMLSelectElement>('#mt-pool')?.value === 'all';
+    const slotSkills = (q<HTMLSelectElement>('#mt-slotskills')?.value === 'clear' ? 'clear' : 'keep') as 'keep' | 'clear';
     const finalInput = q<HTMLInputElement>('#mt-final');
     if (finalInput) finalInput.value = String(finalRuns);
-    Object.assign(l3, { coarseRuns, finalRuns, unitKeep, pairCarriers, coarseTop, maxCombos, rankBy, dummyTroops, seed, swapSides, includeOffline });
+    Object.assign(l3, { coarseRuns, finalRuns, unitKeep, pairCarriers, coarseTop, maxCombos, rankBy, dummyTroops, seed, swapSides, includeOffline, slotSkills });
     return {
       coarseRuns,
       finalRuns,
@@ -459,6 +467,7 @@ function mountOptimizeInner(root: HTMLElement): void {
       rankBy,
       dummyTroops,
       includeOffline,
+      slotSkills,
       matchUnits: l3MatchUnits(),
       coreUnits: l3CoreUnits(),
       baseSeed: seed,
@@ -589,14 +598,40 @@ function mountOptimizeInner(root: HTMLElement): void {
     refreshAfterApply();
   }
 
-  /** 应用 L3 的队友：武将写进对应位 + **该位战法槽清空**（战法留给 L2 配） */
+  /**
+   * 应用 L3 的队友：武将写进对应位。战法按本次口径走 ——
+   * `keep`（缺省）= 该位战法**保留**（评估就是按「带这套」算的，应用后数字才对得上）；
+   * `clear` = 清空该位战法槽（战法留给 L2 那一步配）。
+   */
   function applyL3Picks(index: number): void {
     const row = l3.result?.finals[index];
     if (!row) return;
+    const keepSkills = (l3.result?.slotSkills ?? l3.slotSkills) === 'keep';
     for (const p of row.picks) {
-      cfg.slots[p.unit] = slotForHero(cfg, p.unit, p.heroId);
+      cfg.slots[p.unit] = slotForHero(cfg, p.unit, p.heroId, keepSkills);
     }
-    l3.note = `已应用队友「${row.label}」（该位战法槽已清空，接着去 L2 配战法）`;
+    l3.note = keepSkills
+      ? `已应用队友「${row.label}」（该位战法原样保留；要交给 L2 重配就先在左栏把这几格清空）`
+      : `已应用队友「${row.label}」（该位战法槽已清空，接着去 L2 配战法）`;
+    l2.note = '';
+    refreshAfterApply();
+  }
+
+  /**
+   * 把 L2 榜首那套战法填进左栏（用户 2026-09-29 的「两步衔接」反向入口）：
+   * L2 先给现有阵容配出战法 → 填进来 → 回 L3 时候选就带着这套战法被评估（辅助不再被低估）。
+   */
+  function applyL2BestToConfig(): void {
+    const best = l2.result?.finals[0];
+    if (!best) return;
+    for (const p of best.picks) {
+      const slot = cfg.slots[p.unit];
+      if (!slot) continue;
+      const ids = [...slot.skillIds];
+      ids[p.slot] = p.skillId;
+      slot.skillIds = ids;
+    }
+    l3.note = `已把 L2 榜首那套战法（${best.label}）填进左栏 —— 现在重跑 L3，候选就是「带着这套战法」被评估的`;
     l2.note = '';
     refreshAfterApply();
   }
@@ -676,6 +711,7 @@ function mountOptimizeInner(root: HTMLElement): void {
     const id = target?.id;
     if (id === 'rm-sim-run') void runL2();
     else if (id === 'mt-run') void runL3();
+    else if (id === 'mt-usel2') applyL2BestToConfig();
     else if (target?.dataset?.simSlots === 'all' || target?.dataset?.simSlots === 'none') {
       // 「参与匹配的槽位」全选 / 清空（清空 = 不勾任何槽 → 回落到全部空槽，避免跑出 0 场）
       const all = target.dataset.simSlots === 'all';

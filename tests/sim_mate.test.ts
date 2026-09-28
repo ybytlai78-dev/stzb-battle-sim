@@ -377,6 +377,8 @@ describe('⑤ 视图 HTML（纯函数）', () => {
       seed: 20260922,
       swapSides: true,
       includeOffline: false,
+      slotSkills: 'keep',
+      baseSkills: [[]],
       poolSizes: { listed: 120, all: 160 },
       units: [
         { unit: 0, name: '甲', position: '大营', isCore: true, canMatch: false },
@@ -536,10 +538,10 @@ describe('⑥ 页面（optimize.html）：L2 / L3 共用左栏 + 两步衔接', 
     expect(root.querySelector('#rm-sim-coarse')).toBeTruthy();
   });
 
-  it('L3 跑完 → 应用队友 → 左栏同步换将 + 该位战法槽清空 → 切 L2 配战法', async () => {
+  it('L3 跑完 → 应用队友 → 左栏同步换将；战法按口径保留（缺省）或清空', async () => {
     const root = mountPage();
 
-    // 先给两个队友位各配一个战法，验证「应用队友后该位战法槽清空」
+    // 先给两个队友位各配一个战法，验证「候选带入战法」与「应用后战法怎么处理」
     for (const unit of [1, 2]) {
       const sel = root.querySelector<HTMLSelectElement>(`[data-unit-skill="${unit}-0"]`)!;
       sel.value = 'lianzhan';
@@ -557,6 +559,9 @@ describe('⑥ 页面（optimize.html）：L2 / L3 共用左栏 + 两步衔接', 
     checkedBoxes[1].dispatchEvent(new Event('change'));
     shrinkL3Controls(root);
     expect(root.textContent).toContain('单槽粗筛');
+    // 缺省口径 = 候选带着该位已配战法进场（用户 2026-09-29）
+    expect(root.querySelector<HTMLSelectElement>('#mt-slotskills')!.value).toBe('keep');
+    expect(root.textContent).toContain('保留该位已配战法');
 
     root.querySelector<HTMLButtonElement>('#mt-run')!.click();
     const panel = root.querySelector<HTMLElement>('#op-panel')!;
@@ -565,6 +570,8 @@ describe('⑥ 页面（optimize.html）：L2 / L3 共用左栏 + 两步衔接', 
     const resultText = root.querySelector<HTMLElement>('#op-result')!.textContent ?? '';
     expect(resultText).toContain('决赛排行');
     expect(resultText).toContain('真跑');
+    expect(resultText).toContain('候选进场带什么战法');
+    expect(resultText).toContain('连战'); // 该位已配的战法名（带入基准）
     expect(resultText).not.toContain('undefined');
 
     // 应用榜首队友
@@ -573,20 +580,30 @@ describe('⑥ 页面（optimize.html）：L2 / L3 共用左栏 + 两步衔接', 
     const appliedLabel = applyBtn.closest('tr')!.textContent ?? '';
     applyBtn.click();
 
-    // 左栏同步：该位武将换成应用的那位，且战法槽被清空
-    const matchedUnit = [1, 2].find((u) => root.querySelector<HTMLSelectElement>(`[data-unit-skill="${u}-0"]`)!.value === '')!;
-    expect([1, 2]).toContain(matchedUnit);
-    const heroSel = root.querySelector<HTMLSelectElement>(`[data-unit-hero="${matchedUnit}"]`)!;
+    // 左栏同步：该位武将换成应用的那位；缺省口径下**战法保留**（评估就是按「带这套」算的）
+    const keptUnit = [1, 2].find((u) => root.querySelector<HTMLSelectElement>(`[data-unit-skill="${u}-0"]`)!.value === 'lianzhan')!;
+    expect([1, 2]).toContain(keptUnit);
+    const heroSel = root.querySelector<HTMLSelectElement>(`[data-unit-hero="${keptUnit}"]`)!;
     expect(heroSel.value).not.toBe('');
     expect(appliedLabel).toContain(HERO_RECORDS[heroSel.value].name); // 应用行 = 左栏现在的武将
     expect(root.textContent).toContain('已应用队友');
 
-    // 两步衔接：切到 L2，左栏是刚应用的队伍，L2 参数条就绪
+    // 切到「清空（白板进场）」口径：同样的应用动作会把该位战法清掉（交给 L2 配）
+    root.querySelector<HTMLSelectElement>('#mt-slotskills')!.value = 'clear';
+    root.querySelector<HTMLSelectElement>('#mt-slotskills')!.dispatchEvent(new Event('change'));
+    root.querySelector<HTMLButtonElement>('#mt-run')!.click();
+    expect(await waitState(panel, 'done')).toBe('done');
+    expect(root.querySelector<HTMLElement>('#op-result')!.textContent).toContain('白板进场');
+    root.querySelector<HTMLButtonElement>('#op-result [data-mate-apply]')!.click();
+    const clearedUnit = [1, 2].find((u) => root.querySelector<HTMLSelectElement>(`[data-unit-skill="${u}-0"]`)!.value === '')!;
+    expect([1, 2]).toContain(clearedUnit);
+
+    // 两步衔接：切到 L2，左栏是刚应用的队伍（第二次应用的武将），L2 参数条就绪
     root.querySelector<HTMLButtonElement>('#op-go-l2')!.click();
     expect(root.querySelector('#rm-sim-coarse')).toBeTruthy();
-    expect(root.querySelector<HTMLSelectElement>(`[data-unit-hero="${matchedUnit}"]`)!.value).toBe(heroSel.value);
+    expect(root.querySelector<HTMLSelectElement>(`[data-unit-hero="${clearedUnit}"]`)!.value).not.toBe('');
     expect(root.textContent).toContain('已应用队友');
-  });
+  }, 30000); // 这一条要跑两轮 L3（keep / clear 各一次）→ 全量并发下放宽超时（同 tests/team_scan.test.ts 的做法）
 
   it('L2 模式也能跑（零空槽：3 + 20 场）并在结果里给「应用」', async () => {
     const root = mountPage();
@@ -613,7 +630,74 @@ describe('⑥ 页面（optimize.html）：L2 / L3 共用左栏 + 两步衔接', 
   });
 });
 
-describe('⑦ 同队互斥（引擎配队规则）：候选与组合先剔掉，不让跑批中途抛「配队非法」', () => {
+describe('⑦ 候选带入战法（用户 2026-09-29：辅助不该只按主战法排）', () => {
+  const KIT_A = ['lianzhan', 'yuzhan_yuyong']; // 增益类：连战 / 愈战愈勇（不打伤害）
+  const KIT_B = ['tujin', 'xianqu_tuji']; // 伤害类：突进 / 先驱突击
+
+  const withKit = (): ViewCfg => {
+    const cfg = baseCfg();
+    cfg.slots.forEach((s) => {
+      s.skillIds = [];
+    });
+    cfg.slots[1].skillIds = [...KIT_A];
+    cfg.slots[2].skillIds = [...KIT_B];
+    return cfg;
+  };
+
+  it('缺省 keep：候选**带着该位已配战法**进场（那套战法真的在打）', () => {
+    const cfg = withKit();
+    expect(MATE_SIM_DEFAULTS.slotSkills).toBe('keep');
+    const res = runSimMate(cfg, { ...FAST, matchUnits: [2], coreUnits: [0] });
+    expect(res.slotSkills).toBe('keep');
+    expect(res.baseSkillNames[0]).toEqual(['突进', '先驱突击']);
+    // 候选进场后该位战法还在（clear 口径下这里是空）
+    expect(withSlotHero(cfg, 2, POOL[0], true).slots[2].skillIds).toEqual(KIT_B);
+    // 该位战法的伤害确实进了结果（证明真跑带上了，而不是只写在文案里）
+    expect(res.finals.some((f) => f.bySkill.some((s) => s.name === '突进' || s.name === '先驱突击'))).toBe(true);
+  });
+
+  it('clear：白板进场（该位战法槽清空），与旧行为一致、可选', () => {
+    const cfg = withKit();
+    const res = runSimMate(cfg, { ...FAST, slotSkills: 'clear', matchUnits: [2], coreUnits: [0] });
+    expect(res.slotSkills).toBe('clear');
+    expect(res.baseSkillNames[0]).toEqual(['突进', '先驱突击']); // 仍如实上报「这个位配了什么」
+    expect(withSlotHero(cfg, 2, POOL[0], false).slots[2].skillIds).toEqual([]);
+    expect(res.finals.every((f) => f.bySkill.every((s) => s.name !== '突进' && s.name !== '先驱突击'))).toBe(true);
+  });
+
+  it('两种口径会给出不同的数（带战法 ≠ 白板）', () => {
+    const cfg = withKit();
+    const keep = runSimMate(cfg, { ...FAST, matchUnits: [2], coreUnits: [0] });
+    const clear = runSimMate(cfg, { ...FAST, slotSkills: 'clear', matchUnits: [2], coreUnits: [0] });
+    expect(keep.finals[0].mean).not.toBe(clear.finals[0].mean);
+    expect(keep.finals[0].mean).toBeGreaterThan(0);
+    expect(clear.finals[0].mean).toBeGreaterThan(0);
+  });
+
+  it('视图：① 表有「主战法」列；④ 口径提示写明带入战法 / 白板进场告警', () => {
+    const cfg = withKit();
+    const keepHtml = mateResultHtml(runSimMate(cfg, { ...FAST, matchUnits: [2], coreUnits: [0] }));
+    expect(keepHtml).toContain('主战法');
+    expect(keepHtml).toContain('候选进场带什么战法');
+    expect(keepHtml).toContain('保留该位已配战法');
+    expect(keepHtml).toContain('突进');
+    expect(keepHtml).not.toContain('undefined');
+
+    // 两个位都空着 + keep ⇒ 红字提示「等于白板进场，辅助会被低估」
+    const empty = baseCfg();
+    empty.slots.forEach((s) => {
+      s.skillIds = [];
+    });
+    const warn = mateResultHtml(runSimMate(empty, { ...FAST, matchUnits: [1], coreUnits: [0] }));
+    expect(warn).toContain('白板进场');
+    expect(warn).toContain('被低估');
+
+    const clearHtml = mateResultHtml(runSimMate(cfg, { ...FAST, slotSkills: 'clear', matchUnits: [2], coreUnits: [0] }));
+    expect(clearHtml).toContain('清空（白板进场）');
+  });
+});
+
+describe('⑧ 同队互斥（引擎配队规则）：候选与组合先剔掉，不让跑批中途抛「配队非法」', () => {
   const ZHAOYUN = 'zhaoyun';
   const SP_ZHAOYUN = 'sp_zhaoyun';
   const JIANGWEI = 'h74';

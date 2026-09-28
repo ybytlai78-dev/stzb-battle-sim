@@ -83,6 +83,14 @@ export interface MateSimOptions {
   candidateIds?: string[];
   /** 候选池是否含「下架武将」（主战法已实现但成长率未确认；缺省 false） */
   includeOffline: boolean;
+  /**
+   * **候选武将进场时带不带战法**（用户 2026-09-29 口径）：
+   * - `'keep'`（缺省）：**保留该位当前配置的战法**——你在左栏给这两个队友位配好的辅助套（或先跑一轮 L2 让 L2 填好的那套）
+   *   就当**所有候选的共同基准**：评估的是「这个位换上谁，带着这套战法能打出多少」。空槽仍是空槽。
+   * - `'clear'`：清空匹配位的战法槽（旧行为），候选**白板进场**——只反映主战法与白板属性，
+   *   靠战法放大的辅助会在这一层被低估（战法留给 L2 那一步配）。
+   */
+  slotSkills: 'keep' | 'clear';
   /** 木桩单只兵力（默认 150000，同 L2） */
   dummyTroops: number;
   /** 回合数（默认 8；页面跟随面板「回合数」） */
@@ -100,6 +108,7 @@ export const MATE_SIM_DEFAULTS: MateSimOptions = {
   maxCombos: 1000,
   rankBy: 'total',
   includeOffline: false,
+  slotSkills: 'keep',
   dummyTroops: DUMMY_TROOPS_DEFAULT,
   maxRounds: DEFAULT_ENV.maxRounds,
   baseSeed: DEFAULT_ENV.baseSeed,
@@ -123,6 +132,7 @@ function resolveOptions(opts: Partial<MateSimOptions> = {}): MateSimOptions {
     dummyTroops: Math.max(1, Math.floor(merged.dummyTroops)),
     maxRounds: Math.max(1, Math.floor(merged.maxRounds)),
     includeOffline: Boolean(merged.includeOffline),
+    slotSkills: merged.slotSkills === 'clear' ? 'clear' : 'keep',
   };
 }
 
@@ -192,8 +202,22 @@ export function heroName(id: string): string {
   return HERO_RECORDS[id]?.name ?? id;
 }
 
+/**
+ * 该武将的**主战法名**（页面「主战法」列用）——用户 2026-09-29 口径：候选进场时到底算了什么要看得到；
+ * 带战法口径下这是「主战法 + 该位已配战法」，清空口径下就只剩它。
+ */
+export function heroMainSkillName(id: string): string {
+  const rec = HERO_RECORDS[id] as { mainSkillName?: string; mainSkillId?: string } | undefined;
+  return rec?.mainSkillName ?? (rec?.mainSkillId ? skillName(rec.mainSkillId) : '—');
+}
+
 /** 候选武将进场时的槽位状态：等级沿用原槽位、加点清零、兵种取本体、战法槽清空（战法归 L2 配） */
-export function slotForHero(cfg: ViewCfg, unit: number, heroId: string): ViewCfg['slots'][number] {
+export function slotForHero(
+  cfg: ViewCfg,
+  unit: number,
+  heroId: string,
+  keepSkills = false
+): ViewCfg['slots'][number] {
   const prev = cfg.slots[unit];
   const rec = HERO_RECORDS[heroId];
   return {
@@ -202,7 +226,8 @@ export function slotForHero(cfg: ViewCfg, unit: number, heroId: string): ViewCfg
     addAttack: 0,
     addStrategy: 0,
     troopType: (rec?.troopType ?? prev?.troopType ?? 'infantry') as TroopType,
-    skillIds: [],
+    // keepSkills = 「候选带上该位已配战法」口径：战法是可学的，换将后跟着走（用户 2026-09-29）
+    skillIds: keepSkills ? [...(prev?.skillIds ?? [])] : [],
     // 宝物 / 兵系特性是上一位武将的配置，换将后不带过去（面板里可另配）
     traits: undefined,
     treasure: null,
@@ -210,18 +235,24 @@ export function slotForHero(cfg: ViewCfg, unit: number, heroId: string): ViewCfg
 }
 
 /** 换将（返回新 cfg；其余槽位原样保留，含未参与匹配的将的战法） */
-export function withSlotHero(cfg: ViewCfg, unit: number, heroId: string): ViewCfg {
+export function withSlotHero(cfg: ViewCfg, unit: number, heroId: string, keepSkills = false): ViewCfg {
   return {
     ...cfg,
     enemy: { ...cfg.enemy },
     manual: { ...cfg.manual },
-    slots: cfg.slots.map((s, i) => (i === unit ? slotForHero(cfg, unit, heroId) : { ...s, skillIds: [...s.skillIds] })),
+    slots: cfg.slots.map((s, i) =>
+      i === unit ? slotForHero(cfg, unit, heroId, keepSkills) : { ...s, skillIds: [...s.skillIds] }
+    ),
   };
 }
 
 /** 一次换多个位（成对 / 组合用） */
-export function withHeroPicks(cfg: ViewCfg, picks: Array<{ unit: number; heroId: string }>): ViewCfg {
-  return picks.reduce((acc, p) => withSlotHero(acc, p.unit, p.heroId), cfg);
+export function withHeroPicks(
+  cfg: ViewCfg,
+  picks: Array<{ unit: number; heroId: string }>,
+  keepSkills = false
+): ViewCfg {
+  return picks.reduce((acc, p) => withSlotHero(acc, p.unit, p.heroId, keepSkills), cfg);
 }
 
 /** 清空若干位（队友位）的战法槽：L3 的试跑基线（战法留给 L2 那一步配） */
@@ -409,6 +440,12 @@ export interface MateSimResult {
   skippedIllegal: number;
   /** 当前配置本身就违反互斥规则（基线没跑，先让用户在左栏改掉） */
   baselineIllegal: boolean;
+  /** 候选池是否含「下架武将」 */
+  includeOffline: boolean;
+  /** 候选进场时带不带该位已配战法（`keep` = 带着评、`clear` = 白板进场） */
+  slotSkills: 'keep' | 'clear';
+  /** 匹配位当前已配的战法名（按位分组；全空 = 白板进场，页面据此提示） */
+  baseSkillNames: string[][];
   /** 真跑里出现过的异常消息（前置校验之外的引擎规则；有值页面会提示） */
   errors: string[];
   /** 候选池口径文案：「上架武将」/「含下架武将」 */
@@ -554,8 +591,14 @@ export function* simMateSteps(cfg: ViewCfg, options: Partial<MateSimOptions> = {
     : autoCoreUnits(cfg);
   const matchSlots = mateSlots(cfg, opts.matchUnits, coreUnits);
   const matchedUnits = matchSlots.map((s) => s.unit);
-  // L3 的试跑基线：匹配位的战法槽清空（战法留 L2 配），未参与匹配的将原样保留
-  const l3Base = clearSlotSkills(cfg, matchedUnits);
+  /**
+   * L3 的试跑基线（用户 2026-09-29 口径）：
+   * `slotSkills = 'keep'`（缺省）= 保留匹配位已配的战法 → 候选带着**该位那套战法**进场，
+   * 评估的是「这个位换上谁、带着这套战法能打出多少」（用户：只算主战法会让靠战法放大的辅助吃亏）；
+   * `'clear'` = 清空匹配位战法槽，候选白板进场（战法留给 L2 那一步配）。
+   */
+  const keepSkills = opts.slotSkills !== 'clear';
+  const l3Base = keepSkills ? cfg : clearSlotSkills(cfg, matchedUnits);
   // 核心将的 unitId（用于从 RunRaw 里取该将伤害）；与我方队伍同序，木桩不会撞 id
   const myGenerals = generalsOf(cfg, cfg.morale);
   const coreIds = coreUnits.map((u) => myGenerals[u]?.id).filter((id): id is string => Boolean(id));
@@ -658,7 +701,7 @@ export function* simMateSteps(cfg: ViewCfg, options: Partial<MateSimOptions> = {
     for (const ms of matchSlots) {
       const rows: MateOptionRow[] = [];
       for (const heroId of pool) {
-        const variant = withSlotHero(l3Base, ms.unit, heroId);
+        const variant = withSlotHero(l3Base, ms.unit, heroId, keepSkills);
         // 该候选与「留在队里的将」（含另一个队友位的当前武将）互斥 / 重复 → 跳过（只推进度）
         if (!cfgHeroesLegal(variant)) {
           slotDone += opts.coarseRuns;
@@ -718,10 +761,14 @@ export function* simMateSteps(cfg: ViewCfg, options: Partial<MateSimOptions> = {
               continue;
             }
             seenPair.add(key);
-            const variant = withHeroPicks(l3Base, [
-              { unit: carrierSlot.unit, heroId: carrierHero },
-              { unit: otherSlot.unit, heroId: cand },
-            ]);
+            const variant = withHeroPicks(
+              l3Base,
+              [
+                { unit: carrierSlot.unit, heroId: carrierHero },
+                { unit: otherSlot.unit, heroId: cand },
+              ],
+              keepSkills
+            );
             // 互斥（赵云 ↔ SP赵云：基准与候选撞组）→ 跳过这一对，只推进度
             if (!cfgHeroesLegal(variant)) {
               slotDone += opts.coarseRuns;
@@ -791,7 +838,7 @@ export function* simMateSteps(cfg: ViewCfg, options: Partial<MateSimOptions> = {
   const comboPhaseTotal = comboPicks.length * opts.coarseRuns;
   let comboDone = 0;
   for (const picks of comboPicks) {
-    const variant = picks.length ? withHeroPicks(l3Base, picks) : l3Base;
+    const variant = picks.length ? withHeroPicks(l3Base, picks, keepSkills) : l3Base;
     // 保留名单理论上已合法；这里再兜一层（例如以后叠了新的配队规则）
     if (!cfgHeroesLegal(variant)) {
       comboDone += opts.coarseRuns;
@@ -862,7 +909,7 @@ export function* simMateSteps(cfg: ViewCfg, options: Partial<MateSimOptions> = {
   let finalDone = 0;
   for (const combo of advancing) {
     const picks = combo.picks.map((p) => ({ unit: p.unit, heroId: p.heroId }));
-    const variant = picks.length ? withHeroPicks(l3Base, picks) : l3Base;
+    const variant = picks.length ? withHeroPicks(l3Base, picks, keepSkills) : l3Base;
     if (!cfgHeroesLegal(variant)) {
       finalDone += opts.finalRuns;
       skippedIllegal += 1;
@@ -954,6 +1001,11 @@ export function* simMateSteps(cfg: ViewCfg, options: Partial<MateSimOptions> = {
     skippedIllegal,
     baselineIllegal: !baselineLegal,
     errors,
+    /** 本次口径：'keep' = 候选带着该位已配战法进场（默认）/ 'clear' = 白板进场 */
+    slotSkills: opts.slotSkills,
+    includeOffline: opts.includeOffline,
+    /** 匹配位当前已配的战法名（页面显示「本次基准战法」；全空 = 白板进场） */
+    baseSkillNames: matchedUnits.map((u) => (cfg.slots[u]?.skillIds ?? []).map((id) => skillName(id))),
     poolLabel,
     dummyLabel: dummyLabel(cfg.enemy, opts.dummyTroops),
     coreUnits,
