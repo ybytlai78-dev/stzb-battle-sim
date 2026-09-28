@@ -9,6 +9,8 @@ import { getTreasure } from '../src/data/treasures';
 import type { TreasureLoadout, TroopType } from '../src/engine/types';
 import type { GeneralTrait } from '../src/engine/secondaryTroop';
 import { baseStatsAt, freePointBudget, HERO_RECORDS, isFemale, isLearnableSkillListed, isMainSkill, SLOTTED_HEROES, SKILL_GRADES, TROOP_CHAR, troopCapacity } from './heroes';
+import type { HeroJson } from './heroes';
+import pinyinJson from './data/pinyin.json';
 import { simulateRounds, skillById, SLOT_LABEL, type ParseContext, type RoundModelResult, type RoundUnit, type SkillSlot } from './roundModel';
 
 export const TROOP_OPTIONS: Array<[TroopType, string]> = [
@@ -45,9 +47,23 @@ export interface ViewCfg {
   manual: { boostCaused: number; boostTaken: number; reduce: number };
 }
 
+/** 拼音检索表（`scripts/gen_pinyin.mjs` 生成）：i = 首字母串，f = 全拼（ü 统一记作 v）。
+ *  与主站武将池搜索（`teamEditor.ts`）用同一份数据，口径一致。 */
+const PINYIN = pinyinJson as Record<string, { i: string; f: string }>;
+
+/** 武将候选的搜索匹配串：名字 / 势力 / 兵种 / 标签（SP 等）/ id / 拼音首字母 + 全拼 */
+function heroMatchText(h: HeroJson): string {
+  const py = PINYIN[h.id];
+  return [h.name, h.faction, TROOP_CHAR[h.troopType] ?? '', h.tags.join(' '), h.id, py?.i ?? '', py?.f ?? '']
+    .join(' ')
+    .toLowerCase();
+}
+
 export const HERO_OPTIONS = SLOTTED_HEROES.map((h) => ({
   id: h.id,
   label: `${h.name}（${h.faction}·${TROOP_CHAR[h.troopType] ?? ''}）`,
+  /** 搜索用匹配串（见 `heroMatchText`） */
+  match: heroMatchText(h),
 }));
 const HERO_OPTIONS_HTML = HERO_OPTIONS.map((o) => `<option value="${o.id}">${o.label}</option>`).join('');
 
@@ -55,6 +71,8 @@ export interface SkillOption {
   id: string;
   label: string;
   slot: SkillSlot;
+  /** 搜索用匹配串：名称 / id / 出手位 / 品级 */
+  match: string;
 }
 
 const SLOT_ORDER: SkillSlot[] = ['active', 'prepared', 'pursuit', 'command-prep', 'command-round', 'passive'];
@@ -72,12 +90,145 @@ export const SKILL_OPTIONS: SkillOption[] = LEARNABLE_SKILL_IDS
           id,
           label: `${SLOT_LABEL[parsed.slot]}·${SKILL_REGISTRY[id].name}（${SKILL_GRADES[id] ?? '?'}${offline ? '·待补成长率' : ''}）`,
           slot: parsed.slot,
+          match: `${SKILL_REGISTRY[id].name} ${id} ${SLOT_LABEL[parsed.slot]} ${SKILL_GRADES[id] ?? ''}${
+            offline ? ' 待补成长率' : ''
+          }`.toLowerCase(),
         }
       : undefined;
   })
   .filter((v): v is SkillOption => Boolean(v))
   .sort((a, b) => SLOT_ORDER.indexOf(a.slot) - SLOT_ORDER.indexOf(b.slot) || a.label.localeCompare(b.label, 'zh'));
 const SKILL_OPTIONS_HTML = SKILL_OPTIONS.map((o) => `<option value="${o.id}">${o.label}</option>`).join('');
+
+/* ──────────────────── 候选搜索（武将 / 战法选取共用同一套行为） ────────────────────
+ * 候选太长：武将 158、可学战法 240+，靠滚动找一条很费劲（用户 2026-09-28 反馈）。
+ * 做法：给每个选取 select 配一个搜索框，**只重建该 select 的 `<option>` 列表**：
+ *   · 不碰选中值 —— 已选项与「（空槽）」始终留在列表里，`select.value` 全程不变；
+ *   · 不发 `change`、不重渲染、不回调 onChange —— 选取逻辑与加搜索前一字不差；
+ *   · 武将框与战法框走同一个函数（空白分词 AND、大小写不敏感），两个下拉框行为一致。
+ */
+type PickKind = 'hero' | 'skill';
+
+interface PickOption {
+  value: string;
+  label: string;
+  /** 搜索匹配串（小写）：名称 / id / 拼音 … 命中任一关键词即可 */
+  match: string;
+}
+
+/** 每个候选的匹配串（按 value 查；空槽项等查不到的回退到显示文本） */
+const PICK_MATCH: Record<PickKind, Map<string, string>> = {
+  hero: new Map(HERO_OPTIONS.map((o) => [o.id, o.match])),
+  skill: new Map(SKILL_OPTIONS.map((o) => [o.id, o.match])),
+};
+
+/**
+ * 搜索词状态：按「面板根节点 + cfg 身份」隔离。
+ *  - 同一个 cfg 重渲染（改等级 / 换将 / 换兵种都会重建面板）→ 搜索词保持，不用重打；
+ *  - 换 cfg（L4 battle-sim 切对手是换一个 cfg 对象）→ 视为新面板，搜索词清零。
+ */
+const pickSearchState = new WeakMap<HTMLElement, { cfg: ViewCfg; queries: Map<string, string> }>();
+
+/** select 的完整候选（懒取一次：过滤永远从全量出发，不会层层收窄） */
+const pickOptionCache = new WeakMap<HTMLSelectElement, PickOption[]>();
+
+/** 关键词 → 分词（空白分隔；全部命中才算匹配；大小写不敏感） */
+function pickTokens(q: string): string[] {
+  return q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+}
+
+/** 完整候选列表（首次调用时从 DOM 取，此后以缓存为准） */
+function pickFullOptions(sel: HTMLSelectElement, kind: PickKind): PickOption[] {
+  let list = pickOptionCache.get(sel);
+  if (!list) {
+    const byValue = PICK_MATCH[kind];
+    list = Array.from(sel.options).map((o) => {
+      const label = o.textContent ?? '';
+      return { value: o.value, label, match: byValue.get(o.value) ?? label.toLowerCase() };
+    });
+    pickOptionCache.set(sel, list);
+  }
+  return list;
+}
+
+/** 把搜索词作用到候选列表（只重建 `<option>`；返回命中候选数） */
+function applyPickQuery(sel: HTMLSelectElement, kind: PickKind, query: string): number {
+  const all = pickFullOptions(sel, kind);
+  const tokens = pickTokens(query);
+  const selected = sel.value;
+  const hit = (o: PickOption): boolean => tokens.every((t) => o.match.includes(t));
+  const matches = tokens.length ? all.filter(hit) : all;
+  // 空槽项（清空槽位）与已选项始终保留：搜索绝不改变已选值
+  const shown = tokens.length ? all.filter((o) => hit(o) || o.value === '' || o.value === selected) : all;
+  if (tokens.length || sel.options.length !== shown.length) {
+    const frag = document.createDocumentFragment();
+    for (const o of shown) {
+      const node = document.createElement('option');
+      node.value = o.value;
+      node.textContent = o.label;
+      if (o.value === selected) node.selected = true;
+      frag.appendChild(node);
+    }
+    sel.replaceChildren(frag);
+  }
+  return matches.length;
+}
+
+/** 可搜索选取框 HTML：搜索行 + 原 select（select 自身的 data 属性由调用方给） */
+function pickHtml(
+  key: string,
+  placeholder: string,
+  selectHtml: string,
+  opts: { disabled?: boolean; cls?: string } = {}
+): string {
+  return `<div class="rm-pick${opts.cls ? ` ${opts.cls}` : ''}">
+    <div class="rm-pick-bar">
+      <input class="rm-pick-input" type="search" data-pick-input="${key}" placeholder="${placeholder}"
+        autocomplete="off" spellcheck="false"${opts.disabled ? ' disabled' : ''} />
+      <span class="rm-pick-hint" data-pick-hint="${key}"></span>
+    </div>
+    ${selectHtml}
+  </div>`;
+}
+
+/** 渲染后绑定面板内全部搜索框（只改候选 DOM：不动 cfg、不发 change、不重渲染） */
+function bindPickSearches(root: HTMLElement, cfg: ViewCfg): void {
+  let st = pickSearchState.get(root);
+  if (!st || st.cfg !== cfg) {
+    st = { cfg, queries: new Map() };
+    pickSearchState.set(root, st);
+  }
+  const queries = st.queries;
+  root.querySelectorAll<HTMLInputElement>('[data-pick-input]').forEach((input) => {
+    const key = input.dataset.pickInput ?? '';
+    const kind = key.slice(0, key.indexOf(':')) as PickKind;
+    const sel = root.querySelector<HTMLSelectElement>(`[data-pick-select="${key}"]`);
+    const hint = root.querySelector<HTMLElement>(`[data-pick-hint="${key}"]`);
+    if (!sel || (kind !== 'hero' && kind !== 'skill')) return;
+    const apply = (): void => {
+      const q = input.value;
+      const active = pickTokens(q).length > 0;
+      if (active) queries.set(key, q);
+      else queries.delete(key);
+      const matches = applyPickQuery(sel, kind, q);
+      if (!hint) return;
+      hint.textContent = !active ? '' : matches ? `${matches} 项匹配` : '无匹配';
+      hint.classList.toggle('no-hit', active && matches === 0);
+    };
+    input.addEventListener('input', apply);
+    input.addEventListener('search', apply); // 原生 × 清空只发 search、不发 input
+    input.addEventListener('keydown', (e) => {
+      if (e.key !== 'Escape' || !input.value) return;
+      input.value = ''; // 只清搜索词，不动选中值
+      apply();
+    });
+    const kept = queries.get(key); // 面板重建后恢复上次的搜索词
+    if (kept) {
+      input.value = kept;
+      apply();
+    }
+  });
+}
 
 /** 每将可携带的额外战法槽数（率土：主战法 + 2 个可学战法；与 teamEditor 的 `canAdd < 2` 一致） */
 export const SKILL_SLOTS = 2;
@@ -237,7 +388,12 @@ export function renderConfigPanel(el: HTMLElement, cfg: ViewCfg, opts: ConfigPan
           return `
         <div class="rm-unit" data-unit="${i}">
           <div class="rm-unit-head">
-            <select data-unit-hero="${i}" ${locked ? 'disabled' : ''}>${HERO_OPTIONS_HTML}</select>
+            ${pickHtml(
+              `hero:${i}`,
+              '搜索武将：名 / 拼音 / 势力',
+              `<select data-unit-hero="${i}" data-pick-select="hero:${i}" ${locked ? 'disabled' : ''}>${HERO_OPTIONS_HTML}</select>`,
+              { disabled: locked }
+            )}
             <button class="rm-del" type="button" data-unit-reset="${i}" title="清空该将战法与加点">↺</button>
           </div>
           ${opts.unitBadge?.(i) ? `<div class="rm-badge">${opts.unitBadge(i)}</div>` : ''}
@@ -264,11 +420,16 @@ export function renderConfigPanel(el: HTMLElement, cfg: ViewCfg, opts: ConfigPan
             : ''
         }
           ${Array.from({ length: SKILL_SLOTS }, (_, k) => k)
-            .map(
-              (k) => `<select class="rm-skill" data-unit-skill="${i}-${k}">
+            .map((k) =>
+              pickHtml(
+                `skill:${i}-${k}`,
+                `搜索战法 ${k + 1}：名 / 出手位`,
+                `<select class="rm-skill" data-unit-skill="${i}-${k}" data-pick-select="skill:${i}-${k}">
                 <option value="">（空槽 ${k + 1}）</option>
                 ${SKILL_OPTIONS_HTML}
-              </select>`
+              </select>`,
+                { cls: 'rm-pick-skill' }
+              )
             )
             .join('')}
         </div>`;
@@ -313,6 +474,9 @@ export function renderConfigPanel(el: HTMLElement, cfg: ViewCfg, opts: ConfigPan
   });
   const enemyTroopSel = el.querySelector<HTMLSelectElement>('[data-enemy="troopType"]');
   if (enemyTroopSel) enemyTroopSel.value = cfg.enemy.troopType;
+
+  // 候选搜索（武将 / 战法下拉框）：绑定在选中值回填之后，搜索只收窄候选、不改选中值
+  bindPickSearches(el, cfg);
 
   const bindChange = (node: Element | null, fn: () => void, rerenderAfter = true): void => {
     if (!node) return;
