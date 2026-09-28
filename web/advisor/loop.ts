@@ -18,6 +18,7 @@ import {
   parsePlans,
   type AdvisorMessage,
   type AdvisorTurn,
+  type Budget,
   type ToolCallRecord,
   type TurnVerdict,
 } from './types';
@@ -33,11 +34,29 @@ export const SYSTEM_PROMPT = `你是一个《率土之滨》战斗模拟器的�
 5. 主动声明边界：木桩不还手 → 控制 / 防御型队友的价值量不出来（那是 L4 胜率的事）；解析口径不含控制 / 规避 / 兵力截断。
 6. 工具报错就如实转述并改法，不许编一个结果圆过去。方案要先过 validate_plan 再报给用户。
 
-可用工具：
+可用工具（共 8 个，都很快；检索类 0 场、simulate 每 20 场约 0.1 秒）：
 - get_config：读当前配将区配置（先调它，别猜）。
+- search_hero：按 名字 / 势力 / 兵种 / 主战法名 / 拼音 找武将，拿 id。
+- hero_detail：**武将档案**（阵营 / 兵种 / 攻击距离 / 40 级四维 / 成长率 / 主战法 + 官方描述 / 是否上架）。要给某个武将配队配战法，先调它。
+- search_skill：按 名字 / 出手位（主动/追击/被动/一类指挥/二类指挥/准备）/ 品级 / 效果标签 / **官方描述关键词** 搜战法。
+- list_skills：按出手位**批量拉池子**（分页）——比逐个词搜省调用次数。
+- skill_detail：一个战法的完整信息（含官方描述全文）。
 - validate_plan：校验方案合法性（武将/战法在库、每将 ≤2 可学战法、全队战法唯一、同队互斥）。
-- simulate：对不还手的木桩真跑 N 场（默认 20，上限 200），给核心将伤害期望 / 95% 半宽 / 每将每战法明细。
-- search_hero / search_skill / skill_detail：检索武将、战法、战法详情。`;
+- simulate：对不还手的木桩真跑 N 场（默认 20，单次上限 200），给核心将伤害期望 / 95% 半宽 / 每将 / 每战法明细。
+
+预算与节奏（**不要为了省额度而跳过该做的步骤**）：
+- 研究型问题（"某武将最强怎么配"）：先把档案（hero_detail）与候选池（list_skills / search_skill）补齐，再逐套 validate_plan → simulate 对比，把额度用在该用的地方。
+- 检索 0 命中时先换词（出手位 / 品级 / 描述关键词），不要拿同一个词反复重试。
+- 需要多轮也可以：这一轮没跑完，就直接告诉用户"还差哪一步、下一轮怎么跑"，而不是硬凑一个结论。`;
+
+/** 本轮预算的实参提示（数字来自 `BudgetState`，避免把上限写死在提示词里） */
+export function budgetHint(b: Budget): string {
+  return [
+    `本轮预算：最多 ${b.maxCalls} 次工具调用 · 累计 ${b.maxBattles} 场真跑 · ${Math.round(b.maxMs / 1000)} 秒 · ${b.maxTokens} token。`,
+    '额度是给你用的，不是给你省的：该补的档案、该拉的池子、该跑的对拍，正常走完。',
+    '真的用完额度时，如实说明"还差哪一步、下一轮怎么跑"，不要拿没跑过的数字凑结论。',
+  ].join('\n');
+}
 
 export type AdvisorEvent =
   | { type: 'delta'; text: string }
@@ -69,15 +88,16 @@ function throwIfAborted(signal?: AbortSignal): void {
   }
 }
 
-/** 消费一次流式响应，返回文本与工具调用（usage 通过事件外抛） */
+/** 消费一次流式响应，返回文本、工具调用与 token 用量（usage 同时通过事件外抛） */
 async function collect(
   transport: AdvisorTransport,
   req: { messages: AdvisorMessage[]; tools: Array<{ name: string; description: string; schema: unknown }> },
   signal: AbortSignal | undefined,
   onEvent?: (e: AdvisorEvent) => void
-): Promise<{ text: string; calls: ToolCall[] }> {
+): Promise<{ text: string; calls: ToolCall[]; usage: TokenUsage | null }> {
   let text = '';
   let calls: ToolCall[] = [];
+  let usage: TokenUsage | null = null;
   for await (const ev of transport.chat(req, signal)) {
     if (ev.type === 'text') {
       text += ev.delta;
@@ -85,18 +105,21 @@ async function collect(
     } else if (ev.type === 'tool_calls') {
       calls = ev.calls;
     } else if (ev.type === 'usage') {
+      usage = ev.usage;
       onEvent?.({ type: 'usage', usage: ev.usage });
     }
   }
-  return { text, calls };
+  return { text, calls, usage };
 }
 
 export async function runAdvisorTurn(input: TurnInput): Promise<AdvisorTurn> {
   const { userText, ctx, transport, signal, onEvent } = input;
-  const maxToolCalls = input.maxToolCalls ?? 8;
-  const maxRounds = input.maxRounds ?? 6;
+  // 次数上限的**唯一真源** = 预算（不再各自写死一个 8）
+  const maxToolCalls = input.maxToolCalls ?? ctx.budget.maxCalls;
+  const maxRounds = input.maxRounds ?? 12;
   const messages: AdvisorMessage[] = [
     { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: budgetHint(ctx.budget) },
     ...(input.history ?? []),
     { role: 'user', content: userText },
   ];
@@ -104,25 +127,40 @@ export async function runAdvisorTurn(input: TurnInput): Promise<AdvisorTurn> {
   const toolSpecs = createTools().map((t) => ({ name: t.name, description: t.description, schema: t.schema }));
   let answer = '';
   let degraded = false;
+  /** 超过 token 上限后置位：后续工具调用一律拒绝（但让模型把话说完） */
+  let toolsDisabled = false;
 
   for (let round = 0; round < maxRounds; round += 1) {
     throwIfAborted(signal);
     onEvent?.({ type: 'round', index: round });
     let text = '';
     let calls: ToolCall[] = [];
+    let usage: TokenUsage | null = null;
     try {
-      ({ text, calls } = await collect(transport, { messages, tools: toolSpecs }, signal, onEvent));
+      ({ text, calls, usage } = await collect(transport, { messages, tools: toolSpecs }, signal, onEvent));
+      ctx.budget.tokens += usage?.totalTokens ?? 0;
     } catch (e) {
       if (isAbort(e)) throw e;
       // 厂商不支持工具调用 → 去掉 tools 重试一次（无工具模式），并把降级如实标出来
       if (!degraded && advisorErrorCode(e) === 'format' && toolSpecs.length) {
         degraded = true;
         messages.push({ role: 'user', content: '（本模型不支持工具调用：请只用已有信息回答，不要编造任何数字）' });
-        ({ text } = await collect(transport, { messages, tools: [] }, signal, onEvent));
-        answer = text;
+        const retry = await collect(transport, { messages, tools: [] }, signal, onEvent);
+        ctx.budget.tokens += retry.usage?.totalTokens ?? 0;
+        answer = retry.text;
         break;
       }
       throw e;
+    }
+
+    // token 上限：只兜底，不拦正常研究（默认 100 万，正常一轮万级）。
+    // 超限后**不再执行工具**，但继续让模型把已有结果说完（不是直接掐掉这一轮）。
+    if (ctx.budget.tokens > ctx.budget.maxTokens && !toolsDisabled) {
+      toolsDisabled = true;
+      messages.push({
+        role: 'user',
+        content: `已达本轮 token 上限（${ctx.budget.maxTokens}），请基于已拿到的结果作答，并说明还差哪些没跑。`,
+      });
     }
 
     if (!calls.length) {
@@ -133,11 +171,15 @@ export async function runAdvisorTurn(input: TurnInput): Promise<AdvisorTurn> {
     messages.push({ role: 'assistant', content: text, toolCalls: calls.map((c) => ({ id: c.id, name: c.name, args: c.args })) });
     for (const c of calls) {
       throwIfAborted(signal);
-      if (toolCalls.length >= maxToolCalls) {
+      if (toolsDisabled || toolCalls.length >= maxToolCalls) {
         messages.push({
           role: 'tool',
           toolCallId: c.id,
-          content: JSON.stringify({ error: `已达单轮工具调用上限 ${maxToolCalls}，请基于已有结果作答` }),
+          content: JSON.stringify({
+            error: toolsDisabled
+              ? `已达本轮 token 上限（${ctx.budget.maxTokens}），请基于已有结果作答`
+              : `已达单轮工具调用上限 ${maxToolCalls}，请基于已有结果作答`,
+          }),
         });
         continue;
       }
@@ -150,7 +192,12 @@ export async function runAdvisorTurn(input: TurnInput): Promise<AdvisorTurn> {
         messages.push({
           role: 'tool',
           toolCallId: c.id,
-          content: JSON.stringify({ evidenceId: r.evidenceId, summary: r.summary, stats: r.stats }),
+          content: JSON.stringify({
+            evidenceId: r.evidenceId,
+            summary: r.summary,
+            ...(r.brief ? { brief: r.brief } : {}),
+            stats: r.stats,
+          }),
         });
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);

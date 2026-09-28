@@ -65,6 +65,52 @@ describe('advisor loop（精简版）', () => {
     expect(toolMsgs[1].content).toContain('上限');
   });
 
+  it('次数上限的默认值来自预算（不再各自写死 8）：budget.maxCalls = 2 → 第 3 次被拦', async () => {
+    const ctx = makeCtx({ fakeRuns: true, budget: { maxCalls: 2 } });
+    const t = await turn(
+      [
+        {
+          calls: [
+            { id: 'c1', name: 'get_config', args: {} },
+            { id: 'c2', name: 'get_config', args: {} },
+            { id: 'c3', name: 'get_config', args: {} },
+          ],
+        },
+        { text: '收口' },
+      ],
+      { ctx }
+    );
+    expect(ctx.budget.maxCalls).toBe(2);
+    expect(t.toolCalls).toHaveLength(2);
+    expect(t.messages.filter((m) => m.role === 'tool')[2].content).toContain('上限');
+  });
+
+  it('token 记账与上限：usage 累加进 budget.tokens，超限则收口（默认 100 万够不着）', async () => {
+    const ctx = makeCtx({ fakeRuns: true, budget: { maxTokens: 100 } });
+    const t = await turn(
+      [
+        { calls: [{ id: 'c1', name: 'get_config', args: {} }], usage: { promptTokens: 60, completionTokens: 60, totalTokens: 120 } },
+        { text: '额度用完，先给已拿到的' },
+      ],
+      { ctx }
+    );
+    expect(ctx.budget.tokens).toBe(120);
+    expect(t.answer).toContain('额度');
+    // 超限后不再执行工具
+    expect(t.toolCalls).toHaveLength(0);
+  });
+
+  it('工具明细以 brief 进上下文（模型看得到每将/每战法，而不是只有一句摘要）', async () => {
+    const ctx = makeCtx({ fakeRuns: true, coreDamage: 26500 });
+    const t = await turn(
+      [{ calls: [{ id: 'c1', name: 'simulate', args: { plan: ctx.deps.__plan, runs: 20 } }] }, { text: '看完了' }],
+      { ctx }
+    );
+    const toolMsg = t.messages.find((m) => m.role === 'tool') as AdvisorMessage;
+    expect(toolMsg.content).toContain('brief');
+    expect(toolMsg.content).toContain('每将（场均伤害）');
+  });
+
   it('取消：abort 后抛 AbortError', async () => {
     const ac = new AbortController();
     ac.abort();

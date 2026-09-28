@@ -33,10 +33,12 @@ function findMutualPair(): [string, string] {
 }
 
 describe('advisor tools', () => {
-  it('六个一期工具都在注册表里，且各有 name/description/schema/cost', () => {
+  it('八个工具都在注册表里，且各有 name/description/schema/cost', () => {
     const tools = createTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       'get_config',
+      'hero_detail',
+      'list_skills',
       'search_hero',
       'search_skill',
       'simulate',
@@ -150,6 +152,54 @@ describe('advisor tools', () => {
     expect((s.data as { hits: unknown[] }).hits.length).toBeGreaterThan(0);
     const h = await runTool('search_hero', { q: '赵云' }, ctx);
     expect((h.data as { hits: Array<{ name: string }> }).hits.some((x) => x.name.includes('赵云'))).toBe(true);
+  });
+
+  it('检索扩面（2026-09-29）：描述/标签词也能命中，「骑兵」不再 0 命中', async () => {
+    const ctx = makeCtx({ fakeRuns: true });
+    const byDesc = await runTool('search_skill', { q: '骑兵' }, ctx);
+    expect((byDesc.data as { hits: unknown[] }).hits.length).toBeGreaterThan(0);
+    // 主战法名也能搜到武将（曹纯的虎豹督军）
+    const byMain = await runTool('search_hero', { q: '虎豹督军' }, ctx);
+    expect((byMain.data as { hits: Array<{ name: string }> }).hits.some((x) => x.name === '曹纯')).toBe(true);
+  });
+
+  it('检索 0 命中时给换词提示（brief 不为空），模型不必反复重试同一个词', async () => {
+    const ctx = makeCtx({ fakeRuns: true });
+    const r = await runTool('search_skill', { q: 'zzz不存在的词' }, ctx);
+    expect((r.data as { hits: unknown[] }).hits).toHaveLength(0);
+    expect(r.brief).toContain('出手位');
+  });
+
+  it('hero_detail：曹纯带出主战法 / 兵种 / 40 级四维（它此前只能拿到 id）', async () => {
+    const ctx = makeCtx({ fakeRuns: true });
+    const r = await runTool('hero_detail', { id: 'h498' }, ctx);
+    const d = r.data as { found: boolean; name: string; troopType: string; mainSkillName: string; stats40: { attack: number } };
+    expect(d.found).toBe(true);
+    expect(d.name).toBe('曹纯');
+    expect(d.troopType).toBe('骑');
+    expect(d.mainSkillName).toBe('虎豹督军');
+    expect(d.stats40.attack).toBeGreaterThan(100);
+    expect(r.brief).toContain('虎豹督军');
+    const no = await runTool('hero_detail', { id: 'nope' }, ctx);
+    expect((no.data as { found: boolean }).found).toBe(false);
+  });
+
+  it('list_skills：按出手位批量拉池子（分页 + 还有多少的提示）', async () => {
+    const ctx = makeCtx({ fakeRuns: true });
+    const r = await runTool('list_skills', { slot: '被动', limit: 5 }, ctx);
+    const d = r.data as { total: number; rows: Array<{ id: string; name: string; slot: string }> };
+    expect(d.total).toBeGreaterThan(5);
+    expect(d.rows).toHaveLength(5);
+    expect(d.rows.every((x) => x.slot.includes('被动'))).toBe(true);
+    expect(r.brief).toContain('offset=');
+  });
+
+  it('simulate 带 brief：每将 / 每战法的紧凑明细也进上下文（用户 2026-09-29 口径）', async () => {
+    const ctx = makeCtx({ fakeRuns: true, coreDamage: 26500 });
+    const r = await runTool('simulate', { plan: ctx.deps.__plan, runs: 20 }, ctx);
+    expect(r.brief).toContain('每将（场均伤害）');
+    expect(r.brief).toContain('★');
+    expect(r.brief).toContain('26500');
   });
 
   it('skill_detail：在库返回详情，不在库返回 found:false（不编造）', async () => {

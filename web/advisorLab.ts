@@ -14,32 +14,44 @@
 import { runAdvisorTurn, type AdvisorEvent } from './advisor/loop';
 import { createBrowserTransport, createFakeTransport, type AdvisorSettings, type TokenUsage } from './advisor/transport';
 import { makeCtx, type ToolCtx } from './advisor/tools';
-import { DEFAULT_DUMMY, type AdvisorPlan, type AdvisorTurn } from './advisor/types';
+import { DEFAULT_BUDGET, DEFAULT_DUMMY, type AdvisorPlan, type AdvisorTurn } from './advisor/types';
 import { SLOTTED_HEROES } from './heroes';
 import { defaultCfg, type ViewCfg } from './teamConfig';
 
 const SETTINGS_KEY = 'dsh-advisor-settings-v1';
-/** 干跑模式跑几场（真跑；干跑模式下由假跑批即时返回） */
+/** 干跑模式跑几场 */
 const FAKE_RUNS = 20;
 /** 演示用队伍：优先 L2 实跑基线那三将，库里没有就取上架池前三 */
 const DEMO_HEROES = ['h102003', 'h672', 'h574'];
 
+/** 界面上的额度设置（用户 2026-09-29：别为省 token 卡住模型） */
+interface LabSettings extends AdvisorSettings {
+  maxCalls: number;
+  maxTokens: number;
+}
+
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string);
 
-function loadSettings(): AdvisorSettings {
+function loadSettings(): LabSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
     if (raw) {
-      const p = JSON.parse(raw) as Partial<AdvisorSettings>;
-      return { baseUrl: p.baseUrl ?? '', model: p.model ?? '', key: p.key ?? '' };
+      const p = JSON.parse(raw) as Partial<LabSettings>;
+      return {
+        baseUrl: p.baseUrl ?? '',
+        model: p.model ?? '',
+        key: p.key ?? '',
+        maxCalls: p.maxCalls ?? DEFAULT_BUDGET.maxCalls,
+        maxTokens: p.maxTokens ?? DEFAULT_BUDGET.maxTokens,
+      };
     }
   } catch {
     /* localStorage 不可用 → 空设置 */
   }
-  return { baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat', key: '' };
+  return { baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat', key: '', maxCalls: DEFAULT_BUDGET.maxCalls, maxTokens: DEFAULT_BUDGET.maxTokens };
 }
 
-function saveSettings(s: AdvisorSettings): void {
+function saveSettings(s: LabSettings): void {
   try {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
   } catch {
@@ -120,6 +132,11 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
         <label>key <input id="lab-key" type="password" value="${esc(settings.key)}" placeholder="sk-..." /></label>
         <label class="chk"><input id="lab-fake" type="checkbox" ${fakeMode ? 'checked' : ''} /> 干跑（假传输：不联网、不花 token）</label>
       </div>
+      <div class="row">
+        <label>单轮工具调用上限 <input id="lab-maxcalls" type="number" min="1" max="500" value="${settings.maxCalls}" style="min-width:90px" /></label>
+        <label>单轮 token 上限 <input id="lab-maxtokens" type="number" min="1000" step="10000" value="${settings.maxTokens}" style="min-width:120px" /></label>
+        <span class="muted small">其余护栏：累计 ${DEFAULT_BUDGET.maxBattles} 场 / ${Math.round(DEFAULT_BUDGET.maxMs / 1000)} 秒；超限 = 拒绝执行并把原因回灌给模型（不是静默截断）。</span>
+      </div>
       <p class="muted small">key 只存在本机 localStorage（<code>${SETTINGS_KEY}</code>），直连厂商，不经过任何服务器。</p>
 
       <div class="row">
@@ -154,6 +171,8 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
 
   let toolCount = 0;
   let battles = 0;
+  let tokens = 0;
+  let caps = { maxCalls: settings.maxCalls, maxTokens: settings.maxTokens };
   const onEvent = (e: AdvisorEvent): void => {
     if (e.type === 'round') append(`— 第 ${e.index + 1} 轮 —`);
     else if (e.type === 'delta') {
@@ -167,8 +186,9 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
       append(e.error ? `✘ ${e.name} 报错：${e.error}` : `✔ ${e.name}（${e.battles} 场 / ${e.ms}ms）`);
     } else if (e.type === 'usage') {
       usage = e.usage;
+      tokens += e.usage.totalTokens;
     }
-    cost.textContent = `本轮：${toolCount} 次工具调用 · ${battles} 场${usage ? ` · token ${usage.totalTokens}` : ''}`;
+    cost.textContent = `本轮：${toolCount}/${caps.maxCalls} 次工具调用 · ${battles} 场 · token ${tokens}${usage ? '' : ''} / ${caps.maxTokens}`;
   };
 
   const renderVerdict = (turn: AdvisorTurn): void => {
@@ -192,10 +212,12 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
 
   const send = async (): Promise<void> => {
     if (running) return;
-    const s: AdvisorSettings = {
+    const s: LabSettings = {
       baseUrl: $<HTMLInputElement>('lab-base').value.trim(),
       model: $<HTMLInputElement>('lab-model').value.trim(),
       key: $<HTMLInputElement>('lab-key').value.trim(),
+      maxCalls: Math.max(1, Math.floor(Number($<HTMLInputElement>('lab-maxcalls').value) || DEFAULT_BUDGET.maxCalls)),
+      maxTokens: Math.max(1000, Math.floor(Number($<HTMLInputElement>('lab-maxtokens').value) || DEFAULT_BUDGET.maxTokens)),
     };
     const useFake = $<HTMLInputElement>('lab-fake').checked;
     // 前置校验：真模型模式缺设置就别发请求（否则只会得到一句 401，白等）
@@ -213,7 +235,9 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
     traceEl.textContent = '（空）';
     toolCount = 0;
     battles = 0;
+    tokens = 0;
     usage = null;
+    caps = { maxCalls: s.maxCalls, maxTokens: s.maxTokens };
     cost.textContent = '';
     sendBtn.disabled = true;
     stopBtn.disabled = false;
@@ -222,7 +246,11 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
     saveSettings(s);
     fakeMode = useFake;
     const plan = demoPlan(cfg);
-    const ctx: ToolCtx = makeCtx({ fakeRuns: false, deps: { getConfig: () => cfg } });
+    const ctx: ToolCtx = makeCtx({
+      fakeRuns: false,
+      deps: { getConfig: () => cfg },
+      budget: { maxCalls: s.maxCalls, maxTokens: s.maxTokens },
+    });
     const transport = fakeMode ? fakeScript(plan) : createBrowserTransport(s);
 
     append(`【你】${$<HTMLTextAreaElement>('lab-q').value.trim()}`);

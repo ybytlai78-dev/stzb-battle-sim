@@ -12,7 +12,8 @@
  * 依赖注入：跑批 / 检索都由 `ToolCtx.deps` 传入 → 测试注入毫秒返回的假实现，全链路可离线测。
  */
 import { SKILL_REGISTRY } from '../../src/data/skills';
-import { SKILL_GRADES, skillDesc } from '../heroes';
+import { baseStatsAt, getHeroById, HEROES, skillDesc, SKILL_GRADES, TROOP_CHAR, type HeroJson } from '../heroes';
+import { SLOT_LABEL } from '../roundModel';
 import { evaluatePlan, type PlanSummary } from '../simExpectation';
 import { HERO_OPTIONS, SKILL_OPTIONS, defaultCfg, type ViewCfg } from '../teamConfig';
 import { cfgOf, configToPlan, validateAdvisorPlan } from './gate';
@@ -43,6 +44,8 @@ export interface AdvisorDeps {
   searchHeroes(q: string, limit: number): Array<{ id: string; name: string; label: string }>;
   searchSkills(q: string, limit: number): Array<{ id: string; name: string; label: string }>;
   skillDetail(id: string): unknown;
+  /** 武将档案（主战法 / 兵种 / 阵营 / 四维成长）—— 2026-09-29 补：模型此前只能拿到 id */
+  heroDetail(id: string): unknown;
 }
 
 export interface ToolCtx {
@@ -59,7 +62,7 @@ export function nextEvidenceId(ctx: ToolCtx, name: string): string {
   return `ev-${ctx.evidenceSeq.n}-${name}`;
 }
 
-/** 预算三件套：超限**拒绝执行**（不是静默截断） */
+/** 预算护栏：超限**拒绝执行**（不是静默截断）。token 由 loop 记账，不在这里扣。 */
 export function chargeBudget(state: BudgetState, cost: { battles?: number; ms?: number }, now: number): void {
   const elapsed = now - state.startedAt;
   if (state.calls + 1 > state.maxCalls) throw new BudgetExceeded('calls');
@@ -70,16 +73,46 @@ export function chargeBudget(state: BudgetState, cost: { battles?: number; ms?: 
   state.ms = elapsed;
 }
 
-// ─────────────────────────── 检索口径（与面板搜索同一份匹配串） ───────────────────────────
+// ─────────────────────────── 检索口径 ───────────────────────────
 
 const tokenize = (q: string): string[] => q.trim().toLowerCase().split(/\s+/).filter(Boolean);
 
-/** 空白分词 AND 匹配（与 `web/teamConfig.ts` 的面板搜索同口径：match 串含名字/势力/id/拼音） */
-function matchOptions<T extends { match: string }>(options: T[], q: string, limit: number): T[] {
+/**
+ * 检索匹配串（空白分词 AND）。
+ * 2026-09-29 扩面：原来只有「名称 / id / 出手位 / 品级」——模型搜「骑兵」「攻击」直接 0 命中，
+ * 白烧好几次调用（它自己在回答里点出了这个现象）。现在把**效果标签 + 官方描述 + 主战法名**并进来。
+ */
+export const SKILL_MATCH = SKILL_OPTIONS.map((o) => {
+  const tags = (SKILL_REGISTRY[o.id]?.tags ?? []).join(' ');
+  // `slot` 是英文枚举（active / passive …），面板用的是 `SLOT_LABEL` 的中文名 —— 两个都留，检索按中文、也认英文
+  const slotKey = String(o.slot);
+  const slot = SLOT_LABEL[o.slot] ?? slotKey;
+  return {
+    id: o.id,
+    name: o.label.split('（')[0],
+    slot,
+    slotKey,
+    grade: SKILL_GRADES[o.id] ?? '',
+    match: `${o.match} ${slot} ${slotKey} ${tags} ${skillDesc(o.id)}`.toLowerCase(),
+  };
+});
+
+export const HERO_MATCH = HERO_OPTIONS.map((o) => {
+  const rec = getHeroById(o.id) as (HeroJson & { skillDesc?: string }) | undefined;
+  const extra = `${rec?.mainSkillName ?? ''} ${rec?.skillDesc ?? ''}`;
+  return { id: o.id, name: o.label.split('（')[0], label: o.label, match: `${o.match} ${extra}`.toLowerCase() };
+});
+
+/** 空白分词 AND 匹配 */
+function matchRows<T extends { match: string }>(rows: T[], q: string, limit: number): T[] {
   const toks = tokenize(q);
-  const hits = toks.length ? options.filter((o) => toks.every((t) => o.match.includes(t))) : options;
+  const hits = toks.length ? rows.filter((o) => toks.every((t) => o.match.includes(t))) : rows;
   return hits.slice(0, Math.max(1, limit));
 }
+
+/** 0 命中的提示（模型据此换词，而不是反复重试同一个词） */
+const EMPTY_HINT =
+  '检索提示：战法可按 出手位（主动 / 追击 / 被动 / 一类指挥 / 二类指挥 / 准备）、品级（S/A/B/C/D）、效果标签、官方描述关键词 或名字检索；武将可按 名字 / 势力 / 兵种 / 主战法名 检索。空结果只说明这个词没命中，不代表库里没有。';
 
 // ─────────────────────────── 六个工具 ───────────────────────────
 
@@ -91,6 +124,25 @@ function coreIndices(plan: AdvisorPlan, cfg: ViewCfg): number[] | undefined {
     if (i >= 0) idx.push(i);
   }
   return idx.length ? idx : undefined;
+}
+
+/** 给模型看的紧凑明细（≤15 行）：每将 / 每战法场均贡献 —— 完整样本仍在 `data` 里给渲染层 */
+export function planBrief(s: PlanSummary): string {
+  const units = s.byUnit
+    .slice(0, 5)
+    .map((u) => `${u.core ? '★' : '·'} ${u.name}${u.core ? '（排序口径）' : ''} 场均 ${Math.round(u.mean)}`)
+    .join('\n');
+  const skills = s.bySkill
+    .slice(0, 6)
+    .map((k) => `· ${k.name} 场均 ${Math.round(k.mean)}`)
+    .join('\n');
+  return [
+    '每将（场均伤害）：',
+    units,
+    '每战法（场均贡献）：',
+    skills || '· （本方案没有可学战法贡献）',
+    `汇总：mean ${Math.round(s.mean)} ±${Math.round(s.halfWidth)}（${s.runs} 场；样本标准差 ${Math.round(s.sd)}；单场 ${Math.round(s.min)}~${Math.round(s.max)}；中位 ${Math.round(s.median)}）`,
+  ].join('\n');
 }
 
 const PLAN_SCHEMA = {
@@ -186,6 +238,7 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
         return {
           evidenceId: nextEvidenceId(ctx, 'simulate'),
           summary: `真跑 ${s.runs} 场：核心将伤害期望 ${Math.round(s.mean)} ±${Math.round(s.halfWidth)}（95% 半宽）；全队总伤 ${Math.round(s.meanTotal)}；木桩被打空 ${s.wipedRuns} 场`,
+          brief: planBrief(s),
           data: { ...s, plan: normalizePlan(plan), runs: s.runs },
           stats: { battles: s.runs, ms: Date.now() - t0, seed: ctx.seed },
         };
@@ -193,30 +246,92 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
     },
     {
       name: 'search_hero',
-      description: '按名字 / 势力 / id / 拼音检索武将（空白分词 AND），返回候选与 id。拿不准 id 时先搜，不要凭记忆写 id。',
+      description:
+        '按 名字 / 势力 / 兵种 / 主战法名 / id / 拼音 检索武将（空白分词 AND），返回候选与 id。拿不准 id 时先搜。空结果会给换词提示，不要拿同一个词反复重试。',
       schema: { type: 'object', properties: { q: { type: 'string' }, limit: { type: 'integer' } }, required: ['q'] },
       cost: {},
       async run(args: { q: string; limit?: number }, ctx) {
-        const hits = ctx.deps.searchHeroes(String(args?.q ?? ''), args?.limit ?? 10);
+        const hits = ctx.deps.searchHeroes(String(args?.q ?? ''), args?.limit ?? 12);
         return {
           evidenceId: nextEvidenceId(ctx, 'search_hero'),
           summary: hits.length ? `命中 ${hits.length} 个武将：${hits.map((h) => `${h.name}(${h.id})`).join('、')}` : `没有匹配「${args?.q}」的武将`,
+          brief: hits.length ? '' : EMPTY_HINT,
           data: { q: args?.q ?? '', hits },
           stats: { battles: 0, ms: 0, seed: ctx.seed },
         };
       },
     },
     {
+      name: 'hero_detail',
+      description:
+        '查一个武将的档案：阵营 / 兵种 / 攻击距离 / 40 级四维 / 成长率 / 主战法（名字 + 官方描述）/ 是否上架。**要给某个武将配队配战法之前必须先调它**——不看档案就配是猜。',
+      schema: { type: 'object', properties: { id: { type: 'string', description: '武将 id，如 h498' } }, required: ['id'] },
+      cost: {},
+      async run(args: { id: string }, ctx) {
+        const d = ctx.deps.heroDetail(String(args?.id ?? '')) as {
+          found?: boolean;
+          name?: string;
+          troopType?: string;
+          mainSkillName?: string;
+          mainSkillDesc?: string;
+          stats40?: { attack: number; defense: number; strategy: number; speed: number };
+        };
+        return {
+          evidenceId: nextEvidenceId(ctx, 'hero_detail'),
+          summary: d.found
+            ? `${d.name}（${d.troopType}）：主战法「${d.mainSkillName}」；40 级 攻 ${d.stats40?.attack} / 防 ${d.stats40?.defense} / 谋 ${d.stats40?.strategy} / 速 ${d.stats40?.speed}`
+            : `武将「${args?.id}」不在库`,
+          brief: d.found ? `主战法「${d.mainSkillName}」：${d.mainSkillDesc ?? ''}` : EMPTY_HINT,
+          data: d,
+          stats: { battles: 0, ms: 0, seed: ctx.seed },
+        };
+      },
+    },
+    {
       name: 'search_skill',
-      description: '按名字 / id / 出手位 / 品级检索可学习战法（不含武将主战法），返回候选与 id。',
+      description:
+        '按 名字 / 出手位（主动/追击/被动/一类指挥/二类指挥/准备）/ 品级（S/A/B/C/D）/ 效果标签 / 官方描述关键词 检索可学习战法（不含武将主战法）。空结果会给换词提示。',
       schema: { type: 'object', properties: { q: { type: 'string' }, limit: { type: 'integer' } }, required: ['q'] },
       cost: {},
       async run(args: { q: string; limit?: number }, ctx) {
-        const hits = ctx.deps.searchSkills(String(args?.q ?? ''), args?.limit ?? 10);
+        const hits = ctx.deps.searchSkills(String(args?.q ?? ''), args?.limit ?? 15);
         return {
           evidenceId: nextEvidenceId(ctx, 'search_skill'),
           summary: hits.length ? `命中 ${hits.length} 个战法：${hits.map((h) => `${h.name}(${h.id})`).join('、')}` : `没有匹配「${args?.q}」的战法`,
+          brief: hits.length ? '' : EMPTY_HINT,
           data: { q: args?.q ?? '', hits },
+          stats: { battles: 0, ms: 0, seed: ctx.seed },
+        };
+      },
+    },
+    {
+      name: 'list_skills',
+      description:
+        '批量浏览可学习战法池（按出手位分页），用来「拉齐某一类池子」——比逐个词搜省调用次数。返回 id / 名字 / 出手位 / 品级。',
+      schema: {
+        type: 'object',
+        properties: {
+          slot: { type: 'string', description: '出手位（主动 / 追击 / 被动 / 一类指挥 / 二类指挥 / 准备）；不传 = 全部' },
+          offset: { type: 'integer' },
+          limit: { type: 'integer', description: '缺省 30，上限 80' },
+        },
+        required: [],
+      },
+      cost: {},
+      async run(args: { slot?: string; offset?: number; limit?: number }, ctx) {
+        const slot = String(args?.slot ?? '').trim();
+        const all = slot ? SKILL_MATCH.filter((s) => s.slot.includes(slot) || s.slotKey.includes(slot)) : SKILL_MATCH;
+        const offset = Math.max(0, Math.floor(args?.offset ?? 0));
+        const limit = Math.min(80, Math.max(1, Math.floor(args?.limit ?? 30)));
+        const rows = all.slice(offset, offset + limit).map((s) => ({ id: s.id, name: s.name, slot: s.slot, grade: s.grade }));
+        return {
+          evidenceId: nextEvidenceId(ctx, 'list_skills'),
+          summary: `战法池${slot ? `（${slot}）` : ''}共 ${all.length} 个，本次返回第 ${offset + 1}~${offset + rows.length} 个：${rows.map((r) => r.name).join('、') || '（空）'}`,
+          brief:
+            all.length > offset + rows.length
+              ? `还有 ${all.length - offset - rows.length} 个没返回 —— 需要就再调一次（offset=${offset + rows.length}）。`
+              : '已到池底。',
+          data: { slot: slot || null, total: all.length, offset, rows },
           stats: { battles: 0, ms: 0, seed: ctx.seed },
         };
       },
@@ -269,19 +384,43 @@ export interface MakeCtxOpts {
   deps?: Partial<AdvisorDeps>;
 }
 
-/** 生产依赖：跑批走 `evaluatePlan`（与 L2 同口径），检索走面板同一份候选表 */
+/** 生产依赖：跑批走 `evaluatePlan`（与 L2 同口径），检索走扩面后的匹配串 */
 function realDeps(): AdvisorDeps {
   return {
     getConfig: () => defaultCfg(),
     evaluate: (cfg, runs, coreUnits) => evaluatePlan(cfg, { runs, coreUnits }),
-    searchHeroes: (q, limit) =>
-      matchOptions(HERO_OPTIONS, q, limit).map((o) => ({ id: o.id, name: o.label.split('（')[0], label: o.label })),
-    searchSkills: (q, limit) =>
-      matchOptions(SKILL_OPTIONS, q, limit).map((o) => ({ id: o.id, name: o.label.split('（')[0], label: o.label })),
+    searchHeroes: (q, limit) => matchRows(HERO_MATCH, q, limit).map((o) => ({ id: o.id, name: o.name, label: o.label })),
+    searchSkills: (q, limit) => matchRows(SKILL_MATCH, q, limit).map((o) => ({ id: o.id, name: o.name, label: `${o.name}（${o.slot}·${o.grade}）` })),
     skillDetail: (id) => {
       const def = SKILL_REGISTRY[id];
       if (!def) return { found: false, id };
-      return { found: true, id, name: def.name, grade: SKILL_GRADES[id] ?? null, type: def.type, desc: skillDesc(id) };
+      return { found: true, id, name: def.name, grade: SKILL_GRADES[id] ?? null, type: def.type, tags: def.tags, desc: skillDesc(id) };
+    },
+    heroDetail: (id) => {
+      const rec = getHeroById(id) as (HeroJson & { skillDesc?: string; attackRange?: number; rarity?: string }) | undefined;
+      if (!rec) return { found: false, id };
+      const st = baseStatsAt(rec as never, 40);
+      return {
+        found: true,
+        id,
+        name: rec.name,
+        faction: rec.faction,
+        troopType: TROOP_CHAR[rec.troopType] ?? rec.troopType,
+        attackRange: rec.attackRange ?? null,
+        rarity: rec.rarity ?? null,
+        listed: HEROES.some((h) => h.id === id),
+        stats40: st,
+        growth: {
+          attack: (rec as unknown as { growthAttack?: number }).growthAttack ?? null,
+          defense: (rec as unknown as { growthDefense?: number }).growthDefense ?? null,
+          strategy: (rec as unknown as { growthStrategy?: number }).growthStrategy ?? null,
+          speed: (rec as unknown as { growthSpeed?: number }).growthSpeed ?? null,
+        },
+        mainSkillId: rec.mainSkillId ?? null,
+        mainSkillName: rec.mainSkillName ?? null,
+        mainSkillDesc: rec.skillDesc ?? '',
+        mutualExclusionGroup: rec.mutualExclusionGroup ?? null,
+      };
     },
   };
 }
@@ -318,10 +457,10 @@ export function makeCtx(opts: MakeCtxOpts = {}): ToolCtx & { deps: AdvisorDeps &
     ...(opts.deps ?? {}),
   };
   const plan = configToPlan(deps.getConfig());
-  const byName = new Map(HERO_OPTIONS.map((o) => [o.label.split('（')[0], o.id]));
+  const byName = new Map(HERO_MATCH.map((o) => [o.name, o.id]));
   const ctx: ToolCtx = {
     deps,
-    budget: { ...budget, battles: 0, ms: 0, calls: 0, startedAt: Date.now() },
+    budget: { ...budget, battles: 0, ms: 0, calls: 0, tokens: 0, startedAt: Date.now() },
     evidenceSeq: { n: 0 },
     seed,
   };

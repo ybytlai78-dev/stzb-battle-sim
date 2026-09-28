@@ -102,8 +102,14 @@ export interface ToolStats {
 }
 
 export interface ToolResult {
-  /** ≤200 字摘要：**唯一**进 LLM 上下文的部分（明细不进上下文，防止撑爆） */
+  /** ≤200 字摘要：进 LLM 上下文 */
   summary: string;
+  /**
+   * 紧凑明细（≤15 行，**也进上下文**）：给模型的"看得见的数"。
+   * 用户 2026-09-29 口径：要它能做实事，不为了省 token 把明细全砍掉——
+   * 但完整跑批明细（几千行）仍然只走 `data`（渲染层直读），不塞进上下文。
+   */
+  brief?: string;
   /** 结构化明细：只挂本轮 trace，渲染层直读（LLM 不参与数字路径） */
   data: unknown;
   /** 数字溯源锚：LLM 引用数字必须带它（`编号[[evidenceId]]`） */
@@ -132,20 +138,35 @@ export interface ToolSpec<A = unknown, C = unknown> {
 // ─────────────────────────── 预算护栏（spec §3） ───────────────────────────
 
 export interface Budget {
+  /** 单轮累计真跑场次上限 */
   maxBattles: number;
+  /** 单轮累计墙上时间上限（毫秒） */
   maxMs: number;
+  /**
+   * 单轮工具调用次数上限（**不是** token 上限）。
+   * 2026-09-29 用户口径：模型在"曹纯最强队"这类研究型问题上被 8 次掐死 → 抬到 40，
+   * 额度对得起"先补档 → 拉池子 → 逐套 simulate"的节奏。
+   */
   maxCalls: number;
+  /** 单轮累计 token 上限（用户 2026-09-29 指定 100 万）：只记账与兜底，正常一轮远够不着 */
+  maxTokens: number;
 }
 
 export interface BudgetState extends Budget {
   battles: number;
   ms: number;
   calls: number;
+  tokens: number;
   startedAt: number;
 }
 
-/** 一轮对话的默认预算三件套（spec §3：20,000 场 / 120 秒 / 单轮 ≤8 次工具调用） */
-export const DEFAULT_BUDGET: Budget = { maxBattles: 20000, maxMs: 120000, maxCalls: 8 };
+/** 一轮对话的默认预算（2026-09-29 按用户口径抬额：不再为省 token 卡住模型） */
+export const DEFAULT_BUDGET: Budget = {
+  maxBattles: 50000,
+  maxMs: 300000,
+  maxCalls: 40,
+  maxTokens: 1000000,
+};
 
 export class BudgetExceeded extends Error {
   constructor(public readonly why: 'battles' | 'ms' | 'calls') {
