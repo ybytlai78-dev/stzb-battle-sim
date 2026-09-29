@@ -15,3 +15,5 @@ dist/
 
 # 页面视觉自检产物（scripts/_optimize_shot.mjs 等）：截图不入库
 shots*/
+# 各会话的真机自检落盘目录（截图 / 临时驱动脚本 / 报告 json）——同样不入库
+verify-shots/
