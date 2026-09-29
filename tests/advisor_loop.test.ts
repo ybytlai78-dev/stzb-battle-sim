@@ -8,15 +8,29 @@ import { runAdvisorTurn } from '../web/advisor/loop';
 import { createFakeTransport, type ChatRequest } from '../web/advisor/transport';
 import { makeCtx } from '../web/advisor/tools';
 import { DEFAULT_DUMMY, type AdvisorMessage, type AdvisorPlan } from '../web/advisor/types';
+import type { BoxView } from '../web/advisor/box';
 import { SLOTTED_HEROES } from '../web/heroes';
 
-const turn = (script: Parameters<typeof createFakeTransport>[0], opts: { userText?: string; ctx?: ReturnType<typeof makeCtx>; maxToolCalls?: number; signal?: AbortSignal; rejectTools?: boolean } = {}) =>
+const turn = (
+  script: Parameters<typeof createFakeTransport>[0],
+  opts: {
+    userText?: string;
+    ctx?: ReturnType<typeof makeCtx>;
+    maxToolCalls?: number;
+    signal?: AbortSignal;
+    rejectTools?: boolean;
+    profileText?: string;
+    boxText?: string;
+  } = {}
+) =>
   runAdvisorTurn({
     userText: opts.userText ?? '帮我看看这队',
     ctx: opts.ctx ?? makeCtx({ fakeRuns: true }),
     transport: createFakeTransport(script, { rejectTools: opts.rejectTools }),
     ...(opts.maxToolCalls === undefined ? {} : { maxToolCalls: opts.maxToolCalls }),
     ...(opts.signal === undefined ? {} : { signal: opts.signal }),
+    ...(opts.profileText === undefined ? {} : { profileText: opts.profileText }),
+    ...(opts.boxText === undefined ? {} : { boxText: opts.boxText }),
   });
 
 describe('advisor loop（精简版）', () => {
@@ -171,5 +185,73 @@ describe('advisor loop（精简版）', () => {
     expect(t.plans).toHaveLength(1);
     expect(t.verdict.verified).toBe(false);
     expect(t.verdict.apply.enabled).toBe(false);
+  });
+});
+
+// ─────────────────────────── 「我的 box」注入与拒收（设计文档 §15） ───────────────────────────
+
+describe('advisor loop · 我的 box', () => {
+  const heroIds = SLOTTED_HEROES.slice(0, 3).map((h) => h.id);
+  const planOf = (ids: string[]): AdvisorPlan => ({
+    slots: ids.map((heroId, i) => ({ position: (['大营', '中军', '前锋'] as const)[i], heroId, level: 40, skillIds: [] })),
+    coreUnitIds: [],
+    dummy: { ...DEFAULT_DUMMY },
+  });
+  const boxView = (ids: string[], strict = true): BoxView => ({
+    profileId: 'p1',
+    profileName: '我的号',
+    heroIds: new Set(ids),
+    skillIds: new Set(),
+    strict,
+    empty: false,
+  });
+
+  it('box 块摆位：SYSTEM_PROMPT → 预算 → **box** → 偏好 → 历史 → 提问', async () => {
+    const transport = createFakeTransport([{ text: '好' }]);
+    await runAdvisorTurn({
+      userText: '这队怎么配',
+      ctx: makeCtx({ fakeRuns: true }),
+      transport,
+      profileText: '<advisor_prefs>\n- 口径：只看核心将\n</advisor_prefs>',
+      boxText: '<advisor_box>\n武将 1：曹操(h23·魏·骑)\n</advisor_box>',
+    });
+    const msgs = (transport.requests[0] as ChatRequest).messages;
+    expect(msgs[0].content).toContain('配将顾问');
+    expect(msgs[1].content).toContain('本轮预算');
+    expect(msgs[2].content).toContain('<advisor_box>');
+    expect(msgs[3].content).toContain('<advisor_prefs>');
+    expect(msgs.at(-1)?.content).toBe('这队怎么配');
+  });
+
+  it('提示词第 7 条：box 只是"给自己配将"的范围，其它问题照常；并有 get_my_box 与比较类口径', async () => {
+    const transport = createFakeTransport([{ text: '好' }]);
+    await runAdvisorTurn({ userText: '随便问问', ctx: makeCtx({ fakeRuns: true }), transport });
+    const sys = (transport.requests[0] as ChatRequest).messages[0].content;
+    expect(sys).toContain('box 只是');
+    expect(sys).toContain('不受 box 限制');
+    expect(sys).toContain('不要因为 box 是空的就拒绝回答');
+    expect(sys).toContain('八回合全队总伤');
+    expect(sys).toContain('前三回合爆发');
+    expect(sys).toContain('get_my_box');
+    expect(sys).toContain('共 13 个');
+  });
+
+  it('box 外的将法：方案**合法**（照常看数）但应用禁用 + boxIssues 有机器码', async () => {
+    const ctx = makeCtx({ fakeRuns: true, box: boxView([heroIds[0]]) });
+    const payload = JSON.stringify({ plans: [{ title: '方案A', plan: planOf(heroIds), evidenceIds: [] }] });
+    const t = await turn([{ text: `看这个\n\`\`\`json\n${payload}\n\`\`\`` }], { ctx });
+    expect(t.checks[0].legal).toBe(true);
+    expect(t.checks[0].legalErrors).toEqual([]);
+    expect(t.checks[0].boxIssues?.join(' ')).toContain('hero_not_in_box');
+    expect(t.checks[0].recompute).not.toBeNull();
+    expect(t.verdict.apply.enabled).toBe(false);
+    expect(t.verdict.apply.reason).toContain('box 外');
+  });
+
+  it('把三将都放进 box → 同一份方案合法（box 不该误伤自己有的将）', async () => {
+    const ctx = makeCtx({ fakeRuns: true, box: boxView(heroIds) });
+    const payload = JSON.stringify({ plans: [{ title: '方案A', plan: planOf(heroIds), evidenceIds: [] }] });
+    const t = await turn([{ text: `\`\`\`json\n${payload}\n\`\`\`` }], { ctx });
+    expect(t.checks[0].legal).toBe(true);
   });
 });

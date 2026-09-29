@@ -167,6 +167,20 @@ header.app .pool-search input[type="text"]:focus { outline: none; border-color: 
 }
 .nav-link:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
 
+/* 顶栏右侧「设置」齿轮（刻意**不用** .nav-link：导航计数断言 / 公告是第 7 项都不受影响）
+   设置 = 模型 / 额度 / 数据（含 API key）——与 AI配将 独立页共用同一个弹窗，见 web/settings.ts */
+.header-settings {
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; padding: 0; margin-left: 6px;
+  background: var(--beige); color: var(--beige-ink);
+  border: 1px solid var(--beige-line); border-radius: 6px; cursor: pointer;
+  transition: background .12s, border-color .12s;
+}
+.header-settings:hover { background: var(--beige-hi); border-color: var(--beige-hi); }
+.header-settings:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 2px; }
+.header-settings svg { width: 17px; height: 17px; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+
 /* ── 内容区：固定占满剩余高度（不整页滚动）；战报在自身窗口内滚动 ── */
 main {
   flex: 1;
@@ -3242,4 +3256,134 @@ main {
   .preset-body { grid-template-columns: 1fr; min-height: auto; }
   .preset-list { max-height: 42dvh; }
   .pd-actions .btn { min-width: 0; flex: 1 1 44%; }
+}
+
+/* ── 公告栏（更新公告：版本 → 更新改动）────────────────────────────
+   数据在 web/changelog.ts，视图在 web/announcement.ts；弹窗骨架复用
+   .modal-mask / .modal / .m-head / .m-close / .m-body（与武将详情、教程、预设同一套）。
+   这里只加公告专属排版：配色全部走既有变量（金 / 绯红 / 绿 / 蓝 / 橙 / 弱字），不引入独立风格。 */
+
+/* 顶栏「公告」未读红点：绝对定位在按钮右上角，米黄底上留一圈深色描边，避免糊在一起 */
+.nav-link { position: relative; }
+.nav-link.has-unread::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-crimson);
+  box-shadow: 0 0 0 1px var(--bg);
+}
+
+/* 尺寸交给 .modal 基础规则（min(760px, 92vw)）——与武将详情 / 教程 / 预设等弹窗同一个宽度 */
+.announcement-modal .m-head h3 { gap: 8px; }
+/* 标题右侧的「当前版本 v1.0」：弱字小牌，不抢标题 */
+.announcement-modal .an-cur {
+  font-family: var(--font-sans);
+  font-size: 11.5px;
+  font-weight: 400;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0 6px;
+  line-height: 18px;
+}
+
+.an-item {
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  padding: 10px 12px 8px;
+  margin-bottom: 12px;
+}
+.an-item:last-child { margin-bottom: 0; }
+/* 最新版：左侧绯红竖杠（与卡片 --card-accent 同一套语言）+ 提亮描边 */
+.an-item.latest {
+  border-color: var(--line-strong);
+  box-shadow: inset 3px 0 0 var(--color-crimson);
+}
+
+.an-item .an-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 7px;
+  border-bottom: 1px dashed var(--line);
+}
+.an-item .an-ver {
+  font-family: var(--font-kai);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--gold-bright);
+  border: 1px solid var(--gold);
+  border-radius: 3px;
+  padding: 0 7px;
+  line-height: 22px;
+}
+.an-item .an-title { font-family: var(--font-kai); font-size: 14px; letter-spacing: 1px; color: var(--ink); }
+.an-item .an-flag {
+  font-size: 10.5px;
+  letter-spacing: 1px;
+  color: var(--beige-ink);
+  background: var(--gold);
+  border-radius: 3px;
+  padding: 1px 5px;
+}
+.an-item .an-date {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-weak);
+  font-variant-numeric: tabular-nums;
+}
+.an-item .an-summary { margin-top: 8px; font-size: 12.5px; line-height: 1.85; color: var(--text-dim); }
+
+/* 分组：左侧「新增 / 优化 / 修复 / 调整 / 说明」标签 + 右侧条目列表 */
+.an-group { display: flex; gap: 8px; margin-top: 9px; }
+.an-kind {
+  flex: 0 0 auto;
+  align-self: flex-start;
+  font-size: 11px;
+  letter-spacing: 1px;
+  line-height: 18px;
+  padding: 0 6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 3px;
+  color: var(--text-dim);
+}
+.an-kind.add { color: #8fc79a; border-color: #3f6b4c; background: color-mix(in srgb, var(--green) 22%, transparent); }
+.an-kind.polish { color: #93b7e0; border-color: #3a5a80; background: color-mix(in srgb, var(--blue) 22%, transparent); }
+.an-kind.fix { color: #d99b90; border-color: #6c3a32; background: color-mix(in srgb, var(--red) 26%, transparent); }
+.an-kind.tune { color: #e0b473; border-color: #7a5a2a; background: color-mix(in srgb, var(--orange) 20%, transparent); }
+.an-kind.note { color: var(--text-weak); }
+
+.an-list { margin: 0; padding-left: 16px; min-width: 0; }
+.an-list li { font-size: 12.5px; line-height: 1.9; color: var(--text); margin-bottom: 3px; }
+.an-list li::marker { color: var(--gold); }
+.an-item .an-count {
+  margin-top: 8px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--line);
+  font-size: 10.5px;
+  letter-spacing: 1px;
+  color: var(--text-weak);
+}
+
+/* 底栏版本标记：由 <span> 改成 <button>（点开公告栏）→ 复位浏览器默认按钮样式 */
+.control-bar button.build-tag {
+  background: transparent;
+  font-family: inherit;
+  line-height: 1.5;
+  cursor: pointer;
+  transition: color .12s, border-color .12s;
+}
+.control-bar button.build-tag:hover { color: var(--gold-bright); border-color: var(--gold); }
+.control-bar button.build-tag:focus-visible { outline: 1px solid var(--color-focus); outline-offset: 2px; }
+
+@media (max-width: 720px) {
+  /* 窄屏：日期换行独占一行，不跟版本号/标题抢横向空间 */
+  .an-item .an-date { margin-left: 0; width: 100%; }
 }

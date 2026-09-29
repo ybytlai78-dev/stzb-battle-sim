@@ -23,6 +23,7 @@ import {
   type RecomputeResult,
   type ToolCallRecord,
 } from './types';
+import type { BoxView } from './box';
 
 export interface PlanIssue {
   /** 给 AI 自纠用的机器码（unknown_hero / duplicate_skill / mutual_exclusion / main_skill_in_slot / slot-position …） */
@@ -34,6 +35,13 @@ export interface PlanIssue {
 export interface PlanVerdict {
   ok: boolean;
   errors: PlanIssue[];
+  /**
+   * 方案里含**这位用户 box 外**的将法（严格模式，识图建档见 `box.ts` / 设计文档 §15）。
+   * ⚠️ 口径（用户 2026-09-29 修正）：这**不算"不合法"** —— 比较、测算、看参考都该能看；
+   * 它只意味着**不能一键应用到他的配将区**（`checkPlan` 据此禁用「应用」）。
+   * 「不许推荐他没有的」靠的是：配将类搜索的候选池只在他有的将法里 + 提示词在"给他配将"时要求只用清单内。
+   */
+  boxIssues: PlanIssue[];
   /** 规范化后的方案（排序 / 补默认等级 / 去空战法）——工具与渲染都用它 */
   normalized: AdvisorPlan;
 }
@@ -111,13 +119,26 @@ export function planToScanJson(plan: AdvisorPlan): ScanJson {
 
 /**
  * 关 1：方案合法性。错误**如实返回**（带 code）而不是静默丢弃——AI 拿到 code 才能自纠。
+ *
+ * `box` = 这位用户的「我的 box」只读视图（识图建档，见 `box.ts` / 设计文档 §15）：
+ * 清单外的将法**不算不合法**（进 `boxIssues`，只禁用「应用」）；真正的非法（不在库 / 主战法占槽 / 互斥…）才进 `errors`。
+ * 传 null / 未传（或 box 为空 / 严格模式关）→ 行为与加这个功能之前完全一致。
  */
-export function validateAdvisorPlan(plan: AdvisorPlan): PlanVerdict {
+export function validateAdvisorPlan(plan: AdvisorPlan, box?: BoxView | null): PlanVerdict {
   const normalized = normalizePlan(plan);
   const errors: PlanIssue[] = [];
+  const boxIssues: PlanIssue[] = [];
+  const strict = Boolean(box?.strict);
 
   normalized.slots.forEach((s, i) => {
-    if (!getHeroById(s.heroId)) errors.push({ code: 'unknown_hero', message: `武将「${s.heroId}」不在库`, slotIndex: i });
+    const hero = getHeroById(s.heroId);
+    if (!hero) errors.push({ code: 'unknown_hero', message: `武将「${s.heroId}」不在库`, slotIndex: i });
+    else if (strict && !box?.heroIds.has(s.heroId))
+      boxIssues.push({
+        code: 'hero_not_in_box',
+        message: `武将「${hero.name}」不在你的 box 里（识图清单里没有它）——能看到、能测算，但不能应用到你的配将区`,
+        slotIndex: i,
+      });
     if (s.skillIds.length > SKILL_SLOTS)
       errors.push({ code: 'too_many_skills', message: `每将最多 ${SKILL_SLOTS} 个可学战法，收到 ${s.skillIds.length} 个`, slotIndex: i });
     s.skillIds.forEach((id) => {
@@ -125,6 +146,12 @@ export function validateAdvisorPlan(plan: AdvisorPlan): PlanVerdict {
       if (!def) errors.push({ code: 'unknown_skill', message: `战法「${id}」不在库`, slotIndex: i });
       else if (isMainSkill(id)) errors.push({ code: 'main_skill_in_slot', message: `「${def.name}」是武将主战法，不能放进可学槽`, slotIndex: i });
       else if (!LEARNABLE.has(id)) errors.push({ code: 'skill_not_learnable', message: `战法「${def.name}」不在可学习池（可能已下架）`, slotIndex: i });
+      else if (strict && !box?.skillIds.has(id))
+        boxIssues.push({
+          code: 'skill_not_in_box',
+          message: `战法「${def.name}」不在你的 box 里（识图清单里没有它）——能看到、能测算，但不能应用到你的配将区`,
+          slotIndex: i,
+        });
     });
   });
 
@@ -157,7 +184,7 @@ export function validateAdvisorPlan(plan: AdvisorPlan): PlanVerdict {
   const scan = validateScan(planToScanJson(normalized), browserTables());
   for (const issue of scan.issues) if (issue.level === 'error') errors.push({ code: issue.rule, message: issue.message, slotIndex: issue.slot });
 
-  return { ok: errors.length === 0, errors, normalized };
+  return { ok: errors.length === 0, errors, boxIssues, normalized };
 }
 
 // ─────────────────────────── 关 2 · 数字溯源 ───────────────────────────
@@ -242,6 +269,8 @@ export const ADVISOR_VERIFY_RUNS = 20;
 
 export interface RecomputeCtx {
   evaluate(cfg: ViewCfg, runs: number, coreUnits?: number[], baseSeed?: number): PlanSummary;
+  /** 这位用户的 box（识图建档）：严格模式下方案里出现清单外的将法 → 关 1 直接拒收 */
+  box?: BoxView | null;
 }
 
 /** 方案里的核心将 → `ViewCfg` 槽位下标（排序口径用） */
@@ -258,7 +287,15 @@ export function coreIndices(plan: AdvisorPlan, cfg: ViewCfg): number[] | undefin
 export function recomputePlan(plan: AdvisorPlan, ctx: RecomputeCtx): RecomputeResult {
   const cfg = cfgOf(plan);
   const s = ctx.evaluate(cfg, ADVISOR_VERIFY_RUNS, coreIndices(plan, cfg), ADVISOR_VERIFY_SEED);
-  return { mean: s.mean, halfWidth: s.halfWidth, runs: s.runs, seed: ADVISOR_VERIFY_SEED };
+  return {
+    mean: s.mean,
+    halfWidth: s.halfWidth,
+    runs: s.runs,
+    seed: ADVISOR_VERIFY_SEED,
+    // 用户 2026-09-29 口径：比较类问题的两个主数字 = **八回合全队总伤**与**前三回合爆发**（核心将）
+    meanTotal: s.meanTotal,
+    meanFirst3: s.meanFirst3,
+  };
 }
 
 /** 搜索口径值 vs 标准口径复算值：区间重叠 = 一致；复算明显更低 = 对口径敏感 */
@@ -287,7 +324,7 @@ export function searchHintFromTrace(plan: ProposedPlan, trace: ToolCallRecord[])
 
 /** 对一个方案跑完三关，给出「能不能应用」 */
 export function checkPlan(plan: ProposedPlan, trace: ToolCallRecord[], ctx: RecomputeCtx): PlanCheck {
-  const v = validateAdvisorPlan(plan.plan);
+  const v = validateAdvisorPlan(plan.plan, ctx.box ?? null);
   const ev = verifyPlanEvidence(plan, trace);
   let recompute: RecomputeResult | null = null;
   try {
@@ -298,16 +335,21 @@ export function checkPlan(plan: ProposedPlan, trace: ToolCallRecord[], ctx: Reco
   const search = searchHintFromTrace(plan, trace);
   const judge = recompute && search ? judgeRecompute(search, recompute) : null;
   const verdict = { legal: v.ok, verified: ev.ok, recomputed: recompute !== null };
+  const base = decideApply(verdict);
+  // box 外的将法：**合法**（测算 / 参考照看），只是不能一键应用到这位用户的配将区
+  const boxReason = `方案含你 box 外的将法 ${v.boxIssues.length} 处——能看能算，但不能应用到你的配将区（严格模式）`;
+  const apply = v.boxIssues.length ? { enabled: false, reason: base.enabled ? boxReason : `${base.reason}；${boxReason}` } : base;
   return {
     title: plan.title,
     plan: v.normalized,
     legal: v.ok,
     legalErrors: v.errors.map((e) => `${e.code}: ${e.message}`),
+    boxIssues: v.boxIssues.map((e) => `${e.code}: ${e.message}`),
     evidenceOk: ev.ok,
     ...(ev.reason ? { evidenceReason: ev.reason } : {}),
     recompute,
     search,
     judge,
-    apply: decideApply(verdict),
+    apply,
   };
 }

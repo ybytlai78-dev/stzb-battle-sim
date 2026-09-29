@@ -2,7 +2,9 @@
  * AI 配将顾问 · 对话循环（精简版：够跑通「提问 → 调工具 → 出方案」一轮）
  * ---------------------------------------------------------------------------
  * 与实施计划 Task 6 的差别（本切片有意不做，留给二期）：
- *   · 不做会话持久化（localStorage trace）——由页面自己存；
+ *   · 不做会话持久化（localStorage trace）——由页面自己存；**记忆（会话 + 偏好档案）已由 `memory.ts` / `prefs.ts`
+ *     落地，但 loop 仍然无状态**：页面把 `history`（上一轮的紧凑转录）与 `profileText`（`<advisor_prefs>` 注入块）
+ *     传进来，loop 只负责把它们摆到正确位置（= harness 的 pre-step 注入，见 `memory.ts` 头部 §④）；
  *   · 不做预算的完整三件套提示（预算仍由 `tools.ts` 的护栏拒绝执行，错误照样回灌）；
  *   · 不做「标准口径复算」（关 3），故 `verdict.recomputed` 恒为 false → 应用保持禁用。
  *
@@ -29,12 +31,24 @@ export const SYSTEM_PROMPT = `你是一个《率土之滨》战斗模拟器的�
 硬规则（违反即视为错误回答）：
 1. 数字只能来自工具返回。引用数字时必须紧跟证据编号，写成「26500[[ev-3-simulate]]」这种形式；没跑过就直说「这个我没跑过，要我跑一下吗」，绝不推算或估计。
 2. 提方案必须走结构化出口：正文里放一个围栏 json 代码块，形如 {"plans":[{"title":"…","plan":{…},"evidenceIds":["ev-3-simulate"]}]}。plan 里三个槽位（大营/中军/前锋）、每个槽位 {position, heroId, level, skillIds}（skillIds 只放**可学习**战法，最多 2 个，主战法不用写）。
-3. 排序口径默认是**核心将的伤害期望**（simulate 的 mean）；全队总伤 meanTotal 只作参考列。换口径必须明说。
+3. 排序口径默认是**核心将的伤害期望**（simulate 的 mean）；比较两个配置时优先报**八回合全队总伤 meanTotal** 与**前三回合爆发 meanFirst3**这两个主数字。换口径必须明说。
 4. 差距不显著时必须说「分不出来」：95% 区间重叠（半宽相加大于均值差）就不许说「第 1 名更强」。
 5. 主动声明边界：木桩不还手 → 控制 / 防御型队友的价值量不出来（那是 L4 胜率的事）；解析口径不含控制 / 规避 / 兵力截断。
 6. 工具报错就如实转述并改法，不许编一个结果圆过去。方案要先过 validate_plan 再报给用户。
+7. **box 只是「给你自己配将」时的范围，不是"什么都得先传截图"**：上下文里的 <advisor_box> 是这位用户账号实际拥有的五星武将 / 战法清单（他自己上传截图识别的结果），**每个用户一份**。
+   · **只有当他明确要「给他自己配将 / 出方案 / 我该带什么 / 帮我配」时**，才用清单限定：方案里的每个武将、每个战法都必须在清单里，配将类搜索（optimize_*）也已经只在他有的将法里选。清单为空时先请他上传截图识别一次，再配将。
+   · **其它问题一律照常回答，不受 box 限制**：问"A 和 B 哪个好"、某个将/战法什么机制、这队为什么低、帮我算一下…… 直接查、直接跑（search_* / list_skills / hero_detail / skill_detail / simulate / simulate_many **都不受 box 限制**），把数字给他。**绝对不要因为 box 是空的就拒绝回答、或者反过来要求用户先传截图**——那是答非所问。
+   · 方案里出现清单外的将法时，卡片上会标出来并禁用「应用」；这时照实说明"这是给你看的对比/参考，不是能直接用的配置"即可，不用改口说"不合法"。
 
-可用工具（共 12 个）：
+**比较两个战法 / 两个搭配（"带 A 还是带 B 好"）的标准做法**：
+- 同一套阵容**只换那一处**，其余槽位、等级、靶子、士气完全一致 → 调 simulate_many（≤8 套）一次对拍，runs 拉到 100 以上更稳；
+- 报数就给这两个：**八回合全队总伤 meanTotal** 与 **前三回合爆发 meanFirst3**（另附核心将期望 mean ± 半宽）；差值一起给；
+- 差距落在 95% 区间内（半宽之和 ≥ 均值差）→ 直接说**分不出来**，别硬排名；
+- 顺手说清两者的差别（出手位 / 机制 / 吃不吃发动率），但**机制描述只按工具返回的官方描述说**，没查到就别替它脑补。
+
+可用工具（共 13 个）：
+**我的 box 与配置（毫秒级）**
+- **get_my_box**：读这位用户的 box 全量清单（拥有哪些五星将 / 战法）。配队前先确认；上下文里的 <advisor_box> 块被截断时用它拿全量。
 **搜索类（要"最强 / 最优"就用它们，一次跑完几千~上万场）**
 - **optimize_both**：**一次把「某将 + 配谁 + 带什么战法」搜完**（队友搜索 ↔ 战法搜索交替两轮，约 30~120 秒）。问"某某怎么配输出最大化 / 完整最强配置"就调它一次，不要自己串好几步。
 - **optimize_skills**：只搜战法（队友已定）——「这套阵容带哪些战法期望最高」。
@@ -79,9 +93,28 @@ export interface TurnInput {
   userText: string;
   ctx: ToolCtx;
   transport: AdvisorTransport;
+  /** 上一轮的紧凑转录（`memory.historyFrom()` 产物） */
   history?: AdvisorMessage[];
+  /**
+   * 记忆层注入块（`memory.renderProfileBlock()` 产物，`<advisor_prefs>…</advisor_prefs>`）。
+   * 摆位与 harness 的 pre-step 注入一致：**每轮**都进上下文，且在历史之前（历史是"发生过什么"，
+   * 档案是"这个人一贯要什么"——先给身份约束，再给经过）。
+   */
+  profileText?: string;
+  /**
+   * 「我的 box」注入块（`box.renderBoxBlock()` 产物，`<advisor_box>…</advisor_box>`）。
+   * 与档案同为 **system 块**，但摆位更靠前：box 是**配将的前提条件**（能不能用某个将 / 某个战法），
+   * 比"这个人偏好什么口径"更硬 —— 顺序：SYSTEM_PROMPT → budgetHint → box → prefs → history → 本轮提问。
+   * 空 box 也有块（一小段空态提示：先要截图，别假设），见 `box.renderBoxBlock`。
+   */
+  boxText?: string;
   signal?: AbortSignal;
   onEvent?: (e: AdvisorEvent) => void;
+  /**
+   * 每个工具**跑完就回调**一次（成功才给）。
+   * 记忆层用它收「这一轮已经跑出来的证据」——中途取消 / 关页面时也能把证据清单如实落盘（不丢半成品）。
+   */
+  onToolRecord?: (r: ToolCallRecord) => void;
   /** 单轮最多几次工具调用（缺省 8，spec §3 预算三件套之一） */
   maxToolCalls?: number;
   /** 最多几轮模型往返（缺省 6） */
@@ -130,6 +163,10 @@ export async function runAdvisorTurn(input: TurnInput): Promise<AdvisorTurn> {
   const messages: AdvisorMessage[] = [
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'system', content: budgetHint(ctx.budget) },
+    // 「我的 box」（配将前提条件：能用的将 / 战法范围）：空 box 也有块（提示先要截图）
+    ...(input.boxText ? [{ role: 'system' as const, content: input.boxText }] : []),
+    // 「你的偏好」档案：空档案不注入空块（memory.renderProfileBlock 已经保证空 → ''）
+    ...(input.profileText ? [{ role: 'system' as const, content: input.profileText }] : []),
     ...(input.history ?? []),
     { role: 'user', content: userText },
   ];
@@ -200,7 +237,16 @@ export async function runAdvisorTurn(input: TurnInput): Promise<AdvisorTurn> {
       const t0 = Date.now();
       try {
         const r = await runTool(c.name, c.args, ctx);
-        toolCalls.push({ evidenceId: r.evidenceId, name: c.name, args: c.args, summary: r.summary, data: r.data, stats: r.stats });
+        toolCalls.push({
+          evidenceId: r.evidenceId,
+          name: c.name,
+          args: c.args,
+          summary: r.summary,
+          ...(r.brief ? { brief: r.brief } : {}),
+          data: r.data,
+          stats: r.stats,
+        });
+        input.onToolRecord?.(toolCalls[toolCalls.length - 1]);
         onEvent?.({ type: 'tool_end', name: c.name, ms: Date.now() - t0, battles: r.stats.battles, cached: r.stats.cached });
         messages.push({
           role: 'tool',
@@ -227,7 +273,8 @@ export async function runAdvisorTurn(input: TurnInput): Promise<AdvisorTurn> {
   const claimCheck = verifyClaims(parsed.text, toolCalls);
   const planChecks = parsed.plans.map((p) => verifyPlanEvidence(p, toolCalls));
   // 关 3：对每个方案用**标准口径**独立复算（固定种子 + 20 场），不采信 AI 那次的搜索数字
-  const checks = parsed.plans.map((p) => checkPlan(p, toolCalls, { evaluate: ctx.deps.evaluate }));
+  // box 一并交给关 1：严格模式下方案里出现清单外的将法 → legal=false（应用禁用 + 显示原因）
+  const checks = parsed.plans.map((p) => checkPlan(p, toolCalls, { evaluate: ctx.deps.evaluate, box: ctx.box ?? null }));
   const legal = checks.length ? checks.every((c) => c.legal) : true;
   const verified = claimCheck.ok && planChecks.every((c) => c.ok);
   const recomputed = checks.length ? checks.every((c) => c.recompute !== null) : false;

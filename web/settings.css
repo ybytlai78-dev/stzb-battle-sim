@@ -1,0 +1,22 @@
+/* 全局「设置」弹窗（`web/settings.ts`）——主站与 AI配将独立页共用
+ * .modal / .modal-mask / .btn 骨架来自 web/styles.css；这里只补设置项自己的排版。
+ *
+ * ⚠️ `.modal-mask` 在 styles.css 里的默认是 `display:flex`（不是靠 .on 显示），
+ *    所以本弹窗**必须自己**把它默认藏起来 —— 否则建出来就一直盖在页面上拦截点击。 */
+#advisor-settings-modal { display: none; }
+#advisor-settings-modal.on { display: flex; }
+
+.set-group { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.set-gh { font-size: 12px; color: var(--gold); letter-spacing: 1px; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+.set-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.set-field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-dim); }
+.set-field.wide { grid-column: 1 / -1; }
+.set-field input { background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 4px; padding: 5px 7px; font: inherit; font-size: 13px; }
+.set-field input:focus { outline: none; border-color: var(--gold); }
+.set-chk { display: flex; gap: 7px; align-items: flex-start; font-size: 12px; color: var(--text); line-height: 1.55; }
+.set-chk input { margin-top: 2px; accent-color: var(--gold); }
+.set-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.set-hint { font-size: 11px; color: var(--text-dim); line-height: 1.6; }
+.set-hint code { color: var(--gold); font-size: 11px; }
+.set-clear { color: var(--orange) !important; }
+@media (max-width: 720px) { .set-fields { grid-template-columns: 1fr; } }

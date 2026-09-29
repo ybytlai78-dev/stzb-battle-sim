@@ -6,12 +6,11 @@ import './styles.css';
 import './mobile.css';
 import './lab.css';
 import './tutorial.css';
-import './advisor.css';
+import { openSettingsPanel } from './settings';
+import { TEAM_KEY, readTeamState, writeTeamState } from './teamStore';
 import { runBattle } from '../src/engine/combat';
 import type { General } from '../src/engine/types';
 import type { BattleReport } from '../src/engine/types';
-import { mountAdvisor, type AdvisorView } from './advisor/view';
-import { createAdvisorHost } from './advisorHost';
 import { buildGeneral, freePointBudget, getHeroById, heroIdOf } from './heroes';
 import {
   emptyEditor,
@@ -389,23 +388,36 @@ setupBackButton({
 
 function refresh(): void {
   renderTeamEditor(editorRoot, state, handlers);
+  persistTeam();
 }
 
-// ─── AI 顾问（右侧抽屉；懒挂载，只在第一次点开时创建） ───
-let advisorView: AdvisorView | null = null;
+// ─── AI配将（独立页；主站只留入口 + 一支队伍交接） ───
+// 设计口径：`docs/AI配将-页面布局设计.md` §2/§9 —— 功能全在独立页，主站不再内嵌抽屉。
+/** 主站落盘当前队伍（独立页读它当上下文）；**只在内容变化时写**，否则两标签页会 storage 事件互踢 */
+let lastTeamJson = '';
+function persistTeam(): void {
+  const json = JSON.stringify({ red: state.red, blue: state.blue });
+  if (json === lastTeamJson) return;
+  lastTeamJson = json;
+  writeTeamState(state);
+}
 
 function openAdvisor(): void {
-  if (!advisorView) {
-    advisorView = mountAdvisor(document.body, {
-      host: createAdvisorHost({
-        getTeam: () => state.red,
-        handlers,
-        refresh,
-        notify: (msg) => showNotice(msg),
-      }),
-    });
-  }
-  advisorView.open();
+  persistTeam(); // 出发前先落盘：独立页一进去就拿到当前阵容
+  location.href = './advisor.html';
+}
+
+// 独立页把方案写回同一把键 → 主站重读并重渲染（不然会出现"应用了但主站还是旧队"）
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key !== TEAM_KEY) return;
+    const next = readTeamState();
+    if (!next) return;
+    Object.assign(state, next);
+    lastTeamJson = e.newValue ?? '';
+    refresh();
+    showNotice('配将区已同步：AI配将 页面写回了新方案');
+  });
 }
 
 /** 站位顺序：红队（我方）与蓝队（敌方）都从上到下 大营/中军/前锋 */
@@ -607,10 +619,13 @@ export function initApp(root?: HTMLElement): void {
       <button type="button" class="nav-link" data-nav="presets" title="阵容预设：保存、搜索、一键上场">预设</button>
       <button type="button" class="nav-link" data-nav="skills">战法</button>
       <button type="button" class="nav-link" data-nav="lab">伤害测试</button>
-      <button type="button" class="nav-link" data-nav="advisor" title="AI 顾问：读配将区 → 调 L2/L3 搜索 → 给带实测数据的方案">AI 顾问</button>
+      <button type="button" class="nav-link" data-nav="advisor" title="AI配将：独立页面（读配将区 → 调 L2/L3 搜索 → 给带实测数据的方案）">AI配将</button>
       <button type="button" class="nav-link" data-nav="tutorial">教程</button>
       <button type="button" class="nav-link" data-nav="notice" title="更新公告：每个版本的更新改动都在这里">公告</button>
     </nav>
+    <button type="button" class="header-settings" id="header-settings" title="设置（模型 / 额度 / 数据）——API key 只在这里" aria-label="设置">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 3.5v2.2M12 18.3v2.2M4.9 7.6l1.9 1.1M17.2 15.3l1.9 1.1M4.9 16.4l1.9-1.1M17.2 8.7l1.9-1.1"/></svg>
+    </button>
   `;
   app.appendChild(header);
 
@@ -660,8 +675,10 @@ export function initApp(root?: HTMLElement): void {
   header.querySelector('[data-nav="lab"]')!.addEventListener('click', () => {
     labVisible ? exitLab() : enterLab();
   });
-  // AI 顾问（右侧抽屉）：读配将区 → 调 L2/L3 搜索 → 方案卡 → 一键应用
+  // AI配将（独立页）：落盘当前队伍 → 跳 advisor.html（主站不再内嵌抽屉）
   header.querySelector('[data-nav="advisor"]')!.addEventListener('click', () => openAdvisor());
+  // 设置：模型 / 额度 / 数据（含 API key）——与 AI配将 页共用同一个弹窗
+  header.querySelector('#header-settings')!.addEventListener('click', () => openSettingsPanel());
   // 引擎使用指南（带截图的教程弹窗）
   header.querySelector('[data-nav="tutorial"]')!.addEventListener('click', () => openTutorialPanel());
   // 更新公告（公告栏）：版本 → 更新改动，数据在 web/changelog.ts

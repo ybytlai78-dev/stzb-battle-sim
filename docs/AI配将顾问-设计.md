@@ -441,3 +441,175 @@ npm run web                     # 起服务后打开 http://localhost:5173/advis
 | 界面 | 新增「单轮场次上限」输入框（默认 200000），与调用/token 上限并列 |
 
 **验证**：顾问测试 63 → **68**（假搜索注入验榜单/预算/进度 3 个 + 预算拒绝带账 1 个 + 计费口径 1 个 + **真接线小范围 L2 搜索 1 个** + 工具数 11）；`tsc` 两份 clean；全量 `npm test` **224 files / 2415 tests 全绿**；无头浏览器复跑界面（三个上限输入框 + 进度行）正常、`pageerror = 0`。
+
+## 14. 记忆层（会话持久化 + 「你的偏好」档案）
+
+**用户需求（2026-09-29）**：补齐两块记忆 —— ① 对话内容与证据清单落盘，刷新页面能续上而不是丢上下文；② 为每一位用户维护一份偏好档案，**每一轮自动带进上下文**。
+**要求先看 DSH 记忆插件怎么做的**（存储位置 / 落盘时机 / 偏好如何写入 / 如何注入），再据此落地。
+
+### 14.1 参考实现（harness）：`@vectorize-io/hindsight-coding-agents` v0.7.0
+
+读的是本机 profile 里装的那份：`~/.dsh/profiles/web/node_modules/@vectorize-io/hindsight-coding-agents/`，DSH 侧入口 `dist/dsh.js`（`cordis.patch.yml` 把它作为一行 `hindsight` 挂到 **host plane**，所以 pre-step / session-start / turn-stopping 与工具注册对每个会话都生效）。
+
+| 问题 | harness 的做法（源码位置） |
+|---|---|
+| **存储位置** | 记忆正文 → 远端 Hindsight 服务端的 **bank**（`bankId` 按工作区 cwd 推导，配置在 `~/.hindsight/coding-agent.json`，`HINDSIGHT_CONFIG` 可改）。本地只放三类状态：`~/.hindsight/coding-agents-logs/{diag,usage}.jsonl`、**每会话注入复用缓存** `<tmp>/hindsight-<harness>/<sessionId>.json`（`{turns, reflectAnswer, reflectAttempts, pages}`，`tmp` 写入 + `rename` 原子替换）、以及 retain 游标 `{bank, turns, fingerprint(sha1), pending 发件箱, dirty}`（`src/core/retain-cursor.ts`：`planRetain` 决定 skip / replace / append） |
+| **落盘时机** | 四个钩子（`dist/dsh.js` 的 `apply()`）：`agent/session-start`（冷库才播种）→ `agent/pre-step`（**每轮**：`onPrompt` 算注入 + 写会话缓存 + 追加注入消息）→ **`agent/turn-stopping` = `onSessionIdle()`：重新从宿主抓完整转录**（`fetchTranscript`，因为 `messages.transform` 那种时机拿到的转录**不含刚生成的回答**）→ 与 `st.retainedTurns` 比对，只在变长时写，`retain()` fire-and-forget、**永不抛进宿主**。刻意**不做客户端攒批**：注释原话「nothing is ever held somewhere it can be lost」——重复提交交给服务端 fold（同一文档的多次 retain 合成一次抽取） |
+| **偏好如何写入** | **没有独立的偏好表**：写进去的是**转录本身**，外加一份 bank manifest（`retain_mission` / `retain_extraction_mode` / `retain_custom_instructions` / `retain_chunk_size`）告诉抽取器「该抽什么」；抽取在服务端做。另有两条显式通道：`hindsight_ingest_document`（外部文档 / 更正）与 `hindsight_capture_initiative`（计划页），并带 `retainTags` / `retainMetadata` 作用域标记 |
+| **如何注入** | `onPrompt` 合成一个文本块（**仅第 1 轮**带知识页名册；每轮带本轮 reflect / recall 结果，答案缓存在会话缓存里不重算）；`getInjection(sessionId)` 取回，DSH 适配器把它作为**追加的一条 user 消息**塞进 `decision.messages`（`source.kind='plugin:hindsight'`）。由于它进了会话本身，回读转录时用 `stripInjectedMemory`（标签正则 `<hindsight_memory>…</hindsight_memory>`）剥掉 → **防"注入内容被当成用户说过的话"再写回记忆**（自我污染） |
+
+### 14.2 本项目的落法（无后端 → 两把 localStorage 键）
+
+| 维度 | 落地 | 对应 harness |
+|---|---|---|
+| 存储位置 | `dsh-advisor-session-v1`（对话 + 证据清单 + 方案卡三关结论）/ `dsh-advisor-profile-v1`（偏好档案），与既有 `dsh-advisor-settings-v1` / `dsh-advisor-cache-v1` 同一套命名。**证据只存 `evidenceId / name / args / summary / brief / stats`，不存 `data`**（几千行跑批明细另有 `cache.ts` 按同一 planKey 持久化，抽屉也不读它）；写失败（配额满 / 隐私模式）→ 该键退到进程内内存（`createDefaultStore`，**只有写失败过的键**才从内存读，避免 `localStorage.clear()` 后旧值复活） | 远端 bank + 本地会话缓存 + 游标 → 简化为两把键（没有服务端可放正文） |
+| 落盘时机 | **轮末一次写**：`runAdvisorTurn` 返回 → `toStoredTurn` → `appendTurn`（按 `turn.id` **幂等**，= `retainedTurns` 游标）→ `saveSession`（先按 1.5MB 裁剪再**一次** `JSON.stringify` + 一次 `set`）。超 30 轮丢最旧的并计数（`session.dropped`）。中途取消 / 失败：`loop.ts` 新回调 `onToolRecord` 逐个收已完成的证据 → `flush()` 落成 `partial` 轮（正文只到断点、证据只到跑完的那几个，**不编不补**）；`pagehide` / `visibilitychange` 再兜一次 | `turn-stopping` 抓完整转录 + 游标比对 + fire-and-forget；"不攒批、不丢" |
+| 偏好写入 | 轮末一次**非流式小请求**（`transport.once()`，temperature 0，不带 tools；提示词见 `prefs.ts` 的 `EXTRACT_SYSTEM_PROMPT`，就是 harness 的 `retain_mission` 那件事）：从「本轮用户 + 本轮回答 + 现有档案」抽出 `{"add":[{key,value}],"remove":[旧取值]}`；合并规则 = **同「标签 + 取值」→ `seen`+1**（重复出现算一种置信度），新取值新增一条，超 24 条淘汰最久未确认的。**旁路**：没 key / 关开关 / 传输层不支持 `once` / 请求失败 → 一律当"这轮没得记"，绝不影响对话 | bank manifest 的抽取口径 + 服务端抽取 |
+| 注入 | `renderProfileBlock()` 产出 `<advisor_prefs>…</advisor_prefs>`（空档案返回 `''`，**不注入空块**；条目 / 字数双上限），由 `loop.ts` 作为 **system 块**摆在 `SYSTEM_PROMPT → budgetHint → 档案 → history → 本轮提问`；`historyFrom()` 的紧凑转录（用户原话 + 顾问结论 + 上一轮证据一行行）回灌，**回灌前 `stripInjected()` 剥掉所有本层标签块**（harness 的 `stripInjectedMemory` 同款） | `<hindsight_memory>` + pre-step 追加消息 + 回读剥离 |
+
+**明确不做**（与一期口径一致）：远端 bank / 跨设备同步（`docs/…` §10「明确不做」）、多用户档案切换（"每一位用户"= 每台浏览器的这一位；键就是本机键）、把偏好写回服务端。
+
+### 14.3 改动清单
+
+| 文件 | 内容 |
+|---|---|
+| `web/advisor/memory.ts`（新） | 会话 / 档案的类型 + 纯函数：`parseSession`（坏 JSON / 版本不符 → null）、`appendTurn`（幂等 + 上限）、`updateTurn`（回填 note）、`pruneToBytes`、`saveSession`/`loadSession`、`historyFrom`（紧凑转录 + 字数上限）、`stripInjected`、`mergePreferences` / `removePreference` / `normalizePref`、`renderProfileBlock`、`createDefaultStore`（写失败退内存）、`stampText` |
+| `web/advisor/prefs.ts`（新） | 抽取口径提示词、`buildExtractInput`、`parsePrefReply`（围栏 / 裸 JSON / 坏 JSON 全容错）、`createProfileExtractor`（走 `transport.once`，永不抛错） |
+| `web/advisor/transport.ts` | `AdvisorTransport` 新增可选 `once()`（真传输 = `stream:false` 非流式）；假传输新增 `onceReply` 与 `requests` / `onceRequests` 记录（测试据此断言注入了什么） |
+| `web/advisor/loop.ts` | `TurnInput` 新增 `profileText`（system 块注入）与 `onToolRecord`（中断时收证据）；**loop 仍然无状态**（历史与档案都由页面传进来） |
+| `web/advisor/view.ts` | 挂载即 `renderAll()` 重放（正文 + 证据清单 + **最后一轮方案卡可继续点「应用」**）；轮末落盘 + 中断兜底；会话条（「继续上次会话：09-29 14:03 · 2 轮 · 刷新不丢」）+「新会话」（两下确认，**清对话不清档案**）；「你的偏好」面板（列表 / 手填 / 删除 / 清空 / 「每轮自动整理偏好」开关）；成本行显示 `档案 +N` |
+| `web/advisor.css` | 会话条 / 偏好面板 / 证据清单样式（沿用主站 token，不动布局） |
+
+### 14.4 测试与验收
+
+- `tests/advisor_memory.test.ts`（新，纯函数 + 存储 + 抽取器，node 环境）：键名与往返（证据不带 `data`）、坏数据容错、**幂等**（同轮 id 两次仍 1 条）、轮数上限与 `dropped` 计数、体积裁剪、`partial` 兜底、紧凑转录与字数上限、`stripInjected` 剥两块标签、偏好合并（`seen`+1 / 同标签多值 / 淘汰最久未确认）、删除三种写法、注入块上限与空档案不注入、`parsePrefReply` 容错、抽取器「没有 once / 抛错 → 空结果」、存储降级（假 Storage 抛错仍可读写；无 localStorage 不崩）。
+- `web/advisorSmoke.test.ts`（扩，jsdom 端到端）：① 轮末落盘（对话 + 两条证据 + `data` 不在）；② **重新挂载 = 刷新**后续上（正文 / 证据清单 / 方案卡与应用按钮仍可用）；② 第二轮请求里带上一轮对话与证据、且不含旧 `tool` 消息；④ 空档案不注入、手填后每轮以 system 块注入且**摆位在第 3 条**；③ 自动整理（一次 `once` → 档案 + 面板可见 + 写回本轮 `note`）与开关关闭后不再请求；② 中断兜底（半成品落盘、证据 2 条、日志有【失败】）；②「新会话」两下确认清对话留档案；档案面板删除 / 清空 / 写失败不崩。
+
+### 14.5 验证记录（2026-09-29）
+
+**测试**：`tests/advisor_memory.test.ts` **25 个**（新）+ `web/advisorSmoke.test.ts` 6 → **15 个**（+9）；全量 `npm test` **231 files / 2520 tests 全绿**；`npx tsc --noEmit` 与 `npx tsc --noEmit -p web/tsconfig.json` **两份 clean**。
+
+**真机验证**（无头 Chromium 151 + CDP 直驱 vite dev server，1440×950，干跑模式；脚本 `%TEMP%/advisor-verify/drive.mjs`）：
+
+| 步骤 | 实测 |
+|---|---|
+| 干净起点 | 两个键都为 null，会话条「新会话（还没聊过）」 |
+| 一问落盘 | `dsh-advisor-session-v1` 有 1 轮；证据 `['ev-1-get_config','ev-2-simulate']`；**`evidence` 里没有 `data` 字段**；证据行 2 条；方案卡 1 张 |
+| 手填偏好 | `dsh-advisor-profile-v1` 1 条（口径：只看核心将伤害期望）；面板 1 行；日志有【记忆】 |
+| **刷新页面** | 提问与回答都在；证据行 2 条还原；方案卡还原且「应用」可点；会话条「继续上次会话：09-29 13:57 · 1 轮 · 刷新不丢」；档案仍在；**日志自动停在最新一屏** |
+| 第二轮 | 会话 2 轮；两轮同框（`log` 同时含两个提问）；证据块 2 / 证据行 4（第二次「试跑」显示**用上次结果** = 跑批缓存命中） |
+| 报错 | `pageerror` 与 console error 均为 **0** |
+
+**真机抓到并修掉一个 bug**：`renderAll()` 在抽屉还是 `display:none` 时设 `log.scrollTop = log.scrollHeight`（那时 `scrollHeight` 是 0）→ 刷新恢复出来的历史停在**最旧一屏**。改为抽屉 `open()` 之后再滚到底（`scrollLogToEnd()`），并在真机断言 `scrollTop + clientHeight >= scrollHeight - 4`。
+
+## 15. 识图建 box（2026-09-29）
+
+**用户需求（2026-09-29 原话口径）**：
+1. 用**用户当前接入的那个模型**（他的 ds flash，具备视图 / 识图能力）完成图片识别 —— **不换模型**；
+2. 配将场景里支持上传截图：截图内容 = 他账号里**所有的五星武将 + 五星战法**；
+3. 由 AI 识别这些截图，提取并汇总出这位用户 box 的完整范围（拥有哪些五星武将、拥有哪些战法）；
+4. 后续配将**必须严格基于识别出的 box**：不得推荐用户没有的武将 / 战法；
+5. **每个用户的 box 都不同** → 识别结果按用户区分，并作为那位用户配将的**前提条件**。
+
+**两条用户拍板（2026-09-29，勿再动摇）**：
+
+| 分歧 | 用户选择 | 落法 |
+|---|---|---|
+| 「按用户区分」落到哪一层 | **多档案可切换** | 面板里有档案下拉 + 新建 / 改名 / 删除；box 跟着当前档案走（默认只有一份「我的号」，不改变现状）。`dsh-advisor-box-v1` = `{v,activeId,profiles[]}` |
+| box 硬约束收窄到哪一层 | **只收窄 AI 顾问** | 每轮注入 + 工具候选池 + 方案校验门（关 1）；**主站配将区武将池照旧全库**（不动 `teamEditor`） |
+
+### 15.1 分工：识别靠 AI、对齐靠代码（与既有截图识别同一条纪律）
+
+`docs/截图识别-敌对队伍集.md` §四 的规矩原样搬到 box 上：
+
+```
+截图（多张）──► 视觉模型：只把「名字 + 卡面阵营/兵种」抄成固定 JSON
+                            │（不猜：看不清的进 unrecognized）
+                            ▼
+              box.matchRecognition()：名字 → 库内 id 的**确定性对齐**
+                ├ 归一化后同名唯一 ────────────► 收进 box
+                ├ 同名多版 + 卡面阵营/兵种能消歧 ─► 收进 box（记一行 note）
+                ├ 同名多版、分不出 ────────────► **待确认**（列候选，人来点）
+                ├ 库里没有 ──────────────────► **待确认**（`unmatched` 留原始名字，不静默丢）
+                └ 武将主战法 ─────────────────► 跳过 + 一行说明（随武将自带，不进可学槽）
+                            ▼
+              写入当前档案（并集 + 去重）→ 复核面板可删 / 可搜名字补 / 可清空
+```
+
+要点：
+- **模型只报名字**：id、阵营、兵种一律以库为准（`web/data/heroes.json` / `SKILL_REGISTRY`），识别错一个名字不会把别人的将写进 box；
+- **同名多版是常态**（吕布 汉·骑 / 群·弓、关羽 蜀 / 魏、曹操 魏 / …、SP / XP 前缀版）：`normalizeName` 折全角、去空白与书名号、统一大小写；`SP赵云` 与 `赵云` **是两个将**，只在精确命中失败时才做近似匹配（含前缀差异），且近似匹配也会把候选摆出来让人确认；
+- **战法只收可学习战法**：`SKILL_REGISTRY` 里非主战法（`MAIN_SKILL_IDS`）的条目；「五星战法」按截图照录，品级从 `skill_grades.json` 查补 —— 只截 S 级就等于 box 里只有 S 级（**更保守，不会推出你没有的**）。
+
+### 15.2 改动清单
+
+| 文件 | 内容 |
+|---|---|
+| `web/advisor/box.ts`（新） | box 类型 + **多档案存储**（`dsh-advisor-box-v1`，容错读 / 至少留一份 / 上限 12 档）+ **`matchRecognition` 确定性对齐**（同名多版消歧、未命中进待确认、主战法跳过）+ `mergeRecognition`（并集去重 + `unmatched` 累积 + meta）+ `boxViewOf`（严格模式只读视图）+ **`renderBoxBlock`**（`<advisor_box>` 注入块，空 box 也注入一段**短文**：先要截图，别假设）+ `heroRows` / `skillRows` / `searchHeroCandidates` / `searchSkillCandidates`（复核面板用） |
+| `web/advisor/vision.ts`（新） | 识图那一步：**图片压缩**（长边 1600 / JPEG 0.85，没 canvas / 解码超时 → 退回原图，绝不丢图；>8MB / 非图片明确拒绝）+ 读图系统提示词（固定 JSON schema + 7 条"别猜"规矩）+ **容错解析**（围栏 / 裸 JSON / 夹在说明里；认不出 → 抛 format 错带原文，绝不当成"识别到 0 个"）+ `recognizeBox()`（分批 ≤6 张/请求、进度回调、多批合并去重）+ 干跑示例 `SAMPLE_BOX_REPLY` |
+| `web/advisor/transport.ts` | 消息支持**多模态**（`AdvisorMessage.images` → OpenAI 兼容 `image_url` 段，data URL 直传）；非 2xx 把**服务端原文**带进错误（模型不支持图片时能看懂该换什么），"像是图片/多模态的问题"归类为 `format` |
+| `web/advisor/tools.ts` | `ToolCtx.box`；`search_hero` / `search_skill` / `list_skills` **不受 box 限制**（只给 `✓你有` / `✗你没有` 标注 —— 用户 2026-09-29 修正）；`optimize_skills` / `optimize_mates` / `optimize_both` **候选池收窄**（配将类搜索；模型自己给的候选与 box 求交，交集为空 → 明确报错而不是空跑几千场）；新工具 **`get_my_box`**；`simulate` / `simulate_many` 的输出补上两个比较主数字（**八回合全队总伤 meanTotal** / **前三回合爆发 meanFirst3**） |
+| `web/advisor/gate.ts` | 关 1 新增 `hero_not_in_box` / `skill_not_in_box` → 进 **`boxIssues`（不是 `errors`）**：方案**仍算合法**（照常看数），只是禁用「应用」并给出原因；`checkPlan` 的 ctx 带上 box，`RecomputeResult` 带上 meanTotal / meanFirst3 |
+| `web/advisor/loop.ts` | 硬规则第 7 条（**box 只是"给自己配将"时的范围**，其它问题照常回答；空清单只在配将时先要截图）+ 工具清单加 `get_my_box`（12 → 13 个）+ **比较类问题的标准做法**（同一套只换一处 → simulate_many，报八回合总伤与前三回合爆发）+ `TurnInput.boxText` 注入，摆位 **SYSTEM_PROMPT → budgetHint → box → prefs → history → 本轮提问** |
+| `web/advisor/memory.ts` | `BOX_TAG='advisor_box'` 并纳入 `stripInjected`（防注入块被当成"用户说过的话"回灌） |
+| `web/advisor/view.ts` + `advisor.css` | 抽屉新增「我的 box（识图）」面板：档案下拉 + 新建 / 改名 / 删除、严格模式开关、**选图 / 拖拽 / Ctrl+V 粘贴**（多张、缩略图可删）、开始识别（进度 + 耗时）、**复核表**（武将 / 战法两栏：库内暂时用不了的标黄、可删、可搜名字补）、待确认区（点候选定下来 / 跳过）、清空（两下确认）；`send()` 注入 `boxText` 并把 box 塞进 `ctx` |
+
+### 15.3 box 约束的边界（**2026-09-29 晚按用户口径修正，以此为准**）
+
+> 用户原话：「添加 box 配将只是其中之一，并不是只能从里面配将，**在用户明说帮"我"配将时才需要限定范围**。正常情况下，按用户的问题去找答案就好，比较哪个战法好直接比较携带两战法时打桩数据，给出八回合总伤和前三回合爆发分别是多少。」
+
+| 场景 | 约束 |
+|---|---|
+| **"帮我的号配将 / 出方案 / 我该带什么"** | 用 box 限定：配将类搜索（`optimize_*`）的候选池 = box ∩ 能进模拟；提示词要求方案里只用清单内的将法；清单为空 → 先请他上传截图识别一次 |
+| **其它一切问题**（"A 和 B 哪个好" / 某将什么机制 / 这队为什么低 / 帮我算一算） | **不受 box 限制**：`search_*` / `list_skills` / `hero_detail` / `skill_detail` / `simulate` / `simulate_many` 全量可用；模型**不许**因为 box 是空的就拒绝回答、也不许反过来要求先传截图 |
+| 方案里出现了 box 外的将法 | **合法**（`legal=true`，照常复算、照常看数）→ 进 `PlanCheck.boxIssues`，卡片上一行金色提醒「含你 box 外的将法 N 处」，**「应用」禁用**（"能看能算，不能一键用"）；**不写成"不合法"** |
+| 关掉「严格按我的 box」 | 连 `boxIssues` 都不产生（清单只作事实注入） |
+
+落地：
+1. **注入**（每轮、system 块）：清单 + 「**当他明确要你给他自己配将时**才必须只用清单里的；比较 / 测算 / 查资料不受限」+ 严格模式状态；清单过长截断并提示 `get_my_box`；空 box 也注入一小段（只在配将时先要截图）。
+2. **工具**：检索类**只标注不拦**（`✓你有` / `✗你没有`）；配将类搜索（`optimize_*`）候选池收窄到 box。
+3. **校验门**：box 外 ⇒ `boxIssues`（**不是错误**）⇒ 只禁「应用」。
+4. **比较类问题的口径**（用户明确要的两个数）：同一套阵容只换那一处 → `simulate_many` 对拍 → 报 **八回合全队总伤 `meanTotal`** 与 **前三回合爆发 `meanFirst3`**（+ 核心将期望 ± 半宽 + 差值）；区间重叠就说"分不出来"。这两个数已进 `simulate` / `simulate_many` 的 summary/brief **与方案卡**（`RecomputeResult.meanTotal / meanFirst3`）。
+
+### 15.4 明确不做 / 未覆盖
+
+- **只识别"有没有"**：红度 / 等级 / 宝物不进 box（截图里字太小，错一格就把兵力算错；红度仍由配将区现状决定，`ConfigSlot` 里本来就有）。
+- 不识别二级兵种 / 兵系特性（与 `docs/截图识别-敌对队伍集.md` §一 同一口径）。
+- 不做模板匹配 / OCR 图标识别：识别质量依赖模型看图能力 —— 所以**复核面板是必读的一步**，识别错了当场改。
+- 截图**不落盘、不上传第三方**：只在本机压成 data URL 直发用户自己配置的模型端点，识别完即丢（`localStorage` 只存 id 清单 + 张数 / 模型名）。
+- 不做自动识别触发（不会在背后偷偷读图）、不做跨设备同步（与 §14 一致：本机键）。
+- **不写公告**：与顾问本体一致（仅本地不部署，`web/changelog.ts` 不动）。
+
+### 15.5 测试与验收
+
+- `tests/advisor_box.test.ts`（新，18 个）：多档案（默认一份 / 新建切换改名删除 / 删到只剩一份自动重置 / 两档互不影响）、容错读（坏 JSON / 结构不对 / 条目去重）、增删去重、**对齐**（唯一名 / 同名多版 → ambiguous + 阵营兵种消歧 / 近似名带 note / 未命中 unknown / 空名）、**战法**（可学习唯一命中 / 主战法跳过 / 未命中）、`matchRecognition` 分流与去重、`mergeRecognition` 并集 + `unmatched`、`boxViewOf`（空 box 不算严格）、`renderBoxBlock`（空态 / 计数与 id / 严格开关 / 超长截断提示 `get_my_box`）、`stripInjected` 剥 box 块、`heroRows` / `skillRows` 的"库内暂时用不了"标注、候选检索排除主战法、`normalizeName` 归一。
+- `tests/advisor_vision.test.ts`（新，12 个）：围栏 / 裸 JSON / 夹在说明里都能认、字符串数组也认、**不是 JSON → format 错**（不当成 0 个）、脏字段清洗、多批合并补字段、图片压缩退让路径（jsdom 无 canvas → 原图）、非图片 / 超大图拒绝、单批与多批识图（带 `image_url` 段与进度）、没有 `once()` → 退回 `chat()`、空图 / 超量拒绝、干跑示例可解析。
+- `tests/advisor_tools.test.ts`（44 个，+10）：**检索不受 box 限制**（全库都回、只标 `✓你有` / `✗你没有`；关掉严格模式连标注都没有）、`optimize_skills` / `optimize_mates` 候选池收窄（预估与真跑同一份 options）、模型给的候选全在 box 外 → 明确报错、`get_my_box`（空 / 有内容 / 严格状态）、`validate_plan` 的 `hero_not_in_box` / `skill_not_in_box` **进 boxIssues 且 ok 仍为 true**、真正的非法仍进 errors、空 box 不拦。
+- `tests/advisor_gate.test.ts`（17 个，+4）与 `tests/advisor_loop.test.ts`（15 个，+4）：box 外的将法「**合法但不可应用**」+ `boxIssues` 机器码 + 复算照跑、复算带 `meanTotal` / `meanFirst3`、摆位断言（box 在预算之后、偏好之前）、系统提示词第 7 条（"box 只是给自己配将时的范围" + 比较类口径）与 13 个工具。
+- `web/advisorSmoke.test.ts`（20 个，+5）：端到端 jsdom —— ① 上传截图 → 识别 → 按档案落盘（识别请求确实带 data URL）；② 下一轮注入 box 块（写清"只在给他配将时限定"）+ 方案里有 box 外的将 → 卡上「含你 box 外的将法」+ **不写"不合法"** + 应用禁用 + 给出八回合总伤 / 前三回合爆发；③ 三将都在 box → 应用可点，关掉严格模式 → 块变「关」；④ 多档案（新建 = 空白并提示先要截图，切回原档清单与注入都回来）；⑤ 复核（删一条 / 按 id 手动补回 / 非图片文件明确报错 / 清空两下确认）。
+- `web/settings.test.ts`（+2）：设置弹窗里「干跑」开关**真的能拨**（原来没绑事件）、填上 key 后自动切回真模型（用户显式拨过就尊重他的选择）。
+- **回归**：既有断言按新口径更新（系统块 2 → 3 条、偏好块摆位 2 → 3、box 相关断言改为"标注 / 不可应用"）。
+
+### 15.6 验证记录（2026-09-29）
+
+**测试**：新增 `tests/advisor_box.test.ts`（18）+ `tests/advisor_vision.test.ts`（12）；扩 `tests/advisor_tools.test.ts` 34 → **44**、`tests/advisor_gate.test.ts` 13 → **16**、`tests/advisor_loop.test.ts` 11 → **15**、`web/advisorSmoke.test.ts` 15 → **20**。
+全量 `npm test` = **233 files / 2571 tests 全绿**；`npx tsc --noEmit` 与 `npx tsc --noEmit -p web/tsconfig.json` **两份 clean**；`golden.json` 不受影响（引擎未动）。
+
+**真机验证**（无头 Chrome + CDP 直驱 vite dev server，1500×1000；脚本 **`scripts/_advisor_box_shot.mjs`**：自带 OpenAI 兼容 mock 端点 + 页面内合成"截图"，一条命令跑完两条链路并留图）：
+
+| 步骤 | 实测 |
+|---|---|
+| ① 空 box 面板 | 摘要「武将 0 · 战法 0」；档案下拉「我的号（空）」；严格模式默认勾选；拖拽/粘贴提示、开始识别、两栏复核表都在（图 1） |
+| ② 干跑识别 | 页面内合成 2600×1800 截图 → 选图 → 识别：落盘 `dsh-advisor-box-v1` = `heroIds:["h23","h16","h479"]`（曹操/刘备/吕布）+ `skillIds:["dashang_sanjun","hunshui_moyu"]`；面板「识别完成：武将 +3 / 战法 +2；1 条要你确认」；**待确认**区列出「不存在的将」（库里没有）+ **还没对上**留住原始名字；日志有【识图】模型说看不清这几处（图 2） |
+| ③ **约束生效（修正后口径）** | 发一问 → 干跑脚本给的三将方案（XP关兴＆张苞 / 颜良＆文丑 / SP赵云）全不在 box 里 → 方案卡给「标准口径复算 14,024 ±1,590」+「**八回合全队总伤 35,951｜前三回合爆发 4,787**」（用户要的两个数）+ 金色一行「含你 box 外的将法 3 处：`hero_not_in_box`…能看到、能测算，但不能应用到你的配将区」+ **「应用到配将区」按钮禁用**；**通篇没有"不合法"**（图 3） |
+| ④ **真传输识图** | 设置弹窗指向 mock 端点（model `ds-flash-mock`）→ 清空 box → 再识别：mock 收到 `POST /v1/chat/completions`，`stream:false`、`tools:0`、**1 个 `image_url` 段**、`data:image/jpeg;base64,…`（2600×1800 PNG 原图 → **压缩到 58KB**）、带读图系统提示词；面板落盘 3 将 / 1 法 + 2 条待确认（图 4） |
+| ⑤ 报错 | `pageerror` 与 `console.error` 均为 **0** |
+
+**真机抓到并修掉四个问题（都不是单测能发现的）**：
+1. **抽屉正文被裁**（旧抽屉形态）：面板多了一个之后总高度超过一屏，而 `.advisor-body` 是 `overflow: hidden` → **方案卡与「应用」按钮被裁到够不着**。改为正文可滚 + 输入行钉底，`.advisor-plans` 去掉 `max-height:45%`（在可滚父容器里会被压成 0 高度）。自检脚本加了「方案卡必须完整可见」的断言。
+2. **严格模式开关没生效**（旧抽屉形态）：勾选框的 `change` 只写了 localStorage，`send()` 读的是挂载时那份闭包 → 关掉也照拦。改为 `change` 时刷新闭包 + `send()` 用刚读到的值。
+3. **设置弹窗里的「干跑」开关是死的**（2026-09-29 晚页面改版后）：`#set-fake` 没有任何事件绑定 → 用户填了 key 也永远走干跑、真模型一次都调不到。修：绑定 `change → setDryRun`（**必须注册在 `read()` 之前** —— `read()` 会 `saveSettings` → 广播 → `paint()` 把勾选框刷回旧值，后注册读到的 `t.checked` 已经是旧值，先跑才发现这个坑）；另外「刚填上 key」时自动切回真模型（用户显式拨过干跑开关就尊重他的选择）。
+4. **口径本身错了**（用户指出）：见 §15.3 —— box 只在"给我配将"时限定范围，检索 / 测算 / 比较一律不受限；box 外的将法**不算不合法**，只是不能一键应用；比较类问题要直接给八回合总伤与前三回合爆发。
+
+**页面形态变更说明**：2026-09-29 晚顾问从"主站内嵌抽屉"改成**独立页 `advisor.html`**（左栏 + 主区 + 面板 sheet，设置收进共用弹窗 `web/settings.ts`），布局口径见 `docs/AI配将-页面布局设计.md`；本文 §15 只管 box 那部分，自检脚本已改为直驱 `advisor.html` + 走设置弹窗切换模型。
+

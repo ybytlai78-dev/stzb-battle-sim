@@ -47,6 +47,11 @@ export interface ChatRequest {
 
 export interface AdvisorTransport {
   chat(req: ChatRequest, signal?: AbortSignal): AsyncIterable<StreamEvent>;
+  /**
+   * 一次性补全（非流式、不带 tools）：给「记忆层」这类**旁路**调用用（当前唯一用途 = 偏好抽取，见 `prefs.ts`）。
+   * 可选：没实现就表示这个传输层不支持旁路请求（假传输没给 `onceReply` 时即如此）。
+   */
+  once?(req: ChatRequest, signal?: AbortSignal): Promise<string>;
 }
 
 export interface AdvisorSettings {
@@ -71,6 +76,29 @@ export class AdvisorError extends Error {
 /** 取错误码（不是 AdvisorError 就返回 null）——loop 据此决定是否降级 */
 export function advisorErrorCode(e: unknown): AdvisorErrorCode | null {
   return e instanceof AdvisorError ? e.code : null;
+}
+
+/**
+ * 非 2xx → 带**服务端原文**的错误（截断 300 字）。
+ * 识图这一步尤其需要它：模型不支持图片输入时厂商会在 body 里说清楚（400 + image 字样），
+ * 只报「服务端返回 400 Bad Request」用户根本不知道该换模型 —— 所以这里把原文带上，
+ * 并把「像是图片/多模态的问题」归类为 format（界面显示可操作的提示，而不是当成网络故障）。
+ */
+async function httpError(res: Response): Promise<AdvisorError> {
+  let detail = '';
+  try {
+    detail = (await res.text()).slice(0, 300).replace(/\s+/g, ' ').trim();
+  } catch {
+    /* body 读不出来就算了 */
+  }
+  const tail = detail ? `：${detail}` : '';
+  if (res.status === 401 || res.status === 403) return new AdvisorError('auth', `${res.status}：key 无效或没有权限${tail}`);
+  if (/image|vision|multimodal|图片|modalit/i.test(detail))
+    return new AdvisorError(
+      'format',
+      `这个模型 / 端点似乎不接受图片输入（${res.status} ${res.statusText}）——识图要用**支持视觉的模型**（设置里的「模型」填你自己接入的 ds flash），或者检查接口地址是不是填成了不支持多模态的那个${tail}`
+    );
+  return new AdvisorError('network', `服务端返回 ${res.status} ${res.statusText}${tail}`);
 }
 
 // ─────────────────────────── 纯函数（可单测） ───────────────────────────
@@ -130,6 +158,16 @@ export function toApiMessages(messages: AdvisorMessage[]): unknown[] {
       };
     }
     if (m.role === 'tool') return { role: 'tool', tool_call_id: m.toolCallId ?? '', content: m.content };
+    // 带图消息（识图）→ 多模态段：先文本后图片（OpenAI 兼容 `image_url`，data URL 直传）
+    if (m.images?.length) {
+      return {
+        role: m.role,
+        content: [
+          { type: 'text', text: m.content || '' },
+          ...m.images.map((url) => ({ type: 'image_url', image_url: { url } })),
+        ],
+      };
+    }
     return { role: m.role, content: m.content };
   });
 }
@@ -162,7 +200,7 @@ export function createBrowserTransport(settings: AdvisorSettings): AdvisorTransp
         throw new AdvisorError('cors', `请求没能发出去（可能是 CORS 或网络问题）：${(e as Error)?.message ?? String(e)}`);
       }
       if (res.status === 401 || res.status === 403) throw new AdvisorError('auth', `${res.status}：key 无效或没有权限`);
-      if (!res.ok) throw new AdvisorError('network', `服务端返回 ${res.status} ${res.statusText}`);
+      if (!res.ok) throw await httpError(res);
       const reader = res.body?.getReader();
       if (!reader) throw new AdvisorError('format', '响应没有可读流（该厂商可能不支持 stream）');
 
@@ -198,6 +236,36 @@ export function createBrowserTransport(settings: AdvisorSettings): AdvisorTransp
       if (deltas.length) yield { type: 'tool_calls', calls: assembleToolCalls(deltas) };
       yield { type: 'done' };
     },
+
+    /**
+     * 非流式一次性补全（`stream:false`，不带 tools）：**偏好抽取**这类旁路调用走它。
+     * 与 `chat` 共用同一份设置（baseUrl / model / key），错误分类也一致；抽取方一律 catch 掉，不会影响对话。
+     */
+    async once(req, signal) {
+      let res: Response;
+      try {
+        res = await fetch(url, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${settings.key}` },
+          body: JSON.stringify({
+            model: settings.model,
+            messages: toApiMessages(req.messages),
+            stream: false,
+            temperature: req.temperature ?? 0,
+          }),
+          signal,
+        });
+      } catch (e) {
+        if ((e as Error)?.name === 'AbortError') throw e;
+        throw new AdvisorError('cors', `请求没能发出去（可能是 CORS 或网络问题）：${(e as Error)?.message ?? String(e)}`);
+      }
+      if (res.status === 401 || res.status === 403) throw new AdvisorError('auth', `${res.status}：key 无效或没有权限`);
+      if (!res.ok) throw await httpError(res);
+      const json = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+      const text = json?.choices?.[0]?.message?.content;
+      if (typeof text !== 'string') throw new AdvisorError('format', '返回里没有 choices[0].message.content');
+      return text;
+    },
   };
 }
 
@@ -216,12 +284,31 @@ export interface FakeStep {
 export interface FakeTransportOpts {
   /** 模拟「厂商不支持工具调用」：请求带 tools 就抛 format 错 */
   rejectTools?: boolean;
+  /** 一次性补全（偏好抽取）的应答：给了才有 `once()` */
+  onceReply?: (req: ChatRequest) => string;
 }
 
-export function createFakeTransport(script: FakeStep[], opts: FakeTransportOpts = {}): AdvisorTransport {
+export interface FakeTransport extends AdvisorTransport {
+  /**
+   * 收到过的流式请求（测试据此断言「偏好档案 / 历史」到底注入了什么）。
+   * ⚠️ 存的是**当时那一刻的快照**：loop 会把同一份 `messages` 数组一路 push 下去，
+   * 直接存引用的话，三轮之后回头看第一条会看到整轮的 tool 消息（此坑已踩）。
+   */
+  requests: ChatRequest[];
+  /** 收到过的一次性补全请求 */
+  onceRequests: ChatRequest[];
+}
+
+export function createFakeTransport(script: FakeStep[], opts: FakeTransportOpts = {}): FakeTransport {
   let i = 0;
-  return {
+  const requests: ChatRequest[] = [];
+  const onceRequests: ChatRequest[] = [];
+  const snap = (req: ChatRequest): ChatRequest => ({ ...req, messages: [...req.messages] });
+  const t: FakeTransport = {
+    requests,
+    onceRequests,
     async *chat(req) {
+      requests.push(snap(req));
       if (opts.rejectTools && req.tools.length) throw new AdvisorError('format', '该模型不支持 tools（假传输层模拟）');
       const step = script[i];
       i += 1;
@@ -238,4 +325,12 @@ export function createFakeTransport(script: FakeStep[], opts: FakeTransportOpts 
       yield { type: 'done' };
     },
   };
+  if (opts.onceReply) {
+    const reply = opts.onceReply;
+    t.once = async (req) => {
+      onceRequests.push(snap(req));
+      return reply(req);
+    };
+  }
+  return t;
 }

@@ -5,7 +5,8 @@
  * 这样 `web/advisor/*` 不 import `main.ts`（避免循环依赖），也便于单测。
  */
 import { DEFAULT_DUMMY, PLAN_POSITIONS, normalizePlan, type AdvisorPlan } from './advisor/types';
-import type { EditorHandlers, SlotState } from './teamEditor';
+import type { EditorHandlers, EditorState, SlotState } from './teamEditor';
+import { applyPlanToTeam, readTeamState, writeTeamState } from './teamStore';
 
 /** 应用方案时需要的主站能力（只取用到的那几个 handler） */
 export type HostHandlers = Pick<EditorHandlers, 'onPickHero' | 'onAddSkill' | 'onRemoveSkill' | 'onSetLevel'>;
@@ -24,9 +25,14 @@ export interface AdvisorHostDeps {
 export interface AdvisorHost {
   /** 配将区 → 顾问方案（空槽不返回；`coreUnitIds` 留空 = 让 L2 自动识别核心将） */
   readTeam(): AdvisorPlan;
+  /**
+   * 原始槽位（**只给界面渲染用**，不进 LLM 上下文）：侧栏要按主站同款画立绘 + 战法图标，
+   * 而 `readTeam()` 的 PlanSlot 只有 位置/武将/等级/战法，画不出红度、宝物、兵种。
+   */
+  readSlots?(): SlotState[];
   /** 方案 → 配将区：逐槽换将 / 改等级 / 重设可学战法；失败**如实回报**（不静默半应用） */
   applyPlan(plan: AdvisorPlan): { ok: boolean; message?: string };
-  /** 队伍标签（抽屉标题用） */
+  /** 队伍标签（页面标题用） */
   teamLabel: string;
 }
 
@@ -36,6 +42,10 @@ export function createAdvisorHost(deps: AdvisorHostDeps): AdvisorHost {
 
   return {
     teamLabel,
+
+    readSlots(): SlotState[] {
+      return deps.getTeam();
+    },
 
     readTeam(): AdvisorPlan {
       const slots = deps
@@ -77,6 +87,41 @@ export function createAdvisorHost(deps: AdvisorHostDeps): AdvisorHost {
       }
       deps.notify?.('已把方案写入配将区（红队）');
       return { ok: true };
+    },
+  };
+}
+
+/**
+ * AI配将**独立页**的宿主：没有主站编辑器实例，改成读写共享的队伍存档（`web/teamStore.ts`）。
+ * 写回后主站靠 `storage` 事件重读（见 `web/main.ts`），所以这里只负责"写对 + 如实回报"。
+ */
+export function createPageAdvisorHost(): AdvisorHost {
+  const readState = (): EditorState => readTeamState() ?? { red: [], blue: [] };
+  return {
+    teamLabel: '我方阵容',
+
+    readSlots(): SlotState[] {
+      return readState().red;
+    },
+
+    readTeam(): AdvisorPlan {
+      const slots = readState()
+        .red.map((s, i) => ({
+          position: PLAN_POSITIONS[i] ?? '中军',
+          heroId: s.heroId ?? '',
+          level: s.level,
+          skillIds: [...s.extraSkillIds],
+        }))
+        .filter((s) => Boolean(s.heroId));
+      return { slots, coreUnitIds: [], dummy: { ...DEFAULT_DUMMY } };
+    },
+
+    applyPlan(plan: AdvisorPlan): { ok: boolean; message?: string } {
+      const st = readState();
+      const res = applyPlanToTeam(st.red, plan);
+      st.red = res.slots;
+      if (!writeTeamState(st)) return { ok: false, message: '本机存储不可用：方案没能写回配将区（回主站手动应用）' };
+      return res.ok ? { ok: true } : { ok: false, message: res.message };
     },
   };
 }

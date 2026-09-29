@@ -4,10 +4,15 @@
  */
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest';
-import { MAIN_SKILL_IDS, SLOTTED_HEROES } from '../web/heroes';
+import { ALL_HEROES, getHeroById, HEROES, MAIN_SKILL_IDS, SLOTTED_HEROES } from '../web/heroes';
+import { SKILL_REGISTRY } from '../src/data/skills';
 import { LEARNABLE_SKILL_IDS } from '../web/teamConfig';
 import { createTools, makeCtx, runTool, SIM_RUNS_MAX } from '../web/advisor/tools';
+import type { BoxView } from '../web/advisor/box';
 import { BudgetExceeded, DEFAULT_DUMMY, type AdvisorPlan } from '../web/advisor/types';
+
+const heroNameOf = (id: string): string => getHeroById(id)?.name ?? id;
+const skillNameOf = (id: string): string => SKILL_REGISTRY[id]?.name ?? id;
 
 /** 按武将 id 拼一个方案（位置按 大营/中军/前锋） */
 function planWith(heroIds: string[], skills: string[][] = []): AdvisorPlan {
@@ -33,10 +38,11 @@ function findMutualPair(): [string, string] {
 }
 
 describe('advisor tools', () => {
-  it('十二个工具都在注册表里，且各有 name/description/schema/cost', () => {
+  it('十三个工具都在注册表里，且各有 name/description/schema/cost', () => {
     const tools = createTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
       'get_config',
+      'get_my_box',
       'hero_detail',
       'list_skills',
       'optimize_both',
@@ -553,8 +559,209 @@ describe('advisor tools', () => {
     expect((no.data as { found: boolean }).found).toBe(false);
   });
 
+  it('simulate / simulate_many：给出**八回合全队总伤**与**前三回合爆发**（比较类问题要的两个数）', async () => {
+    const ctx = makeCtx({ fakeRuns: true, coreDamage: 26500 });
+    const one = await runTool('simulate', { plan: ctx.deps.__plan, runs: 20 }, ctx);
+    expect(one.summary).toContain('八回合全队总伤');
+    expect(one.summary).toContain('前三回合爆发');
+    expect(one.brief).toContain('八回合全队总伤 meanTotal');
+    expect(one.brief).toContain('前三回合爆发 meanFirst3');
+
+    // 对拍：同一套阵容只换一处（用户场景：「槽2 用 A 还是 B」）
+    const [a, b] = LEARNABLE_SKILL_IDS;
+    const many = await runTool(
+      'simulate_many',
+      {
+        plans: [
+          { label: '带 A', plan: planWith([ctx.deps.__plan.slots[0].heroId], [[a]]) },
+          { label: '带 B', plan: planWith([ctx.deps.__plan.slots[0].heroId], [[b]]) },
+        ],
+        runs: 100,
+      },
+      ctx
+    );
+    expect(many.summary).toContain('八回合总伤');
+    expect(many.summary).toContain('前三回合爆发');
+    expect(many.brief).toContain('八回合总伤');
+    expect(many.brief).toContain('前三回合爆发');
+    const rows = (many.data as { rows: Array<{ meanTotal: number; meanFirst3: number }> }).rows;
+    expect(rows.every((r) => Number.isFinite(r.meanTotal) && Number.isFinite(r.meanFirst3))).toBe(true);
+  });
+
   it('runTool 未知工具名 → 抛错', async () => {
     const ctx = makeCtx({ fakeRuns: true });
     await expect(runTool('nope', {}, ctx)).rejects.toThrow(/未知工具/);
+  });
+});
+
+// ─────────────────────────── 我的 box（识图建档，设计文档 §15） ───────────────────────────
+
+/** 唯一名 + 已上架（主战法已实现）的三个武将：第 1 个放进 box，另两个留在库外；**两两避开同队互斥**别干扰断言 */
+function threeListedHeroes(): [string, string, string] {
+  const byName = new Map<string, number>();
+  for (const h of HEROES) byName.set(h.name, (byName.get(h.name) ?? 0) + 1);
+  const uniq = HEROES.filter((h) => byName.get(h.name) === 1);
+  const clash = (a: { mutualExclusionGroup: string | null }, b: { mutualExclusionGroup: string | null }): boolean =>
+    Boolean(a.mutualExclusionGroup && a.mutualExclusionGroup === b.mutualExclusionGroup);
+  for (const a of uniq)
+    for (const b of uniq)
+      for (const c of uniq)
+        if (a.id !== b.id && b.id !== c.id && a.id !== c.id && !clash(a, b) && !clash(a, c) && !clash(b, c)) return [a.id, b.id, c.id];
+  throw new Error('库里唯一名上架武将不足（测试前置不成立）');
+}
+
+/** 直接造一个只读视图（工具层只认 `strict` / Set，不需要走存储） */
+function boxView(heroIds: string[], skillIds: string[], strict = true): BoxView {
+  return { profileId: 'p1', profileName: '我的号', heroIds: new Set(heroIds), skillIds: new Set(skillIds), strict, empty: false };
+}
+
+describe('advisor tools · 我的 box 收窄', () => {
+  const [heroIn, heroOut, heroOut2] = threeListedHeroes();
+  const [skillIn, skillOut] = LEARNABLE_SKILL_IDS;
+  /** 关 1 复用截图识别的校验器 → 必须三个位置齐全，所以断言都用三将方案 */
+  const plan3 = (skills: string[][] = []): AdvisorPlan => planWith([heroIn, heroOut, heroOut2], skills);
+
+  it('search_hero：**检索不受 box 限制**（用户 2026-09-29 修正）——全库都回，✓/✗ 只作提示', async () => {
+    const ctx = makeCtx({ fakeRuns: true, box: boxView([heroIn], []) });
+    const outside = await runTool('search_hero', { q: heroNameOf(heroOut) }, ctx);
+    expect((outside.data as { hits: Array<{ id: string }> }).hits.map((h) => h.id)).toContain(heroOut);
+    expect(outside.summary).toContain('✗你没有');
+    expect(outside.brief).toContain('检索不受 box 限制');
+
+    const inside = await runTool('search_hero', { q: heroNameOf(heroIn) }, ctx);
+    expect((inside.data as { hits: Array<{ id: string }> }).hits.map((h) => h.id)).toContain(heroIn);
+    expect(inside.summary).toContain('✓你有');
+  });
+
+  it('关掉严格模式 → 连 ✓/✗ 标注也没有（等于没有这个功能）', async () => {
+    const ctx = makeCtx({ fakeRuns: true, box: boxView([heroIn], [], false) });
+    const r = await runTool('search_hero', { q: heroNameOf(heroOut) }, ctx);
+    expect((r.data as { hits: Array<{ id: string }> }).hits.map((h) => h.id)).toContain(heroOut);
+    expect(r.brief ?? '').not.toContain('检索不受 box 限制');
+    expect(r.summary).not.toContain('✗你没有');
+  });
+
+  it('search_skill / list_skills：同样不受限（清单外的照回，标 ✗）', async () => {
+    const ctx = makeCtx({ fakeRuns: true, box: boxView([], [skillIn]) });
+    const one = await runTool('search_skill', { q: skillNameOf(skillOut) }, ctx);
+    expect((one.data as { hits: Array<{ id: string }> }).hits.map((h) => h.id)).toContain(skillOut);
+    expect(one.summary).toContain('✗你没有');
+
+    const pool = await runTool('list_skills', { limit: 5 }, ctx);
+    const d = pool.data as { total: number; rows: Array<{ id: string }> };
+    expect(d.total).toBeGreaterThan(5); // 全池都在（不再只有 box 里那 1 个）
+    expect(pool.brief).toContain('检索不受 box 限制');
+  });
+
+  it('optimize_skills：候选池收窄到 box 里的战法（预估与真跑用的是同一份 options）', async () => {
+    const seen: Array<{ candidateIds?: string[] }> = [];
+    const ctx = makeCtx({
+      fakeRuns: true,
+      box: boxView([], [skillIn]),
+      deps: {
+        estimateSkillBattles: (_cfg, opts) => {
+          seen.push(opts as { candidateIds?: string[] });
+          return 100;
+        },
+        optimizeSkills: async (_cfg, opts) => {
+          seen.push(opts as { candidateIds?: string[] });
+          return { battles: 0, ms: 1, finals: [] } as never;
+        },
+      },
+    });
+    await runTool('optimize_skills', { plan: ctx.deps.__plan }, ctx);
+    expect(seen.length).toBeGreaterThan(1);
+    for (const opts of seen) expect(opts.candidateIds).toEqual([skillIn]);
+  });
+
+  it('optimize_skills：模型自己给的候选全在 box 外 → 明确报错（不空跑几千场）', async () => {
+    const ctx = makeCtx({ fakeRuns: true, box: boxView([], [skillIn]) });
+    await expect(runTool('optimize_skills', { plan: ctx.deps.__plan, candidateSkillIds: [skillOut] }, ctx)).rejects.toThrow(
+      /一个都不在用户 box 里/
+    );
+  });
+
+  it('optimize_mates：候选武将收窄到 box；主战法未实现的如实跳过并报出来', async () => {
+    const noSkill = ALL_HEROES.find((h) => !h.mainSkillId);
+    const seen: Array<{ candidateIds?: string[] }> = [];
+    const ctx = makeCtx({
+      fakeRuns: true,
+      box: boxView([heroIn, ...(noSkill ? [noSkill.id] : [])], []),
+      deps: {
+        estimateMateBattles: (_cfg, opts) => {
+          seen.push(opts as { candidateIds?: string[] });
+          return 100;
+        },
+        optimizeMates: async (_cfg, opts) => {
+          seen.push(opts as { candidateIds?: string[] });
+          return {
+            battles: 0,
+            ms: 1,
+            finals: [],
+            baseline: { mean: 0, meanTotal: 0, runs: 0 },
+            candidateCount: 1,
+            candidateSkipped: 0,
+            poolSkippedMutual: 0,
+            matchLabel: 'm',
+            coreLabel: 'c',
+            poolLabel: 'p',
+            noMatchSlot: false,
+            baselineIllegal: false,
+          } as never;
+        },
+      },
+    });
+    await runTool('optimize_mates', { plan: ctx.deps.__plan }, ctx);
+    expect(seen.length).toBeGreaterThan(1);
+    for (const opts of seen) expect(opts.candidateIds).toEqual([heroIn]);
+  });
+
+  it('get_my_box：没建 box → 明确让模型先要截图；建了 → 计数 + 清单 + 严格模式状态', async () => {
+    const none = await runTool('get_my_box', {}, makeCtx({ fakeRuns: true }));
+    expect(none.summary).toContain('还没有 box');
+
+    const ctx = makeCtx({ fakeRuns: true, box: boxView([heroIn], [skillIn]) });
+    const r = await runTool('get_my_box', {}, ctx);
+    expect(r.summary).toContain('武将 1 个 / 可学战法 1 个');
+    expect(r.summary).toContain('严格模式开');
+    const d = r.data as { heroes: Array<{ id: string }>; skills: Array<{ id: string }> };
+    expect(d.heroes.map((h) => h.id)).toEqual([heroIn]);
+    expect(d.skills.map((s) => s.id)).toEqual([skillIn]);
+  });
+
+  it('validate_plan：box 外的将法**不算不合法**（用户 2026-09-29 修正）——进 boxIssues，ok 仍为 true', async () => {
+    // 三将都在 box 里、只带 box 外的战法 → 一条 skill_not_in_box，但方案依然合法
+    const ctx = makeCtx({ fakeRuns: true, box: boxView([heroIn, heroOut, heroOut2], [skillIn]) });
+    const skillBad = await runTool('validate_plan', { plan: plan3([[skillOut]]) }, ctx);
+    const sd = skillBad.data as { ok: boolean; errors: Array<{ code: string }>; boxIssues: Array<{ code: string }> };
+    expect(sd.ok).toBe(true);
+    expect(sd.errors).toEqual([]);
+    expect(sd.boxIssues.map((e) => e.code)).toEqual(['skill_not_in_box']);
+    expect(skillBad.summary).toContain('不算不合法');
+
+    const good = await runTool('validate_plan', { plan: plan3([[skillIn]]) }, ctx);
+    expect((good.data as { ok: boolean }).ok).toBe(true);
+    expect((good.data as { boxIssues: unknown[] }).boxIssues).toEqual([]);
+
+    // box 里只有第 1 个将 → 另外两将各报一条 hero_not_in_box（同样只是 boxIssues）
+    const narrow = makeCtx({ fakeRuns: true, box: boxView([heroIn], [skillIn]) });
+    const heroBad = await runTool('validate_plan', { plan: plan3() }, narrow);
+    expect((heroBad.data as { boxIssues: Array<{ code: string }> }).boxIssues.map((e) => e.code)).toEqual(['hero_not_in_box', 'hero_not_in_box']);
+    expect((heroBad.data as { ok: boolean }).ok).toBe(true);
+
+    // 真正的非法（不在库）仍进 errors
+    const broken = await runTool('validate_plan', { plan: plan3([['no_such_skill']]) }, narrow);
+    expect((broken.data as { ok: boolean }).ok).toBe(false);
+
+    // 关掉严格模式 → 连 boxIssues 都没有
+    const loose = makeCtx({ fakeRuns: true, box: boxView([heroIn], [skillIn], false) });
+    const okAgain = await runTool('validate_plan', { plan: plan3([[skillOut]]) }, loose);
+    expect((okAgain.data as { boxIssues: unknown[] }).boxIssues).toEqual([]);
+  });
+
+  it('空 box（还没识别）不算严格：不拦任何东西（什么都没识别 ≠ 什么都不许用）', async () => {
+    const ctx = makeCtx({ fakeRuns: true, box: boxView([], [], false) });
+    const r = await runTool('validate_plan', { plan: plan3([[skillOut]]) }, ctx);
+    expect((r.data as { ok: boolean }).ok).toBe(true);
   });
 });

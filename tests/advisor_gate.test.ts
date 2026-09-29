@@ -19,6 +19,8 @@ import {
   withinTolerance,
 } from '../web/advisor/gate';
 import type { AdvisorPlan, ProposedPlan, ToolCallRecord } from '../web/advisor/types';
+import type { BoxView } from '../web/advisor/box';
+import { DEFAULT_DUMMY } from '../web/advisor/types';
 import { SLOTTED_HEROES } from '../web/heroes';
 
 const rec = (evidenceId: string, mean: number): ToolCallRecord => ({
@@ -163,5 +165,67 @@ describe('advisor gate · 关 3（标准口径独立复算）', () => {
     ];
     const hint = searchHintFromTrace({ title: 'x', plan: plan(), evidenceIds: ['ev-2-optimize_skills'] }, trace);
     expect(hint).toMatchObject({ mean: 26000, halfWidth: 700, runs: 20 });
+  });
+});
+
+// ─────────────────────────── 关 1 的 box 检查（识图建档，设计文档 §15） ───────────────────────────
+
+describe('advisor gate · 关 1 的 box 拒收', () => {
+  const trio = SLOTTED_HEROES.slice(0, 3).map((h) => h.id);
+  const planTrio = (): AdvisorPlan => ({
+    slots: trio.map((heroId, i) => ({ position: (['大营', '中军', '前锋'] as const)[i], heroId, level: 40, skillIds: [] })),
+    coreUnitIds: [],
+    dummy: { ...DEFAULT_DUMMY },
+  });
+  const boxView = (heroIds: string[], strict = true): BoxView => ({
+    profileId: 'p1',
+    profileName: '我的号',
+    heroIds: new Set(heroIds),
+    skillIds: new Set(),
+    strict,
+    empty: false,
+  });
+  const evalOk = (_cfg: never, runs: number) => ({ mean: 26500, halfWidth: 100, runs }) as never;
+
+  it('box 外的武将：**合法**（照常看数）但「应用」禁用（用户 2026-09-29 修正）', () => {
+    const c = checkPlan({ title: 'x', plan: planTrio(), evidenceIds: ['ev-1-simulate'] }, [rec('ev-1-simulate', 26500)], {
+      evaluate: evalOk,
+      box: boxView([trio[0]]),
+    });
+    expect(c.legal).toBe(true);
+    expect(c.legalErrors).toEqual([]);
+    expect(c.boxIssues?.join(' ')).toContain('hero_not_in_box');
+    expect(c.recompute?.mean).toBe(26500); // 复算照跑（比较/测算不受 box 影响）
+    expect(c.apply.enabled).toBe(false);
+    expect(c.apply.reason).toContain('box 外');
+  });
+
+  it('复算结果带两个比较主数字：八回合全队总伤 + 前三回合爆发', () => {
+    const c = checkPlan({ title: 'x', plan: planTrio(), evidenceIds: ['ev-1-simulate'] }, [rec('ev-1-simulate', 26500)], {
+      evaluate: ((_cfg: never, runs: number) => ({ mean: 26500, meanTotal: 71000, meanFirst3: 12000, halfWidth: 100, runs })) as never,
+      box: null,
+    });
+    expect(c.recompute).toMatchObject({ meanTotal: 71000, meanFirst3: 12000 });
+  });
+
+  it('三将都在 box 里 → 同一份方案合法且可应用（box 不该误伤自己有的将）', () => {
+    const c = checkPlan({ title: 'x', plan: planTrio(), evidenceIds: ['ev-1-simulate'] }, [rec('ev-1-simulate', 26500)], {
+      evaluate: evalOk,
+      box: boxView(trio),
+    });
+    expect(c.legal).toBe(true);
+    expect(c.boxIssues).toEqual([]);
+    expect(c.apply.enabled).toBe(true);
+  });
+
+  it('空 box / 未传 box / 关掉严格模式 → 与加这个功能之前完全一致', () => {
+    const loose = checkPlan({ title: 'x', plan: planTrio(), evidenceIds: ['ev-1-simulate'] }, [rec('ev-1-simulate', 26500)], {
+      evaluate: evalOk,
+      box: boxView([trio[0]], false),
+    });
+    expect(loose.legal).toBe(true);
+
+    const none = checkPlan({ title: 'x', plan: planTrio(), evidenceIds: ['ev-1-simulate'] }, [rec('ev-1-simulate', 26500)], { evaluate: evalOk });
+    expect(none.legal).toBe(true);
   });
 });

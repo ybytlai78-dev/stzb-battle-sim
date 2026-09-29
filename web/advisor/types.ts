@@ -220,6 +220,12 @@ export interface ToolCallRequest {
 export interface AdvisorMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: string;
+  /**
+   * 随这条消息一起发的图片（`data:image/...;base64,…`）。
+   * 目前只有一个用途 = **识图建 box**（见 `vision.ts`），走 OpenAI 兼容的多模态 `image_url` 段；
+   * 其余消息一律不带 → 老路径的序列化 / 测试完全不受影响。
+   */
+  images?: string[];
   /** assistant 消息里请求的工具调用（tool 消息则不带） */
   toolCalls?: ToolCallRequest[];
   /** role = 'tool' 时对应哪次调用（OpenAI 协议的 tool_call_id） */
@@ -231,6 +237,8 @@ export interface ToolCallRecord {
   name: string;
   args: unknown;
   summary: string;
+  /** 紧凑明细（≤15 行）：与回灌给模型的那份同源，落盘时一并留着（界面 / 复盘读它） */
+  brief?: string;
   /** 明细（渲染层直读；`verifyClaims` 也在这里找数字） */
   data: unknown;
   stats: ToolStats;
@@ -253,6 +261,10 @@ export interface RecomputeResult {
   halfWidth: number;
   runs: number;
   seed: number;
+  /** 八回合**全队**总伤/场（比较类问题的主数字之一，用户 2026-09-29 口径） */
+  meanTotal: number;
+  /** **前三回合爆发**（核心将前三回合伤害/场；比较类问题的另一个主数字） */
+  meanFirst3: number;
 }
 
 /** 单个方案过完三关的结论（渲染层据此决定「应用」能不能点、卡上显示什么） */
@@ -261,6 +273,11 @@ export interface PlanCheck {
   plan: AdvisorPlan;
   legal: boolean;
   legalErrors: string[];
+  /**
+   * box 外的将法（严格模式）：**合法但与"应用到你的配将区"冲突** —— 卡片上单独一行提醒，不混进「不合法」。
+   * 见 `gate.validateAdvisorPlan` 的 boxIssues 与设计文档 §15。
+   */
+  boxIssues?: string[];
   evidenceOk: boolean;
   evidenceReason?: string;
   recompute: RecomputeResult | null;

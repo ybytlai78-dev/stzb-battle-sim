@@ -12,7 +12,19 @@
  * 依赖注入：跑批 / 检索都由 `ToolCtx.deps` 传入 → 测试注入毫秒返回的假实现，全链路可离线测。
  */
 import { SKILL_REGISTRY } from '../../src/data/skills';
-import { baseStatsAt, getHeroById, HEROES, offlineReason, skillDesc, SKILL_GRADES, TROOP_CHAR, type HeroJson } from '../heroes';
+import {
+  baseStatsAt,
+  getHeroById,
+  HEROES,
+  HERO_RECORDS,
+  isMainSkill,
+  offlineReason,
+  skillDesc,
+  SKILL_GRADES,
+  SLOTTED_HEROES,
+  TROOP_CHAR,
+  type HeroJson,
+} from '../heroes';
 import { SLOT_LABEL } from '../roundModel';
 import {
   estimateBattles as estimateSkillBattlesReal,
@@ -25,6 +37,7 @@ import {
 import {
   clearSlotSkills,
   estimateMateBattles as estimateMateBattlesReal,
+  heroName,
   runSimMateAsync,
   withSlotHero,
   type MateSimOptions,
@@ -33,6 +46,7 @@ import {
 import { HERO_OPTIONS, SKILL_OPTIONS, defaultCfg, type ViewCfg } from '../teamConfig';
 /** 方案里的核心将 → `ViewCfg` 槽位下标（给 `evaluate` 当排序口径用）—— 实现见 `gate.ts`（与关 3 共用） */
 import { cacheKey, hitToResult, type AdvisorCache } from './cache';
+import { heroRows, skillRows, type BoxView } from './box';
 import { cfgOf, configToPlan, coreIndices, validateAdvisorPlan } from './gate';
 import { toolZh } from './trace';
 import {
@@ -109,6 +123,12 @@ export interface ToolCtx {
   confirm?: ConfirmFn;
   /** 超过这个场次才问（缺省 `DEFAULT_CONFIRM_BATTLES` = 2000 场 ≈ 12 秒） */
   confirmFrom?: number;
+  /**
+   * 这位用户的「我的 box」（识图建档，见 `box.ts` / 设计文档 §15）。
+   * **严格模式**下：检索工具只在清单内找、L2/L3 候选池收窄、`validate_plan` 拒收清单外的将法。
+   * 不传 / 空 box / 关掉严格模式 → 一切照旧（等于没有这个功能）。
+   */
+  box?: BoxView | null;
 }
 
 /** 缓存键：同一工具 + 同一方案 + 同一参数 + 同一种子（引擎确定性 → 同输入必同输出） */
@@ -194,9 +214,92 @@ function matchRows<T extends { match: string }>(rows: T[], q: string, limit: num
 const EMPTY_HINT =
   '检索提示：战法可按 出手位（主动 / 追击 / 被动 / 一类指挥 / 二类指挥 / 准备）、品级（S/A/B/C/D）、效果标签、官方描述关键词 或名字检索；武将可按 名字 / 势力 / 兵种 / 主战法名 检索。空结果只说明这个词没命中，不代表库里没有。';
 
+// ─────────────────────────── box 标注 / 收窄（识图建档，见 `box.ts` / 设计文档 §15） ───────────────────────────
+// 口径（用户 2026-09-29 修正）：box 只是「**给这位用户配将**」时的范围，不是"什么都得先传截图"——
+//   · 检索 / 详情 / simulate 一律**不受 box 限制**（比较、测算、查资料照常）；
+//   · 只有"配将类搜索"（optimize_*）把候选池收窄到 box，避免替他搜出他没有的将法；
+//   · 方案里出现 box 外的将法**不算不合法**，只是不能一键应用到他的配将区（见 `gate.ts` 的 boxIssues）。
+
+/** 严格模式且 box 非空时才生效；其余情况一律不标注、不收窄（空 box / 关掉严格模式 = 加这功能之前的行为） */
+const boxOn = (ctx: ToolCtx): BoxView | null => (ctx.box?.strict ? ctx.box : null);
+
+/** 结果行后缀：`·✓你有` / `·✗你没有`（**只标注，不过滤**） */
+function boxMark(ctx: ToolCtx, kind: 'hero' | 'skill', id: string): string {
+  const box = boxOn(ctx);
+  if (!box) return '';
+  return (kind === 'hero' ? box.heroIds : box.skillIds).has(id) ? '·✓你有' : '·✗你没有';
+}
+
+/** 一行说明：✓ / ✗ 是什么意思、什么时候才必须只用 ✓ 的 */
+function boxNote(ctx: ToolCtx, kind: 'hero' | 'skill', outside: number): string {
+  const box = boxOn(ctx);
+  if (!box) return '';
+  const n = kind === 'hero' ? box.heroIds.size : box.skillIds.size;
+  const what = kind === 'hero' ? '武将' : '战法';
+  return (
+    `检索不受 box 限制：标 ✓ 的是你 box 里的 ${n} 个${what}${outside ? `（本次另有 ${outside} 个不在 box 里，标 ✗）` : ''}；` +
+    '**只有「给你自己配将 / 出方案」时才要求只用 ✓ 的** —— 比较、测算、查资料照常用全部。'
+  );
+}
+
+/** 能进模拟的 box 武将（主战法已实现）+ 如实报出跳过的那些 */
+export function boxHeroCandidates(ctx: ToolCtx): { ids: string[]; skipped: string[]; note: string } | null {
+  const box = boxOn(ctx);
+  if (!box) return null;
+  const sim = new Set(SLOTTED_HEROES.map((h) => h.id));
+  const ids: string[] = [];
+  const skipped: string[] = [];
+  for (const id of box.heroIds) {
+    if (!HERO_RECORDS[id]) continue; // 库里没有（改名 / 已删）→ 不当候选
+    if (sim.has(id)) ids.push(id);
+    else skipped.push(heroName(id));
+  }
+  const note = `候选武将已收窄到你的 box（档案「${ctx.box?.profileName}」，${ids.length} 个可进模拟${skipped.length ? `；另有 ${skipped.length} 个（${skipped.slice(0, 5).join('、')}${skipped.length > 5 ? '…' : ''}）主战法未实现，模拟里用不了，已跳过` : ''}）——**配将搜索只在你有的武将里选**；只想比较/测算某几个将，用 simulate / simulate_many（不受此限制）`;
+  return { ids, skipped, note };
+}
+
+/** 能进模拟的 box 战法（库内有定义、且不是武将主战法） */
+export function boxSkillCandidates(ctx: ToolCtx): string[] | null {
+  const box = boxOn(ctx);
+  if (!box) return null;
+  return [...box.skillIds].filter((id) => Boolean(SKILL_REGISTRY[id]) && !isMainSkill(id));
+}
+
+/** box 收窄 → L2 选项；模型自己给了候选就求交（交集为空 → 明确报错，别白跑几千场） */
+function applyBoxSkillOptions(options: Partial<SimExpectOptions>, ctx: ToolCtx): string | null {
+  const cands = boxSkillCandidates(ctx);
+  if (!cands) return null;
+  const allowed = new Set(cands);
+  const asked = options.candidateIds;
+  const kept = asked?.length ? asked.filter((id) => allowed.has(id)) : cands;
+  if (!kept.length)
+    throw new Error(
+      `你给的 candidateSkillIds 一个都不在用户 box 里（档案「${ctx.box?.profileName}」，box 内可学战法 ${allowed.size} 个）——` +
+        '严格模式下不许用他没有的战法：调 get_my_box 或 list_skills 看清单，或去掉 candidateSkillIds 让它在 box 内全搜'
+    );
+  options.candidateIds = kept;
+  return `候选战法已收窄到你的 box（${kept.length} 个）——**配将搜索只在你有的战法里选**；只想比较/测算某几个战法（哪怕你没有），用 simulate_many 对拍（不受此限制）`;
+}
+
+/** box 收窄 → L3 选项（同上口径） */
+function applyBoxMateOptions(options: Partial<MateSimOptions>, ctx: ToolCtx): string | null {
+  const cands = boxHeroCandidates(ctx);
+  if (!cands) return null;
+  const allowed = new Set(cands.ids);
+  const asked = options.candidateIds;
+  const kept = asked?.length ? asked.filter((id) => allowed.has(id)) : cands.ids;
+  if (!kept.length)
+    throw new Error(
+      `你给的 candidateHeroIds 一个都不在用户 box 里（档案「${ctx.box?.profileName}」，box 内可进模拟的武将 ${allowed.size} 个）——` +
+        '严格模式下不许用他没有的武将：调 get_my_box 看清单，或去掉 candidateHeroIds 让它在 box 内全搜'
+    );
+  options.candidateIds = kept;
+  return cands.note;
+}
+
 // ─────────────────────────── 六个工具 ───────────────────────────
 
-/** 给模型看的紧凑明细（≤15 行）：每将 / 每战法场均贡献 —— 完整样本仍在 `data` 里给渲染层 */
+/** 给模型看的紧凑明细（≤15 行）：每将 / 每战法场均贡献 + **两个主数字**（八回合全队总伤 / 前三回合爆发） */
 export function planBrief(s: PlanSummary): string {
   const units = s.byUnit
     .slice(0, 5)
@@ -211,7 +314,8 @@ export function planBrief(s: PlanSummary): string {
     units,
     '每战法（场均贡献）：',
     skills || '· （本方案没有可学战法贡献）',
-    `汇总：mean ${Math.round(s.mean)} ±${Math.round(s.halfWidth)}（${s.runs} 场；样本标准差 ${Math.round(s.sd)}；单场 ${Math.round(s.min)}~${Math.round(s.max)}；中位 ${Math.round(s.median)}）`,
+    `汇总：核心将伤害期望 mean ${Math.round(s.mean)} ±${Math.round(s.halfWidth)}（${s.runs} 场；样本标准差 ${Math.round(s.sd)}；单场 ${Math.round(s.min)}~${Math.round(s.max)}；中位 ${Math.round(s.median)}）`,
+    `八回合全队总伤 meanTotal ${Math.round(s.meanTotal)}｜前三回合爆发 meanFirst3 ${Math.round(s.meanFirst3)}（都是每场平均）`,
   ].join('\n');
 }
 
@@ -219,7 +323,7 @@ export function planBrief(s: PlanSummary): string {
 function skillSearchSetup(
   args: { plan?: unknown; coarseRuns?: number; finalRuns?: number; coarseTop?: number; candidateSkillIds?: string[]; matchSlotKeys?: string[] },
   ctx: ToolCtx
-): { cfg: ViewCfg; options: Partial<SimExpectOptions>; plan: AdvisorPlan } {
+): { cfg: ViewCfg; options: Partial<SimExpectOptions>; plan: AdvisorPlan; boxLine?: string } {
   const plan = args?.plan === undefined ? configToPlan(ctx.deps.getConfig()) : assertPlanShape(args.plan);
   const cfg = cfgOf(plan);
   const options: Partial<SimExpectOptions> = {};
@@ -230,14 +334,15 @@ function skillSearchSetup(
   if (Array.isArray(args?.matchSlotKeys) && args.matchSlotKeys.length) options.matchSlotKeys = args.matchSlotKeys.map(String);
   const core = coreIndices(plan, cfg);
   if (core) options.coreUnits = core;
-  return { cfg, options, plan };
+  const boxLine = applyBoxSkillOptions(options, ctx);
+  return { cfg, options, plan, ...(boxLine ? { boxLine } : {}) };
 }
 
 /** 从 `args.plan`（缺省 = 当前配将区）构造 cfg + L3 队友搜索选项 */
 function mateSearchSetup(
   args: { plan?: unknown; coarseRuns?: number; finalRuns?: number; coarseTop?: number; candidateHeroIds?: string[]; matchUnits?: number[]; slotSkills?: string; includeOffline?: boolean },
   ctx: ToolCtx
-): { cfg: ViewCfg; options: Partial<MateSimOptions> } {
+): { cfg: ViewCfg; options: Partial<MateSimOptions>; boxLine?: string } {
   const plan = args?.plan === undefined ? configToPlan(ctx.deps.getConfig()) : assertPlanShape(args.plan);
   const cfg = cfgOf(plan);
   const options: Partial<MateSimOptions> = {};
@@ -250,7 +355,8 @@ function mateSearchSetup(
   if (typeof args?.includeOffline === 'boolean') options.includeOffline = args.includeOffline;
   const core = coreIndices(plan, cfg);
   if (core) options.coreUnits = core;
-  return { cfg, options };
+  const boxLine = applyBoxMateOptions(options, ctx);
+  return { cfg, options, ...(boxLine ? { boxLine } : {}) };
 }
 
 /** 长搜索的进度外抛 + 取消检查 */
@@ -319,6 +425,7 @@ function bothSetup(
   skillOptions: Partial<SimExpectOptions>;
   rounds: number;
   mateTop: number;
+  boxLines: string[];
 } {
   const plan = args?.plan === undefined ? configToPlan(ctx.deps.getConfig()) : assertPlanShape(args.plan);
   const cfg = cfgOf(plan);
@@ -336,12 +443,14 @@ function bothSetup(
     mateOptions.coreUnits = core;
     skillOptions.coreUnits = core;
   }
+  const boxLines = [applyBoxMateOptions(mateOptions, ctx), applyBoxSkillOptions(skillOptions, ctx)].filter((x): x is string => Boolean(x));
   return {
     cfg,
     mateOptions,
     skillOptions,
     rounds: Math.max(1, Math.min(3, Math.floor(Number(args?.rounds) || 2))),
     mateTop: Math.max(1, Math.min(4, Math.floor(Number(args?.mateTop) || 3))),
+    boxLines,
   };
 }
 
@@ -436,17 +545,67 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
     {
       name: 'validate_plan',
       description:
-        '校验一个方案是否合法（武将/战法是否在库、每将 ≤2 个可学战法、全队战法唯一、同队互斥、位置齐全）。要提方案前先过这一关；不合法会返回带 code 的错误清单。',
+        '校验一个方案是否合法（武将/战法是否在库、每将 ≤2 个可学战法、全队战法唯一、同队互斥、位置齐全）。要提方案前先过这一关；不合法会返回带 code 的错误清单。**用户 box 外的将法不算不合法**（进 `boxIssues`：能看能算，只是「应用」按钮不给点）。',
       schema: { type: 'object', properties: { plan: PLAN_SCHEMA }, required: ['plan'] },
       cost: {},
       async run(args: { plan: unknown }, ctx) {
-        const v = validateAdvisorPlan(assertPlanShape(args?.plan));
+        const v = validateAdvisorPlan(assertPlanShape(args?.plan), ctx.box ?? null);
         return {
           evidenceId: nextEvidenceId(ctx, 'validate_plan'),
           summary: v.ok
-            ? `方案合法（${v.normalized.slots.length} 位：${v.normalized.slots.map((s) => s.heroId).join(' / ')}）`
+            ? `方案合法（${v.normalized.slots.length} 位：${v.normalized.slots.map((s) => s.heroId).join(' / ')}）${
+                v.boxIssues.length ? `；另有 ${v.boxIssues.length} 处 box 外的将法（不算不合法，但不能应用到他的配将区）` : ''
+              }`
             : `方案不合法，${v.errors.length} 处问题；首个：${v.errors[0].code} —— ${v.errors[0].message}`,
-          data: { ok: v.ok, errors: v.errors, normalized: v.normalized },
+          brief: v.ok && v.boxIssues.length ? v.boxIssues.map((e) => `${e.code}: ${e.message}`).join('\n') : undefined,
+          data: { ok: v.ok, errors: v.errors, boxIssues: v.boxIssues, normalized: v.normalized },
+          stats: { battles: 0, ms: 0, seed: ctx.seed },
+        };
+      },
+    },
+    {
+      name: 'get_my_box',
+      description:
+        '读这位用户「我的 box」：他账号**实际拥有**的五星武将 / 战法清单（来自他上传的截图识别 + 复核），带 id 与库内可用性。上下文里那个 `<advisor_box>` 块就是它；这里能拿全量（块被字数截断时用它）。配任何队之前先确认清单。',
+      schema: {
+        type: 'object',
+        properties: { all: { type: 'boolean', description: 'true = 连「库内暂时用不了」的条目一起列（默认只列能进模拟的）' } },
+        required: [],
+      },
+      cost: {},
+      async run(args: { all?: boolean }, ctx) {
+        const box = ctx.box;
+        if (!box || box.empty)
+          return {
+            evidenceId: nextEvidenceId(ctx, 'get_my_box'),
+            summary: '这位用户**还没有 box**（没上传过截图 / 还没识别）——先请他把「五星武将」与「五星战法」的截图发到抽屉的「我的 box」面板里识别一次，再谈配将。',
+            data: { empty: true, profile: box?.profileName ?? null },
+            stats: { battles: 0, ms: 0, seed: ctx.seed },
+          };
+        const heroes = heroRows({ heroIds: [...box.heroIds] });
+        const skills = skillRows({ skillIds: [...box.skillIds] });
+        const showAll = Boolean(args?.all);
+        const hOut = showAll ? heroes : heroes.filter((h) => !h.warn);
+        const sOut = showAll ? skills : skills.filter((s) => !s.warn);
+        const unusable = [...heroes, ...skills].filter((x) => x.warn);
+        const line = (r: { id: string; name: string; sub: string; warn?: string }): string => `${r.name}(${r.id}·${r.sub})${r.warn ? `⚠️${r.warn}` : ''}`;
+        return {
+          evidenceId: nextEvidenceId(ctx, 'get_my_box'),
+          summary: `box（档案「${box.profileName}」，严格模式${box.strict ? '开' : '关'}）：五星武将 ${heroes.length} 个 / 可学战法 ${skills.length} 个${unusable.length ? `；其中 ${unusable.length} 个库内暂时用不了` : ''}`,
+          brief: [
+            `武将 ${hOut.length}：${hOut.map(line).join(' ')}`,
+            `战法 ${sOut.length}：${sOut.map(line).join(' ')}`,
+            unusable.length && !showAll ? `（还有 ${unusable.length} 个库内暂时用不了的没列：${unusable.map((x) => x.name).join('、')}——要看就用 all:true）` : '',
+          ]
+            .filter(Boolean)
+            .join('\n'),
+          data: {
+            profile: box.profileName,
+            strict: box.strict,
+            heroes: hOut,
+            skills: sOut,
+            unusable: unusable.map((x) => ({ name: x.name, id: x.id, why: x.warn })),
+          },
           stats: { battles: 0, ms: 0, seed: ctx.seed },
         };
       },
@@ -454,7 +613,7 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
     {
       name: 'simulate',
       description:
-        '对「不还手的木桩」真跑 N 场，按**核心将伤害期望**汇总（默认 20 场，上限 200）。返回 mean（期望）/ halfWidth（95% 半宽）/ meanTotal（全队总伤，参考）/ byUnit / bySkill / wipedRuns（木桩被打空的场次）。数字只能来自这里，不许自己推算。',
+        '对「不还手的木桩」真跑 N 场，按**核心将伤害期望**汇总（默认 20 场，上限 200）。返回三个主数字：**八回合全队总伤 meanTotal**、**前三回合爆发 meanFirst3**（核心将前三回合）、核心将期望 mean（±95% 半宽 halfWidth），另带 byUnit / bySkill / wipedRuns。**比较"带 A 还是带 B"就用它（或 simulate_many）对拍**——两个数字直接比，区间重叠就说"分不出来"。数字只能来自这里，不许自己推算。',
       schema: {
         type: 'object',
         properties: { plan: PLAN_SCHEMA, runs: { type: 'integer', minimum: 1, maximum: SIM_RUNS_MAX } },
@@ -487,7 +646,7 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
         const s = ctx.deps.evaluate(cfg, runs, coreIndices(plan, cfg));
         const result: ToolResult = {
           evidenceId: nextEvidenceId(ctx, 'simulate'),
-          summary: `真跑 ${s.runs} 场：核心将伤害期望 ${Math.round(s.mean)} ±${Math.round(s.halfWidth)}（95% 半宽）；全队总伤 ${Math.round(s.meanTotal)}；木桩被打空 ${s.wipedRuns} 场`,
+          summary: `真跑 ${s.runs} 场：**八回合全队总伤 ${Math.round(s.meanTotal)}**；**前三回合爆发 ${Math.round(s.meanFirst3)}**；核心将伤害期望 ${Math.round(s.mean)} ±${Math.round(s.halfWidth)}（95% 半宽）；木桩被打空 ${s.wipedRuns} 场`,
           brief: planBrief(s),
           data: { ...s, plan: normalizePlan(plan), runs: s.runs },
           stats: { battles: s.runs, ms: Date.now() - t0, seed: ctx.seed },
@@ -499,7 +658,7 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
     {
       name: 'simulate_many',
       description:
-        '**一次对拍多套方案**（最多 8 套，每套 runs 场，默认 20），按核心将伤害期望排序返回对比表（含每套的每将贡献）。想比较几个搭配时用它，**不要一套一套地调 simulate**（省调用次数）。',
+        '**一次对拍多套方案**（最多 8 套，每套 runs 场，默认 20），按核心将伤害期望排序返回对比表（每套都给**八回合全队总伤**与**前三回合爆发**）。比较几个搭配 / 「带 A 还是带 B」时用它，**不要一套一套地调 simulate**（省调用次数）。',
       schema: {
         type: 'object',
         properties: {
@@ -553,6 +712,7 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
             mean: s.mean,
             halfWidth: s.halfWidth,
             meanTotal: s.meanTotal,
+            meanFirst3: s.meanFirst3,
             runs: s.runs,
             sd: s.sd,
             wipedRuns: s.wipedRuns,
@@ -566,20 +726,20 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
           `按核心将伤害期望排序（各 ${runs} 场）：`,
           ...ranked.map(
             (r, k) =>
-              `${k + 1}. ${r.label} — mean ${Math.round(r.mean)} ±${Math.round(r.halfWidth)}｜总伤 ${Math.round(r.meanTotal)}｜${r.byUnit
+              `${k + 1}. ${r.label} — mean ${Math.round(r.mean)} ±${Math.round(r.halfWidth)}｜**八回合总伤 ${Math.round(r.meanTotal)}**｜**前三回合爆发 ${Math.round(r.meanFirst3)}**｜${r.byUnit
                 .slice(0, 3)
                 .map((u) => `${u.name} ${Math.round(u.mean)}`)
                 .join(' / ')}`
           ),
           ranked.length > 1
-            ? `第 1 与第 2 的差距：${Math.round(ranked[0].mean - ranked[1].mean)}（两者半宽之和 ${Math.round(ranked[0].halfWidth + ranked[1].halfWidth)} —— 差距小于半宽之和就是「分不出来」）`
+            ? `第 1 与第 2 的差距：核心将 ${Math.round(ranked[0].mean - ranked[1].mean)}（半宽之和 ${Math.round(ranked[0].halfWidth + ranked[1].halfWidth)}）、八回合总伤 ${Math.round(ranked[0].meanTotal - ranked[1].meanTotal)}、前三回合爆发 ${Math.round(ranked[0].meanFirst3 - ranked[1].meanFirst3)} —— 差距小于半宽之和就是「分不出来」`
             : '',
         ]
           .filter(Boolean)
           .join('\n');
         return remember(ctx, key, {
           evidenceId: nextEvidenceId(ctx, 'simulate_many'),
-          summary: `对拍 ${rows.length} 套 × ${runs} 场：第 1 名「${ranked[0].label}」核心将期望 ${Math.round(ranked[0].mean)} ±${Math.round(ranked[0].halfWidth)}（总伤 ${Math.round(ranked[0].meanTotal)}）`,
+          summary: `对拍 ${rows.length} 套 × ${runs} 场：第 1 名「${ranked[0].label}」八回合总伤 ${Math.round(ranked[0].meanTotal)}、前三回合爆发 ${Math.round(ranked[0].meanFirst3)}、核心将期望 ${Math.round(ranked[0].mean)} ±${Math.round(ranked[0].halfWidth)}`,
           brief,
           data: { runs, rows, rankedLabels: ranked.map((r) => r.label) },
           stats: { battles: runs * rows.length, ms: Date.now() - t0, seed: ctx.seed },
@@ -613,7 +773,7 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
         },
       },
       async run(args: { topN?: number } & Parameters<typeof skillSearchSetup>[0], ctx) {
-        const { cfg, options } = skillSearchSetup(args, ctx);
+        const { cfg, options, boxLine } = skillSearchSetup(args, ctx);
         const est = ctx.deps.estimateSkillBattles(cfg, options);
         const key = cacheKeyFor('optimize_skills', cfg, options, ctx.seed);
         const cached = cachedResult(ctx, key, 'optimize_skills');
@@ -649,6 +809,7 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
                 matchLabel: res.matchLabel,
                 coreLabel: res.coreLabel,
                 extraLines: [
+                  ...(boxLine ? [boxLine] : []),
                   `候选战法 ${res.candidateCount} 个（被排除 ${res.candidateSkipped}）；进决赛 ${res.finals.length} 支；粗筛 vs 决赛排序一致率 ${(res.rankAgreement * 100).toFixed(0)}%${res.combosCapped ? '；**组合被上限截断**（有更靠后的没评估）' : ''}${res.wipedCombos ? '；**有组合把木桩打空**（期望偏低）' : ''}`,
                 ],
               })
@@ -703,7 +864,7 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
         },
       },
       async run(args: { topN?: number } & Parameters<typeof mateSearchSetup>[0], ctx) {
-        const { cfg, options } = mateSearchSetup(args, ctx);
+        const { cfg, options, boxLine } = mateSearchSetup(args, ctx);
         const est = ctx.deps.estimateMateBattles(cfg, options);
         const key = cacheKeyFor('optimize_mates', cfg, options, ctx.seed);
         const cached = cachedResult(ctx, key, 'optimize_mates');
@@ -739,6 +900,7 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
                 matchLabel: res.matchLabel,
                 coreLabel: res.coreLabel,
                 extraLines: [
+                  ...(boxLine ? [boxLine] : []),
                   `对照基线 = 当前队友（匹配位战法${res.options?.slotSkills === 'clear' ? '已清空' : '保留'}）：mean ${Math.round(res.baseline.mean)} / 全队总伤 ${Math.round(res.baseline.meanTotal)}（${res.baseline.runs} 场）→ 榜首相对基线 ${gain >= 0 ? '+' : ''}${Math.round(gain)}`,
                   `候选武将 ${res.candidateCount} 个（队内已上阵剔除 ${res.candidateSkipped}；同队互斥剔除 ${res.poolSkippedMutual}）；口径：${res.poolLabel}`,
                   '注：**防御 / 控制型队友的价值在这套木桩口径里量不出来**（要看实战得走 L4 胜率）。',
@@ -894,6 +1056,7 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
           `${i + 1}. [${c.stage}] ${c.label} — 核心将期望 ${Math.round(c.mean)} ±${Math.round(c.halfWidth)}（${c.runs} 场）｜全队总伤 ${Math.round(c.meanTotal)}`;
         const brief = [
           `整体搜索：${s.rounds} 轮交替（队友 → 战法${s.rounds > 1 ? ' → 队友 → 战法' : ''}）；真跑 ${rows.length} 套进榜`,
+          ...s.boxLines,
           ...rows.map(line),
           rows.length > 1
             ? `第 1 与第 2 差距 ${Math.abs(Math.round(rows[0].mean - rows[1].mean))}，半宽之和 ${Math.round(rows[0].halfWidth + rows[1].halfWidth)} → ${
@@ -930,15 +1093,19 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
     {
       name: 'search_hero',
       description:
-        '按 名字 / 势力 / 兵种 / 主战法名 / id / 拼音 检索武将（空白分词 AND），返回候选与 id。拿不准 id 时先搜。空结果会给换词提示，不要拿同一个词反复重试。',
+        '按 名字 / 势力 / 兵种 / 主战法名 / id / 拼音 检索武将（空白分词 AND），返回候选与 id。拿不准 id 时先搜。**检索不受 box 限制**（标 `✓你有` / `✗你没有` 只作提示：只有"给你自己配将出方案"时才要求用 ✓ 的）。空结果会给换词提示，不要拿同一个词反复重试。',
       schema: { type: 'object', properties: { q: { type: 'string' }, limit: { type: 'integer' } }, required: ['q'] },
       cost: {},
       async run(args: { q: string; limit?: number }, ctx) {
         const hits = ctx.deps.searchHeroes(String(args?.q ?? ''), args?.limit ?? 12);
+        const outside = hits.filter((h) => !(boxOn(ctx)?.heroIds.has(h.id) ?? true)).length;
+        const note = boxNote(ctx, 'hero', outside);
         return {
           evidenceId: nextEvidenceId(ctx, 'search_hero'),
-          summary: hits.length ? `命中 ${hits.length} 个武将：${hits.map((h) => `${h.name}(${h.id})`).join('、')}` : `没有匹配「${args?.q}」的武将`,
-          brief: hits.length ? '' : EMPTY_HINT,
+          summary: hits.length
+            ? `命中 ${hits.length} 个武将：${hits.map((h) => `${h.name}(${h.id})${boxMark(ctx, 'hero', h.id)}`).join('、')}`
+            : `没有匹配「${args?.q}」的武将`,
+          brief: [note, hits.length ? '' : EMPTY_HINT].filter(Boolean).join('\n'),
           data: { q: args?.q ?? '', hits },
           stats: { battles: 0, ms: 0, seed: ctx.seed },
         };
@@ -978,15 +1145,19 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
     {
       name: 'search_skill',
       description:
-        '按 名字 / 出手位（主动/追击/被动/一类指挥/二类指挥/准备）/ 品级（S/A/B/C/D）/ 效果标签 / 官方描述关键词 检索可学习战法（不含武将主战法）。空结果会给换词提示。',
+        '按 名字 / 出手位（主动/追击/被动/一类指挥/二类指挥/准备）/ 品级（S/A/B/C/D）/ 效果标签 / 官方描述关键词 检索可学习战法（不含武将主战法）。**检索不受 box 限制**（标 `✓你有` / `✗你没有` 只作提示）。空结果会给换词提示。',
       schema: { type: 'object', properties: { q: { type: 'string' }, limit: { type: 'integer' } }, required: ['q'] },
       cost: {},
       async run(args: { q: string; limit?: number }, ctx) {
         const hits = ctx.deps.searchSkills(String(args?.q ?? ''), args?.limit ?? 15);
+        const outside = hits.filter((h) => !(boxOn(ctx)?.skillIds.has(h.id) ?? true)).length;
+        const note = boxNote(ctx, 'skill', outside);
         return {
           evidenceId: nextEvidenceId(ctx, 'search_skill'),
-          summary: hits.length ? `命中 ${hits.length} 个战法：${hits.map((h) => `${h.name}(${h.id})`).join('、')}` : `没有匹配「${args?.q}」的战法`,
-          brief: hits.length ? '' : EMPTY_HINT,
+          summary: hits.length
+            ? `命中 ${hits.length} 个战法：${hits.map((h) => `${h.name}(${h.id})${boxMark(ctx, 'skill', h.id)}`).join('、')}`
+            : `没有匹配「${args?.q}」的战法`,
+          brief: [note, hits.length ? '' : EMPTY_HINT].filter(Boolean).join('\n'),
           data: { q: args?.q ?? '', hits },
           stats: { battles: 0, ms: 0, seed: ctx.seed },
         };
@@ -995,7 +1166,7 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
     {
       name: 'list_skills',
       description:
-        '批量浏览可学习战法池（按出手位分页），用来「拉齐某一类池子」——比逐个词搜省调用次数。返回 id / 名字 / 出手位 / 品级。',
+        '批量浏览可学习战法池（按出手位分页），用来「拉齐某一类池子」——比逐个词搜省调用次数。返回 id / 名字 / 出手位 / 品级。**不受 box 限制**（标 `✓你有` / `✗你没有` 只作提示）。',
       schema: {
         type: 'object',
         properties: {
@@ -1009,16 +1180,22 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
       async run(args: { slot?: string; offset?: number; limit?: number }, ctx) {
         const slot = String(args?.slot ?? '').trim();
         const all = slot ? SKILL_MATCH.filter((s) => s.slot.includes(slot) || s.slotKey.includes(slot)) : SKILL_MATCH;
+        const outside = all.filter((s) => !(boxOn(ctx)?.skillIds.has(s.id) ?? true)).length;
+        const note = boxNote(ctx, 'skill', outside);
         const offset = Math.max(0, Math.floor(args?.offset ?? 0));
         const limit = Math.min(80, Math.max(1, Math.floor(args?.limit ?? 30)));
         const rows = all.slice(offset, offset + limit).map((s) => ({ id: s.id, name: s.name, slot: s.slot, grade: s.grade }));
         return {
           evidenceId: nextEvidenceId(ctx, 'list_skills'),
-          summary: `战法池${slot ? `（${slot}）` : ''}共 ${all.length} 个，本次返回第 ${offset + 1}~${offset + rows.length} 个：${rows.map((r) => r.name).join('、') || '（空）'}`,
-          brief:
+          summary: `战法池${slot ? `（${slot}）` : ''}共 ${all.length} 个，本次返回第 ${offset + 1}~${offset + rows.length} 个：${rows.map((r) => `${r.name}${boxMark(ctx, 'skill', r.id)}`).join('、') || '（空）'}`,
+          brief: [
+            note,
             all.length > offset + rows.length
               ? `还有 ${all.length - offset - rows.length} 个没返回 —— 需要就再调一次（offset=${offset + rows.length}）。`
               : '已到池底。',
+          ]
+            .filter(Boolean)
+            .join('\n'),
           data: { slot: slot || null, total: all.length, offset, rows },
           stats: { battles: 0, ms: 0, seed: ctx.seed },
         };
@@ -1100,6 +1277,8 @@ export interface MakeCtxOpts {
   cache?: AdvisorCache | null;
   /** 覆盖依赖（生产不传） */
   deps?: Partial<AdvisorDeps>;
+  /** 这位用户的「我的 box」（识图建档）：生产由 `view.ts` 注入当前档案；测试直接给 */
+  box?: BoxView | null;
 }
 
 /** 生产依赖：跑批走 `evaluatePlan`（与 L2 同口径），检索走扩面后的匹配串 */
@@ -1225,6 +1404,7 @@ export function makeCtx(opts: MakeCtxOpts = {}): ToolCtx & { deps: AdvisorDeps &
     evidenceSeq: { n: 0 },
     seed,
     cache: opts.cache ?? null,
+    box: opts.box ?? null,
   };
   // 仅测试：默认合法方案 + 按武将名拼方案（`fakeRuns: false` 的生产路径不会用到）
   return Object.assign(ctx, {

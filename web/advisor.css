@@ -1,116 +1,287 @@
-/* AI 顾问抽屉（主站内嵌）—— 配色只用主站既有 token（--panel / --line / --gold / --text…） */
-.advisor-drawer {
+/* AI配将 · 独立页（`advisor.html`）
+ * ---------------------------------------------------------------------------
+ * 皮肤真源：`web/styles.css` 的 :root 变量（--panel / --line / --gold / --beige…）——本文件不发明新颜色。
+ * 骨架口径：`docs/AI配将-页面布局设计.md` §9 / §17 —— **一个骨架两态**：
+ *   收起（默认，极简）：顶栏 / 对话 / 输入区 三段，功能入口在输入区工具行 + 顶栏齿轮；
+ *   展开（工作台）    ：左 332px 侧栏推挤式出现，对话变窄，工具行与阵容行自动收掉。
+ * 窄屏（≤1100px）侧栏改浮层 + 遮罩，并自带关闭钮（浮层会盖住顶栏开关）。
+ */
+
+/* ─────────────────────────── 页面骨架 ─────────────────────────── */
+.advisor-page {
   position: fixed;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  width: 420px;
-  max-width: 96vw;
+  inset: 0;
   display: none;
   flex-direction: column;
-  background: var(--panel, #1c1817);
-  border-left: 1px solid var(--line-strong, #5d4c2c);
-  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.45);
-  z-index: 60;
-  color: var(--text, #eeeae4);
-  font-family: var(--font-sans, "Microsoft YaHei", sans-serif);
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
   font-size: 13px;
 }
-.advisor-drawer.open { display: flex; }
+.advisor-page.open { display: flex; }
 
-.advisor-head {
+/* ── 顶栏：与主站 header.app 同一块皮 ── */
+.advisor-top {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--line, #3c3020);
-  background: var(--panel-2, #241f1d);
+  gap: 12px;
+  padding: max(10px, var(--safe-top, 0px)) max(20px, var(--safe-right, 0px)) 10px max(20px, var(--safe-left, 0px));
+  background: linear-gradient(180deg, #26200f, #1b150c);
+  border-bottom: 1px solid var(--gold);
+  box-shadow: inset 0 -3px 0 rgba(122, 34, 28, .55), 0 2px 12px rgba(0, 0, 0, .5);
 }
-.advisor-title { color: var(--gold-bright, #e6c67e); font-weight: 600; letter-spacing: .5px; }
-.advisor-close {
-  width: 26px; height: 26px; line-height: 1;
-  border-radius: 50%; cursor: pointer;
-  background: var(--red, #8f2c2c); color: #fff; border: 1px solid var(--line-strong, #5d4c2c);
-  font-size: 15px;
+.advisor-rail-toggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; flex: 0 0 auto; padding: 0;
+  background: var(--beige); color: var(--beige-ink);
+  border: 1px solid var(--beige-line); border-radius: 6px; cursor: pointer;
+  transition: background .12s, border-color .12s;
 }
-
-.advisor-body { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; overflow: hidden; flex: 1; }
-
-.advisor-settings { border: 1px solid var(--line, #3c3020); border-radius: 4px; padding: 6px 8px; background: var(--panel-2, #241f1d); }
-.advisor-settings summary { cursor: pointer; color: var(--gold, #c49a36); }
-.advisor-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
-.advisor-row label { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--text-dim, #8a827c); }
-.advisor-row input {
-  background: var(--bg, #12100f); color: var(--text, #eeeae4);
-  border: 1px solid var(--line, #3c3020); border-radius: 3px; padding: 4px 6px; font: inherit; min-width: 110px;
+.advisor-rail-toggle:hover { background: var(--beige-hi); border-color: var(--beige-hi); }
+.advisor-ico { width: 17px; height: 17px; flex: 0 0 auto; stroke: currentColor; fill: none; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.advisor-logo { width: 36px; height: 36px; object-fit: contain; border: 1px solid var(--line-strong); background: var(--panel-2); flex: 0 0 auto; }
+.advisor-title { font-family: var(--font-kai); font-size: 18px; font-weight: 700; letter-spacing: 3px; color: var(--gold-bright); white-space: nowrap; }
+.advisor-team { font-size: 12px; letter-spacing: 1px; color: var(--text-dim); font-family: var(--font-sans); font-weight: 400; }
+.advisor-team-inline { font-size: 12px; color: var(--text-dim); letter-spacing: .5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.advisor-page.rail-open .advisor-team-inline { display: none; }
+.advisor-top-spacer { flex: 1 1 auto; }
+.advisor-top-divider { width: 1px; height: 22px; background: var(--line); }
+.advisor-icon-btn { padding: 6px 9px; letter-spacing: 0; }
+.advisor-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; padding: 3px 9px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--line-strong); background: var(--panel-2); color: var(--text-dim);
+  font-family: var(--font-sans);
 }
-.advisor-chk { flex-direction: row !important; align-items: center; color: var(--text, #eeeae4) !important; }
-.advisor-note { margin: 6px 0 0; font-size: 11px; color: var(--text-dim, #8a827c); line-height: 1.5; }
+.advisor-chip.on { border-color: var(--gold); color: var(--gold-bright); }
+.advisor-chip-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--gold); flex: 0 0 auto; }
 
-.advisor-log {
-  flex: 1 1 40%;
-  min-height: 120px;
-  overflow: auto;
-  margin: 0;
-  padding: 8px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  background: var(--bg, #12100f);
-  border: 1px solid var(--line, #3c3020);
-  border-radius: 4px;
-  font: 12px/1.55 ui-monospace, Consolas, monospace;
+/* ── 主体：侧栏 + 对话 ── */
+.advisor-shell { flex: 1 1 auto; min-height: 0; display: flex; align-items: stretch; }
+.advisor-rail {
+  flex: 0 0 auto; width: 0; overflow: hidden;
+  background: var(--panel); border-right: 0 solid var(--line);
+  transition: width .2s ease-out, border-color .2s ease-out;
 }
-.advisor-progress { min-height: 16px; color: var(--gold, #c49a36); font: 11px/1.4 ui-monospace, Consolas, monospace; }
-/* 一行轨迹：工具调用全部压在这一行，原地刷新（用户 2026-09-29 口径） */
-.advisor-trace {
-  min-height: 18px;
-  padding: 4px 8px;
-  border: 1px solid var(--line, #3c3020);
-  border-radius: 4px;
-  background: var(--panel-2, #241f1d);
-  color: var(--gold-bright, #e6c67e);
-  font: 12px/1.5 ui-monospace, Consolas, monospace;
-  white-space: nowrap;
-  overflow-x: auto;
+/* 收起时连边线一起收掉：0 宽 + 1px 边框会在极简布局左侧留一条竖线（渲染复核抓到） */
+.advisor-page.rail-open .advisor-rail { width: 332px; border-right-width: 1px; }
+.advisor-rail-inner { width: 332px; height: 100%; overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 14px; }
+.advisor-rail-close { display: none; align-self: flex-end; width: 26px; height: 26px; place-items: center; border-radius: 50%; background: var(--red); color: var(--text); border: 1px solid var(--line-strong); font-size: 15px; line-height: 1; cursor: pointer; }
+.advisor-sec { display: flex; flex-direction: column; gap: 8px; }
+.advisor-sec-h { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--gold); letter-spacing: 1px; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+.advisor-sec-spacer { flex: 1 1 auto; }
+.advisor-acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* 侧栏阵容：直接复用主站槽位卡（`.slot` = 立绘卡面 + 战法图标），只把它变成"只看不改" */
+.advisor-team-list { display: flex; flex-direction: column; gap: 8px; }
+.advisor-team-list .slot { background: var(--panel-2); cursor: default; pointer-events: none; }
+.advisor-team-list .slot:hover { background: var(--panel-2); border-color: var(--line); border-bottom: var(--card-accent); }
+.advisor-goto-main { align-self: flex-start; }
+
+.advisor-slot { display: flex; flex-direction: column; gap: 2px; padding: 6px 9px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); }
+.advisor-slot.empty { background: transparent; border-style: dashed; color: var(--text-dim); }
+.advisor-slot-pos { font-size: 12px; color: var(--text-dim); letter-spacing: 1px; }
+.advisor-slot-who { font-family: var(--font-kai); font-size: 15px; color: var(--ink); }
+.advisor-slot-sk { font-size: 12px; color: var(--gold); word-break: break-word; }
+.advisor-slot-meta { font-size: 11px; color: var(--text-dim); }
+.advisor-last-line { font-size: 12px; color: var(--text); word-break: break-word; }
+.advisor-last-time { font-size: 11px; color: var(--text-dim); }
+
+/* ── 对话区（唯一滚动体；阅读列 920px 居中）── */
+.advisor-main { flex: 1 1 auto; min-width: 0; min-height: 0; overflow-y: auto; background: var(--bg); display: flex; flex-direction: column; }
+.advisor-main-inner { width: min(920px, 100%); margin: 0 auto; padding: 16px 24px 24px; display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; }
+/* ── 空态 hero（设计文档 §7.5）：不摆插画，只给定位与可点的下一步 ── */
+.advisor-hero { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 40px 0 20px; text-align: center; }
+.advisor-hero[hidden] { display: none; }
+.advisor-hero-mark { width: 52px; height: 52px; display: grid; place-items: center; border: 1px solid var(--line-strong); background: var(--panel-2); font-family: var(--font-kai); font-size: 24px; color: var(--gold-bright); }
+.advisor-hero h2 { font-family: var(--font-kai); font-size: 22px; font-weight: 700; letter-spacing: 4px; color: var(--ink); }
+.advisor-hero p { max-width: 560px; font-size: 13px; line-height: 1.7; color: var(--text-dim); }
+.advisor-hero-ask { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 640px; }
+.advisor-hero-ask .btn { letter-spacing: 1px; font-weight: 600; }
+
+.advisor-guide {
+  display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+  border: 1px solid var(--gold); border-radius: 6px; background: #2a2214; color: var(--gold-bright); font-size: 13px;
 }
-.advisor-cost { font-size: 11px; color: var(--text-dim, #8a827c); }
+.advisor-guide[hidden] { display: none; }
+.advisor-session-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.advisor-session-meta { font-size: 12px; color: var(--text-dim); }
 
-.advisor-plans { display: flex; flex-direction: column; gap: 8px; max-height: 45%; overflow: auto; }
-.advisor-plan-card { border: 1px solid var(--line-strong, #5d4c2c); border-radius: 4px; padding: 8px; background: var(--panel-2, #241f1d); }
-.pc-title { color: var(--gold-bright, #e6c67e); font-weight: 600; margin-bottom: 6px; }
-.pc-config { width: 100%; border-collapse: collapse; font-size: 12px; }
-.pc-config td { border-top: 1px solid var(--line, #3c3020); padding: 3px 4px; vertical-align: top; }
-.pc-config td:first-child { color: var(--text-dim, #8a827c); width: 42px; }
-.pc-metric { font-size: 12px; margin-top: 4px; }
-.pc-metric.bad { color: var(--orange, #cf8f3e); }
-.pc-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-.advisor-verify-note { font-size: 11px; color: var(--text-dim, #8a827c); }
-.dim { color: var(--text-dim, #8a827c); }
+/* 过程行：摘要一行（工具调用不刷屏），逐条明细折叠在下面 */
+.advisor-proc { border: 1px solid var(--line); border-radius: 4px; background: var(--panel-2); overflow: hidden; }
+.advisor-proc-head { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 5px 9px; cursor: pointer; background: none; border: none; }
+.advisor-proc-chev { width: 14px; height: 14px; color: var(--gold); transition: transform .15s ease-out; }
+.advisor-proc-head[aria-expanded="true"] .advisor-proc-chev { transform: rotate(90deg); }
+.advisor-trace { font: 12px/1.5 ui-monospace, Consolas, monospace; color: var(--gold-bright); }
+.advisor-proc-body { border-top: 1px solid var(--line); padding: 6px 9px; display: flex; flex-direction: column; gap: 3px; }
+.advisor-proc-body[hidden] { display: none; }
+.advisor-proc-row { display: flex; gap: 8px; align-items: baseline; font: 12px/1.6 ui-monospace, Consolas, monospace; }
+.advisor-proc-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-dim); flex: 0 0 auto; }
+.advisor-proc-name { color: var(--text); flex: 0 0 auto; }
+.advisor-proc-arg { color: var(--text-dim); flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.advisor-proc-cost { color: var(--gold); flex: 0 0 auto; }
+.advisor-proc-empty { font-size: 12px; color: var(--text-dim); }
 
-/* 报价 + 确认条：长搜索开跑前先问一句（点「开始」才真跑） */
 .advisor-confirm {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 6px 8px;
-  border: 1px solid var(--gold, #c49a36);
-  border-radius: 4px;
-  background: #2a2214;
-  color: var(--gold-bright, #e6c67e);
-  font-size: 12px;
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 6px 8px; border: 1px solid var(--gold); border-radius: 4px;
+  background: #2a2214; color: var(--gold-bright); font-size: 12px;
 }
 .advisor-confirm[hidden] { display: none; }
 
-.advisor-input-row { display: flex; flex-direction: column; gap: 6px; }
-.advisor-input {
-  width: 100%; resize: vertical;
-  background: var(--bg, #12100f); color: var(--text, #eeeae4);
-  border: 1px solid var(--line, #3c3020); border-radius: 4px; padding: 6px 8px; font: inherit;
+/* 正文：页面态下它自己会长高（`.advisor-main` 是滚动体），不再卡 38vh */
+.advisor-log {
+  flex: 1 1 auto; min-height: 160px; overflow: auto; margin: 0; padding: 10px 12px;
+  white-space: pre-wrap; word-break: break-word;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+  font: 13px/1.7 ui-monospace, Consolas, monospace;
 }
-.advisor-buttons { display: flex; gap: 8px; }
+.advisor-progress { min-height: 16px; color: var(--gold); font: 12px/1.4 ui-monospace, Consolas, monospace; }
+.advisor-cost { font-size: 11px; color: var(--text-dim); }
 
-/* 窄屏（含手机横屏）：抽屉铺满 + 顶部只留关闭 */
+/* 方案卡：不参与压缩（曾经被压成 0 高度 → 真机上「应用」够不着） */
+.advisor-plans { display: flex; flex-direction: column; gap: 8px; flex: 0 0 auto; }
+.advisor-plan-card { border: 1px solid var(--line-strong); border-radius: 4px; padding: 8px; background: var(--panel-2); }
+.pc-title { color: var(--gold-bright); font-weight: 600; margin-bottom: 6px; }
+.pc-config { width: 100%; border-collapse: collapse; font-size: 12px; }
+.pc-config td { border-top: 1px solid var(--line); padding: 3px 4px; vertical-align: top; }
+.pc-config td:first-child { color: var(--text-dim); width: 42px; }
+.pc-metric { font-size: 12px; margin-top: 4px; }
+.pc-metric.bad { color: var(--orange); }
+/* box 外的将法：不是错（照常看数），只是不能一键应用 → 金色提醒，跟"不合法"的橙色分开 */
+.pc-metric.warn { color: var(--gold-bright, #e6c67e); }
+.pc-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.advisor-verify-note { font-size: 11px; color: var(--text-dim); }
+.dim { color: var(--text-dim); }
+
+/* ── 输入区（贴底）── */
+.advisor-composer { flex-shrink: 0; border-top: 1px solid var(--line); background: var(--panel); padding: 8px 20px 12px; }
+.advisor-composer-inner { width: min(920px, 100%); margin: 0 auto; display: flex; flex-direction: column; gap: 6px; }
+.advisor-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+/* 侧栏展开时收掉工具行与阵容行 —— 同一套控件不同时出现两处（设计文档 §17.3） */
+.advisor-page.rail-open .advisor-tools { display: none; }
+.advisor-tools button { font-size: 12px; color: var(--gold); background: none; border: none; cursor: pointer; padding: 0; }
+.advisor-tools button:hover { color: var(--gold-bright); }
+.advisor-input-row { display: flex; align-items: flex-end; gap: 8px; }
+/* 注意别给 textarea 写 width:100% —— 那会把「发送 / 取消」挤成竖排（渲染验证抓到） */
+.advisor-input {
+  flex: 1 1 auto; min-width: 0; resize: vertical; min-height: 40px; max-height: 160px;
+  background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+  padding: 8px 10px; font: 13px/1.6 var(--font-sans);
+}
+.advisor-buttons { display: flex; gap: 8px; flex: 0 0 auto; }
+.advisor-shot { flex: 0 0 auto; white-space: nowrap; }
+.advisor-costline { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text-dim); }
+.advisor-costline button { font-size: 11px; color: var(--text-dim); background: none; border: none; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.advisor-costline button:hover { color: var(--gold-bright); }
+
+/* ── 按需面板（右侧 sheet；同一时刻只开一个）── */
+.advisor-mask { position: fixed; inset: 0; background: rgba(10, 8, 5, .45); z-index: 55; }
+.advisor-mask[hidden] { display: none; }
+.advisor-sheet {
+  position: fixed; top: 0; right: 0; bottom: 0; width: min(440px, 96vw); z-index: 60;
+  display: none; flex-direction: column; background: var(--panel);
+  border-left: 1px solid var(--line-strong); box-shadow: -8px 0 24px rgba(0, 0, 0, .45);
+}
+.advisor-sheet.on { display: flex; }
+.advisor-sheet-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; cursor: default;
+  padding: 10px 12px; border-bottom: 1px solid var(--line); background: var(--panel-2);
+  font-family: var(--font-kai); font-size: 15px; color: var(--gold-bright); letter-spacing: 2px;
+}
+.advisor-sheet-head::-webkit-details-marker { display: none; }
+.advisor-sheet-x { width: 26px; height: 26px; border-radius: 50%; cursor: pointer; background: var(--red); color: var(--text); border: 1px solid var(--line-strong); font-size: 15px; line-height: 1; padding: 0; }
+.advisor-sheet-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+
+/* ── 表单与列表（面板内部复用）── */
+.advisor-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.advisor-row label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--text-dim); }
+.advisor-row input {
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--line); border-radius: 3px; padding: 4px 6px; font: inherit; min-width: 110px;
+}
+.advisor-chk { flex-direction: row !important; align-items: center; color: var(--text) !important; }
+.advisor-note { margin: 6px 0 0; font-size: 12px; color: var(--text-dim); line-height: 1.6; }
+.advisor-note code { color: var(--gold); font-size: 11px; }
+
+/* 记忆层：偏好档案 */
+.advisor-profile { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.advisor-pref-list { display: flex; flex-direction: column; gap: 3px; margin-top: 6px; max-height: 220px; overflow: auto; }
+.advisor-pref-row { display: flex; align-items: baseline; gap: 6px; font-size: 12px; }
+.apf-key { flex: 0 0 auto; color: var(--gold-bright); }
+.apf-key::after { content: "："; color: var(--text-dim); }
+.apf-val { flex: 1 1 auto; word-break: break-word; }
+.advisor-pref-del { flex: 0 0 auto; width: 18px; height: 18px; line-height: 1; cursor: pointer; border-radius: 3px; border: 1px solid var(--line); background: transparent; color: var(--text-dim); font-size: 12px; padding: 0; }
+.advisor-pref-del:hover { color: #fff; background: var(--red); border-color: var(--line-strong); }
+.advisor-pref-add, .advisor-pref-clear { align-self: flex-end; padding: 2px 8px; font-size: 11px; }
+
+.advisor-history { display: flex; flex-direction: column; gap: 4px; }
+.advisor-evidence { border: 1px dashed var(--line); border-radius: 4px; padding: 4px 6px; background: rgba(0, 0, 0, .18); }
+.ae-head { font-size: 11px; color: var(--gold); margin-bottom: 2px; }
+.ae-row { display: flex; gap: 6px; align-items: baseline; font-size: 11px; line-height: 1.5; }
+.ae-id { flex: 0 0 auto; color: var(--gold-bright); }
+.ae-sum { flex: 1 1 auto; color: var(--text); word-break: break-word; }
+.ae-cost { flex: 0 0 auto; color: var(--text-dim); }
+.ae-plan { font-size: 11px; color: var(--text-dim); }
+
+/* ── 我的 box（识图建档）── */
+.advisor-box { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
+.advisor-box-sum { font-size: 12px; color: var(--gold-bright); }
+.advisor-box-profile { min-width: 120px; }
+.advisor-box-new, .advisor-box-rename, .advisor-box-del, .advisor-box-pick, .advisor-box-run, .advisor-box-clear, .advisor-box-name-ok { padding: 2px 8px; font-size: 11px; }
+.advisor-box-rename-row[hidden] { display: none; }
+.advisor-box-name { min-width: 160px; }
+.advisor-box-drop { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 6px; padding: 8px; border: 1px dashed var(--line-strong); border-radius: 4px; background: rgba(0, 0, 0, .18); }
+.advisor-box-drop.over { border-color: var(--gold-bright); background: rgba(196, 154, 54, .12); }
+.advisor-box-hint { font-size: 12px; color: var(--text-dim); }
+.advisor-box-thumbs { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.abr-thumb { position: relative; display: inline-block; }
+.abr-thumb img { width: 62px; height: 62px; object-fit: cover; border: 1px solid var(--line); border-radius: 3px; display: block; }
+.abr-thumb-del { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; line-height: 1; padding: 0; border-radius: 50%; cursor: pointer; font-size: 12px; background: var(--red); color: #fff; border: 1px solid var(--line-strong); }
+.advisor-box-status { font-size: 12px; color: var(--text-dim); flex: 1 1 100%; }
+.advisor-box-status.bad { color: var(--orange); }
+.advisor-box-status.busy { color: var(--gold-bright); }
+.advisor-box-review { margin-top: 6px; }
+.abr-cols { display: flex; gap: 8px; }
+.abr-col { flex: 1 1 0; min-width: 0; }
+.abr-head { font-size: 12px; color: var(--gold); margin-bottom: 2px; }
+.abr-list { display: flex; flex-direction: column; gap: 2px; max-height: 180px; overflow: auto; }
+.abr-item { display: flex; align-items: baseline; gap: 4px; font-size: 12px; line-height: 1.5; }
+.abr-item.warn { color: var(--orange); }
+.abr-name { flex: 0 0 auto; }
+.abr-sub { flex: 1 1 auto; color: var(--text-dim); font-size: 11px; }
+.abr-del { flex: 0 0 auto; width: 16px; height: 16px; line-height: 1; padding: 0; cursor: pointer; border-radius: 3px; border: 1px solid var(--line); background: transparent; color: var(--text-dim); }
+.abr-del:hover { color: #fff; background: var(--red); }
+.abr-add { align-items: center; }
+.abr-add input { min-width: 0; flex: 1 1 auto; }
+.abr-cands { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.abr-cand { padding: 1px 6px; font-size: 11px; }
+.abr-pending { margin-top: 6px; padding: 6px; border: 1px solid var(--gold); border-radius: 4px; background: #2a2214; }
+.abr-pending-head { font-size: 11px; color: var(--gold-bright); margin-bottom: 4px; }
+.abr-pending-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 11px; margin-top: 3px; }
+.abr-raw { color: var(--gold-bright); }
+.abr-pick, .abr-skip { padding: 1px 6px; font-size: 11px; }
+.abr-unmatched { margin-top: 6px; font-size: 11px; color: var(--text-dim); line-height: 1.5; }
+
+/* ── 设置弹窗的排版在 `web/settings.css`（settings.ts 自己 import，两个入口都拿得到）── */
+
+/* ── 窄屏 ── */
 @media (max-width: 1100px) {
-  .advisor-drawer { width: 100vw; max-width: 100vw; border-left: none; }
+  /* 推挤会把对话压死 → 侧栏改浮层；边框与投影只在展开态给（收起的浮层不能留线/留影） */
+  .advisor-rail { position: fixed; top: 0; bottom: 0; left: 0; z-index: 60; }
+  .advisor-page.rail-open .advisor-rail { width: min(332px, 88vw); border-right: 1px solid var(--line-strong); box-shadow: 8px 0 24px rgba(0, 0, 0, .45); }
+  .advisor-rail-inner { width: min(332px, 88vw); }
+  .advisor-rail-close { display: grid; }
+  .advisor-sheet { width: 100vw; border-left: none; }
+}
+@media (max-width: 720px) {
+  .advisor-top, .advisor-composer { padding-left: 12px; padding-right: 12px; }
+  .advisor-title { font-size: 16px; letter-spacing: 2px; }
+  .advisor-team, .advisor-top .advisor-chip { display: none; }
+  .advisor-main-inner { padding: 12px; }
+  .advisor-sheet-body { padding: 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .advisor-rail, .advisor-proc-chev, .advisor-rail-toggle { transition: none; }
 }
