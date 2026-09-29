@@ -2637,17 +2637,20 @@ function executeSplitAttack(
  *  规避（按层数）、叠层待发 / 无视规避（消耗制）没有 remaining，已在标记阶段跳过。 */
 type ActEndCountingStatus = Exclude<Status, { type: 'evasion' | 'pending_stacks' | 'ignore_evasion' | 'avoid_charge' }>;
 
-/** 第 2 组「**下次行动前递减**」的状态（用户口径 2026-09-20）：控制 / 属性 / 增减伤。
+/** 第 2 组「**下次行动前递减**」的状态（用户口径 2026-09-20）：控制 / 属性 / 增减伤 / 无视防御。
  *  语义：duration N = 生效目标接下来 **N 次行动**；第 N 次生效行动结束后状态**仍在身**，
  *  直到「再下一次行动开始前」才移除 —— 即 remaining 减到 ≤0 时**只打「下次行动开始时移除」标记**
  *  （用 remaining ≤ 0 表达），本次行动照常生效，下一次行动开始时由 markStatusesOnActStart 开头清掉。
  *  第 1 组（DoT sorcery/burning/panic/curse/ignite、治愈 first_aid/rest）与其余行动计数型
  *  保持 8032010 的「携带者行动结束后递减」；priority / counter 仍是「行动开始前递减 + 即时移除」。
- *  heal_boost（受到恢复效果提升）与属性/增减伤同组：数值型增益，行动开始前递减，duration 999 等同常驻。 */
+ *  heal_boost（受到恢复效果提升）与属性/增减伤同组：数值型增益，行动开始前递减，duration 999 等同常驻。
+ *  ignore_def（无视防御/谋略，击势 / 统军畏慎 / 奇正之势二段）同为数值型增益且官方写「持续 1 回合」，
+ *  与 damage_boost 同寿：行动中给自己挂的 duration 1 **只覆盖本次行动**（旧实现落在「行动结束后递减」的
+ *  兜底桶里，第 1 次递减发生在下次行动结束 → 会多留一次行动）。 */
 const NEXT_ACT_TICK_TYPES = [
   'hesitation', 'cowardice', 'confusion', 'rampage',
   'attack_buff', 'defense_buff', 'strategy_buff', 'speed_buff',
-  'damage_boost', 'damage_reduce', 'heal_boost',
+  'damage_boost', 'damage_reduce', 'heal_boost', 'ignore_def',
 ] as const;
 type NextActTickStatus = Extract<Status, { type: (typeof NEXT_ACT_TICK_TYPES)[number] }>;
 
@@ -2804,7 +2807,7 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
     return;
   }
   // 0. 行动中施加的状态：在这里先结算「下次行动前递减」类——
-  //    第 2 组（控制/属性/增减伤）先清到期项、再递减；窗口/时点型（priority/counter）即时移除；
+  //    第 2 组（控制/属性/增减伤/无视防御）先清到期项、再递减；窗口/时点型（priority/counter）即时移除；
   //    第 1 组 + 其余行动计数型只标记，待本次行动完全生效后再由 tickStatusesOnActEnd 递减（三出口统一调用）。
   //    statusesAtActStart：判断「本次行动之内才施加」的第 2 组状态（见 tickStatusesOnActEnd ②）。
   const statusesAtActStart = new Set(unit.statuses);
@@ -2815,34 +2818,41 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
   // 行动阶段判定顺序：被动 → 指挥（预备怯战 + 二类） → DoT → 主动 → 普攻（命中后立即结算分兵） → 追击
   // 混乱：无法发动主动战法 + 普攻；但被动/指挥/DoT仍正常判定
 
-  // 0. 被动战法（武将行动阶段判定）：只触发 round_start 型；
-  //    battle_start 型（血溅黄砂/百战精兵等）已在准备阶段由 triggerPassiveSkills 触发一次，此处跳过避免每回合重复叠加
+  // 0. 被动战法（武将行动阶段判定）：**按战法槽位顺序**逐槽结算（用户口径；与 web/teamEditor.ts 的
+  //    「同类型内主战法先判定、装配战法按添加顺序」一致）——同优先级（同为被动）看战法顺序，
+  //    先判定槽 1（主战法）的段，再判定槽 2 的段。
+  //    例：孙策【主·霸王渡江】（槽 1·roundStartRepeat 三连击）先判定、【击势】（槽 2·round_start 挂增伤）后判定
+  //    → 主战法吃不到击势的增伤/无视防御（击势只惠及同一行动内其后的普攻 / 主动 / 追击）。
+  //    原实现是「全部 round_start 段 → 全部 roundStartRepeat 段」两趟循环，跨槽会错序（击势抢在主战法前）。
+  //    每槽内顺序：① round_start 型 output —— battle_start 型（血溅黄砂/百战精兵等）已在准备阶段由
+  //    triggerPassiveSkills 触发一次，此处跳过避免每回合重复叠加；② 该槽的 roundStartRepeat ——
+  //    不在 battle_start 里跑（开战 output 只走一次）。
   for (const id of unit.general.passiveSkillIds) {
     const passive = resolveSkill(ctx, id);
-    if (passive?.type !== 'passive' || passive.timing !== 'round_start') continue;
-    if (passive.startRound != null && ctx.currentRound < passive.startRound) continue;
-    if (passive.endRound != null && ctx.currentRound > passive.endRound) continue;
-    ctx.events.push({
-      type: 'unit_act_start',
-      unitId: unit.general.id,
-      name: unit.general.name,
-      position: unit.general.position,
-      phase: 'passive_skill',
-    });
-    // 持刀从武：专用钩子（记忆池独立重复攻击），不走通用 output 路径
-    if (passive.lastActStrike) {
-      triggerLastActStrike(ctx, unit, passive);
-      continue;
+    if (passive?.type !== 'passive') continue;
+    // ① 行动阶段判定段（timing: 'round_start'），可带 startRound / endRound 回合窗口
+    if (
+      passive.timing === 'round_start' &&
+      (passive.startRound == null || ctx.currentRound >= passive.startRound) &&
+      (passive.endRound == null || ctx.currentRound <= passive.endRound)
+    ) {
+      ctx.events.push({
+        type: 'unit_act_start',
+        unitId: unit.general.id,
+        name: unit.general.name,
+        position: unit.general.position,
+        phase: 'passive_skill',
+      });
+      // 持刀从武：专用钩子（记忆池独立重复攻击），不走通用 output 路径
+      if (passive.lastActStrike) {
+        triggerLastActStrike(ctx, unit, passive);
+      } else {
+        executeSkillWithTargets(ctx, unit, passive, enemies, allies, mixedPool(ctx, unit));
+      }
     }
-    executeSkillWithTargets(ctx, unit, passive, enemies, allies, mixedPool(ctx, unit));
-  }
-
-  // 0.5 被动 roundStartRepeat：每回合行动阶段、round_start 被动之后、指挥之前。
-  // 不在 battle_start 的 triggerPassiveSkills 里跑（开战 output 只走一次）。
-  for (const id of unit.general.passiveSkillIds) {
-    const p = resolveSkill(ctx, id);
-    if (p?.type !== 'passive' || !p.roundStartRepeat) continue;
-    const rs = p.roundStartRepeat;
+    // ② 每回合重复段（roundStartRepeat）
+    const rs = passive.roundStartRepeat;
+    if (!rs) continue;
     if (rs.startRound != null && ctx.currentRound < rs.startRound) continue;
     if (rs.endRound != null && ctx.currentRound > rs.endRound) continue;
     if (rs.oddRounds && ctx.currentRound % 2 === 0) continue;
@@ -2850,7 +2860,7 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
     if (rs.rounds && !rs.rounds.includes(ctx.currentRound)) continue;
     // 攻击距离门槛（雪奋短兵「攻击距离小于等于 1 时…每回合自身行动时」）：未降到门槛内则整段不结算
     if (rs.requireAttackRangeAtMost != null && attackRangeOf(unit) > rs.requireAttackRangeAtMost) continue;
-    executeSkillOutputs(ctx, unit, p, [unit], rs.output);
+    executeSkillOutputs(ctx, unit, passive, [unit], rs.output);
   }
 
   // 0.6 被动「每回合行动时恢复 N 次」（胜敌益强）：按当前回合取次数

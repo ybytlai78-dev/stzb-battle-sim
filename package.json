@@ -11,7 +11,8 @@
     "preview:host": "vite preview --host",
     "test": "vitest run",
     "test:watch": "vitest",
-    "golden": "vitest run tests/golden.test.ts"
+    "golden": "vitest run tests/golden.test.ts",
+    "diagnose": "tsx scripts/diagnose.mts"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.2",

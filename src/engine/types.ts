@@ -2205,7 +2205,7 @@ export interface DotStoredDamage {
 /** 武将身上的状态（buff/debuff）。
  *  叠层属性 buff（持节镇西）：每层各自计 remaining（回合结束掉 1 层），数值 = stacks × perStack
  *  appliedRound：施加时的回合号。0 = 准备阶段（行动前施加，remaining=duration，回合末递减，「前N回合」生效至第N+1回合行动前）；
- *                >0 = 该回合行动中施加（remaining=duration）——第 2 组（控制/属性/增减伤）在携带者下次行动
+ *                >0 = 该回合行动中施加（remaining=duration）——第 2 组（控制/属性/增减伤/无视防御）在携带者下次行动
  *                开始时递减、再下一次行动开始时移除（duration N = 生效接下来 N 次行动）；其余（DoT/治愈等）
  *                在携带者行动结束后递减、到 0 移除 */
 export type Status =
