@@ -176,13 +176,20 @@ export function validateScan(scan: ScanJson, tables: ScanTables): ScanResult {
   ordered.forEach((s, i) => {
     if (!s) return;
 
-    // 规则 2：武将名唯一命中
-    const hits = tables.heroes.filter((h) => h.name === s.heroName);
-    if (hits.length === 0) err('hero-name', `武将「${s.heroName}」不在库`, i);
-    else if (hits.length > 1) {
-      err('hero-name', `武将「${s.heroName}」有 ${hits.length} 个版本：${hits.map((h) => h.id).join(' / ')}`, i);
+    // 规则 2：有 heroId 就认 id（同名多版，如吕布 h3 / h479）。没 id 才按名字唯一命中（截图识别）
+    let hero: HeroLite | undefined;
+    const givenId = s.heroId?.trim();
+    if (givenId) {
+      hero = tables.heroes.find((h) => h.id === givenId);
+      if (!hero) err('hero-name', `武将「${givenId}」不在库`, i);
+    } else {
+      const hits = tables.heroes.filter((h) => h.name === s.heroName);
+      if (hits.length === 0) err('hero-name', `武将「${s.heroName}」不在库`, i);
+      else if (hits.length > 1) {
+        err('hero-name', `武将「${s.heroName}」有 ${hits.length} 个版本：${hits.map((h) => h.id).join(' / ')}`, i);
+      }
+      hero = hits[0];
     }
-    const hero = hits[0];
 
     // 规则 3 / 5：战法名在库 + 第 1 个 = 主战法
     const names = (s.skillNames ?? []).map((n) => String(n).trim()).filter(Boolean);

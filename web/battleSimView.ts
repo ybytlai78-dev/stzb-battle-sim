@@ -8,17 +8,18 @@ import { DEFAULT_ENV, runBatchAsync, type BatchStats, type SimEnv } from './batt
 import { fmt } from './roundChart';
 import { generalsOf, renderConfigPanel, unitTemplates, type ViewCfg } from './teamConfig';
 import { importScanEntries } from './teamScanBrowser';
+import {
+  loadMergedPool,
+  removeUserOpponent,
+  upsertUserEntry,
+  type PoolEntry,
+} from './opponentPool';
 
 /** ViewCfg → 引擎 General[] 已挪到共用层 `web/teamConfig.ts`（L2 模拟测评也要用同一套转换）；此处原样再导出，调用方零改动 */
 export { generalsOf };
 
-/** 对手池条目（可备注名） */
-export interface OpponentEntry {
-  id: string;
-  /** 备注名（用户可改） */
-  note: string;
-  cfg: ViewCfg;
-}
+/** 对手池条目。固定集与用户添加的合并结果，见 `opponentPool.ts`。 */
+export type OpponentEntry = PoolEntry;
 
 interface SimState {
   mine: ViewCfg;
@@ -29,31 +30,14 @@ interface SimState {
   env: SimEnv;
 }
 
-const POOL_KEY = 'dsh-battle-sim-opponents-v1';
-
 function loadPool(): OpponentEntry[] {
-  try {
-    const raw = localStorage.getItem(POOL_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as OpponentEntry[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-function savePool(pool: OpponentEntry[]): void {
-  try {
-    localStorage.setItem(POOL_KEY, JSON.stringify(pool));
-  } catch {
-    /* ignore */
-  }
+  return loadMergedPool().entries;
 }
 
 export function mountBattleSim(root: HTMLElement): void {
   const state: SimState = {
     mine: defaultMine(),
-    current: { id: 'opp-0', note: '对手 1', cfg: defaultMine() },
+    current: { id: 'opp-0', note: '对手 1', cfg: defaultMine(), source: 'user' },
     pool: [],
     runs: 500,
     env: { ...DEFAULT_ENV },
@@ -148,18 +132,18 @@ export function mountBattleSim(root: HTMLElement): void {
   function renderPool(): void {
     const rows = state.pool
       .map(
-        (p, i) => `<tr class="${p.id === state.current.id ? 'on' : ''}" data-pool="${i}">
-          <td><input class="bs-note" data-note="${i}" value="${escapeAttr(p.note)}" /></td>
+        (p, i) => `<tr class="${p.id === state.current.id ? 'on' : ''}" data-pool="${i}" data-source="${p.source}">
+          <td><input class="bs-note" data-note="${i}" value="${escapeAttr(p.note)}" ${p.source === 'benchmark' ? 'readonly' : ''} /></td>
           <td class="rm-skills">${unitTemplates(p.cfg)
             .map((t) => t.name)
             .join(' ｜ ')}</td>
           <td><button class="rm-btn rm-btn-ghost" type="button" data-use="${i}">用作对手</button></td>
-          <td><button class="rm-del" type="button" data-del="${i}">×</button></td>
+          <td>${p.source === 'benchmark' ? '<span class="rm-dim">固定</span>' : `<button class="rm-del" type="button" data-del="${i}">×</button>`}</td>
         </tr>`
       )
       .join('');
     poolEl.innerHTML = `
-      <h2>对手池 <span class="rm-dim">（${state.pool.length} 条，存在浏览器本地）</span></h2>
+      <h2>对手池 <span class="rm-dim">（固定 ${state.pool.filter((p) => p.source === 'benchmark').length} + 自加 ${state.pool.filter((p) => p.source === 'user').length}）</span></h2>
       <div class="bs-poolbar">
         <button class="rm-btn" type="button" id="bs-save-opp">把当前对手存入池子</button>
         <span class="rm-dim">当前对手：<b id="bs-cur-note">${escapeHtml(state.current.note)}</b></span>
@@ -182,9 +166,12 @@ export function mountBattleSim(root: HTMLElement): void {
     poolEl.querySelectorAll<HTMLInputElement>('[data-note]').forEach((el) =>
       el.addEventListener('change', () => {
         const i = Number(el.dataset.note);
-        state.pool[i].note = el.value;
-        if (state.pool[i].id === state.current.id) state.current = state.pool[i];
-        savePool(state.pool);
+        const row = state.pool[i];
+        if (!row || row.source === 'benchmark') return;
+        row.note = el.value;
+        upsertUserEntry(row);
+        if (row.id === state.current.id) state.current = row;
+        state.pool = loadPool();
         renderPool();
       })
     );
@@ -198,24 +185,35 @@ export function mountBattleSim(root: HTMLElement): void {
     );
     poolEl.querySelectorAll<HTMLButtonElement>('[data-del]').forEach((el) =>
       el.addEventListener('click', () => {
-        state.pool.splice(Number(el.dataset.del), 1);
-        savePool(state.pool);
+        const row = state.pool[Number(el.dataset.del)];
+        if (!row || row.source === 'benchmark') return;
+        removeUserOpponent(row.id);
+        state.pool = loadPool();
         if (!state.pool.find((p) => p.id === state.current.id)) {
-          state.current = state.pool[0] ?? { id: `opp-${Date.now()}`, note: '对手 1', cfg: defaultMine() };
+          state.current = state.pool[0] ?? { id: `opp-${Date.now()}`, note: '对手 1', cfg: defaultMine(), source: 'user' };
         }
         renderPanels();
         renderPool();
       })
     );
     poolEl.querySelector<HTMLButtonElement>('#bs-save-opp')?.addEventListener('click', () => {
-      const existing = state.pool.find((p) => p.id === state.current.id);
+      const existing = state.pool.find((p) => p.id === state.current.id && p.source === 'user');
+      const cfg = JSON.parse(JSON.stringify(state.current.cfg)) as OpponentEntry['cfg'];
       if (existing) {
-        existing.cfg = JSON.parse(JSON.stringify(state.current.cfg));
+        existing.cfg = cfg;
         existing.note = state.current.note;
+        upsertUserEntry(existing);
       } else {
-        state.pool.push(JSON.parse(JSON.stringify(state.current)));
+        const created: OpponentEntry = {
+          id: `user-${Date.now()}`,
+          note: state.current.source === 'benchmark' ? `${state.current.note}（副本）` : state.current.note,
+          cfg,
+          source: 'user',
+        };
+        upsertUserEntry(created);
+        state.current = created;
       }
-      savePool(state.pool);
+      state.pool = loadPool();
       renderPool();
     });
 
@@ -234,22 +232,36 @@ export function mountBattleSim(root: HTMLElement): void {
         return;
       }
       const { entries, problems, notices } = importScanEntries(parsed);
+      const benchNotes = new Set(state.pool.filter((p) => p.source === 'benchmark').map((p) => p.note));
       let added = 0;
+      let skippedBench = 0;
       for (const e of entries) {
-        const exist = state.pool.find((p) => p.note === e.name);
-        if (exist) exist.cfg = e.cfg as typeof exist.cfg;
-        else state.pool.push({ id: `opp-${Date.now()}-${added}`, note: e.name, cfg: e.cfg as typeof state.current.cfg });
-        added += 1;
+        if (benchNotes.has(e.name)) {
+          skippedBench += 1;
+          continue;
+        }
+        const exist = state.pool.find((p) => p.source === 'user' && p.note === e.name);
+        const cfg = e.cfg as OpponentEntry['cfg'];
+        if (exist) {
+          exist.cfg = cfg;
+          upsertUserEntry(exist);
+        } else {
+          const created: OpponentEntry = { id: `user-${Date.now()}-${added}`, note: e.name, cfg, source: 'user' };
+          upsertUserEntry(created);
+          added += 1;
+        }
       }
-      if (added) {
-        savePool(state.pool);
-        state.current = state.pool[state.pool.length - 1];
+      if (added || skippedBench) {
+        state.pool = loadPool();
+        const lastUser = [...state.pool].reverse().find((p) => p.source === 'user');
+        if (lastUser) state.current = lastUser;
         renderPanels();
         renderResult();
         renderPool();
       }
       const tail = [...problems, ...notices].slice(0, 1);
-      show(added ? `导入 ${added} 队${tail.length ? `（${tail[0]}）` : ''}` : `没有导入：${problems[0] ?? '内容为空'}`);
+      const benchNote = skippedBench ? `（${skippedBench} 条已在固定测试集）` : '';
+      show(added ? `导入 ${added} 队${benchNote}${tail.length ? `（${tail[0]}）` : ''}` : `没有导入：${problems[0] ?? (skippedBench ? '都已在固定测试集' : '内容为空')}`);
     };
     poolEl.querySelector<HTMLButtonElement>('#bs-import-apply')?.addEventListener('click', () => {
       applyImport(poolEl.querySelector<HTMLTextAreaElement>('#bs-import-text')?.value ?? '');

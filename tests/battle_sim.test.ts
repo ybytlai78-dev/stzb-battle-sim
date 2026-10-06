@@ -176,7 +176,7 @@ describe('页面（jsdom）', () => {
 
     // 存对手 + 改备注
     root.querySelector<HTMLButtonElement>('#bs-save-opp')!.click();
-    const note = root.querySelector<HTMLInputElement>('[data-note="0"]')!;
+    const note = root.querySelector<HTMLInputElement>('tr[data-source="user"] .bs-note')!;
     note.value = '测试对手A';
     note.dispatchEvent(new Event('change'));
     expect(root.querySelector('#bs-pool')!.textContent).toContain('测试对手A');
@@ -214,7 +214,7 @@ describe('对手池：导入识别结果（截图 → 队伍集.json）', () => 
     root.querySelector<HTMLButtonElement>('#bs-import-apply')!.click();
 
     const status = root.querySelector<HTMLElement>('#bs-import-status')!.textContent ?? '';
-    expect(status).toContain('导入 2 队');
+    expect(status).toContain('导入 1 队');
     // 备注名在输入框里（不是文本节点）
     const notes = Array.from(root.querySelectorAll<HTMLInputElement>('#bs-pool [data-note]')).map((el) => el.value);
     expect(notes).toContain('敌方·陈宫张宁吕蒙');

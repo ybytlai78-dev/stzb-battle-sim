@@ -13,7 +13,7 @@
  */
 import { runBattle } from '../src/engine/combat';
 import type { General } from '../src/engine/types';
-import { judgeOutcome } from './battleSim';
+import { collectRun, judgeOutcome } from './battleSim';
 
 /** 一次统计的场次（用户口径：点击「统计胜率」= 200 场快速模拟） */
 export const WIN_RATE_RUNS = 200;
@@ -102,18 +102,35 @@ function cloneTeam(team: General[]): General[] {
   }));
 }
 
-/** 跑一场并按用户口径计入 tally（`myTeam` 恒为「我方」视角）。
- *  `swap` = 本场把两队对调（我方临时放到右侧），结果再还原成我方视角：
- *  每颗种子跑「正/反」两场，消除先手 / 站位偏向（L4 口径）；
- *  由此「两队对调后再统计」两次的胜率必然互补（和 = 100%）。 */
-function countOne(
+/** 单场归类（胜 / 平 / 负 + 我方伤害）。对手池对打与「统计胜率」共用这一条，避免两套口径。 */
+export interface PlayedBattle {
+  /** 胜场 = 斩首胜 + 优势平；平局场 = 劣势平 + 完全平；败场 = 斩首负 */
+  bucket: 'win' | 'draw' | 'loss';
+  decapWin: boolean;
+  decapLoss: boolean;
+  advDraw: boolean;
+  disadvDraw: boolean;
+  evenDraw: boolean;
+  /** 我方本场八回合总伤害 */
+  myDamage: number;
+  /** 我方本场前三回合伤害 */
+  first3: number;
+  /** 我方本场控制人回合 */
+  controlMine: number;
+}
+
+/**
+ * 跑一场并按统计胜率口径归类（`myTeam` 恒为「我方」视角）。
+ * `swap` = 本场把两队对调（我方临时放到右侧），胜负与伤害都还原成我方视角。
+ * 伤害用战报上的实际单位 id（交换场地、同名将改写 id 之后仍然对得上我方）。
+ */
+export function playOne(
   myTeam: General[],
   enemyTeam: General[],
   seed: number,
   maxRounds: number,
-  swap: boolean,
-  t: Tally
-): void {
+  swap: boolean
+): PlayedBattle {
   const left = swap ? enemyTeam : myTeam;
   const right = swap ? myTeam : enemyTeam;
   const report = runBattle({
@@ -126,7 +143,6 @@ function countOne(
   const rightTroops = report.finalEnemyTroops.reduce((a, b) => a + b, 0);
   const myTroops = swap ? rightTroops : leftTroops;
   const enemyTroops = swap ? leftTroops : rightTroops;
-  // 引擎结果是「左侧视角」→ 对调场次先还原成我方视角
   const result: 'win' | 'loss' | 'draw' = swap
     ? report.result === 'win'
       ? 'loss'
@@ -134,31 +150,54 @@ function countOne(
         ? 'win'
         : 'draw'
     : report.result;
-  // 用户口径：斩首场直接计胜 / 负；打满回合（引擎原生 draw）判平局，再按剩余兵力分
-  // 优势平（计入胜场）/ 劣势平（计入平局场）/ 完全平（计入平局场）——兵力比较复用 judgeOutcome。
   const judged = judgeOutcome(result, myTroops, enemyTroops);
   const capped = result === 'draw';
-  t.runs += 1;
-  if (capped) t.capped += 1;
+  const myIds = new Set((swap ? report.enemyTeam : report.myTeam).map((g) => g.id));
+  const raw = collectRun(report, myIds);
+  const first3 = (raw.myDamageByRound[0] ?? 0) + (raw.myDamageByRound[1] ?? 0) + (raw.myDamageByRound[2] ?? 0);
+  const played: PlayedBattle = {
+    bucket: 'loss',
+    decapWin: false,
+    decapLoss: false,
+    advDraw: false,
+    disadvDraw: false,
+    evenDraw: false,
+    myDamage: raw.myDamage,
+    first3,
+    controlMine: raw.controlMine,
+  };
   if (!capped) {
-    // 斩首：大营阵亡，引擎已判 win / loss
     if (result === 'win') {
-      t.win += 1;
-      t.decapWin += 1;
+      played.bucket = 'win';
+      played.decapWin = true;
     } else {
-      t.loss += 1;
-      t.decapLoss += 1;
+      played.decapLoss = true;
     }
   } else if (judged.win) {
-    t.win += 1;
-    t.advDraw += 1;
+    played.bucket = 'win';
+    played.advDraw = true;
   } else if (judged.draw) {
-    t.draw += 1;
-    t.evenDraw += 1;
+    played.bucket = 'draw';
+    played.evenDraw = true;
   } else {
-    t.draw += 1;
-    t.disadvDraw += 1;
+    played.bucket = 'draw';
+    played.disadvDraw = true;
   }
+  return played;
+}
+
+/** 把一场归类累进 tally（与原先 `countOne` 的计数一致） */
+function absorbPlay(t: Tally, p: PlayedBattle): void {
+  t.runs += 1;
+  if (p.advDraw || p.disadvDraw || p.evenDraw) t.capped += 1;
+  if (p.bucket === 'win') t.win += 1;
+  else if (p.bucket === 'draw') t.draw += 1;
+  else t.loss += 1;
+  if (p.decapWin) t.decapWin += 1;
+  if (p.decapLoss) t.decapLoss += 1;
+  if (p.advDraw) t.advDraw += 1;
+  if (p.disadvDraw) t.disadvDraw += 1;
+  if (p.evenDraw) t.evenDraw += 1;
 }
 
 function finalize(t: Tally, baseSeed: number, ms: number): WinRateStats {
@@ -191,10 +230,47 @@ export function simulateWinRate(myTeam: General[], enemyTeam: General[], opts: W
   const t = emptyTally();
   const t0 = Date.now();
   for (let i = 0; i < runs; i += 1) {
-    countOne(myTeam, enemyTeam, baseSeed + Math.floor(i / 2), maxRounds, swapSides && i % 2 === 1, t);
+    absorbPlay(t, playOne(myTeam, enemyTeam, baseSeed + Math.floor(i / 2), maxRounds, swapSides && i % 2 === 1));
     opts.onProgress?.(i + 1, runs);
   }
   return finalize(t, baseSeed, Date.now() - t0);
+}
+
+/** 与 `WinRateStats` 同一批战斗额外带出的伤害（对手池对打的辅助列） */
+export interface WinRateSample extends WinRateStats {
+  /** 八回合我方总伤害 / 场 */
+  meanTotal: number;
+  /** 前三回合我方伤害 / 场 */
+  meanFirst3: number;
+  /** 我方控制人回合 / 场 */
+  controlMine: number;
+}
+
+/**
+ * 同步跑批，并在同一批战斗里汇总八回合总伤与前三回合伤害。
+ * 胜 / 平 / 负计数与 `simulateWinRate` 相同（同一 `playOne`）。
+ */
+export function simulateWinRateSample(myTeam: General[], enemyTeam: General[], opts: WinRateOptions = {}): WinRateSample {
+  const runs = Math.max(1, Math.floor(opts.runs ?? WIN_RATE_RUNS));
+  const baseSeed = opts.baseSeed ?? WIN_RATE_BASE_SEED;
+  const maxRounds = opts.maxRounds ?? WIN_RATE_MAX_ROUNDS;
+  const swapSides = opts.swapSides ?? true;
+  const t = emptyTally();
+  let damageSum = 0;
+  let first3Sum = 0;
+  let controlSum = 0;
+  const t0 = Date.now();
+  for (let i = 0; i < runs; i += 1) {
+    const played = playOne(myTeam, enemyTeam, baseSeed + Math.floor(i / 2), maxRounds, swapSides && i % 2 === 1);
+    absorbPlay(t, played);
+    damageSum += played.myDamage;
+    first3Sum += played.first3;
+    controlSum += played.controlMine;
+    opts.onProgress?.(i + 1, runs);
+  }
+  const stats = finalize(t, baseSeed, Date.now() - t0);
+  const n = Math.max(1, stats.runs);
+  return { ...stats, meanTotal: damageSum / n, meanFirst3: first3Sum / n, controlMine: controlSum / n };
 }
 
 /** 异步跑批：分片让出主线程，可边跑边显示进度（页面用） */
@@ -211,7 +287,7 @@ export async function simulateWinRateAsync(
   const t = emptyTally();
   const t0 = Date.now();
   for (let i = 0; i < runs; i += 1) {
-    countOne(myTeam, enemyTeam, baseSeed + Math.floor(i / 2), maxRounds, swapSides && i % 2 === 1, t);
+    absorbPlay(t, playOne(myTeam, enemyTeam, baseSeed + Math.floor(i / 2), maxRounds, swapSides && i % 2 === 1));
     if ((i + 1) % every === 0) {
       opts.onProgress?.(i + 1, runs);
       await new Promise((res) => setTimeout(res, 0));

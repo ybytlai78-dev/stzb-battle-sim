@@ -100,7 +100,23 @@ describe('反例：规则逐条拦截', () => {
   it('武将名不在库 → 拒收', () => {
     const s = clone();
     s.slots[1].heroName = '张宁宁';
+    delete s.slots[1].heroId;
     expect(errs(s)).toContain('hero-name');
+  });
+  it('同名多版没给 id → 拒收', () => {
+    const s = clone();
+    s.slots[0].heroName = '吕布';
+    delete s.slots[0].heroId;
+    expect(errs(s)).toContain('hero-name');
+  });
+  it('同名多版带 heroId → 认这个 id（群吕布 h479）', () => {
+    const s = clone();
+    s.slots[0].heroName = '吕布';
+    s.slots[0].heroId = 'h479';
+    s.slots[0].skillNames = ['辕门射戟', '神兵天降', '大赏三军'];
+    const res = validateScan(s, tables);
+    expect(res.issues.filter((i) => i.level === 'error').map((i) => i.rule)).toEqual([]);
+    expect(res.slots[0].heroId).toBe('h479');
   });
   it('战法名不在库 → 拒收', () => {
     const s = clone();
