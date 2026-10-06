@@ -19,6 +19,7 @@ import {
   normalizePlan,
   type AdvisorPlan,
   type PlanCheck,
+  type PoolHint,
   type ProposedPlan,
   type RecomputeResult,
   type ToolCallRecord,
@@ -245,6 +246,37 @@ export function verifyClaims(answer: string, trace: ToolCallRecord[]): { ok: boo
   return { ok: failures.length === 0, failures };
 }
 
+/**
+ * **裸报大数字检测**（≥10000 且**一次都没**跟 `[[证据]]`；种子如 20260929 白名单）。
+ *
+ * 与 `verifyClaims` 互补：那个查"引用了但引用是假的"，这个查"压根没引用"。
+ * 2026-10-06 从评测判分（原 `evalCases.ts`）**搬进产品侧**：它现在有两个消费者——
+ * ① 评测判分（`evalCases.ts` 转出）；② 交付前自检（`loop.ts`：裸报就回灌一次、允许重答一轮，见 §16.22）。
+ * 一份实现、两处用，免得"判分说裸报、产品说没事"。
+ *
+ * ⚠️ **口径是"每个数值至少有一处带引用"，不是"每次出现都要带"**（2026-10-06 改，§16.23）：
+ * 要的性质是**可溯源**，不是排版。真模型跑分里曾出现「正文带过 `106206[[ev-8-optimize_skills]]`、
+ * 表格里重复 3 次没再带」被记为 9 处裸报——那条数字其实查得到来源。现在的判据：
+ * 把同一数值的**所有**出现收在一起，只要其中**有一处**紧跟 `[[…]]` 就算合规；一次都没有才算裸报，
+ * 且**每个数值只报一次**（不是每个出现都报）。
+ */
+const SEED_LIKE = /^20\d{6}$/;
+export function uncitedBigNumbers(answer: string): string[] {
+  const re = /(\d[\d,]{4,})(?![\d,]*\]\])/g;
+  /** 值 → 该值出现过至少一次（键即字面量，保留千分位原样） */
+  const bare = new Map<string, boolean>(); // true = 见过带引用的那次
+  for (const m of answer.matchAll(re)) {
+    const raw = m[1].replace(/,/g, '');
+    if (SEED_LIKE.test(raw)) continue; // 种子（如 20260929）不算数据
+    const after = answer.slice(m.index! + m[0].length, m.index! + m[0].length + 4);
+    const cited = after.includes('[[');
+    const key = m[1];
+    if (cited) bare.set(key, true);
+    else if (!bare.has(key)) bare.set(key, false);
+  }
+  return [...bare.entries()].filter(([, cited]) => !cited).map(([v]) => v);
+}
+
 /** 方案自带的证据引用同样要核：一个证据都不带的方案 = 未验证（没跑过的方案不许应用） */
 export function verifyPlanEvidence(plan: ProposedPlan, trace: ToolCallRecord[]): { ok: boolean; reason?: string } {
   if (!plan.evidenceIds.length) return { ok: false, reason: '方案未附实测依据（evidenceIds 为空）' };
@@ -322,6 +354,53 @@ export function searchHintFromTrace(plan: ProposedPlan, trace: ToolCallRecord[])
   return null;
 }
 
+interface PoolData {
+  winRate?: number;
+  winRatePct?: number;
+  halfWidth?: number;
+  runs?: number;
+  meanTotal?: number;
+  meanFirst3?: number;
+  fingerprint?: string;
+  worst?: { note?: string; winRate?: number };
+  opponents?: Array<{ note?: string; win?: number; draw?: number; loss?: number; winRate?: number; meanTotal?: number; meanFirst3?: number }>;
+  rows?: PoolData[];
+}
+
+/** 从方案引用的证据里取出对手池胜率。没有打过对手池就返回 null。 */
+export function poolHintFromTrace(plan: ProposedPlan, trace: ToolCallRecord[]): PoolHint | null {
+  for (const id of plan.evidenceIds) {
+    const hit = trace.find((t) => t.evidenceId === id);
+    if (!hit) continue;
+    const d = hit.data as PoolData | undefined;
+    const src = typeof d?.winRate === 'number' ? d : d?.rows?.find((r) => typeof r.winRate === 'number');
+    if (!src || typeof src.winRate !== 'number') continue;
+    const opponents = (src.opponents ?? d?.opponents ?? []).map((o) => ({
+      note: String(o.note ?? ''),
+      win: Number(o.win ?? 0),
+      draw: Number(o.draw ?? 0),
+      loss: Number(o.loss ?? 0),
+      winRate: Number(o.winRate ?? 0),
+      meanTotal: Number(o.meanTotal ?? 0),
+      meanFirst3: Number(o.meanFirst3 ?? 0),
+    }));
+    return {
+      winRate: src.winRate,
+      winRatePct: typeof src.winRatePct === 'number' ? src.winRatePct : Math.round(src.winRate * 1000) / 10,
+      halfWidth: src.halfWidth ?? 0,
+      runs: src.runs ?? 0,
+      meanTotal: src.meanTotal ?? 0,
+      meanFirst3: src.meanFirst3 ?? 0,
+      worstNote: src.worst?.note ?? opponents.slice().sort((a, b) => a.winRate - b.winRate)[0]?.note ?? '',
+      worstRate: src.worst?.winRate ?? opponents.slice().sort((a, b) => a.winRate - b.winRate)[0]?.winRate ?? 0,
+      evidenceId: id,
+      ...(src.fingerprint || d?.fingerprint ? { fingerprint: src.fingerprint ?? d?.fingerprint } : {}),
+      opponents,
+    };
+  }
+  return null;
+}
+
 /** 对一个方案跑完三关，给出「能不能应用」 */
 export function checkPlan(plan: ProposedPlan, trace: ToolCallRecord[], ctx: RecomputeCtx): PlanCheck {
   const v = validateAdvisorPlan(plan.plan, ctx.box ?? null);
@@ -333,6 +412,7 @@ export function checkPlan(plan: ProposedPlan, trace: ToolCallRecord[], ctx: Reco
     recompute = null; // 引擎拒绝（互斥等）→ 视为未复算，不给应用
   }
   const search = searchHintFromTrace(plan, trace);
+  const pool = poolHintFromTrace(plan, trace);
   const judge = recompute && search ? judgeRecompute(search, recompute) : null;
   const verdict = { legal: v.ok, verified: ev.ok, recomputed: recompute !== null };
   const base = decideApply(verdict);
@@ -350,6 +430,7 @@ export function checkPlan(plan: ProposedPlan, trace: ToolCallRecord[], ctx: Reco
     recompute,
     search,
     judge,
+    pool,
     apply,
   };
 }

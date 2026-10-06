@@ -1,16 +1,16 @@
 /* AI配将 · 独立页（`advisor.html`）
  * ---------------------------------------------------------------------------
  * 皮肤真源：`web/styles.css` 的 :root 变量（--panel / --line / --gold / --beige…）——本文件不发明新颜色。
- * 骨架口径：`docs/AI配将-页面布局设计.md` §9 / §17 —— **一个骨架两态**：
- *   收起（默认，极简）：顶栏 / 对话 / 输入区 三段，功能入口在输入区工具行 + 顶栏齿轮；
- *   展开（工作台）    ：左 332px 侧栏推挤式出现，对话变窄，工具行与阵容行自动收掉。
- * 窄屏（≤1100px）侧栏改浮层 + 遮罩，并自带关闭钮（浮层会盖住顶栏开关）。
+ * 骨架：顶栏 + 左侧导航（宽屏默认展开）+ 对话列 + 底栏输入。
+ * 空态居中一句标题和输入条；聊起来按轮次排（右气泡 / 左正文），工具调用一轮一行。
+ * 窄屏（≤1100px）侧栏改浮层 + 遮罩，默认收起。
  */
 
 /* ─────────────────────────── 页面骨架 ─────────────────────────── */
 .advisor-page {
   position: fixed;
   inset: 0;
+  z-index: 40;
   display: none;
   flex-direction: column;
   overflow: hidden;
@@ -72,7 +72,18 @@
 .advisor-sec { display: flex; flex-direction: column; gap: 8px; }
 .advisor-sec-h { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--gold); letter-spacing: 1px; border-bottom: 1px solid var(--line); padding-bottom: 4px; }
 .advisor-sec-spacer { flex: 1 1 auto; }
-.advisor-acts { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.advisor-nav { display: flex; flex-direction: column; gap: 2px; }
+.advisor-nav-item {
+  display: flex; align-items: center; width: 100%; text-align: left;
+  padding: 8px 10px; border: none; border-radius: 8px; cursor: pointer;
+  background: transparent; color: var(--text); font: 14px/1.4 var(--font-sans);
+}
+.advisor-nav-item:hover { background: var(--panel-2); color: var(--gold-bright); }
+.advisor-text-btn {
+  border: none; background: none; padding: 0; cursor: pointer;
+  color: var(--gold); font: 13px/1.4 var(--font-sans);
+}
+.advisor-text-btn:hover { color: var(--gold-bright); }
 /* 侧栏阵容：直接复用主站槽位卡（`.slot` = 立绘卡面 + 战法图标），只把它变成"只看不改" */
 .advisor-team-list { display: flex; flex-direction: column; gap: 8px; }
 .advisor-team-list .slot { background: var(--panel-2); cursor: default; pointer-events: none; }
@@ -85,66 +96,88 @@
 .advisor-slot-who { font-family: var(--font-kai); font-size: 15px; color: var(--ink); }
 .advisor-slot-sk { font-size: 12px; color: var(--gold); word-break: break-word; }
 .advisor-slot-meta { font-size: 11px; color: var(--text-dim); }
-.advisor-last-line { font-size: 12px; color: var(--text); word-break: break-word; }
-.advisor-last-time { font-size: 11px; color: var(--text-dim); }
 
-/* ── 对话区（唯一滚动体；阅读列 920px 居中）── */
+/* ── 对话区（唯一滚动体；阅读列 720px 居中）── */
 .advisor-main { flex: 1 1 auto; min-width: 0; min-height: 0; overflow-y: auto; background: var(--bg); display: flex; flex-direction: column; }
-.advisor-main-inner { width: min(920px, 100%); margin: 0 auto; padding: 16px 24px 24px; display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; }
-/* ── 空态 hero（设计文档 §7.5）：不摆插画，只给定位与可点的下一步 ── */
-.advisor-hero { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 40px 0 20px; text-align: center; }
-.advisor-hero[hidden] { display: none; }
-.advisor-hero-mark { width: 52px; height: 52px; display: grid; place-items: center; border: 1px solid var(--line-strong); background: var(--panel-2); font-family: var(--font-kai); font-size: 24px; color: var(--gold-bright); }
-.advisor-hero h2 { font-family: var(--font-kai); font-size: 22px; font-weight: 700; letter-spacing: 4px; color: var(--ink); }
-.advisor-hero p { max-width: 560px; font-size: 13px; line-height: 1.7; color: var(--text-dim); }
-.advisor-hero-ask { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 640px; }
-.advisor-hero-ask .btn { letter-spacing: 1px; font-weight: 600; }
+.advisor-main-inner {
+  width: min(720px, 100%); margin: 0 auto; padding: 28px 28px 12px;
+  display: flex; flex-direction: column; gap: 12px; flex: 1 1 auto; min-height: 100%;
+}
+.advisor-page.is-empty .advisor-main-inner { justify-content: center; padding-bottom: 8vh; }
+.advisor-page.is-empty .advisor-session-bar,
+.advisor-page:not(.is-empty) .advisor-hero,
+.advisor-page:not(.is-empty) .advisor-hero-ask { display: none; }
+
+.advisor-hero { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.advisor-hero h2 {
+  margin: 0; font-family: var(--font-kai); font-size: 36px; font-weight: 600;
+  letter-spacing: 0.08em; color: var(--ink);
+}
+.advisor-hero p { margin: 0; max-width: 36em; font-size: 15px; line-height: 1.6; color: var(--text-dim); }
+.advisor-hero-ask { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+.advisor-ask {
+  border: 1px solid var(--line); background: transparent; color: var(--text);
+  border-radius: 999px; padding: 6px 12px; cursor: pointer; font: 13px/1.4 var(--font-sans);
+}
+.advisor-ask:hover { border-color: var(--gold); color: var(--gold-bright); }
 
 .advisor-guide {
-  display: flex; align-items: center; gap: 10px; padding: 9px 12px;
-  border: 1px solid var(--gold); border-radius: 6px; background: #2a2214; color: var(--gold-bright); font-size: 13px;
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  color: var(--gold-bright); font-size: 13px;
 }
 .advisor-guide[hidden] { display: none; }
 .advisor-session-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.advisor-session-meta { font-size: 12px; color: var(--text-dim); }
+.advisor-session-meta { font-size: 13px; color: var(--text-dim); }
 
-/* 过程行：摘要一行（工具调用不刷屏），逐条明细折叠在下面 */
-.advisor-proc { border: 1px solid var(--line); border-radius: 4px; background: var(--panel-2); overflow: hidden; }
-.advisor-proc-head { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 5px 9px; cursor: pointer; background: none; border: none; }
+/* 一轮：右气泡 / 工具一行 / 左正文 */
+.advisor-turn { display: flex; flex-direction: column; gap: 10px; margin: 18px 0 28px; }
+.advisor-bubble p { margin: 0 0 0.7em; }
+.advisor-bubble p:last-child { margin-bottom: 0; }
+.advisor-bubble.user {
+  align-self: flex-end; max-width: min(28em, 86%);
+  padding: 10px 14px; border-radius: 16px 16px 4px 16px;
+  background: var(--panel-3); border: 1px solid var(--line);
+  font-size: 15px; line-height: 1.55; color: var(--ink);
+}
+.advisor-bubble.assistant {
+  align-self: flex-start; max-width: 68ch;
+  font-size: 16px; line-height: 1.75; color: var(--text);
+}
+.advisor-turn.live .advisor-bubble.assistant { white-space: pre-wrap; }
+.advisor-mem { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text-dim); }
+.advisor-sys { margin: 4px 0; font-size: 13px; line-height: 1.5; color: var(--gold-bright); }
+
+.advisor-proc { align-self: flex-start; max-width: 100%; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow: hidden; }
+.advisor-proc-head { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 7px 10px; cursor: pointer; background: none; border: none; color: var(--text-dim); }
+.advisor-proc-head:hover { color: var(--text); }
 .advisor-proc-chev { width: 14px; height: 14px; color: var(--gold); transition: transform .15s ease-out; }
 .advisor-proc-head[aria-expanded="true"] .advisor-proc-chev { transform: rotate(90deg); }
-.advisor-trace { font: 12px/1.5 ui-monospace, Consolas, monospace; color: var(--gold-bright); }
-.advisor-proc-body { border-top: 1px solid var(--line); padding: 6px 9px; display: flex; flex-direction: column; gap: 3px; }
+.advisor-trace, .advisor-proc-sum { font: 13px/1.5 var(--font-sans); color: var(--text-dim); }
+.advisor-proc-body { border-top: 1px solid var(--line); padding: 6px 10px; display: flex; flex-direction: column; gap: 3px; }
 .advisor-proc-body[hidden] { display: none; }
-.advisor-proc-row { display: flex; gap: 8px; align-items: baseline; font: 12px/1.6 ui-monospace, Consolas, monospace; }
+.advisor-proc-row { display: flex; gap: 8px; align-items: baseline; font: 13px/1.6 var(--font-sans); }
 .advisor-proc-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-dim); flex: 0 0 auto; }
 .advisor-proc-name { color: var(--text); flex: 0 0 auto; }
 .advisor-proc-arg { color: var(--text-dim); flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .advisor-proc-cost { color: var(--gold); flex: 0 0 auto; }
-.advisor-proc-empty { font-size: 12px; color: var(--text-dim); }
+.advisor-proc-empty { font-size: 13px; color: var(--text-dim); }
 
 .advisor-confirm {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
-  padding: 6px 8px; border: 1px solid var(--gold); border-radius: 4px;
-  background: #2a2214; color: var(--gold-bright); font-size: 12px;
+  padding: 10px 12px; border: 1px solid var(--gold); border-radius: 10px;
+  background: var(--panel-2); color: var(--gold-bright); font-size: 14px;
 }
 .advisor-confirm[hidden] { display: none; }
 
-/* 正文：页面态下它自己会长高（`.advisor-main` 是滚动体），不再卡 38vh */
-.advisor-log {
-  flex: 1 1 auto; min-height: 160px; overflow: auto; margin: 0; padding: 10px 12px;
-  white-space: pre-wrap; word-break: break-word;
-  background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
-  font: 13px/1.7 ui-monospace, Consolas, monospace;
-}
-.advisor-progress { min-height: 16px; color: var(--gold); font: 12px/1.4 ui-monospace, Consolas, monospace; }
-.advisor-cost { font-size: 11px; color: var(--text-dim); }
+.advisor-log { margin: 0; padding: 0; }
+.advisor-plans:empty { display: none; }
+.advisor-cost { font-size: 12px; color: var(--text-dim); }
 
 /* 方案卡：不参与压缩（曾经被压成 0 高度 → 真机上「应用」够不着） */
 .advisor-plans { display: flex; flex-direction: column; gap: 8px; flex: 0 0 auto; }
-.advisor-plan-card { border: 1px solid var(--line-strong); border-radius: 4px; padding: 8px; background: var(--panel-2); }
-.pc-title { color: var(--gold-bright); font-weight: 600; margin-bottom: 6px; }
-.pc-config { width: 100%; border-collapse: collapse; font-size: 12px; }
+.advisor-plan-card { border: 1px solid var(--line-strong); border-radius: 12px; padding: 14px 16px; background: var(--panel-2); }
+.pc-title { color: var(--gold-bright); font-weight: 600; margin-bottom: 8px; font-size: 15px; }
+.pc-config { width: 100%; border-collapse: collapse; font-size: 14px; }
 .pc-config td { border-top: 1px solid var(--line); padding: 3px 4px; vertical-align: top; }
 .pc-config td:first-child { color: var(--text-dim); width: 42px; }
 .pc-metric { font-size: 12px; margin-top: 4px; }
@@ -154,27 +187,47 @@
 .pc-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .advisor-verify-note { font-size: 11px; color: var(--text-dim); }
 .dim { color: var(--text-dim); }
+.advisor-pool-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.advisor-pool-badge { font-size: 11px; padding: 0 6px; border: 1px solid var(--line); border-radius: 999px; color: var(--gold); }
 
-/* ── 输入区（贴底）── */
-.advisor-composer { flex-shrink: 0; border-top: 1px solid var(--line); background: var(--panel); padding: 8px 20px 12px; }
-.advisor-composer-inner { width: min(920px, 100%); margin: 0 auto; display: flex; flex-direction: column; gap: 6px; }
-.advisor-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-/* 侧栏展开时收掉工具行与阵容行 —— 同一套控件不同时出现两处（设计文档 §17.3） */
-.advisor-page.rail-open .advisor-tools { display: none; }
-.advisor-tools button { font-size: 12px; color: var(--gold); background: none; border: none; cursor: pointer; padding: 0; }
-.advisor-tools button:hover { color: var(--gold-bright); }
-.advisor-input-row { display: flex; align-items: flex-end; gap: 8px; }
-/* 注意别给 textarea 写 width:100% —— 那会把「发送 / 取消」挤成竖排（渲染验证抓到） */
-.advisor-input {
-  flex: 1 1 auto; min-width: 0; resize: vertical; min-height: 40px; max-height: 160px;
-  background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
-  padding: 8px 10px; font: 13px/1.6 var(--font-sans);
+/* ── 输入条（贴在对话列底部；空态时跟标题一起居中）── */
+.advisor-page:not(.is-empty) .advisor-composer { margin-top: auto; position: sticky; bottom: 0; }
+.advisor-composer {
+  flex-shrink: 0; padding: 8px 0 16px;
+  background: linear-gradient(180deg, transparent, var(--bg) 18px);
 }
-.advisor-buttons { display: flex; gap: 8px; flex: 0 0 auto; }
-.advisor-shot { flex: 0 0 auto; white-space: nowrap; }
-.advisor-costline { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--text-dim); }
-.advisor-costline button { font-size: 11px; color: var(--text-dim); background: none; border: none; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
-.advisor-costline button:hover { color: var(--gold-bright); }
+.advisor-composer-inner { display: flex; flex-direction: column; gap: 10px; }
+.advisor-bar {
+  display: flex; align-items: flex-end; gap: 8px;
+  padding: 8px 8px 8px 10px; border: 1px solid var(--line-strong); border-radius: 18px;
+  background: var(--panel-2); box-shadow: 0 10px 28px rgba(0, 0, 0, .35);
+}
+.advisor-bar-meta {
+  flex: 0 1 auto; max-width: 42%; display: flex; flex-direction: column; align-items: flex-end;
+  gap: 2px; padding: 0 2px 6px; text-align: right;
+}
+.advisor-input {
+  flex: 1 1 auto; min-width: 0; width: auto; resize: none; min-height: 28px; max-height: 160px;
+  background: transparent; color: var(--text); border: none; border-radius: 0;
+  padding: 6px 2px; font: 15px/1.5 var(--font-sans);
+}
+.advisor-input:focus { outline: none; }
+.advisor-shot, .advisor-send, .advisor-stop {
+  flex: 0 0 auto; width: 36px; height: 36px; padding: 0; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.advisor-shot, .advisor-stop {
+  background: transparent; color: var(--text-dim); border: 1px solid var(--line);
+}
+.advisor-shot:hover, .advisor-stop:hover { color: var(--gold-bright); border-color: var(--gold); }
+.advisor-send { background: var(--gold); color: #1b150c; border: none; }
+.advisor-send:hover { background: var(--gold-bright); }
+.advisor-send:focus-visible, .advisor-shot:focus-visible, .advisor-stop:focus-visible,
+.advisor-nav-item:focus-visible, .advisor-ask:focus-visible, .advisor-input:focus-visible {
+  outline: 2px solid var(--gold); outline-offset: 2px;
+}
+.advisor-send:disabled, .advisor-stop:disabled { display: none; }
+.advisor-model { font-size: 12px; color: var(--text-dim); }
 
 /* ── 按需面板（右侧 sheet；同一时刻只开一个）── */
 .advisor-mask { position: fixed; inset: 0; background: rgba(10, 8, 5, .45); z-index: 55; }
@@ -278,6 +331,7 @@
 @media (max-width: 720px) {
   .advisor-top, .advisor-composer { padding-left: 12px; padding-right: 12px; }
   .advisor-title { font-size: 16px; letter-spacing: 2px; }
+  .advisor-hero h2 { font-size: 28px; }
   .advisor-team, .advisor-top .advisor-chip { display: none; }
   .advisor-main-inner { padding: 12px; }
   .advisor-sheet-body { padding: 10px; }

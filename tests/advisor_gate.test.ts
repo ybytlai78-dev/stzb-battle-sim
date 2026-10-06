@@ -14,6 +14,7 @@ import {
   judgeRecompute,
   recomputePlan,
   searchHintFromTrace,
+  poolHintFromTrace,
   verifyClaims,
   verifyPlanEvidence,
   withinTolerance,
@@ -227,5 +228,36 @@ describe('advisor gate · 关 1 的 box 拒收', () => {
 
     const none = checkPlan({ title: 'x', plan: planTrio(), evidenceIds: ['ev-1-simulate'] }, [rec('ev-1-simulate', 26500)], { evaluate: evalOk });
     expect(none.legal).toBe(true);
+  });
+
+  it('poolHintFromTrace：方案卡主数字从对手池证据直读，没有 mean 就不算木桩搜索口径', () => {
+    const trace: ToolCallRecord[] = [
+      {
+        evidenceId: 'ev-1-matchup_pool',
+        name: 'matchup_pool',
+        args: {},
+        summary: '综合胜率 62.0%',
+        data: {
+          winRate: 0.62,
+          winRatePct: 62,
+          halfWidth: 0.05,
+          runs: 100,
+          meanTotal: 8000,
+          meanFirst3: 3000,
+          fingerprint: '2026-09-30|',
+          worst: { note: '甲', winRate: 0.4 },
+          opponents: [{ note: '甲', win: 40, draw: 10, loss: 50, winRate: 0.4, meanTotal: 8000, meanFirst3: 3000 }],
+        },
+        stats: { battles: 100, ms: 1, seed: 1 },
+      },
+    ];
+    const plan = planOf(['ev-1-matchup_pool']);
+    const hint = poolHintFromTrace(plan, trace);
+    expect(hint?.winRatePct).toBe(62);
+    expect(hint?.meanTotal).toBe(8000);
+    expect(hint?.meanFirst3).toBe(3000);
+    expect(hint?.worstNote).toBe('甲');
+    expect(hint?.opponents[0]?.loss).toBe(50);
+    expect(searchHintFromTrace(plan, trace)).toBeNull();
   });
 });

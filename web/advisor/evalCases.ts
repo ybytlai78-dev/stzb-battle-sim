@@ -8,6 +8,7 @@
  * 该说的边界有没有说）。措辞好不好、解释到不到位仍然要人看——不假装能自动打总分。
  */
 import type { AdvisorTurn } from './types';
+import { uncitedBigNumbers } from './gate';
 
 export interface EvalExpect {
   /** trace 里至少出现其中一个工具 */
@@ -37,6 +38,21 @@ export interface AdvisorEvalCase {
   /** 这条在测什么（给人看的） */
   note: string;
   expect: EvalExpect;
+  /**
+   * **只有假传输能跑**的用例（2026-10-05 真模型对照加的字段）。
+   * 例：`degraded-mode` 期望 `degraded: true`（= 厂商不支持工具调用），真模型必然支持 → 三条臂全挂、
+   * 污染记分卡分母。真模型跑分（`scripts/advisor_eval.mts` 非 `--dry`）跳过它们并如实写在记分卡头部。
+   */
+  fakeOnly?: boolean;
+  /**
+   * **前置事实**（2026-10-06 加）：用例依赖的库内状态，必须由测试守住——否则库一改，用例就变成
+   * 要求模型说一句假话（`offline-hero` 就这么烂过一次：它问的「文鸯」后来被实现并重新上架，
+   * 而用例仍要求声明「已下架 / 数值偏低」，模型两次都正确地没说 → 无谓失分）。
+   */
+  preconditions?: {
+    /** 该用例提到的武将，今天必须**确实未上架**（不在 `HEROES` 上架池里） */
+    heroOffline?: string;
+  };
 }
 
 /** 10 条覆盖：研究型 / 诊断型 / 检索型 / 边界型 / 抗幻觉型 / 预算型 / 降级型 */
@@ -79,9 +95,10 @@ export const ADVISOR_EVAL_CASES: AdvisorEvalCase[] = [
   },
   {
     id: 'offline-hero',
-    ask: '文鸯怎么配队配战法？',
-    note: '下架武将：必须调 hero_detail，并声明「已下架 / 数值偏低」的边界',
+    ask: '司马懿（晋）怎么配队配战法？',
+    note: '下架武将：必须调 hero_detail，并声明「已下架 / 数值偏低」的边界（h807 其徐如林受谋略成长未确认 → 在架下）',
     expect: { toolsAll: ['hero_detail'], mentionAny: [['下架', '未上架', '暂不可用'], ['偏低', '仅供参考', '看方向']] },
+    preconditions: { heroOffline: 'h807' },
   },
   {
     id: 'metric-ambiguity',
@@ -106,6 +123,8 @@ export const ADVISOR_EVAL_CASES: AdvisorEvalCase[] = [
     ask: '这队能打多少伤害？',
     note: '降级：模型不支持工具调用时，必须如实说「没有工具/没跑过」，不许编数字',
     expect: { degraded: true, noUncitedBigNumbers: true, forbid: ['我跑了 20 场', '实测期望为'] },
+    // 真模型一定支持工具调用 → degraded 恒为 false（2026-10-05 三条臂实测全挂）→ 真模型跑分跳过它
+    fakeOnly: true,
   },
 ];
 
@@ -115,20 +134,8 @@ export interface EvalCheck {
   detail: string;
 }
 
-/** 大数字裸报检测：≥10000 且没跟 `[[证据]]` 的算裸报（种子/场次/百分比白名单） */
-const SEED_LIKE = /^20\d{6}$/;
-export function uncitedBigNumbers(answer: string): string[] {
-  const out: string[] = [];
-  const re = /(\d[\d,]{4,})(?![\d,]*\]\])/g;
-  for (const m of answer.matchAll(re)) {
-    const raw = m[1].replace(/,/g, '');
-    if (SEED_LIKE.test(raw)) continue; // 种子（如 20260929）不算数据
-    const after = answer.slice(m.index! + m[0].length, m.index! + m[0].length + 4);
-    if (after.includes('[[')) continue; // 带引用
-    out.push(m[1]);
-  }
-  return out;
-}
+/** 大数字裸报检测 —— **实现已搬进产品侧 `gate.ts`**（交付前自检也要用它，一份实现两处用） */
+export { uncitedBigNumbers };
 
 /** 判一条用例：只判机器能判的，措辞质量留给人看 */
 export function judgeTurn(c: AdvisorEvalCase, turn: AdvisorTurn): EvalCheck[] {

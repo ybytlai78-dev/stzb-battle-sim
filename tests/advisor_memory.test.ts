@@ -16,6 +16,8 @@ import {
   createMemoryStore,
   EVIDENCE_TAG,
   emptySession,
+  ensureTask,
+  GUIDE_TAG,
   historyFrom,
   loadProfile,
   loadSession,
@@ -28,6 +30,7 @@ import {
   PROFILE_TAG,
   removePreference,
   renderProfileBlock,
+  renderTaskBlock,
   saveProfile,
   saveSession,
   SESSION_KEY,
@@ -353,5 +356,54 @@ describe('偏好抽取器（prefs.ts）', () => {
       },
     });
     expect(await createProfileExtractor(boom)(base)).toEqual({ add: [], remove: [] });
+  });
+});
+
+describe('记忆层 · 会话任务回显（S2，见设计文档 §16.5）', () => {
+  it('任务 = 会话开头那句话：只在空的时候写，之后不再改（任务是开头，不是最新一句）', () => {
+    expect(ensureTask(emptySession(1, 's1'), '帮我看这队').task).toBe('帮我看这队');
+    expect(ensureTask(emptySession(1, 's1'), '   ').task).toBeUndefined();
+    const withTask = ensureTask(emptySession(1, 's1'), '第一句');
+    expect(ensureTask(withTask, '第二句').task).toBe('第一句');
+  });
+
+  it('renderTaskBlock：空任务不注入空块；有任务时截断到上限', () => {
+    expect(renderTaskBlock(null)).toBe('');
+    expect(renderTaskBlock(emptySession())).toBe('');
+    const block = renderTaskBlock({ ...emptySession(), task: '  帮我看这队  ' });
+    expect(block).toContain('【本次会话的任务】帮我看这队');
+    expect(renderTaskBlock({ ...emptySession(), task: 'x'.repeat(500) }).length).toBeLessThan(260);
+  });
+
+  it('任务随会话落盘、刷新后读得回来（`parseSession` 认它，坏值当没有）', () => {
+    const s = ensureTask(appendTurn(emptySession(1, 's1'), { id: 'r1', at: 2, userText: '看这队', answer: '好', evidence: [], plans: [], checks: [], verdict: { legal: true, verified: true, recomputed: true, apply: { enabled: false } } }), '看这队');
+    const store = createMemoryStore();
+    saveSession(s, store);
+    expect(loadSession(store)?.task).toBe('看这队');
+    expect(parseSession(JSON.stringify({ v: 1, id: 's', turns: [], task: 42 }))?.task).toBeUndefined();
+    expect(parseSession(JSON.stringify({ v: 1, id: 's', turns: [], task: '  ' }))?.task).toBeUndefined();
+  });
+
+  it('近距离引导块可被 stripInjected 剥掉（防"注入内容再写回记忆"）', () => {
+    const raw = `帮我看看这队\n<${GUIDE_TAG}>\n【本轮路由】档位：base\n</${GUIDE_TAG}>`;
+    expect(stripInjected(raw)).toBe('帮我看看这队');
+  });
+});
+
+describe('档位随轮落盘（§16.26）', () => {
+  it('route / selfCorrect 进 StoredTurn 并能从 localStorage 原样读回', () => {
+    const withRoute = turnOf({
+      answer: '八回合总伤 106206[[ev-1-simulate]]。',
+      route: { tiers: ['base'], toolNames: ['get_config', 'simulate'], promotions: [], anchor: true },
+      selfCorrect: ['106206'],
+    });
+    const t = toStoredTurn(withRoute, '这队能打多少？');
+    expect(t.route?.anchor).toBe(true);
+    expect(t.route?.toolNames).toHaveLength(2);
+    expect(t.selfCorrect).toEqual(['106206']);
+    // 走一遍真实的序列化 / 解析（页面刷新就是这条路径）
+    const back = parseSession(JSON.stringify({ v: 1, id: 's1', startedAt: 1, updatedAt: 2, retainedTurns: 1, dropped: 0, turns: [t] }));
+    expect(back?.turns[0].route?.tiers).toEqual(['base']);
+    expect(back?.turns[0].selfCorrect).toEqual(['106206']);
   });
 });

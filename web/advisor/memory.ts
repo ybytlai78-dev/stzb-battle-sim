@@ -31,7 +31,7 @@
  *     剥掉本层所有注入标签块 —— 同款防污染。
  */
 import { evidenceZh } from './trace';
-import type { AdvisorMessage, AdvisorTurn, PlanCheck, ProposedPlan, ToolCallRecord, TurnVerdict } from './types';
+import type { AdvisorMessage, AdvisorRoute, AdvisorTurn, PlanCheck, ProposedPlan, ToolCallRecord, TurnVerdict } from './types';
 
 // ─────────────────────────── 键名与上限（都是常量，测试直接锁） ───────────────────────────
 
@@ -43,6 +43,8 @@ export const PROFILE_TAG = 'advisor_prefs';
 export const EVIDENCE_TAG = 'advisor_evidence';
 /** 「我的 box」注入块（识图建档，见 `box.ts` / 设计文档 §15）——同样要能被 `stripInjected` 剥掉 */
 export const BOX_TAG = 'advisor_box';
+/** 本轮**近距离引导**块（工具面分档，见 `router.renderTurnGuide` / 设计文档 §16.5）——同样可剥 */
+export const GUIDE_TAG = 'advisor_route';
 
 /** 会话里最多留几轮（超出的最旧的丢掉，只计数不静默：`session.dropped`） */
 export const MAX_TURNS = 30;
@@ -56,6 +58,8 @@ export const PROFILE_MAX_ITEMS = 24;
 export const PROFILE_KEY_MAX = 12;
 export const PROFILE_VALUE_MAX = 80;
 export const PROFILE_BLOCK_MAX_CHARS = 1000;
+/** 任务回显最多带多少字（首问可能很长；回显是"别跑题"的锚，不是全文） */
+export const TASK_MAX_CHARS = 160;
 
 const clip = (s: string, n: number): string => (s.length > n ? `${s.slice(0, n)}…` : s);
 /** 时间戳 → `09-29 14:03`（会话条 / 档案页脚共用的一份口径） */
@@ -167,6 +171,10 @@ export interface StoredTurn {
   partial?: boolean;
   /** 展示用：这一轮跑的模式（`干跑（假传输）` / `deepseek-chat @ …`） */
   mode?: string;
+  /** 这一轮的工具面档位（S1 起）：生产页轨迹行据此显示「档位 基础 · 16 个工具」 */
+  route?: AdvisorRoute;
+  /** 交付前自检触发过（§16.22）：轨迹行据此显示「自检补引用 N 个」 */
+  selfCorrect?: string[];
   /** 展示用：这一轮的记忆动作（例「档案 +2（共 5 条）」）——落盘后再回填，刷新也看得见 */
   note?: string;
 }
@@ -176,6 +184,12 @@ export interface AdvisorSession {
   id: string;
   startedAt: number;
   updatedAt: number;
+  /**
+   * **本次会话的任务**（= 开头那句话，S2 起落盘）。
+   * 每轮以静态 system 块回显（`renderTaskBlock`）——套件口径：「模型每轮都看得清在为什么事工作，不跑题」。
+   * 会话内不变 → 不破坏前缀缓存。
+   */
+  task?: string;
   /** 已落盘的轮数（= `turns.length`；harness 的 retainedTurns 同款，读出来能判断"有没有新东西"） */
   retainedTurns: number;
   /** 因上限 / 体积被清掉的更早轮数（只计数，不静默丢） */
@@ -195,6 +209,27 @@ export function emptySession(now = Date.now(), id = newSessionId(now)): AdvisorS
   return { v: 1, id, startedAt: now, updatedAt: now, retainedTurns: 0, dropped: 0, turns: [] };
 }
 
+/** 首次落盘时把"开头那句话"记成会话任务（已有则不动——任务是会话的开头，不是每轮的最新一句）。 */
+export function ensureTask(session: AdvisorSession, firstAsk: string): AdvisorSession {
+  if (session.task?.trim()) return session;
+  const task = String(firstAsk ?? '').trim();
+  return task ? { ...session, task } : session;
+}
+
+/**
+ * 任务回显块（**静态 system 块**，会话内不变 → 不破坏前缀缓存）。
+ * 套件口径：「Task: <首条真实用户消息>」——模型每轮都看得清在为什么事工作，不跑题。
+ * 空任务返回 `''`（不注入空块，与 `renderProfileBlock` 同款）。
+ */
+export function renderTaskBlock(session: AdvisorSession | null | undefined): string {
+  const task = session?.task?.trim();
+  if (!task) return '';
+  return (
+    `【本次会话的任务】${clip(task, TASK_MAX_CHARS)}\n` +
+    '（这是这次会话开头那句话，用来提醒你别跑题；以用户最新一句为准，任务变了就按新的做。）'
+  );
+}
+
 /** 容错读：坏 JSON / 结构不对 / 版本不符 → null（当作"没有会话"，绝不抛） */
 export function parseSession(raw: string | null): AdvisorSession | null {
   if (!raw) return null;
@@ -207,6 +242,7 @@ export function parseSession(raw: string | null): AdvisorSession | null {
       id: typeof p.id === 'string' && p.id ? p.id : newSessionId(),
       startedAt: Number(p.startedAt) || Date.now(),
       updatedAt: Number(p.updatedAt) || Date.now(),
+      ...(typeof p.task === 'string' && p.task.trim() ? { task: p.task.trim() } : {}),
       retainedTurns: turns.length,
       dropped: Math.max(0, Number(p.dropped) || 0),
       turns,
@@ -295,6 +331,9 @@ export function toStoredTurn(
     ...(turn.degraded ? { degraded: true } : {}),
     ...(opts.partial ? { partial: true } : {}),
     ...(opts.mode ? { mode: opts.mode } : {}),
+    // 档位与自检状态随轮落盘：刷新页面后轨迹行的「档位 基础 · 16 个工具」照样在
+    ...(turn.route ? { route: turn.route } : {}),
+    ...(turn.selfCorrect?.length ? { selfCorrect: turn.selfCorrect } : {}),
   };
 }
 
@@ -361,7 +400,7 @@ export function historyFrom(
 /** 剥掉本层注入的标签块（= harness 的 `stripInjectedMemory`，防"注入内容再写回记忆"）；留下的空行收敛成一段 */
 export function stripInjected(text: string): string {
   return text
-    .replace(new RegExp(`<(${PROFILE_TAG}|${EVIDENCE_TAG}|${BOX_TAG})\\b[\\s\\S]*?<\\/\\1>`, 'g'), '')
+    .replace(new RegExp(`<(${PROFILE_TAG}|${EVIDENCE_TAG}|${BOX_TAG}|${GUIDE_TAG})\\b[\\s\\S]*?<\\/\\1>`, 'g'), '')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }

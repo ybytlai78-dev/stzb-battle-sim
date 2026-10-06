@@ -1,0 +1,332 @@
+{
+  "when": "20261006-0018",
+  "model": "deepseek-chat",
+  "dry": false,
+  "full": false,
+  "noRouting": false,
+  "anchor": false,
+  "score": {
+    "cases": 9,
+    "passed": 3,
+    "checks": 27,
+    "failedChecks": 9
+  },
+  "skillDetailCalls": 2,
+  "totalToolCalls": 63,
+  "reports": [
+    {
+      "id": "config-read",
+      "ask": "我现在配将区里是哪三个人？",
+      "pass": true,
+      "checks": [
+        {
+          "check": "调用了 get_config",
+          "ok": true,
+          "detail": "实际：get_config"
+        },
+        {
+          "check": "工具调用 ≤ 3",
+          "ok": true,
+          "detail": "实际 1 次"
+        },
+        {
+          "check": "没有给方案（纯问答）",
+          "ok": true,
+          "detail": "实际 0 个"
+        }
+      ],
+      "answer": "当前配将区是这样[[ev-1-get_config]]：\n\n| 位置 | 武将 id | 可学战法 |\n|---|---|---|\n| 大营 | h653 | 0 个[[ev-1-get_config]] |\n| 中军 | h495 | 0 个[[ev-1-get_config]] |\n| 前锋 | sp_zhaoyun | 0 个[[ev-1-get_config]] |\n\n靶子：防御 150 / 谋略 100[[ev-1-get_config]]；士气 120、8 回合[[ev-1-get_config]]。\n\n三将的 id 拿在手里了，但名字和主战法我还没查档案。要我把这三个人的档案（阵营/兵种/攻击距离/主战法）拉出来、顺手看看他们现在一个可学战法都没带的情况吗？",
+      "tools": [
+        "get_config"
+      ],
+      "battles": 0,
+      "tokens": 11779,
+      "ms": 2329
+    },
+    {
+      "id": "diagnose-weak",
+      "ask": "我这队打木桩伤害为什么低？",
+      "pass": false,
+      "checks": [
+        {
+          "check": "调用了 simulate|simulate_many|optimize_skills 之一",
+          "ok": true,
+          "detail": "实际：get_config、tools_catalog、hero_detail、hero_detail、hero_detail、get_my_box、simulate、list_opponent_pool"
+        },
+        {
+          "check": "大数字都带证据引用",
+          "ok": false,
+          "detail": "裸报：12855、13758、12855、34772"
+        }
+      ],
+      "answer": "I've got the baseline. Here's the diagnosis — and it's not subtle.\n\n## 结论先行：不是\"这队弱\"，是**你这队一个可学战法都没带**\n\n配置读出来是这样[[ev-1-get_config]]：\n\n| 位置 | 武将 | 等级 | 可学战法 |\n|---|---|---|---|\n| 大营 | h653 XP关兴＆张苞 | 40 | **0 个** |\n| 中军 | h495 颜良＆文丑 | 40 | **0 个** |\n| 前锋 | sp_zhaoyun SP赵云 | 40 | **0 个** |\n\n也就是说，全队输出**只有三个人的主战法**在打。\n\n**打木桩实测（100 场，靶子 防御150 / 谋略100）[[ev-7-simulate]]：**\n- 八回合全队总伤 **34772**[[ev-7-simulate]]\n- 前三回合爆发 **3218**[[ev-7-simulate]]\n- 核心将（关兴＆张苞）期望 **12855 ±244**[[ev-7-simulate]]\n\n分将场均伤害[[ev-7-simulate]]：SP赵云 13758 / 关兴＆张苞 12855 / 颜良＆文丑 8159。\n分战法贡献[[ev-7-simulate]]：银龙孤胆 9395 / 将门有将 5418 / 二夫之勇 4054。\n\n**低在哪，一眼能看出来：**\n\n1. **三个主战法的伤害占比全队 100%**，一个可学战法都没补。8 回合里可学战法本该是主要的\"填充伤害\"来源，你现在这一块是 0。\n2. **前三回合只有 3218，八回合 34772** —— 爆发只有总量的 9%。这说明伤害是\"平摊在回合里慢慢磨\"的，前期打不出压血线。根子在三个主战法**都不是前期爆发型**：\n   - 关兴＆张苞「将门有将」是每回合行动时 **30% 概率**拿连击/分兵，而且**概率每回合结束才 +10%**[[ev-3-hero_detail]] —— 打到第 5 回合以后才比较稳，天生慢热。\n   - SP赵云「银龙孤胆」要**1 回合准备**才打 7 次递增攻击[[ev-5-hero_detail]] —— 准备类，前期出手被吃掉一回合。\n   - 颜良＆文丑「二夫之勇」只有 **140% 伤害率**[[ev-4-hero_detail]]，而且它本质是个\"减益\"主战法（降对方主动伤害 50%、提对方受主动伤害 25%），伤害不是它的主业。\n3. **颜良＆文丑场均 8159，明显拖后腿**[[ev-7-simulate]]，而它那一格也是空的。\n\n**还有个前提要跟你确认：** 你这个账号的 box 目前是空的（没上传过截图识别）[[ev-6-get_my_box]]。所以我现在**没法给你出\"你能直接应用\"的配法** —— 不知道你实际有哪些五星战法。\n\n**下一步，你选一个：**\n- 想让我按**\"你实际有\"**的战法配 → 把五星武将 / 五星战法截图发到「我的 box」面板识别一次，我再跑。\n- 只想看看**理论上补哪些战法、能提多少** → 我可以放开搜索档跑一轮（要开 search 档，会花真跑场次），给你几条候选和木桩伤害对比。这个不依赖你的 box，但里面可能出现在你没有的战法，卡片上会标出来、不能直接应用。\n\n要我开 search 档跑吗？",
+      "tools": [
+        "get_config",
+        "tools_catalog",
+        "hero_detail",
+        "hero_detail",
+        "hero_detail",
+        "get_my_box",
+        "simulate",
+        "list_opponent_pool"
+      ],
+      "battles": 100,
+      "tokens": 30654,
+      "ms": 7880
+    },
+    {
+      "id": "optimize-skills",
+      "ask": "帮我把当前这队的战法搜一遍，看输出最高的搭配",
+      "pass": false,
+      "checks": [
+        {
+          "check": "调用了 optimize_skills",
+          "ok": false,
+          "detail": "实际：get_config、list_opponent_pool、get_my_box、hero_detail、hero_detail、hero_detail、optimize_winrate、validate_plan、search_skill、search_skill、validate_plan、optimize_winrate、optimize_winrate、skill_detail、skill_detail、validate_plan、search_skill、search_skill、search_skill、search_skill"
+        },
+        {
+          "check": "给了至少一个方案",
+          "ok": true,
+          "detail": "实际 1 个"
+        },
+        {
+          "check": "「应用」可用",
+          "ok": true,
+          "detail": "实际：可用"
+        },
+        {
+          "check": "提到「期望」",
+          "ok": false,
+          "detail": "回答里没有：期望 / mean"
+        },
+        {
+          "check": "提到「半宽」",
+          "ok": true,
+          "detail": "命中「半宽」"
+        },
+        {
+          "check": "大数字都带证据引用",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "answer": "本轮搜到了完整方案，但有两步没跑完，我如实说明。\n\n## 先给结论\n\n当前队：大营 XP关兴＆张苞（h653）/ 中军 颜良＆文丑（h495）/ 前锋 SP赵云（sp_zhaoyun），三个将的战法槽**都是空的**。\n\n战法搜索分三段做的（每段 100 场/对手 + 正反场地）：\n\n| 阶段 | 填入的槽 | 榜首搭配 | 综合胜率 |\n|---|---|---|---|\n| ① 只搜大营 | 大营 | 浑水摸鱼 + 战必断金 | 42.0%[[ev-7-optimize_winrate]] |\n| ② 加搜中军 | 大营 + 中军 | … + 攻心 + 突进 | 60.0%[[ev-12-optimize_winrate]] |\n| ③ 加搜前锋 | 三槽全满 | … + 擅兵不寡 + 凿穿 | 74.0%[[ev-13-optimize_winrate]] |\n\n**最终榜首（三槽全满）**：XP关兴＆张苞 · 浑水摸鱼 + 战必断金 / 颜良＆文丑 · 攻心 + 突进 / SP赵云 · 擅兵不寡 + 凿穿 —— 综合胜率 **74.0% ±8.6%**[[ev-13-optimize_winrate]]，八回合全队总伤 **20984**[[ev-13-optimize_winrate]]，前三回合爆发 **4554**[[ev-13-optimize_winrate]]。\n\n对手池只有一支（固定）：敌方·陈宫张宁吕蒙[[ev-2-list_opponent_pool]]。所以\"综合胜率\"和\"对这一个对手的胜率\"是同一个数：**74.0%**[[ev-13-optimize_winrate]]。\n\n**分不出来的一批**（与第 1 名区间重叠，不能硬排名）：第 2 名 70.0% ±9.0%[[ev-13-optimize_winrate]]、第 3 名 70.0% ±9.0%[[ev-13-optimize_winrate]]、第 4 名 70.0% ±9.0%[[ev-13-optimize_winrate]]、第 5 名 68.0% ±9.1%[[ev-13-optimize_winrate]]、第 6~8 名 66.0% ±9.3%[[ev-13-optimize_winrate]] —— 第 1 名半宽 8.6% 与第 2 名半宽 9.0% 相加（17.6）大于胜率差（4.0），**这几套谁都可能更强**。\n\n## 还差的两步（本轮额度用尽）\n\n1. **最终方案没过 validate_plan**：我按榜单名字回填时把战法 id 写错了一处，报 `unknown_skill`[[ev-16-validate_plan]]。下一轮可直接用这几个已查到的正确 id 复跑校验：`hunshui_moyu`[[ev-9-search_skill]]、`zhanbi_duanjin`[[ev-10-search_skill]]、`shanbing_bugua`[[ev-17-search_skill]]、`zaochuan`[[ev-18-search_skill]]、`gongxin`[[ev-19-search_skill]]、`tujin`[[ev-20-search_skill]]。\n2. **完整池的 matchup_pool 权威数字**（分对手胜/平/负、斩首胜占比）没跑成，上面 74.0% 等来自搜索的决赛口径。\n\n## 两个提醒\n\n- **你的 box 是空的**——没上传过截图[[ev-3-get_my_box]]。本次搜索跑的是**全可学战法池**，所以榜上这些战法你**不一定拥有**。想拿到\"能直接应用\"的配置，请在抽屉「我的 box」上传五星武将+五星战法截图识别一次，我下一轮按你的清单重搜。\n- 机制我没展开：`skill_detail` 对浑水摸鱼、战必断金只回了名字没回描述[[ev-14-skill_detail]][[ev-15-skill_detail]]，我不替它脑补效果。\n\n## 下一轮怎么跑（建议顺序）\n\n1. 修正 id → `validate_plan`（用上面的正确 id）；\n2. 确认后 `matchup_pool` 出完整池权威胜率；\n3. 上传 box → 按你实际拥有的将法再搜一遍，对比\"理想榜 vs 你能用的榜\"。\n\n要我先跑第 1、2 步吗？或者你先传 box 截图，我一次把 1~3 都补齐。",
+      "tools": [
+        "get_config",
+        "list_opponent_pool",
+        "get_my_box",
+        "hero_detail",
+        "hero_detail",
+        "hero_detail",
+        "optimize_winrate",
+        "validate_plan",
+        "search_skill",
+        "search_skill",
+        "validate_plan",
+        "optimize_winrate",
+        "optimize_winrate",
+        "skill_detail",
+        "skill_detail",
+        "validate_plan",
+        "search_skill",
+        "search_skill",
+        "search_skill",
+        "search_skill"
+      ],
+      "battles": 9660,
+      "tokens": 104876,
+      "ms": 37494
+    },
+    {
+      "id": "optimize-mates",
+      "ask": "围绕核心将，换哪个队友最强？",
+      "pass": false,
+      "checks": [
+        {
+          "check": "调用了 optimize_mates",
+          "ok": false,
+          "detail": "实际：get_config、list_opponent_pool、get_my_box、tools_catalog、hero_detail、hero_detail、hero_detail"
+        },
+        {
+          "check": "提到「基线」",
+          "ok": false,
+          "detail": "回答里没有：基线 / 当前队友 / 对照"
+        },
+        {
+          "check": "大数字都带证据引用",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "answer": "I have the config and pool. One thing to flag before I burn search budget:\n\n**你的 box 还是空的**（`ev-3-get_my_box`）。不过你问的是\"围绕核心将换哪个队友最强\"——这属于**比较/搜索类**问题，不受 box 限制，我照跑。\n\n不过我需要你确认一件事：**核心将是哪个？** 当前配将区里是 大营 h653（SP关兴＆张苞，步兵，主战法「将门有将」）／中军 h495（颜良＆文丑，骑兵，「二夫之勇」）／前锋 sp_zhaoyun（SP赵云，步兵，「银龙孤胆」），三个都是输出型（`ev-5`/`ev-6`/`ev-7`）。三者都像核心，我不替你猜。\n\n---\n\n### 已经确认的事实（不跑就有的）\n\n| 项 | 内容 | 证据 |\n|---|---|---|\n| 当前配置 | 大营 SP关兴＆张苞 / 中军 颜良＆文丑 / 前锋 SP赵云，三人**各 0 个可学战法** | `ev-1-get_config` |\n| 对手池 | 固定 1 支：**敌方·陈宫张宁吕蒙**；自加 0 支 | `ev-2-list_opponent_pool` |\n| 你的 box | 空（未上传截图） | `ev-3-get_my_box` |\n| h653 档案 | 步兵，40级 攻191/防168/谋81/速53，主战法「将门有将」（每回合自身行动 30% 概率得连击/分兵，概率每回合+10%） | `ev-5-hero_detail` |\n| h495 档案 | 骑兵，40级 攻198/防164/谋60/速131，主战法「二夫之勇」（群体攻击 140%，降敌主动伤害 50%、增其受主动伤害 25%，2回合） | `ev-6-hero_detail` |\n| sp_zhaoyun 档案 | 步兵，40级 攻190/防179/谋122/速109，主战法「银龙孤胆」（准备1回合，对随机单体 7 次攻击，递增 7%） | `ev-7-hero_detail` |\n\n---\n\n### 下一步（等你一句话，我就跑）\n\n1. **先告诉我核心将是哪一个**（h653 / h495 / sp_zhaoyun），我把它锁进 `coreUnitIds`；\n2. 你**是否要\"给我自己配\"**？要的话得先把「五星武将 + 五星战法」截图传到抽屉的「我的 box」面板识别一次——否则搜索出来的队友可能不在你号上，只能看不能应用；\n3. 然后我按下面口径跑一次 `optimize_mates`（换队友，两侧队友位一起搜）：\n\n- 排序：**对对手池的综合胜率**（`winRate`）；如果你要\"稳、别被克\"，我改用**最差对手胜率**（`worst`）并明说。\n- 每个对手至少 100 场、正反场地，固定测试集不删。\n- 顺便报**分对手胜率** + 同一批对打的**八回合全队总伤**与**前三回合爆发**（只作辅助，不参与排名）。\n\n另外提醒一句：对手池现在**只有 1 支固定队（陈宫张宁吕蒙）**，只打这一支的话\"综合胜率\"基本等同于\"对陈宫张宁吕蒙的胜率\"，换队友的结论会比较窄。如果你有想针对的队伍，可以先告诉我，我走 `route_task(write)` 申请把预设对手加进来（改动要你确认）。\n\n要不要我**先不等 box、直接跑**一版\"h653 为核心、换队友\"的搜索给你看？还是你先补 box？",
+      "tools": [
+        "get_config",
+        "list_opponent_pool",
+        "get_my_box",
+        "tools_catalog",
+        "hero_detail",
+        "hero_detail",
+        "hero_detail"
+      ],
+      "battles": 0,
+      "tokens": 31651,
+      "ms": 6247
+    },
+    {
+      "id": "hero-unknown",
+      "ask": "库里有「赵子龙」这个武将吗？",
+      "pass": true,
+      "checks": [
+        {
+          "check": "调用了 search_hero|hero_detail 之一",
+          "ok": true,
+          "detail": "实际：search_hero、search_hero"
+        },
+        {
+          "check": "没有幻觉「h9000」",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "check": "没有幻觉「攻击力 999」",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "answer": "「赵子龙」这个词本身没命中[[ev-1-search_hero]]，但换成本名「赵云」能查到——库里有两位：\n\n| 武将 | id |\n|---|---|\n| 赵云 | `zhaoyun`[[ev-2-search_hero]] |\n| SP赵云 | `sp_zhaoyun`[[ev-2-search_hero]] |\n\n说明一下：「赵子龙」是赵云的字，库里武将条目是按本名/称号登记的，所以按字搜是空的[[ev-1-search_hero]]，这属于**检索词没命中，不代表库里没有**。\n\n要不要我顺手做这两件事之一：\n1. 拉一份 `zhaoyun` / `sp_zhaoyun` 的档案（阵营 / 兵种 / 攻击距离 / 四维 / 主战法官方描述）；\n2. 如果你是在给自己配队，我先读一下你的 box，确认这两个（哪个）是你实际拥有的，再往下配。\n\n要哪个说一声，或者直接说「都来」。",
+      "tools": [
+        "search_hero",
+        "search_hero"
+      ],
+      "battles": 0,
+      "tokens": 12027,
+      "ms": 2500
+    },
+    {
+      "id": "offline-hero",
+      "ask": "文鸯怎么配队配战法？",
+      "pass": false,
+      "checks": [
+        {
+          "check": "调用了 hero_detail",
+          "ok": true,
+          "detail": "实际：tools_catalog、get_config、list_opponent_pool、search_hero、hero_detail、get_my_box、search_skill"
+        },
+        {
+          "check": "提到「下架」",
+          "ok": false,
+          "detail": "回答里没有：下架 / 未上架 / 暂不可用"
+        },
+        {
+          "check": "提到「偏低」",
+          "ok": false,
+          "detail": "回答里没有：偏低 / 仅供参考 / 看方向"
+        }
+      ],
+      "answer": "文鸯档案拿到了。开搜之前先跟你确认两件事，因为你的问法有两种解法：\n\n**一、这是「给你自己配」还是「通用研究」？**\n你的 box 目前是空的（没上传过截图识别）[[ev-6-get_my_box]]。如果是给你自己账号配队，得先请你把「五星武将」「五星战法」截图传到抽屉的「我的 box」面板识别一次，我才能在**你实际拥有**的将法里搜；否则搜出来的很多将你未必有。如果你只是想研究「文鸯这个将本身怎么配最强」，那不受 box 限制，我直接按全库搜。\n\n**二、文鸯的定位（先看清楚了再搜）**\n文鸯 h704，骑兵，主战法「盛气横凌」：普攻后对同一目标再发一次猛攻（伤害率 260%）；若目标士气高昂 → 混乱 1 回合，若士气一般/低落 → 额外再打一次（80%~160%）[[ev-5-hero_detail]]。\n40 级四维：攻 202 / 防 165 / 谋 40 / 速 177[[ev-5-hero_detail]]。**谋略只有 40**，是个典型的物理追击/普攻向输出，怕谋略队；速度 177 算快，适合抢先手。所以配队方向基本是：**让他多普攻/多追击、或者堆攻击加成的物理队**，而不是法系或肉盾位。\n\n**三、当前打谁**\n对手池现在只有 1 支固定靶：**敌方·陈宫张宁吕蒙**（固定，删不掉，自加对手 0 支）[[ev-3-list_opponent_pool]]。目前配将区里躺着的是大营 h653 / 中军 h495 / 前锋 sp_zhaoyun、全空战法[[ev-2-get_config]]——那是当前配置，不是文鸯队。\n\n---\n\n你回一句「**通用搜最强 / 上传完 box 按我的将搜**」，我就直接往下跑（按规划是：optimize_winrate 搜战法 + optimize_mates 搜队友，最后 matchup_pool 打整个池子出分对手胜率）。如果你的对手池里还有你常打的队伍（比如某个满红蜀骑），也可以让我先加进去再配——改池子要你点头我才动。\n\n**在跑之前我不报任何胜率或伤害数字**：文鸯配法的强弱得靠真跑，我没跑过的不编。",
+      "tools": [
+        "tools_catalog",
+        "get_config",
+        "list_opponent_pool",
+        "search_hero",
+        "hero_detail",
+        "get_my_box",
+        "search_skill"
+      ],
+      "battles": 0,
+      "tokens": 31260,
+      "ms": 4917
+    },
+    {
+      "id": "metric-ambiguity",
+      "ask": "给我一套最强的队伍。",
+      "pass": false,
+      "checks": [
+        {
+          "check": "提到「木桩」",
+          "ok": false,
+          "detail": "回答里没有：木桩 / 不还手"
+        },
+        {
+          "check": "提到「实战」",
+          "ok": true,
+          "detail": "命中「胜率」"
+        }
+      ],
+      "answer": "**先说一件事：你的 box 还是空的。**\n\n我读了配将区配置和对手池，但 `get_my_box` 回的是：这位用户还没上传过截图、没识别过 box[[ev-3-get_my_box]]。所以严格来说我现在**没法判定什么\"你有的最强\"**——只能给你看库内理论最强的参考配置（那套配置里的将法大概率你并不全有，卡片上会标\"不可应用\"）。\n\n另外两条边界先讲清：\n- 对手池目前只有 **1 支固定队**：敌方·陈宫张宁吕蒙（固定，删不掉），自加 0 支[[ev-2-list_opponent_pool]]。所以下面所有胜率都是\"打这一支\"的胜率，综合胜率就只有这一个对手，别当通用强度看。\n- 配将区现值：大营 h653 XP关兴＆张苞 / 中军 h495 颜良＆文丑 / 前锋 sp_zhaoyun SP赵云，三人**都没带可学战法**[[ev-1-get_config]]。\n\n**如果你要的是\"给我自己配\"**：请先到抽屉的「我的 box」面板把五星武将、五星战法截图各传一次，我认完清单再按你有的将法重搜一遍，那才是能直接点的方案。\n\n**在拿到清单之前，我可以先做的**：拿当前这套三人（空战法槽）去搜一遍\"战法怎么带胜率最高\"，先给你一份能跑的基线。要我跑吗？\n\n要是跑，我这轮会这样安排（说一声就开工）：\n1. `optimize_skills`：以当前三将、每将 2 个空槽搜战法，粗筛 → 决赛每对手 ≥100 场，按**打陈宫张宁吕蒙的综合胜率**排序；\n2. 顺手 `search_hero` / `hero_detail` 摸关羽(h451/h26)、张飞(h22)、赵云(zhaoyun) 的档案，为下一轮换将搜索（`optimize_mates`）备料；\n3. 出榜单后逐套 `validate_plan`，再给你一份主方案的完整数据（综合胜率、对每支对手的胜/平/负、八回合总伤、前三回合爆发）。\n\n或者你直接说「先别管 box，按库内最强搜一套给我看」——我就跳过 box 限制，直接开大搜索（optimize_mates + optimize_skills，或一步 optimize_both），出的是**参考配置、不可应用**，你先看强度上限。选哪条？",
+      "tools": [
+        "get_config",
+        "list_opponent_pool",
+        "get_my_box",
+        "tools_catalog",
+        "hero_detail",
+        "hero_detail",
+        "hero_detail",
+        "search_hero",
+        "search_hero",
+        "search_hero"
+      ],
+      "battles": 0,
+      "tokens": 43101,
+      "ms": 6839
+    },
+    {
+      "id": "boundary-control",
+      "ask": "这队加个控制型队友是不是更强？",
+      "pass": false,
+      "checks": [
+        {
+          "check": "提到「控制」",
+          "ok": true,
+          "detail": "命中「控制」"
+        },
+        {
+          "check": "提到「量不出」",
+          "ok": false,
+          "detail": "回答里没有：量不出 / 测不出 / 看不出来 / 无法体现"
+        }
+      ],
+      "answer": "I need to nail down your question before spending runs — and there are two blockers.\n\n**1) 你的 box 是空的** —— `get_my_box` 返回：还没上传过截图 / 没识别[[ev-7-get_my_box]]。所以「给你自己配」这条路现在铺不开：我不知道你有哪些五星将/战法，搜出来的方案里可能全是你没有的。想把方案落到\"能直接应用\"，先去抽屉的「我的 box」面板把五星武将 + 五星战法截图传一次识别。\n\n**2) 更要紧的：现在这队本身是\"裸的\"** —— 当前配将区是 大营 h653 / 中军 h495 / 前锋 sp_zhaoyun，**三个将的可学战法都是 0 个**[[ev-1-get_config]]。也就是说，先给它挂满战法带来的提升，大概率比\"换/加一个控制队友\"更大。这时候直接去测\"加控制是不是更强\"，测的是一个半成品阵容，结论会误导你。\n\n我先把这队的底子说清楚（都是官方档案，不是猜）：\n\n| 位置 | 武将 | 主战法 | 40级 攻/防/谋/速 | 证据 |\n|---|---|---|---|---|\n| 大营 | h653 XP关兴＆张苞（步） | 将门有将：自身行动时 30% 概率得连击 / 分兵（伤害率 100%），每回合结束该概率 +10%，两效果独立判定 | 191/168/81/53 | [[ev-4-hero_detail]] |\n| 中军 | h495 颜良＆文丑（骑） | 二夫之勇：群体攻击（伤害率 140%），使敌主动战法伤害 -50%、受主动战法伤害 +25%，持续 2 回合 | 198/164/60/131 | [[ev-5-hero_detail]] |\n| 前锋 | sp_zhaoyun SP赵云（步） | 银龙孤胆：1 回合准备，对随机敌单 7 次攻击（首击 80%，每次递增 7%） | 190/179/122/109 | [[ev-6-hero_detail]] |\n\n对手池现在只有固定 1 支：敌方·陈宫张宁吕蒙[[ev-2-list_opponent_pool]]。固定集删不掉。\n\n---\n\n**其余两个必须先确认的点：**\n\n**A. \"控制型队友\"你指的是哪一种？** 这两个测法完全不同，我不能用一个词糊过去：\n- ① **换将**：把现有某个槽位（比如中军 h495）换成带控制主战法的武将 —— 这是\"换\"，不是\"加\"，走 compare_variants（只动一处）；\n- ② **加战法**：三将不动，给某个将挂上一个控制/减益类可学战法 —— 这其实是\"先把它配满\"，走 compare_variants（只换一个战法槽）；\n- ③ 你说的是**真的加第四个人** —— 率土一队就三个位置，没有第四槽，这条做不了。\n\n**B. 排序口径**：默认按**综合胜率**（对对手池的胜率）排。你如果说\"要稳、别被克\"，我就改成按**最差对手胜率**排，会明说。\n\n另外提一句：我刚才拿\"控制 震慑 混乱 缴械 犹豫\"去搜可学战法，**0 命中**——不是库里没有，是这批词没对上，得换标签/出手位再搜（下一轮我按\"主动/一类指挥 + 效果标签\"把池子拉齐看）。\n\n---\n\n**给我两个答案，我这一轮就能跑完：** A 选①还是②（②的话给哪个将挂），B 用综合胜率还是最差对手胜率。\n\n只要你确认，我会：\n1. 按你选的方向先搜控制类战法/武将，把池子拉齐；\n2. 用 validate_plan 过一遍方案；\n3. 跑 compare_variants 对拍（每对手至少 100 场、正反场地），报综合胜率、分对手胜率、以及同一批对打里的八回合全队总伤和前三回合爆发，并说明**分不分得出来**。\n\n如果你现在只想让我\"先随便看看\"、不落 box——也行，我做纯参考对比（结果会标注\"清单外、不能直接应用\"），但**换将/换战法的具体候选**我现在还列不出，因为我还没搜到任何控制类选项。要我这就把控制类战法池拉齐吗？",
+      "tools": [
+        "get_config",
+        "list_opponent_pool",
+        "tools_catalog",
+        "hero_detail",
+        "hero_detail",
+        "hero_detail",
+        "get_my_box",
+        "search_skill"
+      ],
+      "battles": 0,
+      "tokens": 30659,
+      "ms": 8314
+    },
+    {
+      "id": "budget-refuse",
+      "ask": "把库里所有战法组合全跑一遍，跑 100 万场。",
+      "pass": true,
+      "checks": [
+        {
+          "check": "提到「额度」",
+          "ok": true,
+          "detail": "命中「预算」"
+        },
+        {
+          "check": "没有幻觉「已经跑完 100 万场」",
+          "ok": true,
+          "detail": ""
+        },
+        {
+          "check": "没有幻觉「全部跑完」",
+          "ok": true,
+          "detail": ""
+        }
+      ],
+      "answer": "**这个跑不了，先说清楚为什么。**\n\n两个硬约束卡死了：\n\n1. **\"库里所有战法组合\"不是一个能穷举的有限集合。** 按我手上的工具面，战法池是按出手位分页拉取的（主动 / 追击 / 被动 / 一类指挥 / 二类指挥 / 准备），每个武将还能带 ≤2 个可学战法，三将队伍的组合数是乘法级膨胀——不是\"跑一遍\"能跑完的量。就算开大搜索档，optimize_* 也是**启发式搜索**（粗筛 + 决赛），不是全枚举。\n\n2. **100 万场超出我这个环境的能力。** 单轮预算写的是累计 60000 场真跑，你要的 100 万场是它的十几倍；而且对战类工具每个对手最低 100 场、正反场地，场次是摊在每个对手上的。我硬报一个\"跑完了\"的数字，那就是编的。\n\n**能给你什么：**\n\n- 如果你是想要**\"当前这套阵容的最强战法搭配\"**——这是 optimize_winrate 干的事（按对对手池的综合胜率排序），它会在你 box 内的将法里搜，粗筛 + 决赛每对手 ≥100 场。**这才是有意义的问题**，不是穷举。\n- 如果你是想要**某个木桩下的伤害期望最优解**——optimize_skills / optimize_both 可以，但前提是你明确说\"要木桩伤害期望\"，而且它同样不是全枚举。\n- 如果你只是**想看看池子里都有哪些战法**——list_skills 分页拉，这个便宜，可以立刻给你。\n\n**下一轮我需要你确认一件事**，然后我就能开工：\n\n你要的到底是哪个？\n\n- A：**给我现有这队配最强战法**（综合胜率口径，走 optimize_winrate，需要开 search 档）\n- B：**要木桩伤害期望最优**（走 optimize_skills，同样要开 search 档）\n- C：**先把战法池摊开给我看**（list_skills，现在就能跑）\n\n顺便，如果目标是 A/B 这种\"给我自己配\"，我需要你确认一下 box 清单是最新的（配将搜索只用你实际有的将法）；你要是还没传过截图，先传一次。\n\n要我先跑 C 把池子摊开、顺便读一下你现在的配将区配置吗？说一声我就动。",
+      "tools": [],
+      "battles": 0,
+      "tokens": 6257,
+      "ms": 3598
+    }
+  ]
+}

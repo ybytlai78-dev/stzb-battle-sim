@@ -5,8 +5,11 @@
  * 这里只测**骨架与交接**，对话链路已由 `web/advisorSmoke.test.ts` 端到端覆盖。
  */
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { mountAdvisorPage } from './advisorPage';
+import { mountAdvisor } from './advisor/view';
+import { createPageAdvisorHost } from './advisorHost';
+import { createFakeTransport } from './advisor/transport';
 import { applyPlanToTeam, readTeamState, writeTeamState, TEAM_KEY } from './teamStore';
 import { __resetSettings } from './settings';
 import { emptySlot, type EditorState } from './teamEditor';
@@ -64,7 +67,7 @@ describe('AI配将 独立页骨架（一个布局两态）', () => {
     expect(page.querySelector('.advisor-top a[href="./index.html"]')).toBeTruthy();
     expect(page.querySelector('.advisor-main .advisor-log')).toBeTruthy();
     expect(page.querySelector('.advisor-composer .advisor-input')).toBeTruthy();
-    expect(page.querySelectorAll('.advisor-tools button')).toHaveLength(4); // 我的 box / 偏好 / 历史 / 设置
+    expect(page.querySelectorAll('.advisor-nav .advisor-nav-item')).toHaveLength(5);
     handle.destroy();
   });
 
@@ -96,7 +99,7 @@ describe('AI配将 独立页骨架（一个布局两态）', () => {
     (m1!.querySelector('[data-set-close]') as HTMLButtonElement).click();
     expect(m1!.classList.contains('on')).toBe(false);
 
-    (page.querySelector('.advisor-tools [data-settings]') as HTMLButtonElement).click();
+    (page.querySelector('.advisor-guide [data-settings]') as HTMLButtonElement).click();
     expect(document.querySelectorAll('#advisor-settings-modal')).toHaveLength(1); // 同一个节点，不重复建
     expect(document.querySelector('#advisor-settings-modal')!.classList.contains('on')).toBe(true);
     handle.destroy();
@@ -110,6 +113,46 @@ describe('AI配将 独立页骨架（一个布局两态）', () => {
     expect(page.querySelector('.advisor-box-profile')).toBeTruthy();
     expect(page.querySelector('#adv-strict')).toBeTruthy();
     handle.destroy();
+  });
+
+  it('返回配将只换房间，进行中的一轮继续写完', async () => {
+    document.body.innerHTML = '';
+    const root = document.createElement('div');
+    document.body.appendChild(root);
+    let release!: () => void;
+    const gate = new Promise<void>((r) => {
+      release = r;
+    });
+    const transport = createFakeTransport([{ text: '房间外也写完了' }]);
+    const orig = transport.chat.bind(transport);
+    transport.chat = async function* (req, signal) {
+      await gate;
+      expect(signal?.aborted).toBeFalsy();
+      yield* orig(req, signal);
+    };
+    let left = false;
+    let view!: ReturnType<typeof mountAdvisor>;
+    view = mountAdvisor(root, {
+      host: createPageAdvisorHost(),
+      transport,
+      extract: false,
+      onLeave: () => {
+        left = true;
+        view.park();
+        root.style.display = 'none';
+      },
+    });
+    const pending = view.__send('继续配');
+    await vi.waitFor(() => {
+      expect((root.querySelector('.advisor-stop') as HTMLButtonElement).disabled).toBe(false);
+    });
+    (root.querySelector('a.advisor-back') as HTMLAnchorElement).click();
+    expect(left).toBe(true);
+    expect((root.querySelector('.advisor-stop') as HTMLButtonElement).disabled).toBe(false);
+    release();
+    await pending;
+    expect(root.querySelector('.advisor-log')!.textContent).toContain('房间外也写完了');
+    view.destroy();
   });
 });
 

@@ -21,6 +21,8 @@ const turn = (
     rejectTools?: boolean;
     profileText?: string;
     boxText?: string;
+    /** 与自纠无关的用例显式关掉它（自纠本身另有专测）——否则假传输脚本会被多要一轮 */
+    noSelfCorrect?: boolean;
   } = {}
 ) =>
   runAdvisorTurn({
@@ -31,6 +33,7 @@ const turn = (
     ...(opts.signal === undefined ? {} : { signal: opts.signal }),
     ...(opts.profileText === undefined ? {} : { profileText: opts.profileText }),
     ...(opts.boxText === undefined ? {} : { boxText: opts.boxText }),
+    ...(opts.noSelfCorrect === undefined ? {} : { noSelfCorrect: opts.noSelfCorrect }),
   });
 
 describe('advisor loop（精简版）', () => {
@@ -206,7 +209,7 @@ describe('advisor loop · 我的 box', () => {
     empty: false,
   });
 
-  it('box 块摆位：SYSTEM_PROMPT → 预算 → **box** → 偏好 → 历史 → 提问', async () => {
+  it('摆位：SYSTEM_PROMPT → 预算 → **box** → 偏好 → 历史 → 提问 → **近距离引导**（S2）', async () => {
     const transport = createFakeTransport([{ text: '好' }]);
     await runAdvisorTurn({
       userText: '这队怎么配',
@@ -220,7 +223,11 @@ describe('advisor loop · 我的 box', () => {
     expect(msgs[1].content).toContain('本轮预算');
     expect(msgs[2].content).toContain('<advisor_box>');
     expect(msgs[3].content).toContain('<advisor_prefs>');
-    expect(msgs.at(-1)?.content).toBe('这队怎么配');
+    expect(msgs.at(-2)?.content).toBe('这队怎么配'); // 提问
+    // 引导贴在提问**之后**（近距离），且不进 system 前缀：「这队怎么配」命中 search 档
+    expect(msgs.at(-1)?.content).toContain('<advisor_route>');
+    expect(msgs.at(-1)?.content).toContain('optimize_winrate');
+    expect(msgs.at(-1)?.role).toBe('user');
   });
 
   it('提示词第 7 条：box 只是"给自己配将"的范围，其它问题照常；并有 get_my_box 与比较类口径', async () => {
@@ -233,7 +240,22 @@ describe('advisor loop · 我的 box', () => {
     expect(sys).toContain('八回合全队总伤');
     expect(sys).toContain('前三回合爆发');
     expect(sys).toContain('get_my_box');
-    expect(sys).toContain('共 13 个');
+    expect(sys).toContain('共 19 个');
+  });
+
+  it('提示词补齐两处边界（2026-10-05 核查结论）：下架武将必须声明 + 控制/防御型在木桩口径量不出来', async () => {
+    const transport = createFakeTransport([{ text: '好' }]);
+    await runAdvisorTurn({ userText: '随便问问', ctx: makeCtx({ fakeRuns: true }), transport });
+    const sys = (transport.requests[0] as ChatRequest).messages[0].content;
+    // 依据：offline-hero 用例要求「下架/偏低」声明，但提示词里"下架"原本出现 0 次 → 模型无从知晓
+    expect(sys).toContain('已下架');
+    expect(sys).toContain('数值仅供看方向');
+    // 依据：boundary-control 用例要求说清"控制型在木桩口径量不出"，模型换了个说法（判分没认）→ 提示词把它写白
+    expect(sys).toContain('量不出来');
+    // 依据：metric-ambiguity 用例要求先分清"木桩输出最强 vs 实战最强"
+    expect(sys).toContain('木桩输出最强');
+    expect(sys).toContain('实战最强');
+    expect(sys).toContain('凑不齐三张同阵营照常配');
   });
 
   it('box 外的将法：方案**合法**（照常看数）但应用禁用 + boxIssues 有机器码', async () => {
@@ -253,5 +275,59 @@ describe('advisor loop · 我的 box', () => {
     const payload = JSON.stringify({ plans: [{ title: '方案A', plan: planOf(heroIds), evidenceIds: [] }] });
     const t = await turn([{ text: `\`\`\`json\n${payload}\n\`\`\`` }], { ctx });
     expect(t.checks[0].legal).toBe(true);
+  });
+});
+
+describe('交付前自检（§16.22：裸报 → 回灌一次、允许重答一轮）', () => {
+  /** 让自检有东西可抓：≥10000 且没跟 `[[…]]` */
+  const bad = '八回合全队总伤 106206，前三回合 3218。';
+  const good = '八回合全队总伤 106206[[ev-1-simulate]]，前三回合 3218。';
+
+  it('终稿有裸报 → 回灌一次（只说事实：哪几个数字没引用），自纠后的正文带引用', async () => {
+    const transport = createFakeTransport([{ text: bad }, { text: good }]);
+    const t = await runAdvisorTurn({ userText: '这队能打多少？', ctx: makeCtx({ fakeRuns: true }), transport });
+    expect(transport.requests, '应该只多要了自纠那一轮').toHaveLength(2);
+    const retry = transport.requests[1].messages.at(-1)!;
+    expect(retry.role).toBe('user');
+    expect(retry.content).toContain('交付前自检');
+    expect(retry.content).toContain('106206'); // 点出是哪个数字
+    expect(retry.content).not.toContain('3218'); // 四级数字不算裸报，不许连坐
+    expect(retry.content).toContain('原样重发');
+    expect(retry.content).toContain('数字与结论都不许改');
+    expect(t.answer).toBe(good);
+    expect(t.selfCorrect).toEqual(['106206']);
+  });
+
+  it('只自纠一轮：第二遍仍裸报就照发（不与模型的执拗死循环）', async () => {
+    const transport = createFakeTransport([{ text: bad }, { text: bad }]);
+    const t = await runAdvisorTurn({ userText: '这队能打多少？', ctx: makeCtx({ fakeRuns: true }), transport });
+    expect(transport.requests).toHaveLength(2);
+    expect(t.answer).toBe(bad);
+    expect(t.selfCorrect).toEqual(['106206']);
+  });
+
+  it('规范回答不触发自检（没有裸报就一轮结束）', async () => {
+    const transport = createFakeTransport([{ text: good }]);
+    const t = await runAdvisorTurn({ userText: '这队能打多少？', ctx: makeCtx({ fakeRuns: true }), transport });
+    expect(transport.requests).toHaveLength(1);
+    expect(t.selfCorrect).toBeUndefined();
+  });
+
+  it('方案 JSON 围栏里的数字**不算**裸报（关 2/关 3 另行把关，别连坐）', async () => {
+    // 案底：自检一开始跑在原文上 → 每个方案卡都被误判成裸报，4 个既有用例当场红。
+    // 现在只查剥掉围栏后的正文，这里锁住它。
+    const ctx = makeCtx({ fakeRuns: true });
+    const payload = JSON.stringify({ plans: [{ title: '方案A', plan: ctx.deps.__plan, evidenceIds: [] }] });
+    const transport = createFakeTransport([{ text: `正文里没有大数字。\n\`\`\`json\n${payload}\n\`\`\`` }]);
+    const t = await runAdvisorTurn({ userText: '给个方案', ctx, transport });
+    expect(transport.requests).toHaveLength(1);
+    expect(t.selfCorrect).toBeUndefined();
+  });
+
+  it('noSelfCorrect 可关闭（评测 A/B 要量它的贡献就得能关）', async () => {
+    const transport = createFakeTransport([{ text: bad }]);
+    const t = await runAdvisorTurn({ userText: '这队能打多少？', ctx: makeCtx({ fakeRuns: true }), transport, noSelfCorrect: true });
+    expect(transport.requests).toHaveLength(1);
+    expect(t.selfCorrect).toBeUndefined();
   });
 });

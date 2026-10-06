@@ -15,7 +15,7 @@ import { createFakeTransport, type ChatRequest } from '../web/advisor/transport'
 import { makeCtx } from '../web/advisor/tools';
 import { cfgOf } from '../web/advisor/gate';
 import { DEFAULT_DUMMY, type AdvisorPlan, type AdvisorTurn } from '../web/advisor/types';
-import { SLOTTED_HEROES } from '../web/heroes';
+import { HEROES, SLOTTED_HEROES } from '../web/heroes';
 
 const caseOf = (id: string): AdvisorEvalCase => {
   const c = ADVISOR_EVAL_CASES.find((x) => x.id === id);
@@ -164,13 +164,18 @@ describe('评测集 · 走完整 loop 的用例（守规矩的模型）', () => 
 });
 
 describe('评测集 · 坏模型会被抓住（系统防线）', () => {
-  it('不调工具就报数字 → 关 2 不通过、应用禁用、裸报数被判失败', async () => {
+  it('不调工具就报数字 → 关 2 不通过、应用禁用、裸报数被判失败（**自纠也不许洗白**）', async () => {
     const c = caseOf('diagnose-weak');
+    const bad = '我估计核心将伤害期望在 26500 左右。';
+    // 脚本给两条完全一样的坏回答：第一轮触发交付前自检（§16.22），第二轮它仍然裸报。
+    // 这条断言的是——自纠**不能**把一个不肯引用的模型洗成"通过"。
     const t = await runAdvisorTurn({
       userText: c.ask,
       ctx: ctxFor(legalPlan()),
-      transport: createFakeTransport([{ text: '我估计核心将伤害期望在 26500 左右。' }]),
+      transport: createFakeTransport([{ text: bad }, { text: bad }]),
     });
+    expect(t.selfCorrect, '自检应已触发一次').toEqual(['26500']);
+    expect(t.answer).toBe(bad);
     const checks = judgeTurn(c, t);
     expect(checks.find((x) => x.check.startsWith('调用了'))?.ok).toBe(false);
     expect(checks.find((x) => x.check.includes('大数字'))?.ok).toBe(false);
@@ -245,10 +250,14 @@ describe('评测集 · 判分器自检（口径级用例，构造 turn 判分）
     expect(good.filter((x) => !x.ok)).toEqual([]);
   });
 
-  it('裸报数检测：≥10000 且无 [[证据]] 才算裸报，种子/场次不算', () => {
+  it('裸报数检测：≥10000 且**一次都没**带引用才算裸报；同一数值带过一次就合规（§16.23）', () => {
     expect(uncitedBigNumbers('期望 26500，但没有引用')).toEqual(['26500']);
     expect(uncitedBigNumbers('期望 26500[[ev-1-simulate]]')).toEqual([]);
     expect(uncitedBigNumbers('种子 20260929、共 20 场、提升 12%')).toEqual([]);
+    // 案底（2026-10-06）：正文带过引用、表格里重复 3 次没再带 → 曾记 9 处裸报，而那个数字其实是可溯源的
+    expect(uncitedBigNumbers('总伤 106206[[ev-8-optimize_skills]]。\n| 1 | 甲 | 106206 |\n| 2 | 乙 | 106206 |')).toEqual([]);
+    // 但**一次都没带**的仍然要报，且每个数值只报一次（不是每个出现都报）
+    expect(uncitedBigNumbers('总伤 106206，另有 21640 与 21640 两处')).toEqual(['106206', '21640']);
   });
 
   it('用例目录本身自洽：id 唯一、都写了 note 与期望', () => {
@@ -258,6 +267,17 @@ describe('评测集 · 判分器自检（口径级用例，构造 turn 判分）
       expect(Object.keys(c.expect).length, c.id).toBeGreaterThan(0);
     }
     expect(ADVISOR_EVAL_CASES.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it('前置事实守住：声明了 heroOffline 的用例，那个武将今天**必须**真的没上架', () => {
+    // 案底（2026-10-06）：offline-hero 原问「文鸯」，而文鸯后来被实现并重新上架 →
+    // 用例仍在要求模型声明「已下架 / 数值偏低」= 要求它说假话，两次跑都无谓失分。
+    const checked = ADVISOR_EVAL_CASES.filter((c) => c.preconditions?.heroOffline);
+    expect(checked.length).toBeGreaterThan(0);
+    for (const c of checked) {
+      const id = c.preconditions!.heroOffline!;
+      expect(HEROES.some((h) => h.id === id), `${c.id}：${id} 又回到上架池了，用例要跟着改`).toBe(false);
+    }
   });
 
   it('scorecard 汇总', () => {

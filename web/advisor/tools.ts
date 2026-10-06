@@ -43,12 +43,23 @@ import {
   type MateSimOptions,
   type MateSimResult,
 } from '../simMate';
-import { HERO_OPTIONS, SKILL_OPTIONS, defaultCfg, type ViewCfg } from '../teamConfig';
+import { HERO_OPTIONS, LEARNABLE_SKILL_IDS, SKILL_OPTIONS, defaultCfg, generalsOf, type ViewCfg } from '../teamConfig';
 /** 方案里的核心将 → `ViewCfg` 槽位下标（给 `evaluate` 当排序口径用）—— 实现见 `gate.ts`（与关 3 共用） */
 import { cacheKey, hitToResult, type AdvisorCache } from './cache';
+import { ALL_TIERS, renderCatalog, renderHelp, toolNamesFor, wireToolNames } from './router';
 import { heroRows, skillRows, type BoxView } from './box';
 import { cfgOf, configToPlan, coreIndices, validateAdvisorPlan } from './gate';
 import { toolZh } from './trace';
+import { addPresetIdToPool, loadMergedPool, removeUserOpponent as removeUserOpponentEntry } from '../opponentPool';
+import { COARSE_RUNS_DEFAULT, MATCHUP_RUNS_MIN, matchupPoolAsync, ratesIndistinguishable, type PoolMatchup } from '../poolMatchup';
+import {
+  FINALISTS_MAX,
+  estimateWinRateBattles,
+  heroUnitsOf,
+  runWinRateSearch,
+  singleChangeBetween,
+  skillHoles,
+} from '../winrateSearch';
 import {
   BudgetExceeded,
   DEFAULT_BUDGET,
@@ -57,6 +68,7 @@ import {
   MS_PER_BATTLE,
   normalizePlan,
   type AdvisorPlan,
+  type AdvisorTier,
   type Budget,
   type BudgetState,
   type ConfirmFn,
@@ -104,11 +116,43 @@ export interface AdvisorDeps {
   estimateMateBattles(cfg: ViewCfg, options: Partial<MateSimOptions>): number;
   /** 把一套队友组合落到配置上（`clearSkills` = 清空这些位的可学战法，交给下一轮战法搜索去填） */
   applyCombo(cfg: ViewCfg, picks: Array<{ unit: number; heroId: string }>, clearSkills: boolean): ViewCfg;
+  /** 合并后的对手池（固定测试集 + 用户从预设加入的） */
+  listOpponentPool(): ReturnType<typeof loadMergedPool>;
+  /** 把一条阵容预设加入对手池（用户添加，不动固定集） */
+  addOpponentFromPreset(presetId: string): { ok: boolean; message: string };
+  /** 移出用户自己加的对手。固定集 id 会失败。 */
+  removeUserOpponent(id: string): { ok: boolean; message: string };
+  /**
+   * 一套方案打完整份对手池。
+   * 胜负口径 = 统计胜率；伤害是同一批战斗的八回合总伤与前三回合。
+   */
+  matchup(
+    plan: AdvisorPlan,
+    runsPerOpponent: number,
+    seed: number,
+    signal?: AbortSignal,
+    onProgress?: (done: number, total: number) => void
+  ): Promise<PoolMatchup>;
+}
+
+/**
+ * 工具面分档的路由钩子（由 `loop.ts` 注入；不传 = 没启用分档，全部工具可调）。
+ * 放在 ctx 上而不是模块级变量：一轮一个 ctx → 天然隔离，测试/多会话互不串档。
+ */
+export interface RouteHooks {
+  /** 当前档位（会话内只增不减） */
+  tiers(): AdvisorTier[];
+  /** **首轮锚定**是否生效（会话还没跑过任何工具 = true；见 `router.ANCHOR_TOOL`） */
+  anchor(): boolean;
+  /** 模型用 `route_task` 主动开档：由 loop 校验理由并决定是否放行 */
+  promote(tier: AdvisorTier, why: string): { ok: boolean; message: string };
 }
 
 export interface ToolCtx {
   deps: AdvisorDeps;
   budget: BudgetState;
+  /** 分档路由钩子（见 `RouteHooks`；缺省 = 不分档） */
+  route?: RouteHooks;
   /** 证据编号序列（每轮一个 ctx → 天然不冲突） */
   evidenceSeq: { n: number };
   /** 本轮基准种子（写进 stats，复算用同一把尺子） */
@@ -162,15 +206,17 @@ export function nextEvidenceId(ctx: ToolCtx, name: string): string {
   return `ev-${ctx.evidenceSeq.n}-${name}`;
 }
 
-/** 预算护栏：超限**拒绝执行**（不是静默截断）。token 由 loop 记账，不在这里扣。 */
-export function chargeBudget(state: BudgetState, cost: { battles?: number; ms?: number }, now: number): void {
-  const elapsed = now - state.startedAt;
+/**
+ * 预算护栏：超限**拒绝执行**（不是静默截断）。token 由 loop 记账，不在这里扣。
+ * 毫秒只看已经累计的**工具执行时间**（`state.ms`），不看本轮墙钟——模型思考和确认等待不占这份额度。
+ */
+export function chargeBudget(state: BudgetState, cost: { battles?: number; ms?: number }, _now?: number): void {
   if (state.calls + 1 > state.maxCalls) throw new BudgetExceeded('calls');
   if (state.battles + (cost.battles ?? 0) > state.maxBattles) throw new BudgetExceeded('battles');
-  if (elapsed + (cost.ms ?? 0) > state.maxMs) throw new BudgetExceeded('ms');
+  if (state.ms + (cost.ms ?? 0) > state.maxMs) throw new BudgetExceeded('ms');
   state.calls += 1;
   state.battles += cost.battles ?? 0;
-  state.ms = elapsed;
+  state.ms += cost.ms ?? 0;
 }
 
 // ─────────────────────────── 检索口径 ───────────────────────────
@@ -521,6 +567,222 @@ function assertPlanShape(plan: unknown): AdvisorPlan {
     slots,
     coreUnitIds: Array.isArray(p.coreUnitIds) ? p.coreUnitIds.filter(Boolean).map(String) : [],
     dummy: { ...DEFAULT_DUMMY, ...(p.dummy ?? {}) },
+  };
+}
+
+const pct1 = (rate: number): string => `${(rate * 100).toFixed(1)}%`;
+
+/** 把胜率收成模型能引用、卡片能直读的数字（百分比保留 1 位） */
+function publishMatchup(m: PoolMatchup) {
+  const round1 = (v: number): number => Math.round(v * 10) / 10;
+  return {
+    ...m,
+    winRatePct: round1(m.winRate * 100),
+    meanTotal: Math.round(m.meanTotal),
+    meanFirst3: Math.round(m.meanFirst3),
+    controlMine: round1(m.controlMine),
+    opponents: m.opponents.map((o) => ({
+      ...o,
+      winRatePct: round1(o.winRate * 100),
+      meanTotal: Math.round(o.meanTotal),
+      meanFirst3: Math.round(o.meanFirst3),
+    })),
+    worst: { ...m.worst, winRatePct: round1(m.worst.winRate * 100) },
+  };
+}
+
+function matchupLines(m: ReturnType<typeof publishMatchup>): string {
+  const rows = m.opponents
+    .map((o) => `· ${o.note}（${o.source === 'benchmark' ? '固定' : '自加'}）胜率 ${pct1(o.winRate)}（胜 ${o.win} / 平 ${o.draw} / 负 ${o.loss}，${o.runs} 场）八回合总伤 ${Math.round(o.meanTotal)} 前三回合 ${Math.round(o.meanFirst3)}`)
+    .join('\n');
+  return [
+    `综合胜率 ${pct1(m.winRate)} ±${pct1(m.halfWidth)}（胜 ${m.win} / 平 ${m.draw} / 负 ${m.loss}，共 ${m.runs} 场）`,
+    `最差对手 ${m.worst.note} ${pct1(m.worst.winRate)}`,
+    `八回合总伤 ${Math.round(m.meanTotal)}｜前三回合 ${Math.round(m.meanFirst3)}（同一批对打，辅助）`,
+    `对手池 ${m.fingerprint} · 种子 ${m.baseSeed} · 每对手 ${m.runsPerOpponent} 场`,
+    rows,
+  ].join('\n');
+}
+
+/** 写操作：有确认钩子就先问。没有钩子（脚本 / 单测）直接执行。 */
+async function confirmWrite(ctx: ToolCtx, tool: string, label: string): Promise<void> {
+  if (!ctx.confirm) return;
+  const ok = await ctx.confirm({ tool, battles: 0, estMs: 0, label });
+  if (!ok) throw new Error(`用户没有确认（${label}）——没有改动`);
+}
+
+interface WinRateArgs {
+  plan?: unknown;
+  coarseRuns?: number;
+  finalRuns?: number;
+  finalists?: number;
+  candidateSkillIds?: string[];
+  candidateHeroIds?: string[];
+  matchSlotKeys?: string[];
+  matchPositions?: string[];
+  /** 点名的核心站在哪。给出后按「队友 → 队友战法 → 核心战法」一次跑完 */
+  coreUnit?: string;
+  rankBy?: 'winRate' | 'worst';
+}
+
+function winrateSetup(args: WinRateArgs, ctx: ToolCtx): {
+  plan: AdvisorPlan;
+  mode: 'skill' | 'hero';
+  holes: ReturnType<typeof skillHoles>;
+  heroUnits: number[];
+  candidateIds: string[];
+  coarseRuns: number;
+  finalRuns: number;
+  finalists: number;
+  rankBy: 'winRate' | 'worst';
+  est: number;
+  boxLine?: string;
+  opponents: number;
+} {
+  const plan = args?.plan === undefined ? configToPlan(ctx.deps.getConfig()) : assertPlanShape(args.plan);
+  const rankBy = args?.rankBy === 'worst' ? 'worst' : 'winRate';
+  const mode = args?.matchPositions?.length ? 'hero' : 'skill';
+  let candidateIds: string[] = [];
+  let boxLine: string | undefined;
+  if (mode === 'skill') {
+    const asked = args?.candidateSkillIds?.filter(Boolean);
+    const boxed = boxSkillCandidates(ctx);
+    if (boxed) {
+      const allowed = new Set(boxed);
+      const kept = asked?.length ? asked.filter((id) => allowed.has(id)) : boxed;
+      if (!kept.length) {
+        throw new Error(
+          `candidateSkillIds 不在用户 box 里（档案「${ctx.box?.profileName}」，可学战法 ${allowed.size} 个）。配将搜索只用清单内的战法；比较单个战法请用 compare_variants，不受 box 限制。`
+        );
+      }
+      candidateIds = kept;
+      boxLine = `候选战法已收窄到你的 box（${kept.length} 个）`;
+    } else {
+      candidateIds = asked?.length ? asked : [...LEARNABLE_SKILL_IDS];
+    }
+    candidateIds = candidateIds.filter((id) => Boolean(SKILL_REGISTRY[id]) && !isMainSkill(id));
+  } else {
+    const asked = args?.candidateHeroIds?.filter(Boolean);
+    const boxed = boxHeroCandidates(ctx);
+    if (boxed) {
+      const allowed = new Set(boxed.ids);
+      const kept = asked?.length ? asked.filter((id) => allowed.has(id)) : boxed.ids;
+      if (!kept.length) {
+        throw new Error(
+          `candidateHeroIds 不在用户 box 里（档案「${ctx.box?.profileName}」）。配将搜索只用清单内、且能进模拟的武将；比较某个武将请用 compare_variants。`
+        );
+      }
+      candidateIds = kept;
+      boxLine = boxed.note;
+    } else {
+      candidateIds = asked?.length ? asked : SLOTTED_HEROES.map((h) => h.id);
+    }
+  }
+  const holes = mode === 'skill' ? skillHoles(plan, args?.matchSlotKeys) : [];
+  const heroUnits = mode === 'hero' ? heroUnitsOf(plan, args?.matchPositions) : [];
+  const coarseRuns = Math.max(1, Math.floor(Number(args?.coarseRuns) || COARSE_RUNS_DEFAULT));
+  const finalRuns = Math.max(MATCHUP_RUNS_MIN, Math.floor(Number(args?.finalRuns) || MATCHUP_RUNS_MIN));
+  const finalists = Math.min(FINALISTS_MAX, Math.max(1, Math.floor(Number(args?.finalists) || FINALISTS_MAX)));
+  const opponents = Math.max(1, ctx.deps.listOpponentPool().entries.length);
+  const est = estimateWinRateBattles({
+    opponents,
+    candidates: candidateIds.length,
+    holes: mode === 'skill' ? Math.max(1, holes.length) : Math.max(1, heroUnits.length),
+    coarseRuns,
+    finalRuns,
+    finalists,
+  });
+  return { plan, mode, holes, heroUnits, candidateIds, coarseRuns, finalRuns, finalists, rankBy, est, ...(boxLine ? { boxLine } : {}), opponents };
+}
+
+/** 分对手胜率压成一行，避免模型以为还得再跑一轮 matchup_pool */
+function oppLine(opponents: Array<{ note: string; winRate: number }>): string {
+  return opponents.map((o) => `${o.note} ${pct1(o.winRate)}`).join('、');
+}
+
+/**
+ * 点名核心时的配将流水线报价。
+ * 顺序固定：先换另外两名队友（全队可学战法清空）→ 逐个队友填两个战法 → 最后填核心的两个战法。
+ */
+function lineupQuote(args: WinRateArgs, ctx: ToolCtx): { bare: AdvisorPlan; core: number; others: number[]; est: number; boxLine?: string } {
+  const seed = args.plan === undefined ? configToPlan(ctx.deps.getConfig()) : assertPlanShape(args.plan);
+  const coreList = heroUnitsOf(seed, [String(args.coreUnit ?? '')]);
+  if (coreList.length !== 1) throw new Error('coreUnit 要是大营、中军、前锋，或 0、1、2');
+  const core = coreList[0];
+  const bare: AdvisorPlan = { ...seed, slots: seed.slots.map((s) => ({ ...s, skillIds: [] })) };
+  const others = bare.slots.map((_, i) => i).filter((i) => i !== core);
+  const positions = others.map((i) => bare.slots[i].position);
+  const shared: WinRateArgs = { ...args, coreUnit: undefined, plan: bare };
+  const hero = winrateSetup({ ...shared, matchPositions: positions, matchSlotKeys: undefined }, ctx);
+  const skill = winrateSetup({ ...shared, matchPositions: undefined, matchSlotKeys: [`${others[0]}-0`, `${others[0]}-1`] }, ctx);
+  return { bare, core, others, est: hero.est + skill.est * (others.length + 1), ...(hero.boxLine || skill.boxLine ? { boxLine: hero.boxLine ?? skill.boxLine } : {}) };
+}
+
+/** 跑完配将流水线。每一段只取综合胜率第 1 名接着往下，队友选定后不回头换人。 */
+async function runLineup(args: WinRateArgs, ctx: ToolCtx): Promise<ToolResult> {
+  const quote = lineupQuote(args, ctx);
+  const t0 = Date.now();
+  let plan = quote.bare;
+  let offset = 0;
+  const stages: string[] = [];
+
+  const runStage = async (name: string, stageArgs: WinRateArgs): Promise<{ label: string; matchup: ReturnType<typeof publishMatchup> }> => {
+    const setup = winrateSetup(
+      { ...args, matchSlotKeys: undefined, matchPositions: undefined, ...stageArgs, coreUnit: undefined, plan },
+      ctx
+    );
+    const searched = await runWinRateSearch({
+      base: setup.plan,
+      mode: setup.mode,
+      holes: setup.holes,
+      heroUnits: setup.heroUnits,
+      candidateIds: setup.candidateIds,
+      coarseRuns: setup.coarseRuns,
+      finalRuns: setup.finalRuns,
+      finalists: setup.finalists,
+      rankBy: setup.rankBy,
+      signal: ctx.signal,
+      totalBattles: setup.est,
+      onProgress: (done, total) =>
+        ctx.onProgress?.({ name: 'optimize_winrate', done: offset + done, total: offset + total, label: `${name} 真跑 ${done}/${total} 场` }),
+      evalPlan: (p, runs) => ctx.deps.matchup(p, runs, ctx.seed, ctx.signal),
+    });
+    offset += searched.battles;
+    const best = searched.rows[0];
+    if (!best) throw new Error(`${name}没有可排的结果`);
+    const m = publishMatchup(best.matchup);
+    plan = best.plan;
+    stages.push(`${name}：${best.label} 综合胜率 ${pct1(m.winRate)} ±${pct1(m.halfWidth)}。分对手 ${oppLine(m.opponents)}`);
+    return { label: best.label, matchup: m };
+  };
+
+  const positions = quote.others.map((i) => quote.bare.slots[i].position);
+  await runStage('队友', { matchPositions: positions });
+  for (const u of quote.others) {
+    await runStage(`${plan.slots[u].position}战法`, { matchSlotKeys: [`${u}-0`, `${u}-1`] });
+  }
+  const last = await runStage('核心战法', { matchSlotKeys: [`${quote.core}-0`, `${quote.core}-1`] });
+
+  return {
+    evidenceId: nextEvidenceId(ctx, 'optimize_winrate'),
+    summary: `配将流水线完成（核心在${quote.bare.slots[quote.core].position}，先队友、再队友战法、最后核心战法）：${last.label} 综合胜率 ${pct1(last.matchup.winRate)} ±${pct1(last.matchup.halfWidth)}。分对手 ${oppLine(last.matchup.opponents)}。`,
+    brief: [quote.boxLine ?? '', '顺序固定：队友 → 各队友战法 → 核心战法。核心的可学战法在前两步是空的。当前对手池一次算完。', ...stages]
+      .filter(Boolean)
+      .join('\n'),
+    data: {
+      lineup: true,
+      coreUnit: quote.bare.slots[quote.core].position,
+      plan,
+      winRate: last.matchup.winRate,
+      winRatePct: last.matchup.winRatePct,
+      halfWidth: last.matchup.halfWidth,
+      runs: last.matchup.runs,
+      meanTotal: last.matchup.meanTotal,
+      meanFirst3: last.matchup.meanFirst3,
+      worst: last.matchup.worst,
+      opponents: last.matchup.opponents,
+    },
+    stats: { battles: offset, ms: Date.now() - t0, seed: ctx.seed },
   };
 }
 
@@ -1217,6 +1479,336 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
         };
       },
     },
+    {
+      name: 'list_opponent_pool',
+      description:
+        '读合并后的对手池：制作人固定测试集（删不掉）+ 用户从阵容预设加进去的队伍。配将和比较之前先看池子里有谁。毫秒级，不跑战斗。',
+      schema: { type: 'object', properties: {} },
+      cost: {},
+      async run(_args, ctx) {
+        const pool = ctx.deps.listOpponentPool();
+        const rows = pool.entries.map((e) => ({ id: e.id, note: e.note, source: e.source, presetId: e.presetId ?? null }));
+        const fingerprint = `${pool.version}|${rows.filter((r) => r.source === 'user').map((r) => r.id).join(',')}`;
+        return {
+          evidenceId: nextEvidenceId(ctx, 'list_opponent_pool'),
+          summary: `对手池 ${pool.version}：固定 ${rows.filter((r) => r.source === 'benchmark').length} 支，自加 ${rows.filter((r) => r.source === 'user').length} 支。${rows.map((r) => `${r.note}（${r.source === 'benchmark' ? '固定' : '自加'}）`).join('、') || '空'}`,
+          brief: rows.map((r) => `· ${r.id} ${r.note} ${r.source}${r.presetId ? ` 预设 ${r.presetId}` : ''}`).join('\n'),
+          data: { version: pool.version, fingerprint, rows },
+          stats: { battles: 0, ms: 0, seed: ctx.seed },
+        };
+      },
+    },
+    {
+      name: 'add_opponent_from_preset',
+      description:
+        '把一条阵容预设加入对手池（只进用户添加，不动固定测试集）。同预设再加一次会用当前配置覆盖。必须等用户确认后才写。',
+      schema: { type: 'object', properties: { presetId: { type: 'string', description: '预设 id' } }, required: ['presetId'] },
+      cost: {},
+      async run(args: { presetId: string }, ctx) {
+        const presetId = String(args?.presetId ?? '');
+        await confirmWrite(ctx, 'add_opponent_from_preset', `把预设 ${presetId} 加入对手池`);
+        const res = ctx.deps.addOpponentFromPreset(presetId);
+        if (!res.ok) throw new Error(res.message);
+        return {
+          evidenceId: nextEvidenceId(ctx, 'add_opponent_from_preset'),
+          summary: res.message,
+          data: res,
+          stats: { battles: 0, ms: 0, seed: ctx.seed },
+        };
+      },
+    },
+    {
+      name: 'remove_user_opponent',
+      description: '从对手池移出用户自己加的一支。固定测试集没有删除入口，传固定集 id 会失败。必须等用户确认后才写。',
+      schema: { type: 'object', properties: { id: { type: 'string', description: '对手条目 id（list_opponent_pool 返回的）' } }, required: ['id'] },
+      cost: {},
+      async run(args: { id: string }, ctx) {
+        const id = String(args?.id ?? '');
+        await confirmWrite(ctx, 'remove_user_opponent', `从对手池移出 ${id}`);
+        const res = ctx.deps.removeUserOpponent(id);
+        if (!res.ok) throw new Error(res.message);
+        return {
+          evidenceId: nextEvidenceId(ctx, 'remove_user_opponent'),
+          summary: res.message,
+          data: res,
+          stats: { battles: 0, ms: 0, seed: ctx.seed },
+        };
+      },
+    },
+    {
+      name: 'matchup_pool',
+      description:
+        '**一套方案打完整份对手池**。主数字是综合胜率（胜场=斩首胜+优势平，平局=劣势平+完全平，败场=斩首负），并给出对每一支对手的胜/平/负。八回合总伤和前三回合伤害来自同一批对打，只作辅助。每个对手至少 100 场（正反场地）。低于 100 会抬回 100。',
+      schema: {
+        type: 'object',
+        properties: {
+          plan: PLAN_SCHEMA,
+          runsPerOpponent: { type: 'integer', minimum: 100, maximum: 500, description: '每个对手的场次，默认 100，低于 100 一律抬回 100' },
+        },
+        required: [],
+      },
+      cost: {
+        battlesOf: (args, ctx) => {
+          const c = ctx as ToolCtx;
+          const runs = Math.max(MATCHUP_RUNS_MIN, Math.floor(Number((args as { runsPerOpponent?: number })?.runsPerOpponent) || MATCHUP_RUNS_MIN));
+          return runs * Math.max(1, c.deps.listOpponentPool().entries.length);
+        },
+      },
+      async run(args: { plan?: unknown; runsPerOpponent?: number }, ctx) {
+        const plan = args?.plan === undefined ? configToPlan(ctx.deps.getConfig()) : assertPlanShape(args.plan);
+        const runs = Math.max(MATCHUP_RUNS_MIN, Math.floor(Number(args?.runsPerOpponent) || MATCHUP_RUNS_MIN));
+        const t0 = Date.now();
+        const raw = await ctx.deps.matchup(plan, runs, ctx.seed, ctx.signal, forwardProgress(ctx, 'matchup_pool'));
+        const data = publishMatchup(raw);
+        return {
+          evidenceId: nextEvidenceId(ctx, 'matchup_pool'),
+          summary: `综合胜率 ${pct1(data.winRate)} ±${pct1(data.halfWidth)}，最差 ${data.worst.note} ${pct1(data.worst.winRate)}；八回合总伤 ${data.meanTotal}，前三回合 ${data.meanFirst3}（${data.runs} 场）`,
+          brief: matchupLines(data),
+          data,
+          stats: { battles: data.battles, ms: Date.now() - t0, seed: ctx.seed },
+        };
+      },
+    },
+    {
+      name: 'compare_variants',
+      description:
+        '**只换一处**的前后对比：同一套阵容只换一个武将或一个可学战法，两套都打完整份对手池（每对手至少 100 场）。返回综合胜率差（百分点）、八回合总伤差、前三回合差，以及 95% 区间是否分得出来。动了两处会直接拒绝。比较不受 box 限制。',
+      schema: {
+        type: 'object',
+        properties: {
+          before: PLAN_SCHEMA,
+          after: PLAN_SCHEMA,
+          runsPerOpponent: { type: 'integer', minimum: 100, maximum: 500 },
+        },
+        required: ['before', 'after'],
+      },
+      cost: {
+        battlesOf: (args, ctx) => {
+          const c = ctx as ToolCtx;
+          const runs = Math.max(MATCHUP_RUNS_MIN, Math.floor(Number((args as { runsPerOpponent?: number })?.runsPerOpponent) || MATCHUP_RUNS_MIN));
+          return runs * Math.max(1, c.deps.listOpponentPool().entries.length) * 2;
+        },
+      },
+      async run(args: { before?: unknown; after?: unknown; runsPerOpponent?: number }, ctx) {
+        const beforePlan = assertPlanShape(args?.before);
+        const afterPlan = assertPlanShape(args?.after);
+        const change = singleChangeBetween(beforePlan, afterPlan);
+        if (!change.ok) throw new Error(change.reason);
+        const runs = Math.max(MATCHUP_RUNS_MIN, Math.floor(Number(args?.runsPerOpponent) || MATCHUP_RUNS_MIN));
+        const t0 = Date.now();
+        const before = publishMatchup(await ctx.deps.matchup(beforePlan, runs, ctx.seed, ctx.signal, forwardProgress(ctx, 'compare_variants')));
+        const after = publishMatchup(await ctx.deps.matchup(afterPlan, runs, ctx.seed, ctx.signal, forwardProgress(ctx, 'compare_variants')));
+        const distinguishable = !ratesIndistinguishable(before, after);
+        const delta = {
+          winRate: after.winRate - before.winRate,
+          winRatePct: Math.round((after.winRate - before.winRate) * 1000) / 10,
+          meanTotal: after.meanTotal - before.meanTotal,
+          meanFirst3: after.meanFirst3 - before.meanFirst3,
+        };
+        const verdict = distinguishable ? `分得出来：综合胜率 ${delta.winRatePct >= 0 ? '+' : ''}${delta.winRatePct} 个百分点` : '分不出来（95% 区间重叠）';
+        return {
+          evidenceId: nextEvidenceId(ctx, 'compare_variants'),
+          summary: `只换了${change.label}。之前 ${pct1(before.winRate)} → 之后 ${pct1(after.winRate)}（${verdict}）。八回合总伤 ${delta.meanTotal >= 0 ? '+' : ''}${delta.meanTotal}，前三回合 ${delta.meanFirst3 >= 0 ? '+' : ''}${delta.meanFirst3}。`,
+          brief: [`变化：${change.label}`, `之前\n${matchupLines(before)}`, `之后\n${matchupLines(after)}`, verdict].join('\n'),
+          data: {
+            change: change.label,
+            distinguishable,
+            delta,
+            before,
+            after,
+            winRate: after.winRate,
+            winRatePct: after.winRatePct,
+            halfWidth: after.halfWidth,
+            runs: after.runs,
+            meanTotal: after.meanTotal,
+            meanFirst3: after.meanFirst3,
+            worst: after.worst,
+            opponents: after.opponents,
+            fingerprint: after.fingerprint,
+            baseSeed: after.baseSeed,
+          },
+          stats: { battles: before.battles + after.battles, ms: Date.now() - t0, seed: ctx.seed },
+        };
+      },
+    },
+    {
+      name: 'optimize_winrate',
+      description:
+        '**在对手池上搜综合胜率最高的战法或队友**（两段：粗筛默认每对手 20 场，决赛每对手至少 100 场）。排序键只有综合胜率；用户说要稳、别被克时把 rankBy 设为 worst（按最差对手胜率）。「给我配」且严格 box 时候选只在 box 内。这是「最强 / 怎么配」的默认搜索。打木桩的伤害期望才用 optimize_skills / optimize_both。手动一次最多填两个空位。点名了核心就传 coreUnit：按「队友 → 队友战法 → 核心战法」一次跑完，不要自己拆。返回里带每一支对手的胜率，不要再为分对手另跑 matchup_pool。',
+      schema: {
+        type: 'object',
+        properties: {
+          plan: PLAN_SCHEMA,
+          matchSlotKeys: { type: 'array', items: { type: 'string' }, description: '要替换的战法槽，"将下标-槽下标"，如 "0-1"。缺省 = 前两个空着的可学槽' },
+          matchPositions: { type: 'array', items: { type: 'string' }, description: '要换的武将位（大营/中军/前锋或下标）。给出则搜武将，不搜战法。与 coreUnit 不要同时用' },
+          coreUnit: { type: 'string', description: '点名的核心站在哪：大营 / 中军 / 前锋（或 0 / 1 / 2）。给出后忽略 matchSlotKeys 和 matchPositions，按队友 → 队友战法 → 核心战法一次跑完' },
+          candidateSkillIds: { type: 'array', items: { type: 'string' } },
+          candidateHeroIds: { type: 'array', items: { type: 'string' } },
+          coarseRuns: { type: 'integer', minimum: 1, maximum: 100, description: '粗筛时每个对手的场次，默认 20' },
+          finalRuns: { type: 'integer', minimum: 100, maximum: 500, description: '决赛每个对手的场次，默认 100，低于 100 抬回 100' },
+          finalists: { type: 'integer', minimum: 1, maximum: 8, description: '决赛留下几套，默认 8' },
+          rankBy: { type: 'string', enum: ['winRate', 'worst'], description: 'winRate=综合胜率（默认）；worst=最差对手胜率' },
+          topN: { type: 'integer', minimum: 1, maximum: 8 },
+        },
+        required: [],
+      },
+      cost: {
+        long: true,
+        battlesOf: (args, ctx) => {
+          const a = (args ?? {}) as WinRateArgs;
+          return a.coreUnit ? lineupQuote(a, ctx as ToolCtx).est : winrateSetup(a, ctx as ToolCtx).est;
+        },
+      },
+      async run(args: WinRateArgs & { topN?: number }, ctx) {
+        if (args?.coreUnit) return runLineup(args, ctx);
+        const setup = winrateSetup(args ?? {}, ctx);
+        const gate = ctx.confirmFrom ?? DEFAULT_CONFIRM_BATTLES;
+        if (ctx.confirm && setup.est < gate) {
+          const ok = await ctx.confirm({
+            tool: 'optimize_winrate',
+            battles: setup.est,
+            estMs: setup.est * MS_PER_BATTLE,
+            label: `胜率搜索：${setup.opponents} 个对手，预计 ${setup.est.toLocaleString('en-US')} 场 / 约 ${Math.round((setup.est * MS_PER_BATTLE) / 1000)} 秒`,
+          });
+          if (!ok) throw new Error('用户拒绝了这次胜率搜索——不要用同样的规模重试');
+        }
+        const t0 = Date.now();
+        const searched = await runWinRateSearch({
+          base: setup.plan,
+          mode: setup.mode,
+          holes: setup.holes,
+          heroUnits: setup.heroUnits,
+          candidateIds: setup.candidateIds,
+          coarseRuns: setup.coarseRuns,
+          finalRuns: setup.finalRuns,
+          finalists: setup.finalists,
+          rankBy: setup.rankBy,
+          signal: ctx.signal,
+          totalBattles: setup.est,
+          onProgress: (done, total) => ctx.onProgress?.({ name: 'optimize_winrate', done, total, label: `真跑 ${done}/${total} 场` }),
+          evalPlan: (plan, runs) => ctx.deps.matchup(plan, runs, ctx.seed, ctx.signal),
+        });
+        const topN = Math.min(8, Math.max(1, Math.floor(Number(args?.topN) || 5)));
+        const rows = searched.rows.slice(0, topN).map((row, i) => {
+          const m = publishMatchup(row.matchup);
+          return {
+            rank: i + 1,
+            label: row.label,
+            tieWithBest: row.tieWithBest,
+            plan: row.plan,
+            winRate: m.winRate,
+            winRatePct: m.winRatePct,
+            halfWidth: m.halfWidth,
+            runs: m.runs,
+            meanTotal: m.meanTotal,
+            meanFirst3: m.meanFirst3,
+            worst: m.worst,
+            opponents: m.opponents,
+            fingerprint: m.fingerprint,
+          };
+        });
+        const best = rows[0];
+        const baseM = searched.baseline ? publishMatchup(searched.baseline.matchup) : null;
+        const gain = best && baseM ? Math.round((best.winRate - baseM.winRate) * 1000) / 10 : 0;
+        return {
+          evidenceId: nextEvidenceId(ctx, 'optimize_winrate'),
+          summary: best
+            ? `胜率搜索完成（${searched.rankBy === 'worst' ? '按最差对手' : '按综合胜率'}）：第 1 名「${best.label}」${pct1(best.winRate)} ±${pct1(best.halfWidth)}，比当前 ${gain >= 0 ? '+' : ''}${gain} 个百分点。八回合总伤 ${best.meanTotal}，前三回合 ${best.meanFirst3}。`
+            : '没有可排行的结果',
+          brief: [
+            setup.boxLine ?? '',
+            `排序：${searched.rankBy === 'worst' ? '最差对手胜率' : '综合胜率'}。粗筛 ${setup.coarseRuns} 场/对手，决赛 ${setup.finalRuns} 场/对手。`,
+            searched.capped ? '候选超过单侧上限，只评估了前 40 个。' : '',
+            ...rows.map((r) => `${r.rank}. ${r.label} 胜率 ${pct1(r.winRate)} ±${pct1(r.halfWidth)}${r.tieWithBest ? '（与第 1 名分不出来）' : ''} 总伤 ${r.meanTotal} 前三 ${r.meanFirst3} 最差 ${r.worst.note} ${pct1(r.worst.winRate)}。分对手 ${oppLine(r.opponents)}`),
+            baseM ? `当前配置综合胜率 ${pct1(baseM.winRate)}` : '',
+          ]
+            .filter(Boolean)
+            .join('\n'),
+          data: {
+            rows,
+            baseline: baseM,
+            rankBy: searched.rankBy,
+            winRate: best?.winRate ?? 0,
+            winRatePct: best?.winRatePct ?? 0,
+            halfWidth: best?.halfWidth ?? 0,
+            runs: best?.runs ?? 0,
+            meanTotal: best?.meanTotal ?? 0,
+            meanFirst3: best?.meanFirst3 ?? 0,
+            worst: best?.worst ?? null,
+            opponents: best?.opponents ?? [],
+          },
+          stats: { battles: searched.battles, ms: Date.now() - t0, seed: ctx.seed },
+        };
+      },
+    },
+    // ── 常驻层（二级披露：一级索引 / 二级 schema / 逃生门，见设计文档 §16）──────────
+    // 与 router-standard 的 META_TOOLS 同构：这三个**任何档都可调**，且不碰引擎、毫秒返回。
+    {
+      name: 'tools_catalog',
+      description:
+        '一级索引：列出**本轮开放**的工具（含参数名）与还没开放的档。任何一轮都可以调。想知道某个工具怎么用查 tools_help；想开新档用 route_task。',
+      schema: { type: 'object', properties: {}, required: [] },
+      cost: {},
+      async run(_args, ctx) {
+        const tiers = ctx.route?.tiers() ?? ALL_TIERS;
+        const anchor = ctx.route?.anchor() ?? false;
+        return {
+          evidenceId: nextEvidenceId(ctx, 'tools_catalog'),
+          summary: `本轮工具面 ${wireToolNames(tiers, anchor).length} 个（${anchor ? '首轮锚定' : `档：${tiers.join(' + ')}`}）`,
+          brief: renderCatalog(createTools(), tiers, anchor),
+          data: { tiers, anchor, toolNames: wireToolNames(tiers, anchor) },
+          stats: { battles: 0, ms: 0, seed: ctx.seed },
+        };
+      },
+    },
+    {
+      name: 'tools_help',
+      description:
+        '二级索引：某个工具的完整说明与参数 schema，并标明它当前是否开放（没开放就先 route_task 开档再调）。',
+      schema: {
+        type: 'object',
+        properties: { name: { type: 'string', description: '工具名，如 optimize_winrate' } },
+        required: ['name'],
+      },
+      cost: {},
+      async run(args: { name?: string }, ctx) {
+        const tiers = ctx.route?.tiers() ?? ALL_TIERS;
+        const anchor = ctx.route?.anchor() ?? false;
+        const text = renderHelp(createTools(), tiers, String(args?.name ?? ''), anchor);
+        return {
+          evidenceId: nextEvidenceId(ctx, 'tools_help'),
+          summary: text.split('\n').slice(0, 3).join('；'),
+          brief: text,
+          data: { tiers, anchor, name: String(args?.name ?? '') },
+          stats: { battles: 0, ms: 0, seed: ctx.seed },
+        };
+      },
+    },
+    {
+      name: 'route_task',
+      description:
+        '逃生门：这一轮确实需要某个**还没开放**的工具时，用它申请开档。tier="search"（大搜索 optimize_* / 胜率搜索）或 "write"（改对手池）。why 写清为什么需要——代码会校验（理由不能空、不能是空口开档），通过后本档当场开放。',
+      schema: {
+        type: 'object',
+        properties: {
+          tier: { type: 'string', enum: ['search', 'write'], description: '要开放的档' },
+          why: { type: 'string', description: '为什么要开这一档（一句话；会记进本轮路由记录）' },
+        },
+        required: ['tier', 'why'],
+      },
+      cost: {},
+      async run(args: { tier?: string; why?: string }, ctx) {
+        const tier = String(args?.tier ?? '') as AdvisorTier;
+        const why = String(args?.why ?? '').trim();
+        const r = ctx.route?.promote(tier, why);
+        return {
+          evidenceId: nextEvidenceId(ctx, 'route_task'),
+          summary: r?.message ?? '本轮没有启用分档（全部工具都已开放）——直接调就行。',
+          data: { tier, why, ok: r?.ok ?? true, tiers: ctx.route?.tiers() ?? ALL_TIERS },
+          stats: { battles: 0, ms: 0, seed: ctx.seed },
+        };
+      },
+    },
   ];
   return tools;
 }
@@ -1261,7 +1853,15 @@ export async function runTool(name: string, args: unknown, ctx: ToolCtx): Promis
       );
     }
   }
-  return tool.run(args as never, ctx);
+  const t0 = Date.now();
+  try {
+    const result = await tool.run(args as never, ctx);
+    ctx.budget.ms += Date.now() - t0;
+    return result;
+  } catch (e) {
+    ctx.budget.ms += Date.now() - t0;
+    throw e;
+  }
 }
 
 // ─────────────────────────── 上下文工厂（生产 + 测试共用） ───────────────────────────
@@ -1348,6 +1948,19 @@ function realDeps(): AdvisorDeps {
       let out = cfg;
       for (const p of picks) out = withSlotHero(out, p.unit, p.heroId, !clearSkills);
       return clearSkills ? clearSlotSkills(out, picks.map((p) => p.unit)) : out;
+    },
+    listOpponentPool: () => loadMergedPool(),
+    addOpponentFromPreset: (presetId) => addPresetIdToPool(presetId),
+    removeUserOpponent: (id) => removeUserOpponentEntry(id),
+    matchup: async (plan, runsPerOpponent, seed, signal, onProgress) => {
+      const cfg = cfgOf(plan);
+      const mine = generalsOf(cfg, cfg.morale);
+      return matchupPoolAsync(mine, loadMergedPool(), {
+        runsPerOpponent,
+        baseSeed: seed,
+        signal,
+        onProgress,
+      });
     },
   };
 }

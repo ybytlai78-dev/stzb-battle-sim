@@ -10,6 +10,8 @@ import { LEARNABLE_SKILL_IDS } from '../web/teamConfig';
 import { createTools, makeCtx, runTool, SIM_RUNS_MAX } from '../web/advisor/tools';
 import type { BoxView } from '../web/advisor/box';
 import { BudgetExceeded, DEFAULT_DUMMY, type AdvisorPlan } from '../web/advisor/types';
+import { loadBenchmark } from '../web/opponentPool';
+import type { PoolMatchup } from '../web/poolMatchup';
 
 const heroNameOf = (id: string): string => getHeroById(id)?.name ?? id;
 const skillNameOf = (id: string): string => SKILL_REGISTRY[id]?.name ?? id;
@@ -38,21 +40,30 @@ function findMutualPair(): [string, string] {
 }
 
 describe('advisor tools', () => {
-  it('十三个工具都在注册表里，且各有 name/description/schema/cost', () => {
+  it('二十二个工具都在注册表里（19 业务 + 3 常驻），且各有 name/description/schema/cost', () => {
     const tools = createTools();
     expect(tools.map((t) => t.name).sort()).toEqual([
+      'add_opponent_from_preset',
+      'compare_variants',
       'get_config',
       'get_my_box',
       'hero_detail',
+      'list_opponent_pool',
       'list_skills',
+      'matchup_pool',
       'optimize_both',
       'optimize_mates',
       'optimize_skills',
+      'optimize_winrate',
+      'remove_user_opponent',
+      'route_task',
       'search_hero',
       'search_skill',
       'simulate',
       'simulate_many',
       'skill_detail',
+      'tools_catalog',
+      'tools_help',
       'validate_plan',
     ]);
     for (const t of tools) {
@@ -294,6 +305,19 @@ describe('advisor tools', () => {
     await expect(runTool('simulate', { plan: ctx.deps.__plan, runs: 20 }, ctx)).rejects.toBeInstanceOf(BudgetExceeded);
   });
 
+  it('毫秒预算只计工具耗时：开跑前空等不拒绝', async () => {
+    const ctx = makeCtx({ fakeRuns: true, budget: { maxMs: 5 } });
+    await new Promise((r) => setTimeout(r, 30));
+    await runTool('get_config', {}, ctx);
+    expect(ctx.budget.calls).toBe(1);
+  });
+
+  it('工具耗时已经用尽 → 拒绝下一次（ms）', async () => {
+    const ctx = makeCtx({ fakeRuns: true, budget: { maxMs: 1000 } });
+    ctx.budget.ms = 1001;
+    await expect(runTool('get_config', {}, ctx)).rejects.toMatchObject({ why: 'ms' });
+  });
+
   it('预算按实参场次计费：跑 20 场只扣 20（而不是固定上限）', async () => {
     const ctx = makeCtx({ fakeRuns: true });
     await runTool('simulate', { plan: ctx.deps.__plan, runs: 20 }, ctx);
@@ -321,6 +345,15 @@ describe('advisor tools', () => {
     const a = await runTool('get_config', {}, ctx);
     const b = await runTool('get_config', {}, ctx);
     expect(a.evidenceId).not.toBe(b.evidenceId);
+  });
+
+  it('validate_plan：同名武将按 heroId 通过（群吕布 h479）', async () => {
+    const ctx = makeCtx({ fakeRuns: true });
+    const others = SLOTTED_HEROES.filter((h) => !h.mutualExclusionGroup && h.id !== 'h479').slice(0, 2).map((h) => h.id);
+    const r = await runTool('validate_plan', { plan: planWith(['h479', ...others]) }, ctx);
+    const data = r.data as { ok: boolean; errors: Array<{ message: string }> };
+    expect(data.errors.map((e) => e.message)).toEqual([]);
+    expect(data.ok).toBe(true);
   });
 
   it('validate_plan：合法方案（真表）→ ok', async () => {
@@ -763,5 +796,201 @@ describe('advisor tools · 我的 box 收窄', () => {
     const ctx = makeCtx({ fakeRuns: true, box: boxView([], [], false) });
     const r = await runTool('validate_plan', { plan: plan3([[skillOut]]) }, ctx);
     expect((r.data as { ok: boolean }).ok).toBe(true);
+  });
+
+  it('optimize_winrate：严格 box 时评估过的战法都不出清单', async () => {
+    const seen = new Set<string>();
+    const ctx = makeCtx({
+      fakeRuns: true,
+      box: boxView([heroIn, heroOut, heroOut2], [skillIn]),
+      deps: {
+        matchup: async (plan) => {
+          for (const slot of plan.slots) for (const id of slot.skillIds) seen.add(id);
+          return fakePool(0.6, 0.02);
+        },
+      },
+    });
+    await runTool('optimize_winrate', { plan: plan3(), matchSlotKeys: ['0-0'], coarseRuns: 2, finalists: 1 }, ctx);
+    expect(seen.has(skillIn)).toBe(true);
+    expect(seen.has(skillOut)).toBe(false);
+  });
+
+  it('optimize_winrate：候选全在 box 外 → 不跑对打', async () => {
+    let called = 0;
+    const ctx = makeCtx({
+      fakeRuns: true,
+      box: boxView([heroIn, heroOut, heroOut2], [skillIn]),
+      deps: {
+        matchup: async () => {
+          called += 1;
+          return fakePool(0.5, 0.1);
+        },
+      },
+    });
+    await expect(runTool('optimize_winrate', { plan: plan3(), candidateSkillIds: [skillOut], matchSlotKeys: ['0-0'] }, ctx)).rejects.toThrow(/不在用户 box/);
+    expect(called).toBe(0);
+  });
+
+  it('optimize_winrate coreUnit：先队友、再队友战法、最后才给核心填战法，简报带分对手', async () => {
+    const core = 'h479';
+    const mates = SLOTTED_HEROES.filter((h) => !h.mutualExclusionGroup && h.id !== core).slice(0, 4).map((h) => h.id);
+    const skills = LEARNABLE_SKILL_IDS.slice(0, 6);
+    const seen: AdvisorPlan[] = [];
+    const ctx = makeCtx({
+      fakeRuns: true,
+      deps: {
+        matchup: async (plan) => {
+          seen.push(JSON.parse(JSON.stringify(plan)) as AdvisorPlan);
+          return fakePool(0.5, 0.01);
+        },
+      },
+    });
+    const r = await runTool(
+      'optimize_winrate',
+      {
+        plan: planWith([core, mates[0], mates[1]]),
+        coreUnit: '大营',
+        candidateHeroIds: mates,
+        candidateSkillIds: skills,
+        coarseRuns: 1,
+        finalists: 1,
+      },
+      ctx
+    );
+    const coreSkilled = seen.findIndex((p) => p.slots[0].skillIds.length > 0);
+    expect(coreSkilled).toBeGreaterThan(0);
+    for (const p of seen) {
+      if (p.slots[0].skillIds.length > 0) {
+        expect(p.slots[1].skillIds).toHaveLength(2);
+        expect(p.slots[2].skillIds).toHaveLength(2);
+      }
+    }
+    expect(seen.some((p) => p.slots[0].skillIds.length === 0 && p.slots[1].heroId !== mates[0])).toBe(true);
+    expect(r.brief).toContain('分对手');
+    expect(r.brief).toContain('甲');
+    expect(r.summary).toContain('先队友');
+    const data = r.data as { lineup: boolean; opponents: Array<{ note: string }> };
+    expect(data.lineup).toBe(true);
+    expect(data.opponents.map((o) => o.note)).toEqual(['甲']);
+  });
+});
+
+/** 假的对手池成绩，字段够 publishMatchup / 搜索排序用 */
+function fakePool(winRate: number, halfWidth: number, meanTotal = 8000, meanFirst3 = 3000): PoolMatchup {
+  const win = Math.round(winRate * 100);
+  return {
+    version: 'test',
+    fingerprint: 'test|',
+    baseSeed: 1,
+    runsPerOpponent: 100,
+    opponents: [
+      {
+        id: 'o1',
+        note: '甲',
+        source: 'benchmark',
+        runs: 100,
+        win,
+        draw: 0,
+        loss: 100 - win,
+        winRate,
+        halfWidth,
+        meanTotal,
+        meanFirst3,
+        controlMine: 0,
+      },
+    ],
+    runs: 100,
+    win,
+    draw: 0,
+    loss: 100 - win,
+    winRate,
+    halfWidth,
+    meanTotal,
+    meanFirst3,
+    controlMine: 0,
+    worst: { id: 'o1', note: '甲', winRate },
+    battles: 100,
+    ms: 1,
+  };
+}
+
+describe('advisor tools · 对手池胜率', () => {
+  const [a, b, c] = threeListedHeroes();
+  const [skillA, skillB] = LEARNABLE_SKILL_IDS;
+  const base = (): AdvisorPlan => planWith([a, b, c]);
+
+  it('matchup_pool：低于 100 场抬回 100，再交给对打', async () => {
+    const runs: number[] = [];
+    const ctx = makeCtx({
+      fakeRuns: true,
+      deps: {
+        matchup: async (_plan, n) => {
+          runs.push(n);
+          return fakePool(0.55, 0.05);
+        },
+      },
+    });
+    const r = await runTool('matchup_pool', { plan: base(), runsPerOpponent: 10 }, ctx);
+    expect(runs).toEqual([100]);
+    expect((r.data as { winRate: number }).winRate).toBe(0.55);
+    expect(r.summary).toContain('综合胜率');
+    expect(r.summary).toContain('八回合总伤');
+  });
+
+  it('compare_variants：动了两处直接拒绝，一场都不跑', async () => {
+    let called = 0;
+    const ctx = makeCtx({
+      fakeRuns: true,
+      deps: {
+        matchup: async () => {
+          called += 1;
+          return fakePool(0.5, 0.01);
+        },
+      },
+    });
+    const after = base();
+    after.slots[0] = { ...after.slots[0], skillIds: [skillA] };
+    after.slots[1] = { ...after.slots[1], skillIds: [skillB] };
+    await expect(runTool('compare_variants', { before: base(), after }, ctx)).rejects.toThrow(/一次只能换一处/);
+    expect(called).toBe(0);
+  });
+
+  it('compare_variants：只换一个战法，区间重叠就说分不出来，并给出两项伤害差', async () => {
+    let n = 0;
+    const ctx = makeCtx({
+      fakeRuns: true,
+      deps: {
+        matchup: async () => fakePool(n++ === 0 ? 0.5 : 0.52, 0.08, n === 1 ? 8000 : 9000, n === 1 ? 3000 : 3200),
+      },
+    });
+    const after = base();
+    after.slots[0] = { ...after.slots[0], skillIds: [skillA] };
+    const r = await runTool('compare_variants', { before: base(), after }, ctx);
+    const data = r.data as { distinguishable: boolean; delta: { winRatePct: number; meanTotal: number; meanFirst3: number } };
+    expect(data.distinguishable).toBe(false);
+    expect(r.summary).toContain('分不出来');
+    expect(data.delta.meanTotal).toBe(1000);
+    expect(data.delta.meanFirst3).toBe(200);
+    expect(data.delta.winRatePct).toBe(2);
+  });
+
+  it('remove_user_opponent：固定集 id 删不掉', async () => {
+    const id = loadBenchmark()[0]?.id;
+    expect(id).toBeTruthy();
+    const ctx = makeCtx({ fakeRuns: true });
+    await expect(runTool('remove_user_opponent', { id }, ctx)).rejects.toThrow(/固定测试集不能删除/);
+  });
+
+  it('remove_user_opponent：用户没点确认就不写', async () => {
+    const ctx = makeCtx({
+      fakeRuns: true,
+      deps: {
+        removeUserOpponent: () => {
+          throw new Error('不该写到存储');
+        },
+      },
+    });
+    ctx.confirm = async () => false;
+    await expect(runTool('remove_user_opponent', { id: 'user-1' }, ctx)).rejects.toThrow(/没有确认/);
   });
 });

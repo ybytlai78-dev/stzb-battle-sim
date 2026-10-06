@@ -20,6 +20,16 @@ export const TOOL_ZH: Record<string, string> = {
   search_skill: '查战法',
   list_skills: '战法清单',
   skill_detail: '战法详情',
+  list_opponent_pool: '对手池',
+  add_opponent_from_preset: '加入对手',
+  remove_user_opponent: '移出对手',
+  matchup_pool: '打对手池',
+  compare_variants: '前后对比',
+  optimize_winrate: '胜率搜索',
+  // 常驻层（工具面分档，见设计文档 §16）：模型查目录 / 查参数 / 申请开档，界面上也要有中文
+  tools_catalog: '查工具面',
+  tools_help: '查工具用法',
+  route_task: '申请开档',
 };
 
 export const toolZh = (name: string): string => TOOL_ZH[name] ?? name;

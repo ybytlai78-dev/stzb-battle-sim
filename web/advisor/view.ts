@@ -47,6 +47,7 @@ import {
 import { createLocalCache } from './cache';
 import { cfgOf } from './gate';
 import { runAdvisorTurn, type AdvisorEvent } from './loop';
+import { routeBadge } from './router';
 import { evidenceZh, toolZh, TraceLine } from './trace';
 import {
   MAX_IMAGES,
@@ -60,6 +61,7 @@ import {
   clearSession,
   defaultStore,
   emptySession,
+  ensureTask,
   historyFrom,
   loadProfile,
   loadSession,
@@ -68,6 +70,7 @@ import {
   normalizePref,
   removePreference,
   renderProfileBlock,
+  renderTaskBlock,
   saveProfile,
   saveSession,
   stampText,
@@ -100,12 +103,15 @@ import {
   type AdvisorTurn,
   type PlanCheck,
   type PlanPosition,
+  type PoolHint,
   type SearchQuote,
   type ToolCallRecord,
 } from './types';
 import type { AdvisorHost } from '../advisorHost';
 /** 槽位卡直接复用主站 `renderSlot`（立绘 + 战法图标）：侧栏与主站看起来必须是同一套东西 */
 import { emptySlot, renderSlot, type EditorHandlers, type SlotState } from '../teamEditor';
+import { addPresetIdToPool, loadMergedPool, removeUserOpponent } from '../opponentPool';
+import { readPresetFile } from '../presetStore';
 
 /** 只读槽位卡的占位 handler：侧栏不可编辑（点击已被 CSS 关掉，这里只是 renderSlot 的形参） */
 const READONLY_HANDLERS: EditorHandlers = {
@@ -185,11 +191,20 @@ export interface AdvisorViewOpts {
    * 传 `false` = 本轮不整理偏好（测试 / 想完全手填时用）。
    */
   extract?: ((input: { userText: string; answer: string; profile: PrefProfile }) => Promise<PrefExtractResult>) | false;
+  /**
+   * 主站内嵌时的「回配将台」。只换房间，调用方负责把本视图藏起来；
+   * 本轮请求继续跑，回来还能看到进度。
+   */
+  onLeave?: () => void;
+  /** 一轮开始 / 结束。主站用来在顶栏留「还在跑」的标记。 */
+  onRunning?: (running: boolean) => void;
 }
 
 export interface AdvisorView {
   open(): void;
   close(): void;
+  /** 人去了另一个房间：键盘 / 粘贴不再由这里接管，进行中的一轮不中断 */
+  park(): void;
   isOpen(): boolean;
   destroy(): void;
   /** 测试专用：等价于输入并点「发送」 */
@@ -207,6 +222,8 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
   let built = false;
   let destroyed = false;
   let running = false;
+  /** 人在配将台：视图还在，但不抢 Esc / 粘贴 */
+  let parked = false;
   let controller: AbortController | null = null;
   let usage: TokenUsage | null = null;
   let lastChecks: PlanCheck[] = [];
@@ -253,7 +270,7 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
         </button>
         <span class="advisor-chip advisor-strict-chip" title="严格模式：配将搜索只在你有的将法里选（比较 / 测算不受限）">严格按 box</span>
         <span class="advisor-top-divider"></span>
-        <a class="btn beige sm" href="./index.html" title="回到主站配将台">← 返回配将</a>
+        <a class="btn beige sm advisor-back" href="./index.html" title="回到主站配将台">← 返回配将</a>
         <button type="button" class="btn beige sm advisor-icon-btn" data-settings title="设置（模型 / 额度 / 数据）" aria-label="设置">
           <svg class="advisor-ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 3.5v2.2M12 18.3v2.2M4.9 7.6l1.9 1.1M17.2 15.3l1.9 1.1M4.9 16.4l1.9-1.1M17.2 8.7l1.9-1.1"/></svg>
         </button>
@@ -263,24 +280,17 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
         <aside class="advisor-rail" id="advisor-rail" aria-label="侧栏：当前阵容与功能">
           <div class="advisor-rail-inner">
             <button type="button" class="advisor-rail-close" data-rail-close aria-label="收起侧栏" title="收起侧栏（Esc）">×</button>
+            <nav class="advisor-nav" aria-label="功能">
+              <button type="button" class="advisor-nav-item advisor-new">新会话</button>
+              <button type="button" class="advisor-nav-item" data-sheet="box">我的 box</button>
+              <button type="button" class="advisor-nav-item" data-sheet="pool">对手池</button>
+              <button type="button" class="advisor-nav-item" data-sheet="prefs">偏好</button>
+              <button type="button" class="advisor-nav-item" data-sheet="history">历史</button>
+            </nav>
             <section class="advisor-sec">
               <div class="advisor-sec-h">当前阵容（只读）</div>
               <a class="btn beige sm advisor-goto-main" href="./index.html" title="回主站配将台改加点 / 红度 / 兵种 / 宝物">在主站编辑 ↗</a>
               <div class="advisor-team-list"></div>
-            </section>
-            <section class="advisor-sec">
-              <div class="advisor-sec-h">功能</div>
-              <div class="advisor-acts">
-                <button type="button" class="btn beige sm advisor-act" data-sheet="box">我的 box</button>
-                <button type="button" class="btn beige sm advisor-act" data-sheet="prefs">偏好档案</button>
-                <button type="button" class="btn beige sm advisor-act" data-sheet="history">历史</button>
-                <button type="button" class="btn beige sm advisor-act advisor-new">新会话</button>
-                <button type="button" class="advisor-chip advisor-strict-chip" data-sheet="box" title="严格模式开关在「我的 box」面板里（同一状态，只有一份）">严格按我的 box：开</button>
-              </div>
-            </section>
-            <section class="advisor-sec">
-              <div class="advisor-sec-h">最近一轮<span class="advisor-sec-spacer"></span><span class="advisor-last-time"></span></div>
-              <div class="advisor-last-line">—</div>
             </section>
           </div>
         </aside>
@@ -288,63 +298,48 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
         <main class="advisor-main" id="advisor-main">
           <div class="advisor-main-inner">
             <div class="advisor-hero">
-              <div class="advisor-hero-mark" aria-hidden="true">配</div>
               <h2>说说你想怎么配</h2>
-              <p>我读你配将区的当前队伍，调 L2 战法 / L3 武将搜索在标准木桩上跑实测，只把跑出来的数字给你 —— 算数由工具做，过关 3 复算的方案卡才给「应用」。</p>
-              <div class="advisor-hero-ask">
-                <button type="button" class="btn beige advisor-ask">这队为什么伤害低？</button>
-                <button type="button" class="btn beige advisor-ask">前锋换个谁，伤害期望最高？</button>
-                <button type="button" class="btn beige advisor-ask">在 box 里把大营配到最优</button>
-              </div>
-              <p class="advisor-note">Enter 发送 · Shift+Enter 换行 · Esc Esc 停止</p>
-            </div>
-            <div class="advisor-guide" hidden>
-              <span>还没配模型：AI配将需要你自己的接口地址 / 模型 / 密钥。</span>
-              <span class="advisor-sec-spacer"></span>
-              <button type="button" class="btn beige sm" data-settings>打开设置</button>
+              <p>读你现在的队伍，在对手池上按综合胜率搜。</p>
             </div>
             <div class="advisor-session-bar">
               <span class="advisor-session-meta"></span>
-              <button type="button" class="btn ghost sm advisor-new">新会话</button>
+              <button type="button" class="advisor-text-btn advisor-new">新会话</button>
             </div>
-            <div class="advisor-proc">
-              <button type="button" class="advisor-proc-head" aria-expanded="false">
-                <svg class="advisor-ico advisor-proc-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>
-                <span class="advisor-trace"></span>
-              </button>
-              <div class="advisor-proc-body" hidden></div>
-            </div>
+            <div class="advisor-log"></div>
             <div class="advisor-confirm" hidden></div>
-            <pre class="advisor-log"></pre>
             <div class="advisor-plans"></div>
+            <footer class="advisor-composer">
+              <div class="advisor-composer-inner">
+                <div class="advisor-guide" hidden>
+                  <span>还没配模型。需要你自己的接口地址、模型和密钥。</span>
+                  <button type="button" class="advisor-text-btn" data-settings>打开设置</button>
+                </div>
+                <div class="advisor-bar">
+                  <button type="button" class="advisor-shot" data-sheet="box" title="识别截图，建 box" aria-label="识别截图">
+                    <svg class="advisor-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+                  </button>
+                  <textarea class="advisor-input" rows="1" placeholder="问点什么，一起看看这队"></textarea>
+                  <div class="advisor-bar-meta">
+                    <span class="advisor-model"></span>
+                    <span class="advisor-cost"></span>
+                  </div>
+                  <button type="button" class="advisor-send" aria-label="发送">
+                    <svg class="advisor-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+                  </button>
+                  <button type="button" class="advisor-stop" aria-label="停止" disabled>
+                    <svg class="advisor-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
+                  </button>
+                </div>
+                <div class="advisor-hero-ask">
+                  <button type="button" class="advisor-ask">这队对对手池的胜率是多少？</button>
+                  <button type="button" class="advisor-ask">前锋换个谁，综合胜率最高？</button>
+                  <button type="button" class="advisor-ask">在 box 里把大营配到胜率最高</button>
+                </div>
+              </div>
+            </footer>
           </div>
         </main>
       </div>
-
-      <footer class="advisor-composer">
-        <div class="advisor-composer-inner">
-          <div class="advisor-tools">
-            <button type="button" data-sheet="box">我的 box</button>
-            <button type="button" data-sheet="prefs">偏好</button>
-            <button type="button" data-sheet="history">历史</button>
-            <button type="button" data-settings>设置</button>
-          </div>
-          <div class="advisor-input-row">
-            <button type="button" class="btn beige sm advisor-shot" data-sheet="box" title="截图 → 识别 → 建 box（用同一个模型；截图只在本机）">识别截图</button>
-            <textarea class="advisor-input" rows="2" placeholder="例：这队为什么伤害低？/ 前锋换个谁伤害期望最高？/ 把它换成张辽试试（Enter 发送 · Shift+Enter 换行）"></textarea>
-            <div class="advisor-buttons">
-              <button type="button" class="btn primary advisor-send">发送</button>
-              <button type="button" class="btn advisor-stop" disabled>取消</button>
-            </div>
-          </div>
-          <div class="advisor-costline">
-            <span class="advisor-cost"></span>
-            <span class="advisor-sec-spacer"></span>
-            <span class="advisor-model"></span>
-            <button type="button" data-settings>设置</button>
-          </div>
-        </div>
-      </footer>
 
       <div class="advisor-mask" hidden></div>
 
@@ -414,6 +409,22 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
           <div class="advisor-history"></div>
           <p class="advisor-note">会话 + 证据清单落本机（<code>dsh-advisor-session-v1</code>，轮末一次原子写）；刷新、关页面都续得上。</p>
         </div>
+      </aside>
+
+      <aside class="advisor-sheet" data-sheet-panel="pool" role="dialog" aria-modal="true" aria-label="对手池">
+        <div class="advisor-sheet-head">
+          <span class="advisor-sheet-title">对手池</span>
+          <button type="button" class="advisor-sheet-x" data-sheet-close aria-label="关闭">×</button>
+        </div>
+        <div class="advisor-sheet-body">
+          <p class="advisor-note">固定测试集随站发布，删不掉。你只能从阵容预设里加队伍，或移出自己加的那部分。顾问和实战胜率页读的是同一份池子。</p>
+          <div class="advisor-pool-list"></div>
+          <div class="advisor-row">
+            <label>从预设加入 <select class="advisor-pool-preset"></select></label>
+            <button type="button" class="btn advisor-pool-add">加入对手池</button>
+          </div>
+          <p class="advisor-pool-status advisor-note"></p>
+        </div>
       </aside>`;
 
     // ── 独立页骨架接线（设计文档 §17：一个骨架两态 + 按需面板）──
@@ -447,6 +458,12 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
     });
     wrap.addEventListener('click', (e) => {
       const t = e.target as HTMLElement;
+      const leave = t.closest<HTMLAnchorElement>('a.advisor-back, a.advisor-goto-main');
+      if (leave && opts.onLeave) {
+        e.preventDefault();
+        opts.onLeave();
+        return;
+      }
       const sheetBtn = t.closest<HTMLElement>('[data-sheet]');
       if (sheetBtn) {
         openSheet(sheetBtn.dataset.sheet ?? null);
@@ -472,8 +489,9 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
     });
     let lastEsc = 0;
     onKeyDown = (e: KeyboardEvent): void => {
-      if (e.key !== 'Escape') return;
-      const overlay = Boolean(wrap.querySelector('.advisor-sheet.on')) || wrap.classList.contains('rail-open');
+      if (parked || e.key !== 'Escape') return;
+      /* 宽屏侧栏是常驻栏，不占 Esc；只有窄屏浮层才算挡住了停止手势 */
+      const overlay = Boolean(wrap.querySelector('.advisor-sheet.on')) || (wrap.classList.contains('rail-open') && narrow());
       if (overlay) {
         openSheet(null);
         setRail(false);
@@ -492,6 +510,11 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
 
     el('.advisor-send').addEventListener('click', () => void send(el<HTMLTextAreaElement>('.advisor-input').value));
     el('.advisor-stop').addEventListener('click', () => controller?.abort());
+    el<HTMLTextAreaElement>('.advisor-input').addEventListener('input', () => {
+      const ta = el<HTMLTextAreaElement>('.advisor-input');
+      ta.style.height = 'auto';
+      ta.style.height = `${Math.min(160, ta.scrollHeight)}px`;
+    });
     el<HTMLTextAreaElement>('.advisor-input').addEventListener('keydown', (e) => {
       const ke = e as KeyboardEvent;
       /* Enter 发送 / Shift+Enter 换行；输入法组合中不抢 Enter（中文输入必踩） */
@@ -513,14 +536,10 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
       append('\n【记忆】偏好档案已清空\n');
     });
     for (const btn of wrap.querySelectorAll<HTMLButtonElement>('.advisor-ask')) {
-      btn.addEventListener('click', () => {
-        const input = el<HTMLTextAreaElement>('.advisor-input');
-        input.value = btn.textContent?.trim() ?? '';
-        input.focus();
-      });
+      btn.addEventListener('click', () => void send(btn.textContent?.trim() ?? ''));
     }
     for (const btn of wrap.querySelectorAll<HTMLButtonElement>('.advisor-new')) {
-      btn.addEventListener('click', () => onNewSession());
+      btn.addEventListener('click', () => onNewSession(btn));
     }
 
     // ── 我的 box（识图建档）──
@@ -620,6 +639,7 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
       setBoxStatus('box 已清空（重新识别或手动补）');
     });
     document.addEventListener('paste', onPaste);
+    bindOpponentPool();
 
     // 刷新 / 关页面：把"这一轮已经跑出来的东西"兜底落盘（正课在每轮结束时，这里只兜中断）
     window.addEventListener('pagehide', flush);
@@ -627,11 +647,11 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
     renderAll();
     renderProfilePanel();
     renderBoxPanel();
+    renderOpponentPool();
     renderTeam();
     syncSettingsViews();
     renderProcDetail();
-    syncLastLine();
-    if (!el('.advisor-trace').textContent) el('.advisor-trace').textContent = '还没有工具调用';
+    if (window.innerWidth > 1100) setRail(true);
   }
 
   function readSettings(): AdvisorConfig {
@@ -645,6 +665,7 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
       bar.hidden = false;
       bar.innerHTML = `<span>即将执行 —— ${esc(q.label)}</span><button type="button" class="btn primary advisor-go">开始</button><button type="button" class="btn advisor-skip">不跑</button>`;
       el('.advisor-trace').textContent = `${trace.text()} · ⏳ 等你确认`;
+      scrollLogToEnd();
       const finish = (v: boolean): void => {
         bar.hidden = true;
         bar.innerHTML = '';
@@ -657,28 +678,105 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
     });
   }
 
+  /** 系统一行（已应用 / 失败 / 记忆）。不进气泡，避免和正文挤成一块。 */
   function append(line: string): void {
+    const text = line.replace(/^\n+|\n+$/g, '').trim();
+    if (!text) return;
     const log = el('.advisor-log');
-    log.textContent += line;
+    const row = document.createElement('p');
+    row.className = 'advisor-sys';
+    row.textContent = text;
+    log.appendChild(row);
     scrollLogToEnd();
   }
 
   /**
-   * 滚到最新一行。⚠️ 必须在抽屉**可见之后**调用：`build()` 发生在 `display:none` 状态下，
-   * 那时 `scrollHeight` 是 0，恢复出来的历史会停在最旧一屏（真机验证时抓到）。
+   * 滚到最新一行。滚动体是 `.advisor-main`。
+   * ⚠️ 必须在页面可见之后调用：不可见时 `scrollHeight` 是 0，历史会停在最旧一屏。
    */
   function scrollLogToEnd(): void {
-    const log = el<HTMLElement>('.advisor-log');
-    log.scrollTop = log.scrollHeight;
+    const main = el<HTMLElement>('.advisor-main');
+    main.scrollTop = main.scrollHeight;
   }
 
   // ─────────────────────────── 记忆层渲染（刷新后由这里还原） ───────────────────────────
 
-  /** 一轮的正文（与落盘内容一一对应，重放 / 实时共用同一份口径） */
-  function turnText(t: StoredTurn): string {
-    const body = t.answer || (t.partial ? '（这一轮中断了，没有结论）' : '（空回答）');
-    const note = t.note ? `【记忆】${t.note}\n` : '';
-    return `\n【你】${t.userText}\n${t.mode ? `【模式】${t.mode}\n` : ''}${note}【顾问】\n${body}\n`;
+  const PROC_CHEV = `<svg class="advisor-ico advisor-proc-chev" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>`;
+
+  /** 顾问正文按段排，不再塞进一块等宽字。 */
+  function answerHtml(text: string): string {
+    const parts = text.split(/\n+/).map((s) => s.trim()).filter(Boolean);
+    if (!parts.length) return '<p>（空回答）</p>';
+    return parts.map((p) => `<p>${esc(p)}</p>`).join('');
+  }
+
+  function procRowsHtml(records: Array<Pick<ToolCallRecord, 'name' | 'brief' | 'summary' | 'stats'>>): string {
+    return records
+      .map((r) => {
+        const cost = [
+          r.stats?.battles ? `${num(r.stats.battles)} 场` : '',
+          r.stats?.cached ? '缓存' : '',
+          r.stats?.ms ? `${(r.stats.ms / 1000).toFixed(1)}s` : '',
+        ]
+          .filter(Boolean)
+          .join(' · ');
+        return (
+          `<div class="advisor-proc-row"><span class="advisor-proc-dot"></span>` +
+          `<span class="advisor-proc-name">${esc(toolZh(r.name))}</span>` +
+          `<span class="advisor-proc-arg">${esc(clipText(r.brief || r.summary || '', 70))}</span>` +
+          `<span class="advisor-proc-cost">${cost}</span></div>`
+        );
+      })
+      .join('');
+  }
+
+  function traceLabelOf(t: StoredTurn, active: boolean): string {
+    // 档位徽标（§16.26）：生产页唯一能看见"模型这一轮拿到多大工具面"的地方。
+    // 放在工具列表**之后**，且进行中就显示（用户能当场看出这轮被锚定/只给了基础档）。
+    const badge = t.route ? routeBadge(t.route, t.selfCorrect) : '';
+    const head = active && trace.text() ? trace.text() : t.evidence.length ? t.evidence.map((e) => toolZh(e.name)).join(' · ') : '没有工具调用';
+    return badge ? `${head} · ${badge}` : head;
+  }
+
+  /** 一轮：你的话靠右，工具一行折叠，顾问的话靠左。进行中的那轮带 `.live`，流式往里写。 */
+  function turnArticle(t: StoredTurn, active: boolean, live = false): string {
+    const label = traceLabelOf(t, active);
+    const body = active
+      ? `<div class="advisor-proc-body" hidden></div>`
+      : `<div class="advisor-proc-body" hidden>${procRowsHtml(t.evidence)}</div>`;
+    const sum = active
+      ? `<span class="advisor-trace">${esc(label)}</span>`
+      : `<span class="advisor-proc-sum">${esc(label)}</span>`;
+    const answer = t.answer || (t.partial ? '（这一轮中断了，没有结论）' : '（空回答）');
+    const mem = t.note ? `<p class="advisor-mem">记忆 · ${esc(t.note)}</p>` : '';
+    return `<article class="advisor-turn${live ? ' live' : ''}">
+      <div class="advisor-bubble user"><p>${esc(t.userText)}</p></div>
+      <div class="advisor-proc">
+        <button type="button" class="advisor-proc-head" aria-expanded="false">${PROC_CHEV}${sum}</button>
+        ${body}
+      </div>
+      <div class="advisor-bubble assistant">${answerHtml(answer)}</div>
+      ${mem}
+    </article>`;
+  }
+
+  function beginLive(q: string): void {
+    wrap.classList.remove('is-empty');
+    const log = el('.advisor-log');
+    log.querySelectorAll('.advisor-trace').forEach((n) => {
+      n.classList.remove('advisor-trace');
+      n.classList.add('advisor-proc-sum');
+    });
+    const article = document.createElement('article');
+    article.className = 'advisor-turn live';
+    article.innerHTML =
+      `<div class="advisor-bubble user"><p></p></div>` +
+      `<div class="advisor-proc"><button type="button" class="advisor-proc-head" aria-expanded="false">${PROC_CHEV}` +
+      `<span class="advisor-trace">还没有工具调用</span></button><div class="advisor-proc-body" hidden></div></div>` +
+      `<div class="advisor-bubble assistant"></div>`;
+    article.querySelector('.advisor-bubble.user p')!.textContent = q;
+    log.appendChild(article);
+    scrollLogToEnd();
   }
 
   /** 一轮的证据清单（用户要的「证据清单落盘」在界面上的样子：编号 · 摘要 · 场次） */
@@ -728,12 +826,14 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
   /** 从盘上的会话整体重放界面（挂载时 / 每轮结束后都走它：**实时与刷新后的样子一致**） */
   function renderAll(): void {
     const log = el<HTMLElement>('.advisor-log');
-    log.textContent = session.turns.map(turnText).join('');
+    const turns = session.turns;
+    log.innerHTML = turns.map((t, i) => turnArticle(t, i === turns.length - 1)).join('');
     scrollLogToEnd();
-    el('.advisor-history').innerHTML = session.turns.map((t, i) => evidenceBlock(t, i)).join('');
-    const last = session.turns[session.turns.length - 1];
+    el('.advisor-history').innerHTML = turns.map((t, i) => evidenceBlock(t, i)).join('');
+    const last = turns[turns.length - 1];
     renderPlanCards(last?.checks ?? []);
     renderSessionBar();
+    renderProcDetail();
   }
 
   /** 设置 → 界面（严格 chip 文案 / 模型名 / 未配模型引导条 / 两个复选框），单向：state → DOM */
@@ -797,8 +897,7 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
   function renderSessionBar(): void {
     const meta = el('.advisor-session-meta');
     /* 空态 hero：只有真聊过才收起来（设计文档 §7.5 三态） */
-    const hero = wrap.querySelector<HTMLElement>('.advisor-hero');
-    if (hero) hero.hidden = session.turns.length > 0;
+    wrap.classList.toggle('is-empty', session.turns.length === 0 && !inFlight);
     if (!session.turns.length) {
       meta.textContent = '新会话（还没聊过）';
       return;
@@ -867,7 +966,7 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
 
   /** 粘贴截图（只在抽屉打开时接管；非图片的粘贴照旧） */
   function onPaste(e: ClipboardEvent): void {
-    if (!built || destroyed || !wrap.classList.contains('open')) return;
+    if (!built || destroyed || parked || !wrap.classList.contains('open')) return;
     const files = [...(e.clipboardData?.files ?? [])].filter((f) => f.type.startsWith('image/'));
     if (!files.length) return;
     e.preventDefault();
@@ -1124,8 +1223,7 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
     renderBoxPanel();
   }
 
-  function onNewSession(): void {
-    const btn = el<HTMLButtonElement>('.advisor-new');
+  function onNewSession(btn: HTMLButtonElement): void {
     if (btn.dataset.armed !== '1') {
       btn.dataset.armed = '1';
       btn.textContent = '确认清空？';
@@ -1177,6 +1275,45 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
         return `<tr><td>${pos}</td><td>${esc(heroName(slot.heroId))}<span class="dim"> Lv${slot.level}</span></td><td>${skills}</td></tr>`;
       })
       .join('');
+    const headline = check.pool ? poolCardHtml(check.pool) : dummyCardHtml(check);
+    const notes = [
+      check.legal ? '' : `<div class="pc-metric bad">不合法：${esc(check.legalErrors.join('；'))}</div>`,
+      // box 外的将法：**不是不合法**（用户 2026-09-29 修正）——照常看数，只是不能一键应用到他的配将区
+      check.boxIssues?.length ? `<div class="pc-metric warn">含你 box 外的将法 ${check.boxIssues.length} 处：${esc(check.boxIssues.join('；'))}</div>` : '',
+      check.evidenceOk ? '' : `<div class="pc-metric bad">证据核验失败：${esc(check.evidenceReason ?? '')}</div>`,
+    ].join('');
+    return `
+      <div class="advisor-plan-card" data-plan="${index}">
+        <div class="pc-title">${esc(check.title)}</div>
+        <table class="pc-config"><tbody>${rows}</tbody></table>
+        ${headline}${notes}
+        <div class="pc-actions">
+          <button type="button" class="btn primary advisor-apply" data-plan="${index}" ${check.apply.enabled ? '' : 'disabled'}>应用到配将区</button>
+          <span class="advisor-verify-note">${check.apply.enabled ? '三关通过（合法 / 可溯源 / 已复算）' : esc(check.apply.reason ?? '')}</span>
+        </div>
+      </div>`;
+  }
+
+  /** 对手池对打的主数字。胜率来自工具证据，八回合总伤和前三回合是同一批战斗。 */
+  function poolCardHtml(pool: PoolHint): string {
+    const pct = (rate: number): string => `${(rate * 100).toFixed(1)}%`;
+    const rows = pool.opponents
+      .map(
+        (o) =>
+          `<div class="pc-metric dim">${esc(o.note || '对手')} 胜率 ${pct(o.winRate)}（胜 ${o.win} / 平 ${o.draw} / 负 ${o.loss}）总伤 ${num(o.meanTotal)} 前三 ${num(o.meanFirst3)}</div>`,
+      )
+      .join('');
+    return [
+      `<div class="pc-metric"><b>综合胜率</b> <b>${pool.winRatePct.toFixed(1)}%</b> ±${(pool.halfWidth * 100).toFixed(1)} 个百分点（${pool.runs} 场，来自「${esc(evidenceZh(pool.evidenceId))}」）</div>`,
+      `<div class="pc-metric">最差对手 <b>${esc(pool.worstNote || '—')}</b> ${pct(pool.worstRate)}</div>`,
+      `<div class="pc-metric">同一批对打：<b>八回合全队总伤</b> <b>${num(pool.meanTotal)}</b>｜<b>前三回合爆发</b> <b>${num(pool.meanFirst3)}</b></div>`,
+      rows,
+      pool.fingerprint ? `<div class="pc-metric dim">对手池 ${esc(pool.fingerprint)}</div>` : '',
+    ].join('');
+  }
+
+  /** 没有打过对手池时，仍显示木桩复算（应用门用的那套）。 */
+  function dummyCardHtml(check: PlanCheck): string {
     const rc = check.recompute;
     const search = check.search;
     const metrics = rc
@@ -1188,22 +1325,82 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
           check.judge === 'consistent' ? '区间重叠，<b>一致</b>' : '复算明显更低，<b>对口径敏感，谨慎采纳</b>'
         }</div>`
       : '<div class="pc-metric bad">方案没引用任何实测证据（未验证）</div>';
-    const notes = [
-      check.legal ? '' : `<div class="pc-metric bad">不合法：${esc(check.legalErrors.join('；'))}</div>`,
-      // box 外的将法：**不是不合法**（用户 2026-09-29 修正）——照常看数，只是不能一键应用到他的配将区
-      check.boxIssues?.length ? `<div class="pc-metric warn">含你 box 外的将法 ${check.boxIssues.length} 处：${esc(check.boxIssues.join('；'))}</div>` : '',
-      check.evidenceOk ? '' : `<div class="pc-metric bad">证据核验失败：${esc(check.evidenceReason ?? '')}</div>`,
-    ].join('');
-    return `
-      <div class="advisor-plan-card" data-plan="${index}">
-        <div class="pc-title">${esc(check.title)}</div>
-        <table class="pc-config"><tbody>${rows}</tbody></table>
-        ${metrics}${compare}${notes}
-        <div class="pc-actions">
-          <button type="button" class="btn primary advisor-apply" data-plan="${index}" ${check.apply.enabled ? '' : 'disabled'}>应用到配将区</button>
-          <span class="advisor-verify-note">${check.apply.enabled ? '三关通过（合法 / 可溯源 / 已复算）' : esc(check.apply.reason ?? '')}</span>
-        </div>
-      </div>`;
+    return metrics + compare;
+  }
+
+  /** 侧栏「对手池」：固定集只读，预设加入和移出都要再点一次确认。 */
+  function renderOpponentPool(): void {
+    const pool = loadMergedPool();
+    const fixed = pool.entries.filter((e) => e.source === 'benchmark').length;
+    const added = pool.entries.length - fixed;
+    const rows = pool.entries
+      .map((e) => {
+        const badge = e.source === 'benchmark' ? '固定' : '自加';
+        const remove =
+          e.source === 'user' ? `<button type="button" class="btn advisor-pool-remove" data-id="${esc(e.id)}">移出</button>` : '';
+        return `<div class="advisor-pool-row" data-source="${e.source}"><span class="advisor-pool-badge">${badge}</span><span>${esc(e.note)}</span>${remove}</div>`;
+      })
+      .join('');
+    el('.advisor-pool-list').innerHTML =
+      `<div class="advisor-note">固定 ${fixed} · 自加 ${added} · 版本 ${esc(pool.version)}</div>` +
+      (rows || '<div class="dim">对手池是空的</div>');
+    const sel = el<HTMLSelectElement>('.advisor-pool-preset');
+    const presets = readPresetFile().list.filter((p) => p.slots.filter((s) => s.heroId).length >= 3);
+    const prev = sel.value;
+    sel.innerHTML = presets.length
+      ? presets.map((p) => `<option value="${esc(p.id)}">#${p.no} ${esc(p.name)}</option>`).join('')
+      : '<option value="">还没有满编预设</option>';
+    if (prev && [...sel.options].some((o) => o.value === prev)) sel.value = prev;
+  }
+
+  function setPoolStatus(msg: string): void {
+    el('.advisor-pool-status').textContent = msg;
+  }
+
+  /** 加入 / 移出：第一次点变成确认文案，第二次才写。固定集没有移出按钮。 */
+  function bindOpponentPool(): void {
+    el('.advisor-pool-list').addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.advisor-pool-remove');
+      if (!btn) return;
+      if (btn.dataset.armed !== '1') {
+        btn.dataset.armed = '1';
+        btn.textContent = '确认移出？';
+        setTimeout(() => {
+          if (btn.dataset.armed === '1') {
+            delete btn.dataset.armed;
+            btn.textContent = '移出';
+          }
+        }, 3000);
+        return;
+      }
+      const res = removeUserOpponent(btn.dataset.id ?? '');
+      setPoolStatus(res.message);
+      renderOpponentPool();
+    });
+    el('.advisor-pool-add').addEventListener('click', () => {
+      const btn = el<HTMLButtonElement>('.advisor-pool-add');
+      const id = el<HTMLSelectElement>('.advisor-pool-preset').value;
+      if (!id) {
+        setPoolStatus('先在主站把一支满编队伍存成预设');
+        return;
+      }
+      if (btn.dataset.armed !== '1') {
+        btn.dataset.armed = '1';
+        btn.textContent = '确认加入？';
+        setTimeout(() => {
+          if (btn.isConnected && btn.dataset.armed === '1') {
+            delete btn.dataset.armed;
+            btn.textContent = '加入对手池';
+          }
+        }, 3000);
+        return;
+      }
+      delete btn.dataset.armed;
+      btn.textContent = '加入对手池';
+      const res = addPresetIdToPool(id);
+      setPoolStatus(res.message);
+      renderOpponentPool();
+    });
   }
 
   function onEvent(e: AdvisorEvent): void {
@@ -1214,29 +1411,19 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
       trace.end(e.name, { battles: e.battles, ms: e.ms, cached: e.cached, ...(e.error ? { error: e.error } : {}) });
     } else if (e.type === 'tool_progress') trace.progress(e.name, e.done, e.total, e.label);
     else if (e.type === 'delta') {
-      const log = el('.advisor-log');
-      log.textContent += e.text;
-      log.scrollTop = log.scrollHeight;
+      const bubble = wrap.querySelector<HTMLElement>('.advisor-turn.live .advisor-bubble.assistant');
+      if (bubble) bubble.textContent += e.text;
+      scrollLogToEnd();
       if (inFlight) inFlight.text += e.text;
     } else if (e.type === 'usage') {
       usage = e.usage;
       tokens += e.usage.totalTokens;
     }
-    if (trace.text()) el('.advisor-trace').textContent = trace.text();
+    const traceNode = wrap.querySelector('.advisor-trace');
+    if (trace.text() && traceNode) traceNode.textContent = trace.text();
     el('.advisor-cost').textContent = `本轮：${trace.count} 次工具调用 · ${num(battles)} 场 · 词元 ${num(tokens)}`;
     renderProcDetail();
-    syncLastLine();
     void usage;
-  }
-
-  /** 侧栏「最近一轮」与成本行同源（只读成本行文本，避免两处口径分叉） */
-  function syncLastLine(): void {
-    const cost = el<HTMLElement>('.advisor-cost').textContent ?? '';
-    const line = wrap.querySelector<HTMLElement>('.advisor-last-line');
-    if (line) line.textContent = cost || '—';
-    const at = wrap.querySelector<HTMLElement>('.advisor-last-time');
-    const last = session.turns[session.turns.length - 1];
-    if (at) at.textContent = last ? stampText(last.at) : '';
   }
 
   /**
@@ -1244,32 +1431,12 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
    * 进行中优先用 `inFlight.records`（这轮刚开始、还没落盘），否则用最后一轮的记录。
    */
   function renderProcDetail(): void {
-    const body = wrap.querySelector<HTMLElement>('.advisor-proc-body');
+    const body = wrap.querySelector<HTMLElement>('.advisor-trace')?.closest('.advisor-proc')?.querySelector<HTMLElement>('.advisor-proc-body');
     if (!body) return;
     const last = session.turns[session.turns.length - 1];
     /* 进行中优先用内存里的 records；已落盘的轮次读 evidence（同一个 ToolCallRecord，去掉 data） */
     const records = inFlight?.records ?? last?.evidence ?? [];
-    if (!records.length) {
-      body.innerHTML = '<div class="advisor-proc-empty">这一轮还没调用工具。</div>';
-      return;
-    }
-    body.innerHTML = records
-      .map((r) => {
-        const cost = [
-          r.stats?.battles ? `${num(r.stats.battles)} 场` : '',
-          r.stats?.cached ? '缓存' : '',
-          r.stats?.ms ? `${(r.stats.ms / 1000).toFixed(1)}s` : '',
-        ]
-          .filter(Boolean)
-          .join(' · ');
-        return (
-          `<div class="advisor-proc-row"><span class="advisor-proc-dot"></span>` +
-          `<span class="advisor-proc-name">${esc(toolZh(r.name))}</span>` +
-          `<span class="advisor-proc-arg">${esc(clipText(r.brief || r.summary || '', 70))}</span>` +
-          `<span class="advisor-proc-cost">${cost}</span></div>`
-        );
-      })
-      .join('');
+    body.innerHTML = records.length ? procRowsHtml(records) : '<div class="advisor-proc-empty">这一轮还没调用工具。</div>';
   }
 
   /** 轮末整理偏好（旁路：不抛错、不阻塞对话；开关关掉 / 假传输没脚本 / 没 key 时静默空转） */
@@ -1314,9 +1481,9 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
     }
     saveSettings(s);
     running = true;
+    opts.onRunning?.(true);
     tokens = 0;
     trace = new TraceLine();
-    el('.advisor-trace').textContent = '还没有工具调用';
     el('.advisor-cost').textContent = '';
     el<HTMLTextAreaElement>('.advisor-input').value = '';
     el<HTMLButtonElement>('.advisor-send').disabled = true;
@@ -1326,7 +1493,7 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
     const mode = fake ? '干跑（假传输）' : `${s.model} @ ${s.baseUrl}`;
     const turnId = newTurnId();
     inFlight = { id: turnId, q, mode, text: '', records: [] };
-    append(`\n【你】${q}\n【模式】${mode}\n`);
+    beginLive(q);
 
     const hostPlan = opts.host.readTeam();
     const fakePick = fakePlanFor(hostPlan);
@@ -1352,6 +1519,9 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
       ctx.confirmFrom = s.askFrom;
     }
     try {
+      // 「本次会话的任务」= 会话开头那句话（S2）：**开跑前**就定下来，第一轮也带得上；
+      // 落盘仍在轮末统一做（这一份只是本轮注入用）
+      const taskSession = ensureTask(session, q);
       const turn = await runAdvisorTurn({
         userText: q,
         ctx,
@@ -1359,13 +1529,18 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
         // 记忆层：上一轮的紧凑转录 + 「你的偏好」档案（每轮都带，摆位见 loop.ts）
         history: historyFrom(session),
         profileText: renderProfileBlock(profile),
+        // 「本次会话的任务」静态回显块（防跑题；空任务不注入）
+        taskText: renderTaskBlock(taskSession),
+        // 首轮锚定（S3）：这个会话还没跑过任何工具 → 本轮第一个请求只发 get_config（+常驻层）
+        anchor: session.turns.every((t) => (t.evidence ?? []).length === 0),
         // 「我的 box」：**配将的前提条件**，每轮都进上下文（空 box 也进一小段：先要截图，别假设）
         boxText: renderBoxBlock(boxView),
         signal: controller.signal,
         onEvent,
         onToolRecord: (r) => inFlight?.records.push(r),
       });
-      session = saveSession(appendTurn(session, toStoredTurn(turn, q, { id: turnId, at: Date.now(), mode })), store);
+      // 落盘：轮次 + 「本次会话的任务」（首问，S2 起随会话持久化——刷新页面后仍然每轮回显）
+      session = saveSession(ensureTask(appendTurn(session, toStoredTurn(turn, q, { id: turnId, at: Date.now(), mode })), q), store);
       inFlight = null;
       renderAll();
       // 偏好整理是旁路：它自己抛错也只当"这轮没得记"，绝不能把一轮成功的对话记成失败
@@ -1384,6 +1559,7 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
       append(msg);
     } finally {
       running = false;
+      opts.onRunning?.(false);
       if (!destroyed) {
         el<HTMLButtonElement>('.advisor-send').disabled = false;
         el<HTMLButtonElement>('.advisor-stop').disabled = true;
@@ -1393,10 +1569,15 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
   }
 
   function open(): void {
+    parked = false;
     if (!built) build();
     wrap.classList.add('open');
-    // 恢复出来的历史 / 上一轮的结论：打开时直接看最新一屏
-    if (built) scrollLogToEnd();
+    if (!built) return;
+    renderTeam();
+    scrollLogToEnd();
+  }
+  function park(): void {
+    parked = true;
   }
   function close(): void {
     controller?.abort();
@@ -1409,6 +1590,7 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
   return {
     open,
     close,
+    park,
     isOpen: () => wrap.classList.contains('open'),
     destroy() {
       destroyed = true;

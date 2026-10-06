@@ -1,0 +1,47 @@
+{
+  "when": "20261006-0016",
+  "model": "deepseek-chat",
+  "dry": false,
+  "full": false,
+  "noRouting": false,
+  "anchor": false,
+  "score": {
+    "cases": 1,
+    "passed": 1,
+    "checks": 3,
+    "failedChecks": 0
+  },
+  "skillDetailCalls": 0,
+  "totalToolCalls": 1,
+  "reports": [
+    {
+      "id": "config-read",
+      "ask": "我现在配将区里是哪三个人？",
+      "pass": true,
+      "checks": [
+        {
+          "check": "调用了 get_config",
+          "ok": true,
+          "detail": "实际：get_config"
+        },
+        {
+          "check": "工具调用 ≤ 3",
+          "ok": true,
+          "detail": "实际 1 次"
+        },
+        {
+          "check": "没有给方案（纯问答）",
+          "ok": true,
+          "detail": "实际 0 个"
+        }
+      ],
+      "answer": "当前配将区里的三个人是：\n\n| 位置 | 武将 | 可学战法 |\n|---|---|---|\n| 大营 | h653 | 0 个[[ev-1-get_config]] |\n| 中军 | h495 | 0 个[[ev-1-get_config]] |\n| 前锋 | sp_zhaoyun | 0 个[[ev-1-get_config]] |\n\n靶子设定：防御 150 / 谋略 100[[ev-1-get_config]]，士气 120、8 回合[[ev-1-get_config]]。\n\n只有 id，还没有名字和档案。要我把这三个人的档案拉出来看看（名字、兵种、主战法），或者直接给他们配战法出方案吗？如果是要给你自己配，我这边还得先确认你的 box 清单。",
+      "tools": [
+        "get_config"
+      ],
+      "battles": 0,
+      "tokens": 11770,
+      "ms": 2495
+    }
+  ]
+}

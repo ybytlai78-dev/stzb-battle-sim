@@ -15,7 +15,9 @@ import { runAdvisorTurn, type AdvisorEvent } from './advisor/loop';
 import { TraceLine } from './advisor/trace';
 import { createLocalCache } from './advisor/cache';
 import { createBrowserTransport, createFakeTransport, type AdvisorSettings, type TokenUsage } from './advisor/transport';
-import { makeCtx, type ToolCtx } from './advisor/tools';
+import { createTools, makeCtx, type ToolCtx } from './advisor/tools';
+import { toolSurfaceChars } from './advisor/router';
+import { emptySession, renderTaskBlock } from './advisor/memory';
 import { DEFAULT_BUDGET, DEFAULT_DUMMY, type AdvisorPlan, type AdvisorTurn } from './advisor/types';
 import { SLOTTED_HEROES } from './heroes';
 import { defaultCfg, type ViewCfg } from './teamConfig';
@@ -167,6 +169,8 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
       <pre id="lab-log" class="log"></pre>
       <h2>本轮裁定</h2>
       <pre id="lab-verdict" class="log small">（还没跑）</pre>
+      <h2>路由 <span class="muted small">（思考模式分档 —— 模型这一轮实际看到了什么，设计文档 §16）</span></h2>
+      <pre id="lab-route" class="log small">（还没跑）</pre>
       <h2>证据清单（方案卡上的数字只从这里来）</h2>
       <div id="lab-trace" class="trace muted small">（空）</div>
     </div>`;
@@ -175,6 +179,7 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
   const log = $('lab-log');
   const cost = $('lab-cost');
   const verdictEl = $('lab-verdict');
+  const routeEl = $('lab-route');
   const traceEl = $('lab-trace');
   const confirmEl = $('lab-confirm');
   const sendBtn = $<HTMLButtonElement>('lab-send');
@@ -189,6 +194,10 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
   let battles = 0;
   let tokens = 0;
   let trace = new TraceLine();
+  /** 会话状态（实验页没有记忆层，就按"这一页里跑过没有"算）：跑成功过工具 → 首轮锚定失效 */
+  let sessionHadToolCall = false;
+  /** 会话首问（Task 回显的原料；与生产口径一致：只在为空时写一次） */
+  let labTask = '';
   let caps = { maxCalls: settings.maxCalls, maxTokens: settings.maxTokens };
   const onEvent = (e: AdvisorEvent): void => {
     // 工具调用压成一行（与主站抽屉同口径）
@@ -218,7 +227,7 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
     verdictEl.textContent = [
       `合法（关 1）：${v.legal ? '通过' : '不通过'}`,
       `可溯源（关 2）：${v.verified ? '通过' : '不通过'}`,
-      `标准口径复算（关 3）：${v.recomputed ? '通过' : '未接入（实施计划 Task 5）'}`,
+      `标准口径复算（关 3）：${v.recomputed ? '通过' : '本轮没有方案（或方案未复算）'}`,
       `「应用」：${v.apply.enabled ? '可用' : `禁用 —— ${v.apply.reason ?? ''}`}`,
       `方案数：${turn.plans.length}${turn.degraded ? '（无工具模式：模型不支持工具调用）' : ''}`,
     ].join('\n');
@@ -230,6 +239,41 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
           )
           .join('')
       : '（空）';
+  };
+
+  /**
+   * 路由面板（S4）= 顾问自己的 `dev_router_status`：把**这一轮模型实际看到的东西**摊开——
+   * 档位 / 工具面（名字 + 字符数 + 相对全量省了多少）/ 首轮锚定 / 主动开档记录 /
+   * 以及原样贴出的 Task 块与本轮近场引导。全部来自 `turn.route` 与 `turn.messages`（**实际发出去的那份**），
+   * 不是重新推导一遍——这样"面板说省了 44%"和线上 payload 不可能对不上。
+   */
+  const renderRoute = (turn: AdvisorTurn): void => {
+    const route = turn.route;
+    if (!route) {
+      routeEl.textContent = '（本轮没有路由快照：走了降级路径（模型不支持工具调用）或旧入口）';
+      return;
+    }
+    const all = createTools();
+    const chars = toolSurfaceChars(all, route.toolNames);
+    const full = toolSurfaceChars(all, all.map((t) => t.name));
+    const save = full ? Math.round((1 - chars / full) * 100) : 0;
+    const guide = [...turn.messages].reverse().find((m) => m.content.includes('<advisor_route>'));
+    const task = turn.messages.find((m) => m.role === 'system' && m.content.startsWith('【本次会话的任务】'));
+    routeEl.textContent = [
+      `档位：${route.tiers.join(' + ')}${route.anchor ? '　★ 首轮锚定生效中（会话还没跑过工具）' : ''}`,
+      `工具面：${route.toolNames.length} 个 / ${chars} 字符　（全量 ${all.length} 个 / ${full} 字符，省 ${save}%）`,
+      `工具：${route.toolNames.join(', ')}`,
+      route.promotions.length
+        ? `主动开档：${route.promotions.map((p) => `${p.tier}（第 ${p.round} 轮开，理由：${p.why}）`).join('；')}`
+        : '主动开档：无',
+      turn.selfCorrect?.length
+        ? `交付前自检（§16.22）：触发过 —— 回灌后补上引用的是这些数字：${turn.selfCorrect.join('、')}`
+        : '交付前自检：未触发（正文里没有裸报的大数字）',
+      '',
+      task ? `【Task 块（静态 system，每轮都带）】\n${task.content}` : '【Task 块】未注入（会话首问尚未落盘）',
+      '',
+      guide ? `【本轮近场引导（贴在提问之后）】\n${guide.content}` : '（本轮没有引导块）',
+    ].join('\n');
   };
 
   const send = async (): Promise<void> => {
@@ -255,6 +299,7 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
     running = true;
     log.textContent = '';
     verdictEl.textContent = '（跑着呢…）';
+    routeEl.textContent = '（跑着呢…）';
     traceEl.textContent = '';
     toolCount = 0;
     battles = 0;
@@ -297,21 +342,29 @@ export function mountAdvisorLab(root: HTMLElement): AdvisorLabHandle {
     append(`【模式】${fakeMode ? '干跑（假传输）' : `${s.model} @ ${s.baseUrl}`}`);
     append('');
     try {
+      const q = $<HTMLTextAreaElement>('lab-q').value.trim();
+      if (!labTask) labTask = q; // 会话首问 = Task（与生产 `memory.ensureTask` 同口径）
       const turn = await runAdvisorTurn({
-        userText: $<HTMLTextAreaElement>('lab-q').value.trim(),
+        userText: q,
         ctx,
         transport,
         signal: controller.signal,
         onEvent,
+        // 与生产同款的三个注入（S2/S3）：任务回显、首轮锚定、近距离引导由 loop 自动贴
+        taskText: renderTaskBlock({ ...emptySession(), task: labTask }),
+        anchor: !sessionHadToolCall,
       });
+      if (turn.toolCalls.length) sessionHadToolCall = true;
       append('');
       append('【顾问】');
       append(turn.answer || '（空回答）');
       renderVerdict(turn);
+      renderRoute(turn);
     } catch (e) {
       append('');
       append(`【失败】${(e as Error)?.message ?? String(e)}`);
       verdictEl.textContent = `本轮失败：${(e as Error)?.message ?? String(e)}`;
+      routeEl.textContent = '本轮失败：没有路由快照';
     } finally {
       running = false;
       sendBtn.disabled = false;

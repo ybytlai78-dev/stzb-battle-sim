@@ -234,6 +234,24 @@ describe('Web 战斗模拟器冒烟', () => {
     expect((document.querySelector('#app > .control-bar') as HTMLElement).style.display).not.toBe('none');
   });
 
+  it('AI配将和配将台是同一页的两个房间，来回切换不拆对话', async () => {
+    await boot();
+    const nav = document.querySelector('.nav-link[data-nav="advisor"]') as HTMLButtonElement;
+    nav.click();
+    const page = document.querySelector('.advisor-page') as HTMLElement;
+    const log = page.querySelector('.advisor-log');
+    expect(page.classList.contains('open')).toBe(true);
+    expect((document.querySelector('main > .team-editor') as HTMLElement).style.display).toBe('none');
+    (page.querySelector('a.advisor-back') as HTMLAnchorElement).click();
+    expect(page.isConnected).toBe(true);
+    expect(page.querySelector('.advisor-log')).toBe(log);
+    expect((document.getElementById('advisor-room') as HTMLElement).style.display).toBe('none');
+    expect((document.querySelector('main > .team-editor') as HTMLElement).style.display).not.toBe('none');
+    nav.click();
+    expect(document.querySelector('.advisor-page')).toBe(page);
+    expect((document.getElementById('advisor-room') as HTMLElement).style.display).not.toBe('none');
+  });
+
   it('顶栏「教程」：打开使用指南弹窗（8 张截图 + 说明），× 可关闭', async () => {
     await boot();
     const nav = document.querySelector('.nav-link[data-nav="tutorial"]') as HTMLElement;

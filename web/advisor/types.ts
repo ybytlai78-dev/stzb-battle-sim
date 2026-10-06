@@ -170,7 +170,7 @@ export interface ToolSpec<A = unknown, C = unknown> {
 export interface Budget {
   /** 单轮累计真跑场次上限 */
   maxBattles: number;
-  /** 单轮累计墙上时间上限（毫秒） */
+  /** 单轮累计工具执行时间上限（毫秒）。不含模型思考、不含等人确认 */
   maxMs: number;
   /**
    * 单轮工具调用次数上限（**不是** token 上限）。
@@ -255,6 +255,21 @@ export interface TurnVerdict {
   apply: { enabled: boolean; reason?: string };
 }
 
+/** 对手池对打写在方案卡上的主数字（从工具 data 直读，模型不参与） */
+export interface PoolHint {
+  winRate: number;
+  winRatePct: number;
+  halfWidth: number;
+  runs: number;
+  meanTotal: number;
+  meanFirst3: number;
+  worstNote: string;
+  worstRate: number;
+  evidenceId: string;
+  fingerprint?: string;
+  opponents: Array<{ note: string; win: number; draw: number; loss: number; winRate: number; meanTotal: number; meanFirst3: number }>;
+}
+
 /** 关 3 的复算结果（固定种子 + 20 场 + 标准木桩） */
 export interface RecomputeResult {
   mean: number;
@@ -285,7 +300,31 @@ export interface PlanCheck {
   search: { mean: number; halfWidth: number; runs: number; evidenceId: string } | null;
   /** 搜索口径 vs 标准口径：区间重叠 = consistent；明显更低 = sensitive */
   judge: 'consistent' | 'sensitive' | null;
+  /**
+   * 对手池胜率（来自方案引用的 matchup / compare / optimize_winrate 证据）。
+   * 有它时方案卡以综合胜率为主数字，八回合总伤和前三回合是同一批对打的辅助列。
+   */
+  pool?: PoolHint | null;
   apply: { enabled: boolean; reason?: string };
+}
+
+/**
+ * 工具面分档（**思考模式路由**的档名，定义放这里是为了让 `router.ts` 与 `tools.ts` 都能引用
+ * 而不互相 import）：`base` = 默认档（查档案 / 测算 / 校验）；`search` = 大搜索（optimize_*）；
+ * `write` = 改对手池。锚定档（会话首个请求只发一个工具）由 S3 引入。
+ */
+export type AdvisorTier = 'base' | 'search' | 'write';
+
+/** 每轮结束时的档位快照（思考模式路由 · 结构机制移植，见设计文档 §16） */
+export interface AdvisorRoute {
+  /** 本轮开放的全部档（会话内只增不减） */
+  tiers: AdvisorTier[];
+  /** 实际发出去的工具面（与 wire 同源，供页面/测试断言） */
+  toolNames: string[];
+  /** 模型用 `route_task` 主动开档的记录（谁在什么时候要求开哪一档、理由） */
+  promotions: Array<{ tier: AdvisorTier; why: string; round: number }>;
+  /** 本轮结束时**首轮锚定**是否仍生效（会话还没跑过任何工具 = true） */
+  anchor?: boolean;
 }
 
 export interface AdvisorTurn {
@@ -299,4 +338,11 @@ export interface AdvisorTurn {
   /** 厂商不支持工具调用 → 去掉 tools 重试过（无工具模式） */
   degraded?: boolean;
   verdict: TurnVerdict;
+  /** 本轮的工具面档位（S1 起；页面轨迹行与评测记分卡读它） */
+  route?: AdvisorRoute;
+  /**
+   * 交付前自检（§16.22）触发过：这是当时**没带证据编号**的数字清单（已回灌给模型重答一轮）。
+   * 只在真触发时存在——面板据此显示"补了引用"，记分卡据此看自纠有没有发生。
+   */
+  selfCorrect?: string[];
 }

@@ -3276,6 +3276,18 @@ main {
   background: var(--color-crimson);
   box-shadow: 0 0 0 1px var(--bg);
 }
+/* AI配将还在跑：人已经回配将台，顶栏留一个金点 */
+.nav-link.busy::after {
+  content: '';
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gold-bright);
+  box-shadow: 0 0 0 1px var(--bg);
+}
 
 /* 尺寸交给 .modal 基础规则（min(760px, 92vw)）——与武将详情 / 教程 / 预设等弹窗同一个宽度 */
 .announcement-modal .m-head h3 { gap: 8px; }

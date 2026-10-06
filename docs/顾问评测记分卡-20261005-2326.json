@@ -1,0 +1,47 @@
+{
+  "when": "20261005-2326",
+  "model": "deepseek-chat",
+  "dry": false,
+  "full": false,
+  "noRouting": false,
+  "anchor": false,
+  "score": {
+    "cases": 1,
+    "passed": 1,
+    "checks": 3,
+    "failedChecks": 0
+  },
+  "skillDetailCalls": 0,
+  "totalToolCalls": 1,
+  "reports": [
+    {
+      "id": "config-read",
+      "ask": "我现在配将区里是哪三个人？",
+      "pass": true,
+      "checks": [
+        {
+          "check": "调用了 get_config",
+          "ok": true,
+          "detail": "实际：get_config"
+        },
+        {
+          "check": "工具调用 ≤ 3",
+          "ok": true,
+          "detail": "实际 1 次"
+        },
+        {
+          "check": "没有给方案（纯问答）",
+          "ok": true,
+          "detail": "实际 0 个"
+        }
+      ],
+      "answer": "当前配将区里是这三个人（都是 0 个可学战法，等级取到的默认值）：\n\n| 位置 | 武将 id |\n|---|---|\n| 大营 | h653 |\n| 中军 | h495 |\n| 前锋 | sp_zhaoyun |\n\n靶子：防御 150 / 谋略 100，士气 120，8 回合[[ev-1-get_config]]。\n\n要我查一下这三个具体是谁、主战法是什么，顺便看看要不要给空槽补战法吗？",
+      "tools": [
+        "get_config"
+      ],
+      "battles": 0,
+      "tokens": 11502,
+      "ms": 2180
+    }
+  ]
+}

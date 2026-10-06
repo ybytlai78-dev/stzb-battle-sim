@@ -99,7 +99,7 @@ describe('AI 顾问抽屉（主站内嵌）', () => {
     expect(page.classList.contains('rail-open')).toBe(true);
     expect(page.querySelector('#advisor-rail')).toBeTruthy();
     // 展开态：输入区工具行与顶栏阵容行交给 CSS 收掉（宽度断言在 Playwright 渲染验证里）
-    expect(page.querySelector('.advisor-tools')).toBeTruthy();
+    expect(page.querySelector('.advisor-nav')).toBeTruthy();
   });
 
   it('一问到底：流式正文 + 工具调用轨迹 + 方案卡（三关通过、应用可点）', async () => {
@@ -111,10 +111,17 @@ describe('AI 顾问抽屉（主站内嵌）', () => {
     const trace = root.querySelector('.advisor-trace')?.textContent ?? '';
     expect(trace).toContain('读配置');
     expect(trace).toContain('试跑');
-    expect(trace.split('·')).toHaveLength(2);
     expect(trace).not.toContain('get_config');
+    // 档位徽标（§16.26）拼在**同一行尾部**，所以不再锁「段数 = 2」：锁「徽标之前恰好是两个工具」
+    const segs = trace.split('·').map((s) => s.trim()).filter(Boolean);
+    const badgeAt = segs.findIndex((s) => s.startsWith('档位'));
+    expect(badgeAt, `轨迹行应带档位徽标：${trace}`).toBeGreaterThan(0);
+    expect(segs.slice(0, badgeAt)).toHaveLength(2);
+    expect(segs.slice(badgeAt).join(' · ')).toContain('个工具');
     const log = root.querySelector('.advisor-log')?.textContent ?? '';
-    expect(log).toContain('【顾问】');
+    expect(log).toContain('按标准口径跑了 20 场');
+    expect(root.querySelector('.advisor-bubble.user')?.textContent).toContain('这队现在打木桩能打多少？');
+    expect(root.querySelector('.advisor-bubble.assistant')).toBeTruthy();
     expect(log).not.toContain('▶');
 
     const card = root.querySelector('.advisor-plan-card') as HTMLElement;
@@ -266,8 +273,30 @@ describe('AI 顾问记忆层（会话持久化 + 你的偏好）', () => {
     expect(ev!.content).toContain('试跑②');
     // 历史里不该出现上一轮的协议 tool 消息 / 系统提示词原件
     expect(second.messages.some((m) => m.role === 'tool')).toBe(false);
-    // 系统块 = SYSTEM_PROMPT + 预算 + 我的 box（空 box 也带一小段空态提示，见 box.renderBoxBlock）
-    expect(second.messages.filter((m) => m.role === 'system')).toHaveLength(3);
+    // 系统块 = SYSTEM_PROMPT + 预算 + **本次会话的任务**（S2）+ 我的 box（空 box 也带一小段空态提示，见 box.renderBoxBlock）
+    const sys = second.messages.filter((m) => m.role === 'system');
+    expect(sys).toHaveLength(4);
+    expect(sys[2].content).toContain('本次会话的任务'); // 会话任务回显：静态块，刷新后仍在
+    // 近距离引导（S2）：贴在本轮提问**之后**，且不进历史 / 不进 system 前缀
+    const last = second.messages[second.messages.length - 1];
+    expect(last.role).toBe('user');
+    expect(last.content).toContain('<advisor_route>');
+    expect(last.content).toContain('【本轮路由】');
+    expect(sys.map((m) => m.content).join('\n')).not.toContain('<advisor_route>');
+  });
+
+  it('③ 首轮锚定（S3）：会话第一个请求只发 get_config（+常驻三件），跑过一次后放开', async () => {
+    const { view, transport } = setup();
+    view.open();
+    await view.__send('这队现在打木桩能打多少？');
+    // 第一个请求：窄面（首轮锚定）
+    const firstReq = transport.requests[0];
+    expect(firstReq.tools.map((t) => t.name)).toEqual(['get_config', 'tools_catalog', 'tools_help', 'route_task']);
+    expect(firstReq.messages.at(-1)?.content).toContain('首轮锚定');
+    // 第二个请求（第一个请求里 get_config 已经跑过）：放开默认档，simulate 才可见
+    const secondReq = transport.requests[1];
+    expect(secondReq.tools.map((t) => t.name)).toContain('simulate');
+    expect(secondReq.tools.length).toBeGreaterThan(4);
   });
 
   it('④ 注入：空档案不注入；手填一条后，每轮都以 system 块带进上下文', async () => {
@@ -286,12 +315,14 @@ describe('AI 顾问记忆层（会话持久化 + 你的偏好）', () => {
     const injected = reqOf(transport, '第二问').messages.find((m) => m.content.includes('<advisor_prefs>'));
     expect(injected?.role).toBe('system');
     expect(injected?.content).toContain('只看核心将伤害期望');
-    // 摆位：SYSTEM_PROMPT → 预算 → **我的 box** → 偏好档案 → 历史 → 本轮提问
+    // 摆位（S2 起）：SYSTEM_PROMPT → 预算 → **本次会话的任务** → 我的 box → 偏好档案 → 历史 → 本轮提问 → 近距离引导
     const msgs = reqOf(transport, '第二问').messages;
     expect(msgs[0].content).toContain('配将顾问');
     expect(msgs[1].content).toContain('本轮预算');
-    expect(msgs[2].content).toContain('<advisor_box>');
-    expect(msgs.indexOf(injected!)).toBe(3);
+    expect(msgs[2].content).toContain('本次会话的任务');
+    expect(msgs[2].content).toContain('第一问'); // 任务 = 会话开头那句话
+    expect(msgs[3].content).toContain('<advisor_box>');
+    expect(msgs.indexOf(injected!)).toBe(4);
   });
 
   it('③ 自动整理：轮末一次 once 抽取 → 合并进档案 → 面板可见 → 写回本轮 note', async () => {

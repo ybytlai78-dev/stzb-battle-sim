@@ -6,6 +6,7 @@ import './styles.css';
 import './mobile.css';
 import './lab.css';
 import './tutorial.css';
+import './advisor.css';
 import { openSettingsPanel } from './settings';
 import { TEAM_KEY, readTeamState, writeTeamState } from './teamStore';
 import { runBattle } from '../src/engine/combat';
@@ -47,6 +48,8 @@ import { asset } from './assets';
 import { openTutorialPanel } from './tutorial';
 import { setupTouchDrag } from './touchDrag';
 import { setupBackButton } from './backButton';
+import { createAdvisorHost } from './advisorHost';
+import { mountAdvisor, type AdvisorView } from './advisor/view';
 import { createBattleView } from './battleView';
 import { createBattleSummary, createStatsView } from './battleSummary';
 import { WIN_RATE_RUNS, openWinRatePanel } from './winRate';
@@ -378,6 +381,8 @@ setupTouchDrag(handlers);
 // 安卓返回键 / 返回手势（仅原生壳生效）：最上层覆盖层 → 实验室 → 战报页 → 都没有才退出应用。
 // 这些面板是 DOM 覆盖层而不是真页面，不接管的话在"页面"里按返回会直接退到桌面。
 setupBackButton({
+  isAdvisorOpen: () => advisorVisible,
+  closeAdvisor: () => exitAdvisor(),
   isLabOpen: () => labVisible,
   closeLab: () => exitLab(),
   isReportOpen: () => app.classList.contains('report-open'),
@@ -391,9 +396,7 @@ function refresh(): void {
   persistTeam();
 }
 
-// ─── AI配将（独立页；主站只留入口 + 一支队伍交接） ───
-// 设计口径：`docs/AI配将-页面布局设计.md` §2/§9 —— 功能全在独立页，主站不再内嵌抽屉。
-/** 主站落盘当前队伍（独立页读它当上下文）；**只在内容变化时写**，否则两标签页会 storage 事件互踢 */
+/** 主站落盘当前队伍（另一标签里的 advisor.html 仍读它）；**只在内容变化时写** */
 let lastTeamJson = '';
 function persistTeam(): void {
   const json = JSON.stringify({ red: state.red, blue: state.blue });
@@ -403,8 +406,7 @@ function persistTeam(): void {
 }
 
 function openAdvisor(): void {
-  persistTeam(); // 出发前先落盘：独立页一进去就拿到当前阵容
-  location.href = './advisor.html';
+  enterAdvisor();
 }
 
 // 独立页把方案写回同一把键 → 主站重读并重渲染（不然会出现"应用了但主站还是旧队"）
@@ -602,6 +604,11 @@ export function initApp(root?: HTMLElement): void {
   // 否则下次 enterLab 会往已脱离文档的旧节点上挂载（界面空白、DOM 查不到）
   labRoot = null;
   labVisible = false;
+  advisorView?.destroy();
+  advisorRoot?.remove();
+  advisorView = null;
+  advisorRoot = null;
+  advisorVisible = false;
   app = root ?? document.getElementById('app')!;
   app.innerHTML = '';
   app.className = 'app-shell';
@@ -619,7 +626,7 @@ export function initApp(root?: HTMLElement): void {
       <button type="button" class="nav-link" data-nav="presets" title="阵容预设：保存、搜索、一键上场">预设</button>
       <button type="button" class="nav-link" data-nav="skills">战法</button>
       <button type="button" class="nav-link" data-nav="lab">伤害测试</button>
-      <button type="button" class="nav-link" data-nav="advisor" title="AI配将：独立页面（读配将区 → 调 L2/L3 搜索 → 给带实测数据的方案）">AI配将</button>
+      <button type="button" class="nav-link" data-nav="advisor" title="AI配将：和配将台同一页，来回切换不会中断">AI配将</button>
       <button type="button" class="nav-link" data-nav="tutorial">教程</button>
       <button type="button" class="nav-link" data-nav="notice" title="更新公告：每个版本的更新改动都在这里">公告</button>
     </nav>
@@ -675,7 +682,6 @@ export function initApp(root?: HTMLElement): void {
   header.querySelector('[data-nav="lab"]')!.addEventListener('click', () => {
     labVisible ? exitLab() : enterLab();
   });
-  // AI配将（独立页）：落盘当前队伍 → 跳 advisor.html（主站不再内嵌抽屉）
   header.querySelector('[data-nav="advisor"]')!.addEventListener('click', () => openAdvisor());
   // 设置：模型 / 额度 / 数据（含 API key）——与 AI配将 页共用同一个弹窗
   header.querySelector('#header-settings')!.addEventListener('click', () => openSettingsPanel());
@@ -696,6 +702,9 @@ export function initApp(root?: HTMLElement): void {
 let labRoot: HTMLElement | null = null;
 let labVisible = false;
 let battleWasVisible = false;
+let advisorRoot: HTMLElement | null = null;
+let advisorView: AdvisorView | null = null;
+let advisorVisible = false;
 
 function enterLab(): void {
   if (!labRoot) {
@@ -720,6 +729,55 @@ function enterLab(): void {
   // 顶栏导航在实验室态变成「返回配将」（用户 2026-09-19：实验室内那行返回按钮已删，返回入口收到顶栏）
   const nav = app.querySelector<HTMLButtonElement>('[data-nav="lab"]');
   if (nav) nav.textContent = '返回配将';
+}
+
+/**
+ * 配将台 ↔ AI配将：同一页的两个房间。
+ * 离开只把房间藏起来，不 destroy —— 进行中的一轮（请求 / 跑批）接着跑，回来还是这一屏。
+ */
+function ensureAdvisor(): void {
+  if (advisorView) return;
+  advisorRoot = document.createElement('div');
+  advisorRoot.id = 'advisor-room';
+  advisorRoot.style.display = 'none';
+  document.body.appendChild(advisorRoot);
+  advisorView = mountAdvisor(advisorRoot, {
+    host: createAdvisorHost({
+      getTeam: () => state.red,
+      handlers,
+      refresh,
+      notify: showNotice,
+    }),
+    onLeave: () => exitAdvisor(),
+    onRunning: (busy) => {
+      const nav = app.querySelector<HTMLButtonElement>('[data-nav="advisor"]');
+      if (!nav) return;
+      nav.classList.toggle('busy', busy);
+      nav.title = busy ? 'AI配将进行中，点这里回去看' : 'AI配将：和配将台同一页，来回切换不会中断';
+    },
+  });
+}
+
+function enterAdvisor(): void {
+  if (advisorVisible) return;
+  if (labVisible) exitLab();
+  if (app.classList.contains('report-open')) closeReportView();
+  ensureAdvisor();
+  editorRoot.style.display = 'none';
+  controlBar.style.display = 'none';
+  advisorRoot!.style.display = '';
+  advisorVisible = true;
+  advisorView!.open();
+}
+
+function exitAdvisor(): void {
+  if (!advisorVisible) return;
+  advisorView?.park();
+  advisorRoot!.style.display = 'none';
+  advisorVisible = false;
+  editorRoot.style.display = '';
+  controlBar.style.display = '';
+  refresh();
 }
 
 function exitLab(): void {
