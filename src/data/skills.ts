@@ -1513,7 +1513,11 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'inflict_status', status: { type: 'burning', duration: 1, rate: 119, growthRate: 1.3 } },
     ],
   },
-  /** 长兵方阵（B 指挥）：前 3 回合使我军群体 75% 几率分兵（伤害率 60%），持续 3 回合 */
+  /** 长兵方阵（B 指挥）：前 3 回合（`roundRepeat` 窗口 1~3）使我军群体**每回合各掷一次** 75% 判定，
+   *  命中则进入分兵状态（伤害率 60%）。⚠️ 官方文案里的「前 3 回合」是**判定窗口**、不是状态时长：
+   *  分兵只覆盖判定成功的那一个回合（`duration: 1` = 只覆盖携带者本次行动，第 4 回合行动开始前清除）。
+   *  旧实现写 `duration: 3`，再叠加「目标行动时挂上的状态本次行动结束不递减 + 同源刷新 remaining 取 max」，
+   *  实际覆盖到第 5 回合（用户 2026-09-30 报告）。 */
   changbing_fangzhen: {
     id: 'changbing_fangzhen',
     name: '长兵方阵',
@@ -1526,7 +1530,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     retainAfterDeath: true,
     roundRepeat: { startRound: 1, endRound: 3, rate: 0.75 },
     tags: ['split'],
-    output: [{ kind: 'inflict_status', status: { type: 'split', duration: 3, rate: 60 } }],
+    output: [{ kind: 'inflict_status', status: { type: 'split', duration: 1, rate: 60 } }],
   },
   /** 奇术折冲（A 主动·示例）：使敌军群体陷入妖术状态（116% 受谋略），持续 2 回合 */
   qishu_zhechong: {
@@ -2126,7 +2130,15 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['damage'],
     output: [{ kind: 'physical_damage', rate: 280 }],
   },
-  /** 三术奇谋（S 主动）：1 回合准备，对敌军单体发动 3 次策略攻击 178%，并依次使目标攻击/防御/谋略下降 18，持续 2 回合，每次目标独立判定 */
+  /**
+   * 三术奇谋（S 主动）：1 回合准备，对敌军单体发动 3 次策略攻击 178%，并依次使目标攻击/防御/谋略下降 18，持续 2 回合，每次目标独立判定。
+   * 成长率：
+   *  - 伤害率 178% → **1.85/点**（大明州 4469 §6.1 完整表，已确认）；
+   *  - 属性下降 18.0 → **0.075/点（受谋略）**：用户实测反解（游戏内实读 2026-10-06）——
+   *    谋略 299.1 → 34.4、277.1 → 32.8。0.1 位显示口径下两点交集 [0.074835, 0.075080)（唯一整齐值 0.075，
+   *    与已确认的其疾如风 速度 +41 同档）。
+   * 引擎点数类缩放按整数取整（本库现行口径）→ 结算 −34 / −33（游戏显示 34.4 / 32.8，取整口径另议）。
+   */
   sanshu_qimou: {
     id: 'sanshu_qimou',
     name: '三术奇谋',
@@ -2140,9 +2152,9 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'strategy_damage', rate: 178, strategyScaled: true, growthRate: 1.85, targetMode: 'random_single' },
       { kind: 'strategy_damage', rate: 178, strategyScaled: true, growthRate: 1.85, targetMode: 'random_single' },
       { kind: 'strategy_damage', rate: 178, strategyScaled: true, growthRate: 1.85, targetMode: 'random_single' },
-      { kind: 'inflict_status', status: { type: 'attack_buff', amount: -18, duration: 2 } },
-      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -18, duration: 2 } },
-      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -18, duration: 2 } },
+      { kind: 'inflict_status', status: { type: 'attack_buff', amount: -18, duration: 2, strategyScaled: true, growthRate: 0.075 } },
+      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -18, duration: 2, strategyScaled: true, growthRate: 0.075 } },
+      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -18, duration: 2, strategyScaled: true, growthRate: 0.075 } },
     ],
   },
   /** 妖术（S 主动 50%）：1 回合准备，使敌军群体陷入暴走状态（无差别攻击），持续 2 回合 */
@@ -7376,7 +7388,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    * 入档判断：**上架** —— 三个数值（30% / 每回合 +10% / 分兵 100%）官方均给确定值，且无「受属性影响」段。
    * 引擎配套（新机制 `BaseSkill.roundRampingChance`）：输出段未显式给 `chance` 时，基础率改为
    *   `min(1, base + increment × (当前回合 − 1))`（再走士气修正），逐段**独立**判定、各自发 `skill_trigger`；
-   *   连击 / 分兵均为既有状态（行动中施加 `duration: 1`：本次行动生效完、携带者行动结束后递减 → 本次普攻与分兵仍覆盖）。
+   *   连击 / 分兵均为既有状态（`duration: 1`；连击/分兵走第 2 组「下次行动前递减」口径 ——
+   *   在本次行动内后续的普攻阶段生效，下一次行动开始时清除，不溢出到下一回合）。
    */
   jiangmen_youjiang: {
     id: 'jiangmen_youjiang',

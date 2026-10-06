@@ -126,6 +126,40 @@ describe('三术奇谋（S 准备：敌军单体 3 次策略攻击 + 三属性�
       expect(inflicted(report, st).filter((e) => e.unitId.startsWith('enemy')).length).toBeGreaterThan(0);
     }
   });
+
+  it('属性下降「受谋略」成长率 0.075/点（用户实测：谋略 299.1 → 34.4、277.1 → 32.8；基值 18 @ 谋略 80）', () => {
+    const segs = SKILL_REGISTRY['sanshu_qimou'].output.filter((o) => o.kind === 'inflict_status');
+    expect(segs).toHaveLength(3);
+    const types: string[] = [];
+    for (const o of segs) {
+      if (o.kind !== 'inflict_status' || Array.isArray(o.status)) continue;
+      types.push(o.status.type);
+      expect('strategyScaled' in o.status && o.status.strategyScaled).toBe(true);
+      expect('growthRate' in o.status && o.status.growthRate).toBe(0.075);
+      expect('amount' in o.status && o.status.amount).toBe(-18);
+    }
+    expect(types).toEqual(['attack_buff', 'defense_buff', 'strategy_buff']);
+    // 实测点复算（游戏 0.1 位显示口径）：18 + 0.075 × (谋略 − 80)
+    expect(Math.round((18 + 0.075 * (299.1 - 80)) * 10) / 10).toBe(34.4);
+    expect(Math.round((18 + 0.075 * (277.1 - 80)) * 10) / 10).toBe(32.8);
+  });
+
+  it('高谋略携带者的落差：生效谋略 299.1 → 敌军属性下降 34（引擎点数类整数取整口径）', () => {
+    // 避开部队加成（同阵营 3 人 +10% 四维 / 同兵种 3 人 +10%）→ 生效谋略 = 面板 299.1
+    const team = activeTeam('sanshu_qimou');
+    team[0].faction = '魏';
+    team[0].troopType = 'cavalry';
+    team[1].faction = '蜀';
+    team[1].troopType = 'archer';
+    team[2].faction = '吴';
+    team[2].troopType = 'infantry';
+    team[1].strategy = 299.1;
+    const report = run(team);
+    const down = inflicted(report, 'attack_buff').filter((e) => e.unitId.startsWith('enemy'));
+    expect(down.length).toBeGreaterThan(0);
+    // 18 + 0.075×219.1 = 34.4325 → 四舍五入 34（游戏显示 34.4，取整口径另议）
+    expect(down.every((e) => e.detail.includes('降低了34'))).toBe(true);
+  });
 });
 
 describe('妖术（S 准备：敌军群体暴走 2 回合）', () => {

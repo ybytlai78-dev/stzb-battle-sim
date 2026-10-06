@@ -23,7 +23,9 @@ const CONFIRMED: Record<string, Record<string, number>> = {
   xixiang_wugong: { strategy_damage: 2.075 },
   kui_xiangta: { strategy_damage: 0.69 },
   gongxin: { strategy_damage: 1.075 },
-  sanshu_qimou: { strategy_damage: 1.85 },
+  /** 用户实测反解（2026-10-06，游戏内实读）：三术奇谋属性下降 −18 受谋略 0.075/点
+   *  （谋略 299.1 → 34.4、277.1 → 32.8；0.1 位显示口径交集 [0.074835, 0.075080)） */
+  sanshu_qimou: { strategy_damage: 1.85, attack_buff: 0.075, defense_buff: 0.075, strategy_buff: 0.075 },
   famou: { strategy_damage: 2.175 },
   luolei: { strategy_damage: 1.35 },
   mizhen: { strategy_damage: 1.5 },

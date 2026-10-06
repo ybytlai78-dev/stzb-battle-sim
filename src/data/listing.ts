@@ -131,7 +131,8 @@ export const OFFLINE_LEARNABLE_SKILLS: Record<string, string> = {
   chouce_juedao: '伤害 250% / 属性 -25 成长未确认',
   qishu_zhechong: '妖术 116% / 普攻伤害 -20% 成长未确认',
   famou: '属性 -45 成长未确认（伤害 2.175 已确认）',
-  sanshu_qimou: '属性 -18 成长未确认（伤害 1.85 已确认）',
+  // 三术奇谋（sanshu_qimou）：属性 −18 成长已由用户实测反解确认为 **0.075/点（受谋略）**
+  //   （谋略 299.1 → 34.4、277.1 → 32.8，2026-10-06）→ 已从上架黑名单移除（战法上架）。
   fengsheng_heli: '受策略增伤 12% 成长未确认（恐慌 1.3 已确认）',
   shuiyan_qijun: '攻击 -10 成长未确认（伤害 2.25 已确认）',
   weiya_kunjun: '防御 -7.2 成长未确认（伤害 2.25 已确认）',
