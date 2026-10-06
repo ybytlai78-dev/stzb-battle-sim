@@ -129,7 +129,7 @@ describe('行动前施加（准备阶段）：计数器回合末递减，「前N
   });
 });
 
-describe('行动中施加的计数器回合（第 2 组：控制/属性/增减伤）：下次行动开始时递减、移除推迟到再下一次行动开始', () => {
+describe('行动中施加的计数器回合（第 2 组：控制/属性/增减伤/连击/分兵）：下次行动开始时递减、移除推迟到再下一次行动开始', () => {
   it('玄武洰流怯战 duration=2（行动中施加）：连续 2 次行动都被怯战；第 2 次行动结束后仍在身，下次行动开始时移除', () => {
     const ctx = makeCtx();
     const caster = makeUnit('caster', { position: '大营', attackRange: 5 });
@@ -186,7 +186,7 @@ describe('行动中施加的计数器回合（第 2 组：控制/属性/增减�
 });
 
 describe('连击（主动）：1回合，覆盖当次行动；同类型冲突', () => {
-  it('主动连击 duration=1：行动中施加 → 本次行动完整享受连击，行动结束后才移除', () => {
+  it('主动连击 duration=1：行动中施加 → 本次行动完整享受连击，下一次行动开始前移除', () => {
     const ctx = makeCtx();
     const u = makeUnit('u');
     ctx.myTeam = [u];
@@ -205,14 +205,16 @@ describe('连击（主动）：1回合，覆盖当次行动；同类型冲突', 
     const hits = ctx.events.filter((e) => e.type === 'attack_hit' && e.sourceId === 'u');
     expect(hits).toHaveLength(2);
 
-    // 新口径：行动结束才递减 → 本次行动已完整生效，行动结束后 1→0 移除
-    expect(hasStatus(u, 'combo')).toBe(false);
+    // 连击 / 分兵均为第 2 组「下次行动前递减」：行动开始时递减 1→0（只打移除标记、本次行动照常生效），
+    // 状态对象保留到「下一次行动开始前」才被静默清除
+    expect(hasStatus(u, 'combo')).toBe(true);
+    expect(getStatus(u, 'combo')!.remaining).toBe(0);
 
-    // 回合末不递减（行动中施加；此时已移除）
+    // 回合末不递减（行动中施加的第 2 组状态由行动开始处递减）
     tickStatuses(ctx, [u]);
-    expect(hasStatus(u, 'combo')).toBe(false);
+    expect(hasStatus(u, 'combo')).toBe(true);
 
-    // 下回合无连击：单次普攻
+    // 下回合行动开始 → 入口清除；无连击：单次普攻
     ctx.currentRound = 2;
     actUnit(ctx, u);
     expect(ctx.events.filter((e) => e.type === 'attack_hit' && e.sourceId === 'u')).toHaveLength(3);

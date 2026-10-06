@@ -173,7 +173,8 @@ describe('将门有将（XP关兴＆张苞 h653）', () => {
       expect(Boolean(combo)).toBe(ts[0].success);
       expect(Boolean(split)).toBe(ts[1].success);
       if (combo && split) {
-        expect((combo as { remaining: number }).remaining).toBe(1);
+        // 连击 / 分兵走第 2 组「下次行动前递减」：行动结束补一次递减 → remaining 0（下一次行动开始时清除）
+        expect((combo as { remaining: number }).remaining).toBe(0);
         expect((split as { rate: number }).rate).toBe(100);
       }
       const n = Number(Boolean(combo)) + Number(Boolean(split));

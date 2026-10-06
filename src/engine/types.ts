@@ -687,6 +687,7 @@ export type CreateStatus =
   /** 概率规避（列营守险）：受到下 charges 次伤害时各掷一次 rate，命中则完全免疫该次伤害。
    *  与 evasion 的「层数式必挡」不同：判定失败也消耗 1 次机会。 */
   | { type: 'evade_chance'; rate: number; charges: number; duration: number }
+  /** 连击（本回合至多两次普攻）：状态类增益，走第 2 组递减 —— duration 1 = 只覆盖携带者本次行动 */
   | { type: 'combo'; duration: number }
   /**
    * 伤害分摊（言出必克 / 雅虑适时）：**携带者**替同侧友军承担一部分受到的伤害——同侧任一符合条件者
@@ -833,7 +834,7 @@ export type CreateStatus =
   | { type: 'curse'; duration: number; rate: number; growthRate: number; sourceStrategy?: number }
   /** 引燃标记（火势风威）：携带者受到下一次伤害时额外引发一次燃烧（rate% 受谋略），触发后移除 */
   | { type: 'ignite'; duration: number; rate: number; growthRate: number; sourceStrategy?: number }
-  | { type: 'split'; duration: number; rate: number; /** 次数型分兵（鱼鳞）：有值时按攻击输出次数消耗，不按回合递减 */ charges?: number; /** 受谋略缩放（鱼鳞） */ strategyScaled?: boolean }
+  | { type: 'split'; duration: number; rate: number; /** 次数型分兵（鱼鳞）：有值时按攻击输出次数消耗，不按回合递减；无 charges 走第 2 组（duration 1 = 只覆盖本次行动） */ charges?: number; /** 受谋略缩放（鱼鳞） */ strategyScaled?: boolean }
   | { type: 'jump_prep'; duration: number; rate: number }
   /** 下一次造成伤害无视规避（缚父临危）：无 duration——消耗制，不按回合递减 */
   /** 下一次造成伤害无视规避（缚父临危）：duration 仅占位——消耗制，不按回合递减（两个 tick 函数显式跳过） */
@@ -2205,9 +2206,9 @@ export interface DotStoredDamage {
 /** 武将身上的状态（buff/debuff）。
  *  叠层属性 buff（持节镇西）：每层各自计 remaining（回合结束掉 1 层），数值 = stacks × perStack
  *  appliedRound：施加时的回合号。0 = 准备阶段（行动前施加，remaining=duration，回合末递减，「前N回合」生效至第N+1回合行动前）；
- *                >0 = 该回合行动中施加（remaining=duration）——第 2 组（控制/属性/增减伤/无视防御）在携带者下次行动
- *                开始时递减、再下一次行动开始时移除（duration N = 生效接下来 N 次行动）；其余（DoT/治愈等）
- *                在携带者行动结束后递减、到 0 移除 */
+ *                >0 = 该回合行动中施加（remaining=duration）——第 2 组（控制/属性/增减伤/无视防御/连击/分兵）在携带者下次行动
+ *                开始时递减、再下一次行动开始时移除（duration N = 生效接下来 N 次行动；duration 1 = 只覆盖本次行动）；
+ *                其余（DoT/治愈等）在携带者行动结束后递减、到 0 移除 */
 export type Status =
   | { type: 'confusion'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'rampage'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; pendingNextAct?: boolean }

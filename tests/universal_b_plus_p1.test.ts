@@ -470,8 +470,8 @@ describe('先声夺人（A 被动：前 3 回合行动时连击 / 分兵 / 单�
     expect(appliedRounds.every((r) => r >= 1 && r <= 3)).toBe(true);
     expect(lateCast).toHaveLength(0);
     expect(lateTrig).toHaveLength(0);
-    // 新口径：第 3 回合施加的 duration 1（连击/分兵）覆盖到携带者第 4 回合的行动，
-    // 因此第 4 回合允许出现分兵伤害；但不该更晚（duration 1 = 接下来 1 次行动）
-    expect(splitDamageRounds.every((r) => r >= 1 && r <= 4)).toBe(true);
+    // 口径（本次修复）：连击 / 分兵走第 2 组「下次行动前递减」——第 3 回合施加的 duration 1
+    // 只覆盖该回合自身的行动、第 4 回合行动开始前即被清除，因此分兵伤害不可能出现在第 4 回合及以后
+    expect(splitDamageRounds.every((r) => r >= 1 && r <= 3)).toBe(true);
   });
 });
