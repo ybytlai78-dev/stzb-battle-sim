@@ -13,6 +13,7 @@ export default defineConfig({
       input: {
         main: resolve(process.cwd(), 'index.html'),
         advisor: resolve(process.cwd(), 'advisor.html'),
+        rogue: resolve(process.cwd(), 'rogue.html'),
       },
     },
   },
