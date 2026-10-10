@@ -1,0 +1,1 @@
+import"./teamEditor-BAX3Nthp.js";import{m as e,c as n}from"./advisorHost-Bd4FxH0V.js";function r(o){const t=e(o,{host:n()});return{destroy:()=>t.destroy()}}if(typeof document<"u"){const o=document.getElementById("app");o&&r(o)}
