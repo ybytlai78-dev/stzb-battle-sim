@@ -15,6 +15,11 @@ import benchmarkJson from './data/opponent_benchmark.json';
 export const EXTRA_POOL_KEY = 'dsh-advisor-opponents-extra-v1';
 /** 旧版 L4 对手池。第一次读取时迁进用户添加，之后以新键为准。 */
 export const LEGACY_POOL_KEY = 'dsh-battle-sim-opponents-v1';
+/**
+ * 被用户**关闭**的对手 id（不参与胜率比较）。固定集与自加共用这一把键。
+ * 关闭 = 保留配置、只从「参与比较」的池子里摘出去 —— 这是固定集唯一的「停用」入口（它删不掉）。
+ */
+export const DISABLED_POOL_KEY = 'dsh-advisor-opponents-off-v1';
 
 export type PoolSource = 'benchmark' | 'user';
 
@@ -25,6 +30,11 @@ export interface PoolEntry {
   note: string;
   cfg: ViewCfg;
   source: PoolSource;
+  /**
+   * 是否参与胜率比较。缺省 `true`；由 `loadMergedPool` 按「已关闭」名单填充
+   * （用户条目落盘时不写这一位 —— 它是派生态，不是配置）。
+   */
+  enabled?: boolean;
   /** 从哪条预设加进来的（手存 / 导入则没有） */
   presetId?: string;
 }
@@ -33,6 +43,8 @@ export interface PoolEntry {
 export interface MergedPool {
   version: string;
   entries: PoolEntry[];
+  /** 已关闭的对手 id（升序；进指纹，开关一变缓存就不复用） */
+  disabled: string[];
 }
 
 interface BenchmarkFile {
@@ -155,25 +167,82 @@ export function saveExtras(entries: PoolEntry[], storage: PoolStorage | null = d
   writeExtras(entries.filter((e) => e.source !== 'benchmark' && !isBenchmarkId(e.id)), storage);
 }
 
+/** 已关闭的对手 id（读不出来 / 存储不可用 → 空集，等价于「全开」） */
+export function loadDisabledIds(storage: PoolStorage | null = defaultPoolStorage()): Set<string> {
+  if (!storage) return new Set();
+  try {
+    const raw = storage.getItem(DISABLED_POOL_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw) as unknown;
+    return new Set(Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeDisabledIds(ids: ReadonlySet<string>, storage: PoolStorage | null): void {
+  if (!storage) return;
+  try {
+    storage.setItem(DISABLED_POOL_KEY, JSON.stringify([...ids].sort()));
+  } catch {
+    /* 配额满 / 隐私模式：这一次不持久化 */
+  }
+}
+
 /**
  * 合并：固定集在前，用户添加在后。
- * 用户条目若 id 撞上固定集，丢掉（固定集优先）。
+ * 用户条目若 id 撞上固定集，丢掉（固定集优先）。`disabled` 里的 id 标 `enabled: false`（仍留在 entries 里，
+ * 面板要列出它们才能再打开）。
  */
-export function mergePool(benchmark: PoolEntry[], extras: PoolEntry[]): MergedPool {
+export function mergePool(
+  benchmark: PoolEntry[],
+  extras: PoolEntry[],
+  disabled: ReadonlySet<string> = new Set()
+): MergedPool {
   const benchIds = new Set(benchmark.map((e) => e.id));
   const users = extras.filter((e) => e.source !== 'benchmark' && !benchIds.has(e.id));
-  return { version: benchmarkVersion(), entries: [...benchmark.map(clone), ...users.map(clone)] };
+  const entries = [...benchmark.map(clone), ...users.map(clone)].map((e) => ({ ...e, enabled: !disabled.has(e.id) }));
+  return { version: benchmarkVersion(), entries, disabled: [...disabled].sort() };
 }
 
-/** 读合并后的对手池 */
-export function loadMergedPool(storage: PoolStorage | null = defaultPoolStorage()): MergedPool {
-  return mergePool(loadBenchmark(), loadExtras(storage));
+/**
+ * 读合并后的对手池。
+ * 缺省只给**已开启**的（胜率比较 / 顾问工具走这条）；`includeDisabled: true` 给面板用（要列出开关）。
+ */
+export function loadMergedPool(
+  storage: PoolStorage | null = defaultPoolStorage(),
+  opts: { includeDisabled?: boolean } = {}
+): MergedPool {
+  const pool = mergePool(loadBenchmark(), loadExtras(storage), loadDisabledIds(storage));
+  if (opts.includeDisabled) return pool;
+  return { ...pool, entries: pool.entries.filter((e) => e.enabled !== false) };
 }
 
-/** 证据用的池子指纹：固定集版本 + 用户条目 id */
+/** 证据用的池子指纹：固定集版本 + 已启用自加条目 + 已关闭条目（开关一变指纹就变，缓存不串） */
 export function poolFingerprint(pool: MergedPool = loadMergedPool()): string {
-  const extras = pool.entries.filter((e) => e.source === 'user').map((e) => e.id);
-  return `${pool.version}|${extras.join(',')}`;
+  const extras = pool.entries.filter((e) => e.source === 'user' && e.enabled !== false).map((e) => e.id);
+  return `${pool.version}|${extras.join(',')}|off:${(pool.disabled ?? []).join(',')}`;
+}
+
+/**
+ * 开启 / 关闭一条对手。关闭 = 保留配置、但不参与胜率比较。
+ * 固定集删不掉，这里是它唯一的「停用」入口；自加条目也共用同一把开关。
+ */
+export function setOpponentEnabled(
+  id: string,
+  enabled: boolean,
+  storage: PoolStorage | null = defaultPoolStorage()
+): PoolWriteResult {
+  const hit = loadMergedPool(storage, { includeDisabled: true }).entries.find((e) => e.id === id);
+  if (!hit) return { ok: false, message: `对手池里没有条目 ${id}` };
+  const ids = loadDisabledIds(storage);
+  if (enabled) ids.delete(id);
+  else ids.add(id);
+  writeDisabledIds(ids, storage);
+  return {
+    ok: true,
+    message: enabled ? `已开启「${hit.note}」` : `已关闭「${hit.note}」——不参与胜率比较`,
+  };
 }
 
 /** 阵容预设 → 可进引擎的 ViewCfg。空槽 / 不足 3 将返回 null。 */
@@ -193,7 +262,10 @@ function slotFromPreset(s: SlotState): SlotCfg {
     heroId: s.heroId ?? '',
     level: s.level,
     addAttack: s.freePoints?.attack ?? 0,
+    addDefense: s.freePoints?.defense ?? 0,
     addStrategy: s.freePoints?.strategy ?? 0,
+    addSpeed: s.freePoints?.speed ?? 0,
+    ...(s.secondaryTroop ? { secondaryTroop: s.secondaryTroop } : {}),
     troopType: troop === 'cavalry' || troop === 'archer' || troop === 'infantry' ? troop : 'infantry',
     skillIds: [...(s.extraSkillIds ?? [])],
     ...(s.secondaryTraits?.length ? { traits: [...s.secondaryTraits] } : {}),
@@ -225,6 +297,11 @@ export function addPresetToPool(preset: TeamPreset, storage: PoolStorage | null 
   };
   const next = exist ? extras.map((e) => (e.presetId === preset.id ? entry : e)) : [...extras, entry];
   saveExtras(next, storage);
+  // 新加进来的一律是「开启」态：否则移出→再加会带着上次的关闭标记复活
+  if (!exist) {
+    const ids = loadDisabledIds(storage);
+    if (ids.delete(entry.id)) writeDisabledIds(ids, storage);
+  }
   return { ok: true, message: exist ? `已用预设「${entry.note}」更新对手池里的同名条目` : `已把预设「${entry.note}」加入对手池`, entry };
 }
 
@@ -246,6 +323,11 @@ export function upsertUserEntry(entry: PoolEntry, storage: PoolStorage | null = 
   const i = extras.findIndex((e) => e.id === nextEntry.id);
   const next = i >= 0 ? extras.map((e, idx) => (idx === i ? nextEntry : e)) : [...extras, nextEntry];
   saveExtras(next, storage);
+  // 新条目默认开启；已存在的条目只覆盖配置，**不动开关**（避免导入顺手把用户关掉的队重新打开）
+  if (i < 0) {
+    const ids = loadDisabledIds(storage);
+    if (ids.delete(nextEntry.id)) writeDisabledIds(ids, storage);
+  }
   return { ok: true, message: `已保存「${nextEntry.note}」`, entry: nextEntry };
 }
 
@@ -255,5 +337,7 @@ export function removeUserOpponent(id: string, storage: PoolStorage | null = def
   const extras = loadExtras(storage);
   if (!extras.some((e) => e.id === id)) return { ok: false, message: `对手池里没有可删除的条目 ${id}` };
   saveExtras(extras.filter((e) => e.id !== id), storage);
+  const ids = loadDisabledIds(storage);
+  if (ids.delete(id)) writeDisabledIds(ids, storage); // 顺手清掉关闭标记，免得同 id 再加回来是关着的
   return { ok: true, message: '已从对手池移出' };
 }

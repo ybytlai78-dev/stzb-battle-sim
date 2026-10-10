@@ -13,7 +13,7 @@
  *     合并进档案。抽取是**旁路**：失败、没 key、关掉开关都只影响档案，不影响对话。
  */
 import { SKILL_REGISTRY } from '../../src/data/skills';
-import { getHeroById, MAIN_SKILL_IDS, SLOTTED_HEROES } from '../heroes';
+import { avatarSrc, getHeroById, gradeFrame, gradeRibbon, MAIN_SKILL_IDS, skillGrade, skillTypeIcon, SLOTTED_HEROES } from '../heroes';
 import {
   activeProfile,
   addProfile,
@@ -110,7 +110,7 @@ import {
 import type { AdvisorHost } from '../advisorHost';
 /** 槽位卡直接复用主站 `renderSlot`（立绘 + 战法图标）：侧栏与主站看起来必须是同一套东西 */
 import { emptySlot, renderSlot, type EditorHandlers, type SlotState } from '../teamEditor';
-import { addPresetIdToPool, loadMergedPool, removeUserOpponent } from '../opponentPool';
+import { addPresetIdToPool, loadMergedPool, removeUserOpponent, setOpponentEnabled } from '../opponentPool';
 import { readPresetFile } from '../presetStore';
 
 /** 只读槽位卡的占位 handler：侧栏不可编辑（点击已被 CSS 关掉，这里只是 renderSlot 的形参） */
@@ -226,7 +226,6 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
   let parked = false;
   let controller: AbortController | null = null;
   let usage: TokenUsage | null = null;
-  let lastChecks: PlanCheck[] = [];
   let battles = 0;
   let tokens = 0;
   let trace = new TraceLine();
@@ -307,7 +306,6 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
             </div>
             <div class="advisor-log"></div>
             <div class="advisor-confirm" hidden></div>
-            <div class="advisor-plans"></div>
             <footer class="advisor-composer">
               <div class="advisor-composer-inner">
                 <div class="advisor-guide" hidden>
@@ -319,16 +317,16 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
                     <svg class="advisor-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
                   </button>
                   <textarea class="advisor-input" rows="1" placeholder="问点什么，一起看看这队"></textarea>
-                  <div class="advisor-bar-meta">
-                    <span class="advisor-model"></span>
-                    <span class="advisor-cost"></span>
-                  </div>
                   <button type="button" class="advisor-send" aria-label="发送">
                     <svg class="advisor-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
                   </button>
                   <button type="button" class="advisor-stop" aria-label="停止" disabled>
                     <svg class="advisor-ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
                   </button>
+                </div>
+                <div class="advisor-bar-meta">
+                  <span class="advisor-model"></span>
+                  <span class="advisor-cost"></span>
                 </div>
                 <div class="advisor-hero-ask">
                   <button type="button" class="advisor-ask">这队对对手池的胜率是多少？</button>
@@ -417,7 +415,7 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
           <button type="button" class="advisor-sheet-x" data-sheet-close aria-label="关闭">×</button>
         </div>
         <div class="advisor-sheet-body">
-          <p class="advisor-note">固定测试集随站发布，删不掉。你只能从阵容预设里加队伍，或移出自己加的那部分。顾问和实战胜率页读的是同一份池子。</p>
+          <p class="advisor-note">固定测试集随站发布、删不掉，但<b>每一条都能单独开关</b>：关掉的队伍留在池子里、不参与胜率比较。自加的那部分还能移出。顾问和实战胜率页读的是同一份池子（只算开着的）。</p>
           <div class="advisor-pool-list"></div>
           <div class="advisor-row">
             <label>从预设加入 <select class="advisor-pool-preset"></select></label>
@@ -738,8 +736,11 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
     return badge ? `${head} · ${badge}` : head;
   }
 
-  /** 一轮：你的话靠右，工具一行折叠，顾问的话靠左。进行中的那轮带 `.live`，流式往里写。 */
-  function turnArticle(t: StoredTurn, active: boolean, live = false): string {
+  /**
+   * 一轮：你的话靠右，工具一行折叠，顾问的话靠左，方案卡跟在这一轮正文后面。
+   * 进行中的那轮带 `.live`，流式往里写。方案卡在轮内，下一句用户消息会把它顶上去。
+   */
+  function turnArticle(t: StoredTurn, active: boolean, live = false, turnIndex = 0): string {
     const label = traceLabelOf(t, active);
     const body = active
       ? `<div class="advisor-proc-body" hidden></div>`
@@ -749,6 +750,7 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
       : `<span class="advisor-proc-sum">${esc(label)}</span>`;
     const answer = t.answer || (t.partial ? '（这一轮中断了，没有结论）' : '（空回答）');
     const mem = t.note ? `<p class="advisor-mem">记忆 · ${esc(t.note)}</p>` : '';
+    const plans = t.checks.length ? `<div class="advisor-plans">${renderLineup(t.checks, turnIndex)}</div>` : '';
     return `<article class="advisor-turn${live ? ' live' : ''}">
       <div class="advisor-bubble user"><p>${esc(t.userText)}</p></div>
       <div class="advisor-proc">
@@ -757,6 +759,7 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
       </div>
       <div class="advisor-bubble assistant">${answerHtml(answer)}</div>
       ${mem}
+      ${plans}
     </article>`;
   }
 
@@ -808,14 +811,35 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
     return `<div class="advisor-evidence"><div class="ae-head">第 ${index + 1} 轮证据清单${t.partial ? '（中断）' : ''}</div>${rows}${plans}</div>`;
   }
 
-  function renderPlanCards(checks: PlanCheck[]): void {
-    lastChecks = checks;
-    const box = el('.advisor-plans');
-    box.innerHTML = checks.map((c, i) => renderPlanCard(c, i)).join('');
-    box.querySelectorAll('.advisor-apply').forEach((btn) =>
+  /** 方案卡上的切队、查看详情、一键应用。卡在各自那一轮里，用轮次下标找回那一轮的校验结果。 */
+  function bindPlanApplies(): void {
+    el('.advisor-log').querySelectorAll('.advisor-plan-card').forEach((card) => {
+      card.querySelectorAll<HTMLButtonElement>('.pc-tab').forEach((tab) => {
+        tab.addEventListener('click', () => {
+          const i = tab.dataset.team;
+          card.querySelectorAll('.pc-tab').forEach((t) => t.classList.toggle('on', (t as HTMLElement).dataset.team === i));
+          card.querySelectorAll<HTMLElement>('.pc-team').forEach((p) => {
+            if (p.dataset.team === i) p.removeAttribute('hidden');
+            else p.setAttribute('hidden', '');
+          });
+        });
+      });
+      card.querySelectorAll<HTMLButtonElement>('.pc-detail-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const detail = btn.closest('.pc-team')?.querySelector<HTMLElement>('.pc-detail');
+          if (!detail) return;
+          const open = detail.hasAttribute('hidden');
+          if (open) detail.removeAttribute('hidden');
+          else detail.setAttribute('hidden', '');
+          btn.textContent = open ? '收起详情' : '查看详情';
+        });
+      });
+    });
+    el('.advisor-log').querySelectorAll('.advisor-apply').forEach((btn) =>
       btn.addEventListener('click', () => {
-        const i = Number((btn as HTMLElement).dataset.plan);
-        const check = lastChecks[i];
+        const elBtn = btn as HTMLElement;
+        const turn = session.turns[Number(elBtn.dataset.turn)];
+        const check = turn?.checks[Number(elBtn.dataset.plan)];
         if (!check?.apply.enabled) return;
         const r = opts.host.applyPlan(check.plan);
         append(r.ok ? '\n【已应用】方案写入配将区。\n' : `\n【应用失败】${r.message ?? ''}\n`);
@@ -827,11 +851,10 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
   function renderAll(): void {
     const log = el<HTMLElement>('.advisor-log');
     const turns = session.turns;
-    log.innerHTML = turns.map((t, i) => turnArticle(t, i === turns.length - 1)).join('');
+    log.innerHTML = turns.map((t, i) => turnArticle(t, i === turns.length - 1, false, i)).join('');
+    bindPlanApplies();
     scrollLogToEnd();
     el('.advisor-history').innerHTML = turns.map((t, i) => evidenceBlock(t, i)).join('');
-    const last = turns[turns.length - 1];
-    renderPlanCards(last?.checks ?? []);
     renderSessionBar();
     renderProcDetail();
   }
@@ -1244,7 +1267,8 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
   }
 
   /**
-   * 中断兜底：把"已经跑出来的"存成一轮半成品（`partial`）——幂等，重复调用不会写第二条。
+   * 中断兜底：把"已经跑出来的"存成一轮半成品（`partial`）。
+   * 同一轮再写一次会盖掉这条半成品（切走页面时先存的空快照，不能挡住后来的结论）。
    * 失败 / 取消 / 刷新都会走它；正文只到断点，证据只到已跑完的那几个（不编、不补）。
    */
   function flush(): void {
@@ -1266,32 +1290,70 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
     if (document.visibilityState === 'hidden') flush();
   }
 
-  function renderPlanCard(check: PlanCheck, index: number): string {
+  /**
+   * 一轮里的多支队伍合成一张合阵容卡。
+   * 左边一队一个大营头像；右边是选中那队的武将头像和战法图标。
+   * @param checks 这一轮过完三关的方案，一队一条
+   * @param turnIndex 落在第几轮，应用时用它找回方案
+   */
+  function renderLineup(checks: PlanCheck[], turnIndex: number): string {
+    const tabs = checks
+      .map((c, i) => {
+        const camp = c.plan.slots.find((s) => s.position === '大营') ?? c.plan.slots[0];
+        const src = camp ? avatarSrc(camp.heroId) : '';
+        const face = src ? `<img src="${esc(src)}" alt="">` : '';
+        return `<button type="button" class="pc-tab${i === 0 ? ' on' : ''}" data-team="${i}">${face}<span>部队${i + 1}</span></button>`;
+      })
+      .join('');
+    const teams = checks.map((c, i) => teamHtml(c, i, turnIndex)).join('');
+    const title = checks.length > 1 ? '配将合阵容' : checks[0].title;
+    return `<div class="advisor-plan-card" data-turn="${turnIndex}"><div class="pc-title">${esc(title)}</div><div class="pc-shell"><div class="pc-rail">${tabs}</div><div class="pc-stage">${teams}</div></div></div>`;
+  }
+
+  /** 右边一队：顶栏综合胜率，三行头像 + 战法图标，详情默认收起。 */
+  function teamHtml(check: PlanCheck, index: number, turnIndex: number): string {
     const rows = (['大营', '中军', '前锋'] as const)
       .map((pos) => {
         const slot = check.plan.slots.find((s) => s.position === pos);
-        if (!slot) return `<tr><td>${pos}</td><td class="dim">（空）</td><td class="dim">—</td></tr>`;
-        const skills = slot.skillIds.length ? slot.skillIds.map(skillName).join(' + ') : '<span class="dim">（未配可学战法）</span>';
-        return `<tr><td>${pos}</td><td>${esc(heroName(slot.heroId))}<span class="dim"> Lv${slot.level}</span></td><td>${skills}</td></tr>`;
+        if (!slot) return `<div class="pc-hero"><div class="pc-who"><b class="dim">空</b><span>${pos}</span></div></div>`;
+        const src = avatarSrc(slot.heroId);
+        const face = src ? `<img class="pc-avatar" src="${esc(src)}" alt="">` : '';
+        return `<div class="pc-hero">${face}<div class="pc-who"><b>${esc(heroName(slot.heroId))}</b><span>${pos}</span></div><div class="pc-skills">${skillSlots(slot.heroId, slot.skillIds)}</div></div>`;
       })
       .join('');
+    const win = check.pool ? `${check.pool.winRatePct.toFixed(1)}%` : '—';
     const headline = check.pool ? poolCardHtml(check.pool) : dummyCardHtml(check);
     const notes = [
       check.legal ? '' : `<div class="pc-metric bad">不合法：${esc(check.legalErrors.join('；'))}</div>`,
-      // box 外的将法：**不是不合法**（用户 2026-09-29 修正）——照常看数，只是不能一键应用到他的配将区
       check.boxIssues?.length ? `<div class="pc-metric warn">含你 box 外的将法 ${check.boxIssues.length} 处：${esc(check.boxIssues.join('；'))}</div>` : '',
       check.evidenceOk ? '' : `<div class="pc-metric bad">证据核验失败：${esc(check.evidenceReason ?? '')}</div>`,
     ].join('');
-    return `
-      <div class="advisor-plan-card" data-plan="${index}">
-        <div class="pc-title">${esc(check.title)}</div>
-        <table class="pc-config"><tbody>${rows}</tbody></table>
-        ${headline}${notes}
-        <div class="pc-actions">
-          <button type="button" class="btn primary advisor-apply" data-plan="${index}" ${check.apply.enabled ? '' : 'disabled'}>应用到配将区</button>
-          <span class="advisor-verify-note">${check.apply.enabled ? '三关通过（合法 / 可溯源 / 已复算）' : esc(check.apply.reason ?? '')}</span>
-        </div>
-      </div>`;
+    return `<div class="pc-team" data-team="${index}"${index === 0 ? '' : ' hidden'}>
+      <div class="pc-bar"><span>${esc(check.title)}</span><span class="pc-win">综合胜率 <b>${win}</b></span></div>
+      ${rows}
+      <div class="pc-detail" hidden>${headline}${notes}</div>
+      <div class="pc-actions">
+        <button type="button" class="btn pc-detail-btn">查看详情</button>
+        <button type="button" class="btn primary advisor-apply" data-turn="${turnIndex}" data-plan="${index}" ${check.apply.enabled ? '' : 'disabled'}>一键应用</button>
+        <span class="advisor-verify-note">${check.apply.enabled ? '三关通过（合法 / 可溯源 / 已复算）' : esc(check.apply.reason ?? '')}</span>
+      </div>
+    </div>`;
+  }
+
+  /** 主战法 + 两个可学槽。空槽留灰框。 */
+  function skillSlots(heroId: string, learned: string[]): string {
+    const main = getHeroById(heroId)?.mainSkillId;
+    const cells = [main ? skillIcon(main) : emptySkill(), ...[0, 1].map((i) => (learned[i] ? skillIcon(learned[i]) : emptySkill()))];
+    return cells.join('');
+  }
+
+  function skillIcon(skillId: string): string {
+    const grade = skillGrade(skillId);
+    return `<span class="pc-skill" title="${esc(skillName(skillId))}"><span class="sslot-icon"><img class="ti" src="${skillTypeIcon(skillId)}" alt=""><img class="kf" src="${gradeFrame(grade)}" alt=""><img class="rb" src="${gradeRibbon(grade)}" alt=""></span><span class="pc-skill-name">${esc(skillName(skillId))}</span></span>`;
+  }
+
+  function emptySkill(): string {
+    return '<span class="pc-skill"><span class="pc-skill-empty"></span></span>';
   }
 
   /** 对手池对打的主数字。胜率来自工具证据，八回合总伤和前三回合是同一批战斗。 */
@@ -1328,21 +1390,26 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
     return metrics + compare;
   }
 
-  /** 侧栏「对手池」：固定集只读，预设加入和移出都要再点一次确认。 */
+  /** 侧栏「对手池」：每条一个参战开关（关掉的不参与胜率比较）；预设加入和移出都要再点一次确认。 */
   function renderOpponentPool(): void {
-    const pool = loadMergedPool();
+    const pool = loadMergedPool(undefined, { includeDisabled: true });
     const fixed = pool.entries.filter((e) => e.source === 'benchmark').length;
     const added = pool.entries.length - fixed;
+    const on = pool.entries.filter((e) => e.enabled !== false).length;
+    const off = pool.entries.length - on;
     const rows = pool.entries
       .map((e) => {
         const badge = e.source === 'benchmark' ? '固定' : '自加';
+        const enabled = e.enabled !== false;
+        const sw = (id: string, on: boolean, label: string): string =>
+          `<button type="button" class="advisor-pool-switch${on ? ' on' : ''}" data-toggle="${esc(id)}" aria-pressed="${on}" title="${on ? '点击关闭：不参与胜率比较' : '点击开启：参与胜率比较'}">${label}</button>`;
         const remove =
           e.source === 'user' ? `<button type="button" class="btn advisor-pool-remove" data-id="${esc(e.id)}">移出</button>` : '';
-        return `<div class="advisor-pool-row" data-source="${e.source}"><span class="advisor-pool-badge">${badge}</span><span>${esc(e.note)}</span>${remove}</div>`;
+        return `<div class="advisor-pool-row${enabled ? '' : ' off'}" data-source="${e.source}"><span class="advisor-pool-badge">${badge}</span><span class="advisor-pool-note">${esc(e.note)}</span>${sw(e.id, enabled, enabled ? '参战' : '已关')}${remove}</div>`;
       })
       .join('');
     el('.advisor-pool-list').innerHTML =
-      `<div class="advisor-note">固定 ${fixed} · 自加 ${added} · 版本 ${esc(pool.version)}</div>` +
+      `<div class="advisor-note">固定 ${fixed} · 自加 ${added} · 参战 ${on}${off ? ` · 已关 ${off}` : ''} · 版本 ${esc(pool.version)}</div>` +
       (rows || '<div class="dim">对手池是空的</div>');
     const sel = el<HTMLSelectElement>('.advisor-pool-preset');
     const presets = readPresetFile().list.filter((p) => p.slots.filter((s) => s.heroId).length >= 3);
@@ -1357,9 +1424,16 @@ export function mountAdvisor(root: HTMLElement, opts: AdvisorViewOpts): AdvisorV
     el('.advisor-pool-status').textContent = msg;
   }
 
-  /** 加入 / 移出：第一次点变成确认文案，第二次才写。固定集没有移出按钮。 */
+  /** 加入 / 移出 / 参战开关。加入与移出第一次点变成确认文案，第二次才写；开关一次点到底（可逆）。 */
   function bindOpponentPool(): void {
     el('.advisor-pool-list').addEventListener('click', (e) => {
+      const sw = (e.target as HTMLElement).closest<HTMLButtonElement>('.advisor-pool-switch');
+      if (sw) {
+        const res = setOpponentEnabled(sw.dataset.toggle ?? '', !sw.classList.contains('on'));
+        setPoolStatus(res.message);
+        renderOpponentPool();
+        return;
+      }
       const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.advisor-pool-remove');
       if (!btn) return;
       if (btn.dataset.armed !== '1') {

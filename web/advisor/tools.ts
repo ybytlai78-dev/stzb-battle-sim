@@ -48,9 +48,10 @@ import { HERO_OPTIONS, LEARNABLE_SKILL_IDS, SKILL_OPTIONS, defaultCfg, generalsO
 import { cacheKey, hitToResult, type AdvisorCache } from './cache';
 import { ALL_TIERS, renderCatalog, renderHelp, toolNamesFor, wireToolNames } from './router';
 import { heroRows, skillRows, type BoxView } from './box';
+import { DEFENSE_LABEL, MAX_DEFENSE_TEAMS, packDefenseSystems } from '../defenseSystems';
 import { cfgOf, configToPlan, coreIndices, validateAdvisorPlan } from './gate';
 import { toolZh } from './trace';
-import { addPresetIdToPool, loadMergedPool, removeUserOpponent as removeUserOpponentEntry } from '../opponentPool';
+import { addPresetIdToPool, loadMergedPool, poolFingerprint, removeUserOpponent as removeUserOpponentEntry } from '../opponentPool';
 import { COARSE_RUNS_DEFAULT, MATCHUP_RUNS_MIN, matchupPoolAsync, ratesIndistinguishable, type PoolMatchup } from '../poolMatchup';
 import {
   FINALISTS_MAX,
@@ -60,6 +61,8 @@ import {
   singleChangeBetween,
   skillHoles,
 } from '../winrateSearch';
+import { fitTemplateBudget, runTemplateSearch, type TemplateChampion } from '../templateSearch';
+import { TEMPLATE_LABEL, templatesForHero, type TeamTemplateId } from '../teamRoles';
 import {
   BudgetExceeded,
   DEFAULT_BUDGET,
@@ -695,6 +698,189 @@ function winrateSetup(args: WinRateArgs, ctx: ToolCtx): {
   return { plan, mode, holes, heroUnits, candidateIds, coarseRuns, finalRuns, finalists, rankBy, est, ...(boxLine ? { boxLine } : {}), opponents };
 }
 
+const TEMPLATE_IDS: Record<string, TeamTemplateId> = {
+  standard: 'standard',
+  标准队: 'standard',
+  counter: 'counter',
+  半肉反击: 'counter',
+  blade: 'blade',
+  菜刀: 'blade',
+  shenshang: 'shenshang',
+  神赏法刀: 'shenshang',
+  神赏: 'shenshang',
+};
+
+interface TemplateArgs {
+  plan?: unknown;
+  template?: string;
+  heroId?: string;
+  /** 点名武将必须带的战法，id 或中文名，最多 2 个 */
+  lockSkillIds?: string[];
+  /** 已经分给别的队伍的 A/S 战法，这一队不再用 */
+  usedSkillIds?: string[];
+  coarseRuns?: number;
+  finalRuns?: number;
+}
+
+function templateIdOf(raw: unknown): TeamTemplateId | undefined {
+  if (raw == null || raw === '') return undefined;
+  const id = TEMPLATE_IDS[String(raw)];
+  if (!id) throw new Error('template 只能是 standard / counter / blade / shenshang');
+  return id;
+}
+
+function lockHeroId(raw: unknown, pool: string[]): string | undefined {
+  if (raw == null || raw === '') return undefined;
+  const key = String(raw);
+  if (pool.includes(key)) return key;
+  const named = pool.filter((id) => getHeroById(id)?.name === key);
+  if (named.length === 1) return named[0];
+  throw new Error(named.length > 1 ? `「${key}」有多张卡，请传 heroId` : '点名的武将不在候选里');
+}
+
+/** 残缺方案里能捞到的武将和战法。给我配不要求三个槽都填满。 */
+function salvagePlan(raw: unknown, pool: string[]): { heroId?: string; skillIds: string[] } {
+  const slots = (raw as { slots?: Array<{ heroId?: unknown; skillIds?: unknown }> } | null)?.slots;
+  if (!Array.isArray(slots)) return { skillIds: [] };
+  let heroId: string | undefined;
+  const skillIds: string[] = [];
+  for (const slot of slots) {
+    if (!slot) continue;
+    if (!heroId && slot.heroId) {
+      const key = String(slot.heroId);
+      if (pool.includes(key)) heroId = key;
+      else {
+        const named = pool.filter((id) => getHeroById(id)?.name === key);
+        if (named.length === 1) heroId = named[0];
+      }
+    }
+    if (Array.isArray(slot.skillIds)) {
+      for (const id of slot.skillIds) if (id) skillIds.push(String(id));
+    }
+  }
+  return { heroId, skillIds };
+}
+
+function resolveSkillId(raw: string, pool: string[]): string | undefined {
+  if (pool.includes(raw)) return raw;
+  const named = Object.values(SKILL_REGISTRY).find((s) => s.name === raw);
+  return named && pool.includes(named.id) ? named.id : undefined;
+}
+
+/**
+ * 「给我配」的候选池。开了 box 就只用 box；没开就用上架武将和可学战法。
+ * 空 box 直接要求先传截图，不拿全库顶上。
+ */
+function templateSetup(args: TemplateArgs, ctx: ToolCtx): {
+  plan: AdvisorPlan;
+  heroIds: string[];
+  skillIds: string[];
+  templates?: TeamTemplateId[];
+  lockHeroId?: string;
+  coarseRuns: number;
+  finalRuns: number;
+  skillCap: number;
+  est: number;
+  opponents: number;
+  boxLine?: string;
+  fitNote?: string;
+  lockSkillIds: string[];
+} {
+  const fallback = configToPlan(ctx.deps.getConfig());
+  let plan = fallback;
+  if (args?.plan !== undefined) {
+    try {
+      const shaped = assertPlanShape(args.plan);
+      if (shaped.slots.length >= 3 && shaped.slots.every((s) => s.heroId && s.position)) plan = shaped;
+    } catch {
+      // 点名武将常被塞进缺 heroId 的 plan。靶子仍用当前配将区。
+    }
+  }
+  let heroIds: string[];
+  let skillIds: string[];
+  let boxLine: string | undefined;
+  if (ctx.box?.strict) {
+    if (ctx.box.empty) {
+      throw new Error('这位用户还没有 box（没上传过截图 / 还没识别）——先请他把「五星武将」与「五星战法」的截图发到「我的 box」里识别一次，再配将。');
+    }
+    const heroes = boxHeroCandidates(ctx);
+    const skills = boxSkillCandidates(ctx) ?? [];
+    if (!heroes?.ids.length) throw new Error(heroes?.note || 'box 里没有能进模拟的武将');
+    if (!skills.length) throw new Error('box 里没有能进模拟的可学战法。先上传五星战法截图，再配将。');
+    heroIds = heroes.ids;
+    skillIds = skills;
+    boxLine = heroes.note;
+  } else {
+    heroIds = HEROES.map((h) => h.id);
+    skillIds = [...LEARNABLE_SKILL_IDS];
+  }
+  const used = new Set<string>();
+  for (const raw of args?.usedSkillIds ?? []) {
+    const id = resolveSkillId(String(raw), skillIds);
+    if (!id) throw new Error(`「${raw}」不在这次配将的战法池里，不能记成已占用。`);
+    used.add(id);
+  }
+  if (used.size) skillIds = skillIds.filter((id) => !used.has(id));
+  const template = templateIdOf(args?.template);
+  const salvaged = salvagePlan(args?.plan, heroIds);
+  const locked = args?.heroId ? lockHeroId(args.heroId, heroIds) : salvaged.heroId;
+  const askedSkills = (args?.lockSkillIds?.length ? args.lockSkillIds : locked ? salvaged.skillIds : []).map(String);
+  const lockSkills: string[] = [];
+  for (const raw of askedSkills) {
+    const id = resolveSkillId(raw, skillIds);
+    if (!id) throw new Error(`「${raw}」不在这次配将的战法池里。`);
+    if (!lockSkills.includes(id)) lockSkills.push(id);
+    if (lockSkills.length >= 2) break;
+  }
+  const coarseRuns = Math.max(1, Math.floor(Number(args?.coarseRuns) || COARSE_RUNS_DEFAULT));
+  const finalRuns = Math.max(MATCHUP_RUNS_MIN, Math.floor(Number(args?.finalRuns) || MATCHUP_RUNS_MIN));
+  const opponents = Math.max(1, ctx.deps.listOpponentPool().entries.length);
+  const templateCount = template ? 1 : locked ? Math.max(1, templatesForHero(locked, heroIds, skillIds).length) : 4;
+  const fit = fitTemplateBudget({
+    templates: templateCount,
+    opponents,
+    candidates: skillIds.length,
+    coarseRuns,
+    finalRuns,
+    remaining: Math.max(0, ctx.budget.maxBattles - ctx.budget.battles),
+  });
+  if (fit.est > ctx.budget.maxBattles - ctx.budget.battles) {
+    throw new Error(
+      `模板配将按现在的对手池（${opponents} 支、${templateCount} 套模板）至少要 ${fit.est.toLocaleString('en-US')} 场，本轮只剩 ${(ctx.budget.maxBattles - ctx.budget.battles).toLocaleString('en-US')} 场。点名一名武将或一套模板再跑，或先减少对手。`
+    );
+  }
+  const fitNote = fit.shrunk
+    ? `本轮场次不够默认规模，战法候选收到 ${fit.candidates} 个，粗筛改为每对手 ${fit.coarseRuns} 场。冠军仍打每对手 ${finalRuns} 场。`
+    : undefined;
+  return {
+    plan,
+    heroIds,
+    skillIds,
+    ...(template ? { templates: [template] } : {}),
+    ...(locked ? { lockHeroId: locked } : {}),
+    lockSkillIds: lockSkills,
+    coarseRuns: fit.coarseRuns,
+    finalRuns,
+    skillCap: fit.candidates,
+    est: fit.est,
+    opponents,
+    ...(boxLine ? { boxLine } : {}),
+    ...(fitNote ? { fitNote } : {}),
+  };
+}
+
+function championBrief(c: TemplateChampion): string {
+  if (!c.plan) return `${c.label}：${c.reason ?? '没跑成'}`;
+  const head = `${c.label}：${c.roleLine}`;
+  if (c.passedGate === false) {
+    return `${head}\n未过及格线。前三回合胜率 ${pct1(c.guardWinRate ?? 0)}，前三回合输出 ${Math.round(c.meanFirst3 ?? 0)}。`;
+  }
+  if (!c.matchup) return `${head}\n${c.reason ?? '没有对手池成绩'}`;
+  const m = publishMatchup(c.matchup);
+  const blade = c.guardWinRate == null ? '' : `三侍卫前三回合胜率 ${pct1(c.guardWinRate)}，前三回合输出 ${Math.round(c.meanFirst3 ?? m.meanFirst3)}。`;
+  return `${head}\n综合胜率 ${pct1(m.winRate)} ±${pct1(m.halfWidth)}。八回合总伤 ${m.meanTotal}，前三回合 ${m.meanFirst3}。${blade}分对手 ${oppLine(m.opponents)}。`;
+}
+
 /** 分对手胜率压成一行，避免模型以为还得再跑一轮 matchup_pool */
 function oppLine(opponents: Array<{ note: string; winRate: number }>): string {
   return opponents.map((o) => `${o.note} ${pct1(o.winRate)}`).join('、');
@@ -851,10 +1037,13 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
         const sOut = showAll ? skills : skills.filter((s) => !s.warn);
         const unusable = [...heroes, ...skills].filter((x) => x.warn);
         const line = (r: { id: string; name: string; sub: string; warn?: string }): string => `${r.name}(${r.id}·${r.sub})${r.warn ? `⚠️${r.warn}` : ''}`;
+        const teams = packDefenseSystems(sOut.map((s) => s.id));
+        const teamLine = `可出队伍 ${teams.length}（最多 ${MAX_DEFENSE_TEAMS}）：${teams.map((id) => DEFENSE_LABEL[id]).join('、') || '凑不齐体系'}`;
         return {
           evidenceId: nextEvidenceId(ctx, 'get_my_box'),
-          summary: `box（档案「${box.profileName}」，严格模式${box.strict ? '开' : '关'}）：五星武将 ${heroes.length} 个 / 可学战法 ${skills.length} 个${unusable.length ? `；其中 ${unusable.length} 个库内暂时用不了` : ''}`,
+          summary: `box（档案「${box.profileName}」，严格模式${box.strict ? '开' : '关'}）：五星武将 ${heroes.length} 个 / 可学战法 ${skills.length} 个${unusable.length ? `；其中 ${unusable.length} 个库内暂时用不了` : ''}。${teamLine}`,
           brief: [
+            teamLine,
             `武将 ${hOut.length}：${hOut.map(line).join(' ')}`,
             `战法 ${sOut.length}：${sOut.map(line).join(' ')}`,
             unusable.length && !showAll ? `（还有 ${unusable.length} 个库内暂时用不了的没列：${unusable.map((x) => x.name).join('、')}——要看就用 all:true）` : '',
@@ -866,6 +1055,7 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
             strict: box.strict,
             heroes: hOut,
             skills: sOut,
+            teams: teams.map((id) => DEFENSE_LABEL[id]),
             unusable: unusable.map((x) => ({ name: x.name, id: x.id, why: x.warn })),
           },
           stats: { battles: 0, ms: 0, seed: ctx.seed },
@@ -1482,18 +1672,28 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
     {
       name: 'list_opponent_pool',
       description:
-        '读合并后的对手池：制作人固定测试集（删不掉）+ 用户从阵容预设加进去的队伍。配将和比较之前先看池子里有谁。毫秒级，不跑战斗。',
+        '读合并后的对手池：制作人固定测试集（删不掉，但可逐条开关）+ 用户从阵容预设加进去的队伍。**只列参战中的**——被用户关掉的条目不参与胜率比较，会单独报出来。配将和比较之前先看池子里有谁。毫秒级，不跑战斗。',
       schema: { type: 'object', properties: {} },
       cost: {},
       async run(_args, ctx) {
         const pool = ctx.deps.listOpponentPool();
-        const rows = pool.entries.map((e) => ({ id: e.id, note: e.note, source: e.source, presetId: e.presetId ?? null }));
-        const fingerprint = `${pool.version}|${rows.filter((r) => r.source === 'user').map((r) => r.id).join(',')}`;
+        const off = pool.entries.filter((e) => e.enabled === false);
+        const rows = pool.entries
+          .filter((e) => e.enabled !== false)
+          .map((e) => ({ id: e.id, note: e.note, source: e.source, presetId: e.presetId ?? null }));
+        const offNote = off.length ? `；另有 ${off.length} 支已被用户关闭、不参与比较：${off.map((e) => e.note).join('、')}` : '';
         return {
           evidenceId: nextEvidenceId(ctx, 'list_opponent_pool'),
-          summary: `对手池 ${pool.version}：固定 ${rows.filter((r) => r.source === 'benchmark').length} 支，自加 ${rows.filter((r) => r.source === 'user').length} 支。${rows.map((r) => `${r.note}（${r.source === 'benchmark' ? '固定' : '自加'}）`).join('、') || '空'}`,
-          brief: rows.map((r) => `· ${r.id} ${r.note} ${r.source}${r.presetId ? ` 预设 ${r.presetId}` : ''}`).join('\n'),
-          data: { version: pool.version, fingerprint, rows },
+          summary: `对手池 ${pool.version}：参战 ${rows.length} 支（固定 ${rows.filter((r) => r.source === 'benchmark').length}，自加 ${rows.filter((r) => r.source === 'user').length}）。${rows.map((r) => `${r.note}（${r.source === 'benchmark' ? '固定' : '自加'}）`).join('、') || '空'}${offNote}`,
+          brief:
+            rows.map((r) => `· ${r.id} ${r.note} ${r.source}${r.presetId ? ` 预设 ${r.presetId}` : ''}`).join('\n') +
+            (off.length ? `\n${off.map((e) => `× ${e.id} ${e.note}（已关闭，不参与比较）`).join('\n')}` : ''),
+          data: {
+            version: pool.version,
+            fingerprint: poolFingerprint(pool),
+            rows,
+            disabled: off.map((e) => ({ id: e.id, note: e.note })),
+          },
           stats: { battles: 0, ms: 0, seed: ctx.seed },
         };
       },
@@ -1632,9 +1832,102 @@ export function createTools(): ToolSpec<never, ToolCtx>[] {
       },
     },
     {
+      name: 'optimize_template',
+      description:
+        '**给我配 / 最强阵容**。先按主战法结构套进标准队、半肉反击、菜刀、神赏法刀，并锁上一套防守体系（战磐 / 神赏 / 双减 / 百战 / 双封 / 垒石；速度快的辅助可再锁攻其不备），每套先配将再搜该角色的战法，再用对手池综合胜率在过线的冠军里选一支。没点名就跑能凑齐的模板。点名武将只传 heroId（不要传 plan，也不要自己拼三个槽）。他指定携带的战法传 lockSkillIds（id 或中文名，最多 2 个），该格锁死不再搜。box 写了可出几队就出几队（最多 5），每队一套；下一队把前面占用的 A/S 放进 usedSkillIds。法刀要在会还手的三侍卫上、前三回合胜率达到 90% 才参加最后比较；没过线的简报写「未过及格线」，不要当成推荐。返回里的胜率、前三回合输出和防守体系说明是唯一可引用的说法。已经定好的队伍只换一两个槽用 optimize_winrate。',
+      schema: {
+        type: 'object',
+        properties: {
+          template: { type: 'string', enum: ['standard', 'counter', 'blade', 'shenshang'], description: '只跑这一套。缺省 = 能凑齐的都跑。standard 标准队 / counter 半肉反击 / blade 菜刀 / shenshang 神赏法刀' },
+          heroId: { type: 'string', description: '点名的武将 id。只跑他能进的模板，并锁在对应格子上。不要把武将写进 plan' },
+          lockSkillIds: { type: 'array', items: { type: 'string' }, description: '这名武将必须携带的可学战法，id 或中文名，最多 2 个。例：["一夫当关","百战无怯"]' },
+          usedSkillIds: { type: 'array', items: { type: 'string' }, description: '已经分给别的队伍的 A/S 战法，id 或中文名。这一队的候选里去掉它们' },
+          coarseRuns: { type: 'integer', minimum: 1, maximum: 100, description: '粗筛每个对手的场次，默认 20。预算不够时工具会自己收小' },
+          finalRuns: { type: 'integer', minimum: 100, maximum: 500, description: '冠军打对手池时每个对手的场次，默认 100，低于 100 抬回 100' },
+        },
+        required: [],
+      },
+      cost: {
+        long: true,
+        battlesOf: (args, ctx) => templateSetup((args ?? {}) as TemplateArgs, ctx as ToolCtx).est,
+      },
+      async run(args: TemplateArgs, ctx) {
+        const setup = templateSetup(args ?? {}, ctx);
+        const gate = ctx.confirmFrom ?? DEFAULT_CONFIRM_BATTLES;
+        if (ctx.confirm && setup.est < gate) {
+          const ok = await ctx.confirm({
+            tool: 'optimize_template',
+            battles: setup.est,
+            estMs: setup.est * MS_PER_BATTLE,
+            label: `模板配将：${setup.opponents} 个对手，预计 ${setup.est.toLocaleString('en-US')} 场 / 约 ${Math.round((setup.est * MS_PER_BATTLE) / 1000)} 秒`,
+          });
+          if (!ok) throw new Error('用户拒绝了这次模板配将——不要用同样的规模重试');
+        }
+        const t0 = Date.now();
+        const level = setup.plan.slots.find((s) => s.level > 0)?.level ?? 40;
+        const result = await runTemplateSearch({
+          heroIds: setup.heroIds,
+          skillIds: setup.skillIds,
+          ...(setup.templates ? { templates: setup.templates } : {}),
+          ...(setup.lockHeroId ? { lockHeroId: setup.lockHeroId } : {}),
+          ...(setup.lockSkillIds.length ? { lockSkillIds: setup.lockSkillIds } : {}),
+          skillCap: setup.skillCap,
+          totalBattles: setup.est,
+          dummy: setup.plan.dummy,
+          level,
+          coarseRuns: setup.coarseRuns,
+          finalRuns: setup.finalRuns,
+          seed: ctx.seed,
+          signal: ctx.signal,
+          matchup: (plan, runs) => ctx.deps.matchup(plan, runs, ctx.seed, ctx.signal),
+          onProgress: (done, total) => ctx.onProgress?.({ name: 'optimize_template', done, total, label: `模板配将 ${done}/${total} 场` }),
+        });
+        const lines = result.champions.map(championBrief);
+        const recommended = result.recommended;
+        const rec = result.note
+          ? result.note
+          : result.tied
+            ? '这几支对手池胜率的 95% 区间重叠，分不出来，不硬排。'
+            : recommended?.matchup
+              ? `推荐 ${recommended.label}。综合胜率 ${pct1(recommended.matchup.winRate)}。`
+              : '没有能推荐的队伍。';
+        const win = recommended?.matchup;
+        return {
+          evidenceId: nextEvidenceId(ctx, 'optimize_template'),
+          summary: `模板配将完成。${rec}`,
+          brief: [setup.boxLine ?? '', setup.fitNote ?? '', ...lines, rec].filter(Boolean).join('\n'),
+          data: {
+            tied: result.tied,
+            note: result.note ?? null,
+            recommended: recommended?.template ?? null,
+            recommendedLabel: recommended ? TEMPLATE_LABEL[recommended.template] : null,
+            winRate: win?.winRate ?? null,
+            winRatePct: win ? Math.round(win.winRate * 1000) / 10 : null,
+            halfWidth: win?.halfWidth ?? null,
+            meanTotal: win ? Math.round(win.meanTotal) : null,
+            meanFirst3: win ? Math.round(win.meanFirst3) : null,
+            opponents: win?.opponents ?? [],
+            plan: recommended?.plan ?? null,
+            champions: result.champions.map((c) => ({
+              template: c.template,
+              label: c.label,
+              roleLine: c.roleLine,
+              reason: c.reason ?? null,
+              passedGate: c.passedGate,
+              guardWinRate: c.guardWinRate ?? null,
+              meanFirst3: c.meanFirst3 == null ? null : Math.round(c.meanFirst3),
+              winRate: c.matchup?.winRate ?? null,
+              plan: c.plan,
+            })),
+          },
+          stats: { battles: result.battles, ms: Date.now() - t0, seed: ctx.seed },
+        };
+      },
+    },
+    {
       name: 'optimize_winrate',
       description:
-        '**在对手池上搜综合胜率最高的战法或队友**（两段：粗筛默认每对手 20 场，决赛每对手至少 100 场）。排序键只有综合胜率；用户说要稳、别被克时把 rankBy 设为 worst（按最差对手胜率）。「给我配」且严格 box 时候选只在 box 内。这是「最强 / 怎么配」的默认搜索。打木桩的伤害期望才用 optimize_skills / optimize_both。手动一次最多填两个空位。点名了核心就传 coreUnit：按「队友 → 队友战法 → 核心战法」一次跑完，不要自己拆。返回里带每一支对手的胜率，不要再为分对手另跑 matchup_pool。',
+        '**在已经定好的队伍上换一两个战法槽或队友位**（两段：粗筛默认每对手 20 场，决赛每对手至少 100 场）。「给我配 / 最强阵容」不要用这个，用 optimize_template。排序键只有综合胜率；用户说要稳、别被克时把 rankBy 设为 worst（按最差对手胜率）。手动一次最多填两个空位。返回里带每一支对手的胜率，不要再为分对手另跑 matchup_pool。',
       schema: {
         type: 'object',
         properties: {
@@ -1949,7 +2242,7 @@ function realDeps(): AdvisorDeps {
       for (const p of picks) out = withSlotHero(out, p.unit, p.heroId, !clearSkills);
       return clearSkills ? clearSlotSkills(out, picks.map((p) => p.unit)) : out;
     },
-    listOpponentPool: () => loadMergedPool(),
+    listOpponentPool: () => loadMergedPool(undefined, { includeDisabled: true }),
     addOpponentFromPreset: (presetId) => addPresetIdToPool(presetId),
     removeUserOpponent: (id) => removeUserOpponentEntry(id),
     matchup: async (plan, runsPerOpponent, seed, signal, onProgress) => {

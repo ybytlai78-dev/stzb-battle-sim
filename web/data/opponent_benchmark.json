@@ -1,39 +1,348 @@
 {
-  "version": "2026-09-30",
+  "version": "2026-10-10.1",
   "entries": [
     {
-      "id": "bench-chengong-zhangning-lvmeng",
-      "note": "敌方·陈宫张宁吕蒙",
+      "id": "bench-lvbu-zhangchunhua-zhenluo",
+      "note": "敌方·吕布张春华甄洛",
       "cfg": {
         "slots": [
           {
-            "heroId": "h443",
-            "level": 41,
-            "addAttack": 0,
+            "heroId": "h479",
+            "level": 43,
+            "addAttack": 40,
             "addStrategy": 0,
             "troopType": "archer",
-            "skillIds": ["shenbing_tianjiang", "dashang_sanjun"],
-            "traits": ["地利"],
+            "skillIds": ["jifeng_ershi", "sishuiguan"],
+            "traits": ["齐射"],
             "treasure": null
           },
           {
-            "heroId": "h474",
-            "level": 41,
+            "heroId": "h29",
+            "level": 43,
             "addAttack": 0,
             "addStrategy": 0,
-            "troopType": "infantry",
-            "skillIds": ["zhongmou_buxie", "sanshu_qimou"],
+            "addSpeed": 60,
+            "troopType": "archer",
+            "skillIds": ["shiji", "hunshui_moyu"],
             "traits": ["地利"],
             "treasure": null
           },
           {
-            "heroId": "lvmeng",
+            "heroId": "h15",
+            "level": 43,
+            "addAttack": 0,
+            "addStrategy": 60,
+            "troopType": "archer",
+            "skillIds": ["fanji_zhence", "zhanbi_duanjin"],
+            "treasure": null
+          }
+        ],
+        "morale": 120,
+        "enemy": { "defense": 150, "strategy": 100, "troopType": "infantry" },
+        "rounds": 8,
+        "manual": { "boostCaused": 0, "boostTaken": 0, "reduce": 0 }
+      }
+    },
+    {
+      "id": "bench-zhangchunhua-yuejin-yujin",
+      "note": "敌方·张春华乐进于禁",
+      "cfg": {
+        "slots": [
+          {
+            "heroId": "h29",
+            "level": 45,
+            "addAttack": 0,
+            "addStrategy": 0,
+            "addSpeed": 60,
+            "troopType": "archer",
+            "skillIds": ["mizhen", "luolei"],
+            "traits": ["地利"],
+            "treasure": null
+          },
+          {
+            "heroId": "h685",
             "level": 42,
             "addAttack": 0,
             "addStrategy": 0,
+            "addSpeed": 40,
+            "troopType": "infantry",
+            "skillIds": ["baizhan_wuqie", "yuzhan_yuyong"],
+            "traits": ["利刃"],
+            "treasure": null
+          },
+          {
+            "heroId": "h796",
+            "level": 42,
+            "addAttack": 0,
+            "addDefense": 40,
+            "addStrategy": 0,
+            "troopType": "infantry",
+            "skillIds": ["yiyou_dailai", "bubu_weiyin"],
+            "traits": ["守备"],
+            "treasure": null
+          }
+        ],
+        "morale": 120,
+        "enemy": { "defense": 150, "strategy": 100, "troopType": "infantry" },
+        "rounds": 8,
+        "manual": { "boostCaused": 0, "boostTaken": 0, "reduce": 0 }
+      }
+    },
+    {
+      "id": "bench-taishici-caozhi-zhangliao",
+      "note": "敌方·太史慈曹植张辽",
+      "cfg": {
+        "slots": [
+          {
+            "heroId": "taishici",
+            "level": 40,
+            "addAttack": 40,
+            "addStrategy": 0,
             "troopType": "archer",
-            "skillIds": ["fanji_zhence", "daoxing_xianzu"],
-            "traits": ["地利"],
+            "skillIds": ["dunbing_cuorui", "wenjiu_zhanjiang"],
+            "treasure": null
+          },
+          {
+            "heroId": "h672",
+            "level": 41,
+            "addAttack": 0,
+            "addStrategy": 40,
+            "troopType": "cavalry",
+            "skillIds": ["fanji_zhence", "mizhen"],
+            "treasure": null
+          },
+          {
+            "heroId": "h27",
+            "level": 40,
+            "addAttack": 0,
+            "addStrategy": 0,
+            "addSpeed": 40,
+            "troopType": "cavalry",
+            "skillIds": ["yangwei", "dashang_sanjun"],
+            "treasure": null
+          }
+        ],
+        "morale": 120,
+        "enemy": { "defense": 150, "strategy": 100, "troopType": "infantry" },
+        "rounds": 8,
+        "manual": { "boostCaused": 0, "boostTaken": 0, "reduce": 0 }
+      }
+    },
+    {
+      "id": "bench-zhurong-zhangliao-caocao",
+      "note": "敌方·祝融夫人张辽曹操",
+      "cfg": {
+        "slots": [
+          {
+            "heroId": "h494",
+            "level": 44,
+            "addAttack": 60,
+            "addStrategy": 0,
+            "troopType": "infantry",
+            "secondaryTroop": "蛮兵",
+            "skillIds": ["bingjin", "jiji_qihou"],
+            "traits": ["利刃"],
+            "treasure": null
+          },
+          {
+            "heroId": "h27",
+            "level": 42,
+            "addAttack": 0,
+            "addStrategy": 0,
+            "addSpeed": 40,
+            "troopType": "cavalry",
+            "skillIds": ["fanji_zhence", "changbing_fangzhen"],
+            "traits": ["疾行"],
+            "treasure": null
+          },
+          {
+            "heroId": "h23",
+            "level": 44,
+            "addAttack": 0,
+            "addStrategy": 40,
+            "troopType": "cavalry",
+            "skillIds": ["dashang_sanjun", "hunshui_moyu"],
+            "traits": ["难测"],
+            "treasure": null
+          }
+        ],
+        "morale": 120,
+        "enemy": { "defense": 150, "strategy": 100, "troopType": "infantry" },
+        "rounds": 8,
+        "manual": { "boostCaused": 0, "boostTaken": 0, "reduce": 0 }
+      }
+    },
+    {
+      "id": "bench-taishici-zhangchunhua-zhoutai",
+      "note": "敌方·太史慈张春华周泰",
+      "cfg": {
+        "slots": [
+          {
+            "heroId": "taishici",
+            "level": 41,
+            "addAttack": 40,
+            "addDefense": 0,
+            "addStrategy": 0,
+            "addSpeed": 0,
+            "troopType": "archer",
+            "skillIds": ["xianqu_tuji", "yangwei"],
+            "treasure": null
+          },
+          {
+            "heroId": "h29",
+            "level": 40,
+            "addAttack": 0,
+            "addDefense": 0,
+            "addStrategy": 0,
+            "addSpeed": 60,
+            "troopType": "archer",
+            "skillIds": ["shiji", "qishu_zhechong"],
+            "treasure": null
+          },
+          {
+            "heroId": "h589",
+            "level": 41,
+            "addAttack": 0,
+            "addDefense": 0,
+            "addStrategy": 0,
+            "addSpeed": 0,
+            "troopType": "infantry",
+            "skillIds": ["sanshu_qimou", "qingnang_miyao"],
+            "treasure": null
+          }
+        ],
+        "morale": 120,
+        "enemy": { "defense": 150, "strategy": 100, "troopType": "infantry" },
+        "rounds": 8,
+        "manual": { "boostCaused": 0, "boostTaken": 0, "reduce": 0 }
+      }
+    },
+    {
+      "id": "bench-taishici-caozhi-guanyu",
+      "note": "敌方·太史慈曹植关羽",
+      "cfg": {
+        "slots": [
+          {
+            "heroId": "taishici",
+            "level": 42,
+            "addAttack": 40,
+            "addDefense": 0,
+            "addStrategy": 0,
+            "addSpeed": 0,
+            "troopType": "archer",
+            "skillIds": ["xianqu_tuji", "wenjiu_zhanjiang"],
+            "treasure": null
+          },
+          {
+            "heroId": "h672",
+            "level": 42,
+            "addAttack": 0,
+            "addDefense": 0,
+            "addStrategy": 40,
+            "addSpeed": 0,
+            "troopType": "cavalry",
+            "skillIds": ["yanfen_jizhen", "luolei"],
+            "treasure": null
+          },
+          {
+            "heroId": "h26",
+            "level": 42,
+            "addAttack": 0,
+            "addDefense": 0,
+            "addStrategy": 0,
+            "addSpeed": 0,
+            "troopType": "cavalry",
+            "skillIds": ["qingnang_miyao", "lianzhan"],
+            "treasure": null
+          }
+        ],
+        "morale": 120,
+        "enemy": { "defense": 150, "strategy": 100, "troopType": "infantry" },
+        "rounds": 8,
+        "manual": { "boostCaused": 0, "boostTaken": 0, "reduce": 0 }
+      }
+    },
+    {
+      "id": "bench-zhurong-lukang-caocao",
+      "note": "敌方·祝融夫人陆抗曹操",
+      "cfg": {
+        "slots": [
+          {
+            "heroId": "h494",
+            "level": 41,
+            "addAttack": 60,
+            "addDefense": 0,
+            "addStrategy": 0,
+            "addSpeed": 0,
+            "troopType": "cavalry",
+            "skillIds": ["xianqu_tuji", "wenjiu_zhanjiang"],
+            "treasure": null
+          },
+          {
+            "heroId": "h574",
+            "level": 40,
+            "addAttack": 0,
+            "addDefense": 0,
+            "addStrategy": 0,
+            "addSpeed": 0,
+            "troopType": "infantry",
+            "skillIds": ["wuxin_lianzhan", "biqi_fengmang"],
+            "treasure": null
+          },
+          {
+            "heroId": "h23",
+            "level": 41,
+            "addAttack": 0,
+            "addDefense": 0,
+            "addStrategy": 40,
+            "addSpeed": 0,
+            "troopType": "cavalry",
+            "skillIds": ["zhanbi_duanjin", "changbing_fangzhen"],
+            "treasure": null
+          }
+        ],
+        "morale": 120,
+        "enemy": { "defense": 150, "strategy": 100, "troopType": "infantry" },
+        "rounds": 8,
+        "manual": { "boostCaused": 0, "boostTaken": 0, "reduce": 0 }
+      }
+    },
+    {
+      "id": "bench-xunyu-zhangchunhua-caocao",
+      "note": "敌方·荀彧张春华曹操",
+      "cfg": {
+        "slots": [
+          {
+            "heroId": "h24",
+            "level": 44,
+            "addAttack": 0,
+            "addDefense": 0,
+            "addStrategy": 0,
+            "addSpeed": 0,
+            "troopType": "cavalry",
+            "skillIds": ["zhongmou_buxie", "jishui_zhiji"],
+            "treasure": null
+          },
+          {
+            "heroId": "h29",
+            "level": 44,
+            "addAttack": 0,
+            "addDefense": 0,
+            "addStrategy": 0,
+            "addSpeed": 60,
+            "troopType": "archer",
+            "skillIds": ["luolei", "zhanbi_duanjin"],
+            "treasure": null
+          },
+          {
+            "heroId": "h23",
+            "level": 44,
+            "addAttack": 0,
+            "addDefense": 0,
+            "addStrategy": 40,
+            "addSpeed": 0,
+            "troopType": "cavalry",
+            "skillIds": ["gongyin_bishi", "qingnang_miyao"],
             "treasure": null
           }
         ],

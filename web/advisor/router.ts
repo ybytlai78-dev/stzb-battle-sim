@@ -40,7 +40,7 @@ export const TIER_TOOLS: Record<AdvisorTier, string[]> = {
     'compare_variants',
     'matchup_pool',
   ],
-  search: ['optimize_winrate', 'optimize_skills', 'optimize_mates', 'optimize_both'],
+  search: ['optimize_template', 'optimize_winrate', 'optimize_skills', 'optimize_mates', 'optimize_both'],
   write: ['add_opponent_from_preset', 'remove_user_opponent'],
 };
 
@@ -95,7 +95,7 @@ export const TIER_HINT: Record<AdvisorTier, string> = {
 /** 用户消息里出现这些词 → 开放大搜索档（"人肉搜索器"正是发生在这类问题上）。 */
 const SEARCH_HINTS = [
   '最强', '最好', '最优', '最高', '最厉害', '输出最大', '伤害最高',
-  '怎么配', '帮我配', '帮我搭', '配将', '配队', '搭配', '组队', '优化',
+  '怎么配', '帮我配', '给我配', '帮我搭', '配将', '配队', '搭配', '组队', '优化',
   '搜', '期望',
 ];
 
@@ -271,7 +271,7 @@ export function renderHelp(all: ToolLike[], tiers: AdvisorTier[], name: string, 
  * 短、按档变化、纯函数（可单测）：`loop.ts` 只负责把它摆到用户消息后面。
  * 标签定义在 `memory.ts`（注入标签的唯一住处，`stripInjected` 按它剥离）。
  */
-export function renderTurnGuide(tiers: AdvisorTier[], _userText = '', opts: { anchor?: boolean } = {}): string {
+export function renderTurnGuide(tiers: AdvisorTier[], _userText = '', opts: { anchor?: boolean; resume?: boolean } = {}): string {
   const lines: string[] = [`<${GUIDE_TAG}>`, `【本轮路由】档位：${tiers.join(' + ')}（当轮工具面见 tools_catalog）。`];
   if (opts.anchor) {
     lines.push(
@@ -282,11 +282,17 @@ export function renderTurnGuide(tiers: AdvisorTier[], _userText = '', opts: { an
   if (tiers.includes('search')) {
     lines.push(
       '这一问要**真跑搜索**：list_opponent_pool 看当前池（用户没说改池子就不要问加减）。' +
-        '点名了核心就 optimize_winrate 传 coreUnit，一次跑完「队友 → 队友战法 → 核心战法」。阵营只认卡（群吕布≠汉吕布），不要为凑同阵营三人去筛队友。只补战法槽才用 matchSlotKeys。' +
-        '分对手胜率用返回里的分对手，不要再开一轮 matchup_pool。不要逐个 skill_detail 翻战法。'
+        '给我配 / 最强阵容：先看 box 的「可出队伍」，有几套出几队，最多 5。每队调一次 optimize_template（点名武将传 heroId，指定他带的战法传 lockSkillIds，不要传 plan）。阵营只认卡（群吕布≠汉吕布），不要为凑同阵营三人去筛队友。' +
+        '只补已经定好的队伍上的战法槽才用 optimize_winrate 的 matchSlotKeys，不要走 coreUnit。' +
+        '分对手胜率用返回里的分对手，不要再开一轮 matchup_pool。不要逐个 skill_detail 翻战法。' +
+        '每支队伍用一套防守体系（战磐 / 神赏 / 双减 / 百战 / 双封 / 垒石）。速度快的辅助再带攻其不备。下一队把前面占用的 A/S 放进 usedSkillIds。回答里说明用了哪套。'
     );
   } else if (tiers.includes('write')) {
-    lines.push('这一问要动**对手池**：加入 / 移出会弹确认，等用户点了再继续；固定测试集删不掉。');
+    lines.push(
+      '这一问要动**对手池**：加入 / 移出会弹确认，等用户点了再继续；固定测试集删不掉，但**每一条都能单独开关** —— ' +
+        '用户说「关掉某队 / 别算某队」时，告诉他在对手池面板点那一条的「参战 / 已关」开关（关掉的保留在池子里、不进胜率比较），' +
+        'list_opponent_pool 会把已关的单独报出来。'
+    );
   } else {
     lines.push(
       '这一问按**默认档**走：查配置 / 查档案 / 单次或少量试跑 / 前后对比 / 校验方案都在手上。' +
@@ -299,6 +305,13 @@ export function renderTurnGuide(tiers: AdvisorTier[], _userText = '', opts: { an
       '没跑过就说没跑过。**两条边界必须当场说**：查到的将若**已下架**，说「已下架 / 数值仅供看方向」；' +
       '**控制 / 防御型队友的价值在木桩口径下量不出来**，要把这句话说白。提方案前先 validate_plan，正文里放围栏 json 出口。'
   );
+  if (opts.resume) {
+    lines.push(
+      '用户这句是让你**接着上一轮**，不是新开一问。上一轮的工具结果和思考已经在对话里。' +
+        '接着那些结果把结论写完，或只补还缺的那一步。' +
+        '不要重新 get_config，不要重新 tools_catalog，不要重新 route_task，不要重跑已经有证据的搜索。'
+    );
+  }
   lines.push(`</${GUIDE_TAG}>`);
   return lines.join('\n');
 }

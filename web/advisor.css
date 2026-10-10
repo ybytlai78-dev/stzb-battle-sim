@@ -97,10 +97,19 @@
 .advisor-slot-sk { font-size: 12px; color: var(--gold); word-break: break-word; }
 .advisor-slot-meta { font-size: 11px; color: var(--text-dim); }
 
-/* ── 对话区（唯一滚动体；阅读列 720px 居中）── */
-.advisor-main { flex: 1 1 auto; min-width: 0; min-height: 0; overflow-y: auto; background: var(--bg); display: flex; flex-direction: column; }
+/* ── 对话区（唯一滚动体）──
+ * 左右各 200px 固定边距，用户气泡和回复落在同一列里。
+ * 侧栏收起时左边距不变，腾出的宽度整段加进对话列。
+ */
+/* 盖掉全站 `main` 的 max-width:1380px + margin:auto + 20px 内边距。
+ * 否则收起侧栏后对话列会重新居中，左边距变大，腾出的宽度进不了对话。 */
+.advisor-main {
+  flex: 1 1 auto; min-width: 0; min-height: 0; overflow-y: auto;
+  width: auto; max-width: none; margin: 0; padding: 0;
+  background: var(--bg); display: flex; flex-direction: column;
+}
 .advisor-main-inner {
-  width: min(720px, 100%); margin: 0 auto; padding: 28px 28px 12px;
+  width: 100%; margin: 0; padding: 28px 200px 12px;
   display: flex; flex-direction: column; gap: 12px; flex: 1 1 auto; min-height: 100%;
 }
 .advisor-page.is-empty .advisor-main-inner { justify-content: center; padding-bottom: 8vh; }
@@ -174,21 +183,50 @@
 .advisor-cost { font-size: 12px; color: var(--text-dim); }
 
 /* 方案卡：不参与压缩（曾经被压成 0 高度 → 真机上「应用」够不着） */
-.advisor-plans { display: flex; flex-direction: column; gap: 8px; flex: 0 0 auto; }
-.advisor-plan-card { border: 1px solid var(--line-strong); border-radius: 12px; padding: 14px 16px; background: var(--panel-2); }
-.pc-title { color: var(--gold-bright); font-weight: 600; margin-bottom: 8px; font-size: 15px; }
-.pc-config { width: 100%; border-collapse: collapse; font-size: 14px; }
-.pc-config td { border-top: 1px solid var(--line); padding: 3px 4px; vertical-align: top; }
-.pc-config td:first-child { color: var(--text-dim); width: 42px; }
+/* 方案卡跟在那一轮正文后面，随聊天记录上滚，不钉在输入框上方 */
+.advisor-plans { display: flex; flex-direction: column; gap: 8px; }
+.advisor-plan-card { border: 1px solid var(--line-strong); border-radius: 12px; padding: 0; background: var(--panel-2); overflow: hidden; }
+.pc-title { color: var(--gold-bright); font-weight: 600; padding: 10px 12px 6px; font-size: 15px; font-family: var(--font-kai); letter-spacing: 2px; text-align: center; }
+.pc-shell { display: flex; min-height: 0; }
+.pc-rail { flex: 0 0 76px; display: flex; flex-direction: column; background: rgba(0, 0, 0, .28); border-right: 1px solid var(--line); }
+.pc-tab { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; border: 0; border-left: 2px solid transparent; background: transparent; color: var(--text-dim); cursor: pointer; font-size: 11px; }
+.pc-tab.on { background: rgba(201, 162, 74, .16); color: var(--gold-bright); border-left-color: var(--gold); }
+.pc-tab img { width: 40px; height: 40px; object-fit: cover; border-radius: 4px; background: #111; }
+.pc-stage { flex: 1 1 auto; min-width: 0; }
+.pc-team { display: flex; flex-direction: column; min-width: 0; }
+.pc-team[hidden] { display: none; }
+.pc-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 8px 12px; background: linear-gradient(90deg, #3a2a14, #241c14); color: var(--gold-bright); font-size: 13px; }
+.pc-win { padding: 2px 8px; border: 1px solid #c45a4a; border-radius: 4px; background: #1c140e; color: #f2e6c8; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pc-hero { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-top: 1px solid var(--line); }
+.pc-avatar { width: 46px; height: 46px; object-fit: cover; border-radius: 4px; flex: 0 0 auto; background: #111; }
+.pc-who { flex: 0 0 64px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.pc-who b { font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-who span { font-size: 12px; color: var(--text-dim); }
+.pc-skills { display: flex; gap: 6px; flex: 1 1 auto; min-width: 0; overflow-x: auto; }
+.pc-skill { display: flex; flex-direction: column; align-items: center; width: 52px; flex: 0 0 auto; gap: 2px; }
+.pc-skill .sslot-icon { width: 40px; height: 40px; }
+.pc-skill-name { font-size: 10px; line-height: 1.2; text-align: center; max-width: 52px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+.pc-skill-empty { width: 40px; height: 40px; border: 1px dashed var(--line); border-radius: 8px; background: rgba(0, 0, 0, .25); }
+.pc-detail { padding: 4px 12px 0; }
+.pc-detail[hidden] { display: none; }
 .pc-metric { font-size: 12px; margin-top: 4px; }
 .pc-metric.bad { color: var(--orange); }
 /* box 外的将法：不是错（照常看数），只是不能一键应用 → 金色提醒，跟"不合法"的橙色分开 */
 .pc-metric.warn { color: var(--gold-bright, #e6c67e); }
-.pc-actions { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.pc-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin: 0; padding: 8px 12px 12px; }
 .advisor-verify-note { font-size: 11px; color: var(--text-dim); }
 .dim { color: var(--text-dim); }
 .advisor-pool-row { display: flex; align-items: center; gap: 8px; font-size: 13px; }
 .advisor-pool-badge { font-size: 11px; padding: 0 6px; border: 1px solid var(--line); border-radius: 999px; color: var(--gold); }
+.advisor-pool-note { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 每一条对手的参战开关：金色=参战（默认），灰=已关（不参与胜率比较） */
+.advisor-pool-switch {
+  flex-shrink: 0; font-size: 11px; line-height: 1.6; padding: 0 8px; cursor: pointer;
+  border: 1px solid var(--line); border-radius: 999px;
+  background: transparent; color: var(--text-dim);
+}
+.advisor-pool-switch.on { border-color: var(--gold); color: var(--gold); }
+.advisor-pool-row.off .advisor-pool-note { color: var(--text-dim); text-decoration: line-through; }
 
 /* ── 输入条（贴在对话列底部；空态时跟标题一起居中）── */
 .advisor-page:not(.is-empty) .advisor-composer { margin-top: auto; position: sticky; bottom: 0; }
@@ -202,9 +240,11 @@
   padding: 8px 8px 8px 10px; border: 1px solid var(--line-strong); border-radius: 18px;
   background: var(--panel-2); box-shadow: 0 10px 28px rgba(0, 0, 0, .35);
 }
+/* 工具调用 / 词元：对话列底部的小字，不进输入框 */
 .advisor-bar-meta {
-  flex: 0 1 auto; max-width: 42%; display: flex; flex-direction: column; align-items: flex-end;
-  gap: 2px; padding: 0 2px 6px; text-align: right;
+  display: flex; flex-wrap: wrap; justify-content: center; align-items: baseline;
+  gap: 4px 14px; padding: 0 8px; text-align: center;
+  font-size: 12px; line-height: 1.4; color: var(--text-dim);
 }
 .advisor-input {
   flex: 1 1 auto; min-width: 0; width: auto; resize: none; min-height: 28px; max-height: 160px;
