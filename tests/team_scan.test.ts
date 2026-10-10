@@ -60,13 +60,25 @@ describe('图1：敌方 陈宫/张宁/吕蒙', () => {
     expect(res.slots.map((s) => s.treasureSeen?.name)).toEqual(['白羽扇', '雕翎扇', '白羽扇']);
     expect(res.issues.filter((i) => i.rule === 'treasure-quality').length).toBe(3);
   });
-  it('导出对手配置：三将 3 战法 + 地利，等级 41/41/42 全保留', () => {
+  it('导出对手配置：三将 2 个可学战法（主战法剔除）+ 地利，等级 41/41/42 全保留', () => {
     const [entry] = toOpponentEntries([{ label: res.label, slots: res.slots }]);
     expect(entry.name).toBe('敌方·陈宫张宁吕蒙');
     expect(entry.cfg.slots.map((s) => s.level)).toEqual([41, 41, 42]);
-    expect(entry.cfg.slots[0].skillIds.length).toBe(3);
+    expect(entry.cfg.slots[0].skillIds.length).toBe(2);
     expect(entry.cfg.slots.every((s) => (s.traits ?? []).includes('地利'))).toBe(true);
     expect(entry.cfg.rounds).toBe(8);
+  });
+  // 契约：`ViewCfg.skillIds` 只装可学战法 —— `buildGeneral` 已按 mainSkillId 自带挂一次主战法，
+  // 若这里再带一份，引擎会把它判定两次（太史慈方阵突击 200 场：6.6 次/3524 伤害 vs 3.0 次/1551）。
+  it('导出对手配置：主战法不进 cfg.skillIds（三将逐槽核对）', () => {
+    const [entry] = toOpponentEntries([{ label: res.label, slots: res.slots }]);
+    expect(entry.cfg.slots.map((s) => s.skillIds)).toEqual([
+      ['shenbing_tianjiang', 'dashang_sanjun'],
+      ['zhongmou_buxie', 'sanshu_qimou'],
+      ['fanji_zhence', 'daoxing_xianzu'],
+    ]);
+    const mains = ['chizhi_nanchou', 'huangtian_yuyin', 'baiyi_dujiang'];
+    expect(entry.cfg.slots.some((s) => s.skillIds.some((id) => mains.includes(id)))).toBe(false);
   });
 });
 

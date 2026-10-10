@@ -1,0 +1,131 @@
+{
+  "source": {
+    "file": "敌方-荀彧张春华曹操.jpg",
+    "sha256": "a208c6757c6b735ecaa446138770f19331c989512caac0b1ab2e5b12c0801f15",
+    "at": "2026-10-09"
+  },
+  "label": "敌方·荀彧张春华曹操",
+  "side": "enemy",
+  "slots": [
+    {
+      "position": "大营",
+      "heroName": "荀彧",
+      "heroId": "h24",
+      "level": 44,
+      "troopTrait": null,
+      "skillNames": [
+        "驱虎吞狼",
+        "众谋不懈",
+        "激水之疾"
+      ],
+      "treasure": null,
+      "treasureSeen": null
+    },
+    {
+      "position": "中军",
+      "heroName": "张春华",
+      "heroId": "h29",
+      "level": 44,
+      "troopTrait": null,
+      "skillNames": [
+        "强势",
+        "落雷",
+        "战必断金"
+      ],
+      "treasure": null,
+      "treasureSeen": null
+    },
+    {
+      "position": "前锋",
+      "heroName": "曹操",
+      "heroId": "h23",
+      "level": 44,
+      "troopTrait": null,
+      "skillNames": [
+        "魏武之世",
+        "共饮避世",
+        "青囊秘要"
+      ],
+      "treasure": null,
+      "treasureSeen": null
+    }
+  ],
+  "unrecognized": [
+    "二级兵种（图标）",
+    "兵种特性（截图未显示特性名）"
+  ],
+  "resolved": {
+    "slots": [
+      {
+        "position": "大营",
+        "heroId": "h24",
+        "heroName": "荀彧",
+        "mainSkillId": "quhu_tunlang",
+        "troopType": "cavalry",
+        "rawLevel": 44,
+        "level": 44,
+        "levelClampedTo40": false,
+        "troopTrait": null,
+        "skillNames": [
+          "驱虎吞狼",
+          "众谋不懈",
+          "激水之疾"
+        ],
+        "skillIds": [
+          "quhu_tunlang",
+          "zhongmou_buxie",
+          "jishui_zhiji"
+        ],
+        "treasure": null,
+        "treasureSeen": null
+      },
+      {
+        "position": "中军",
+        "heroId": "h29",
+        "heroName": "张春华",
+        "mainSkillId": "qiangshi",
+        "troopType": "archer",
+        "rawLevel": 44,
+        "level": 44,
+        "levelClampedTo40": false,
+        "troopTrait": null,
+        "skillNames": [
+          "强势",
+          "落雷",
+          "战必断金"
+        ],
+        "skillIds": [
+          "qiangshi",
+          "luolei",
+          "zhanbi_duanjin"
+        ],
+        "treasure": null,
+        "treasureSeen": null
+      },
+      {
+        "position": "前锋",
+        "heroId": "h23",
+        "heroName": "曹操",
+        "mainSkillId": "weiwu_zhishi",
+        "troopType": "cavalry",
+        "rawLevel": 44,
+        "level": 44,
+        "levelClampedTo40": false,
+        "troopTrait": null,
+        "skillNames": [
+          "魏武之世",
+          "共饮避世",
+          "青囊秘要"
+        ],
+        "skillIds": [
+          "weiwu_zhishi",
+          "gongyin_bishi",
+          "qingnang_miyao"
+        ],
+        "treasure": null,
+        "treasureSeen": null
+      }
+    ],
+    "issues": []
+  }
+}

@@ -1,0 +1,131 @@
+{
+  "source": {
+    "file": "敌方-太史慈张春华周泰.jpg",
+    "sha256": "d619123095ae1f488ad42cc8eb855d3b06ecc0c1d52e2f6e92bf749b7b5c657b",
+    "at": "2026-10-09"
+  },
+  "label": "敌方·太史慈张春华周泰",
+  "side": "enemy",
+  "slots": [
+    {
+      "position": "大营",
+      "heroName": "太史慈",
+      "heroId": "taishici",
+      "level": 41,
+      "troopTrait": null,
+      "skillNames": [
+        "方阵突击",
+        "先驱突击",
+        "扬威"
+      ],
+      "treasure": null,
+      "treasureSeen": null
+    },
+    {
+      "position": "中军",
+      "heroName": "张春华",
+      "heroId": "h29",
+      "level": 40,
+      "troopTrait": null,
+      "skillNames": [
+        "强势",
+        "始计",
+        "奇术折冲"
+      ],
+      "treasure": null,
+      "treasureSeen": null
+    },
+    {
+      "position": "前锋",
+      "heroName": "周泰",
+      "heroId": "h589",
+      "level": 41,
+      "troopTrait": null,
+      "skillNames": [
+        "疮痍累身",
+        "三术奇谋",
+        "青囊秘要"
+      ],
+      "treasure": null,
+      "treasureSeen": null
+    }
+  ],
+  "unrecognized": [
+    "二级兵种（图标）",
+    "兵种特性（截图未显示特性名）"
+  ],
+  "resolved": {
+    "slots": [
+      {
+        "position": "大营",
+        "heroId": "taishici",
+        "heroName": "太史慈",
+        "mainSkillId": "fangzhen_tuji",
+        "troopType": "archer",
+        "rawLevel": 41,
+        "level": 41,
+        "levelClampedTo40": false,
+        "troopTrait": null,
+        "skillNames": [
+          "方阵突击",
+          "先驱突击",
+          "扬威"
+        ],
+        "skillIds": [
+          "fangzhen_tuji",
+          "xianqu_tuji",
+          "yangwei"
+        ],
+        "treasure": null,
+        "treasureSeen": null
+      },
+      {
+        "position": "中军",
+        "heroId": "h29",
+        "heroName": "张春华",
+        "mainSkillId": "qiangshi",
+        "troopType": "archer",
+        "rawLevel": 40,
+        "level": 40,
+        "levelClampedTo40": false,
+        "troopTrait": null,
+        "skillNames": [
+          "强势",
+          "始计",
+          "奇术折冲"
+        ],
+        "skillIds": [
+          "qiangshi",
+          "shiji",
+          "qishu_zhechong"
+        ],
+        "treasure": null,
+        "treasureSeen": null
+      },
+      {
+        "position": "前锋",
+        "heroId": "h589",
+        "heroName": "周泰",
+        "mainSkillId": "chuangyi_leishen",
+        "troopType": "infantry",
+        "rawLevel": 41,
+        "level": 41,
+        "levelClampedTo40": false,
+        "troopTrait": null,
+        "skillNames": [
+          "疮痍累身",
+          "三术奇谋",
+          "青囊秘要"
+        ],
+        "skillIds": [
+          "chuangyi_leishen",
+          "sanshu_qimou",
+          "qingnang_miyao"
+        ],
+        "treasure": null,
+        "treasureSeen": null
+      }
+    ],
+    "issues": []
+  }
+}

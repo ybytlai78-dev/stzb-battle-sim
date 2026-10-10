@@ -1,0 +1,131 @@
+{
+  "source": {
+    "file": "敌方-太史慈曹植关羽.jpg",
+    "sha256": "96308a49440c6ecfd0c421d4b87cdf63a392e4e7bd6cb5b328cd48c514b779b5",
+    "at": "2026-10-09"
+  },
+  "label": "敌方·太史慈曹植关羽",
+  "side": "enemy",
+  "slots": [
+    {
+      "position": "大营",
+      "heroName": "太史慈",
+      "heroId": "taishici",
+      "level": 42,
+      "troopTrait": null,
+      "skillNames": [
+        "方阵突击",
+        "先驱突击",
+        "温酒斩将"
+      ],
+      "treasure": null,
+      "treasureSeen": null
+    },
+    {
+      "position": "中军",
+      "heroName": "曹植",
+      "heroId": "h672",
+      "level": 42,
+      "troopTrait": null,
+      "skillNames": [
+        "七步释嫌",
+        "焰焚箕轸",
+        "落雷"
+      ],
+      "treasure": null,
+      "treasureSeen": null
+    },
+    {
+      "position": "前锋",
+      "heroName": "关羽",
+      "heroId": "h26",
+      "level": 42,
+      "troopTrait": null,
+      "skillNames": [
+        "千里单骑",
+        "青囊秘要",
+        "连战"
+      ],
+      "treasure": null,
+      "treasureSeen": null
+    }
+  ],
+  "unrecognized": [
+    "二级兵种（图标）",
+    "兵种特性（截图未显示特性名）"
+  ],
+  "resolved": {
+    "slots": [
+      {
+        "position": "大营",
+        "heroId": "taishici",
+        "heroName": "太史慈",
+        "mainSkillId": "fangzhen_tuji",
+        "troopType": "archer",
+        "rawLevel": 42,
+        "level": 42,
+        "levelClampedTo40": false,
+        "troopTrait": null,
+        "skillNames": [
+          "方阵突击",
+          "先驱突击",
+          "温酒斩将"
+        ],
+        "skillIds": [
+          "fangzhen_tuji",
+          "xianqu_tuji",
+          "wenjiu_zhanjiang"
+        ],
+        "treasure": null,
+        "treasureSeen": null
+      },
+      {
+        "position": "中军",
+        "heroId": "h672",
+        "heroName": "曹植",
+        "mainSkillId": "qibu_shixian",
+        "troopType": "cavalry",
+        "rawLevel": 42,
+        "level": 42,
+        "levelClampedTo40": false,
+        "troopTrait": null,
+        "skillNames": [
+          "七步释嫌",
+          "焰焚箕轸",
+          "落雷"
+        ],
+        "skillIds": [
+          "qibu_shixian",
+          "yanfen_jizhen",
+          "luolei"
+        ],
+        "treasure": null,
+        "treasureSeen": null
+      },
+      {
+        "position": "前锋",
+        "heroId": "h26",
+        "heroName": "关羽",
+        "mainSkillId": "qianli_danqi",
+        "troopType": "cavalry",
+        "rawLevel": 42,
+        "level": 42,
+        "levelClampedTo40": false,
+        "troopTrait": null,
+        "skillNames": [
+          "千里单骑",
+          "青囊秘要",
+          "连战"
+        ],
+        "skillIds": [
+          "qianli_danqi",
+          "qingnang_miyao",
+          "lianzhan"
+        ],
+        "treasure": null,
+        "treasureSeen": null
+      }
+    ],
+    "issues": []
+  }
+}

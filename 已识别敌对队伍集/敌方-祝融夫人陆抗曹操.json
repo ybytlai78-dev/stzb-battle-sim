@@ -1,0 +1,138 @@
+{
+  "source": {
+    "file": "敌方-祝融夫人陆抗曹操.jpg",
+    "sha256": "18c2303fb47b3ace01a5f21ee7ab3696eab4d8825f3f7de066ae603e71c368e3",
+    "at": "2026-10-09"
+  },
+  "label": "敌方·祝融夫人陆抗曹操",
+  "side": "enemy",
+  "slots": [
+    {
+      "position": "大营",
+      "heroName": "祝融夫人",
+      "heroId": "h494",
+      "level": 41,
+      "troopTrait": null,
+      "skillNames": [
+        "火兽冲锋",
+        "先驱突击",
+        "温酒斩将"
+      ],
+      "treasure": null,
+      "treasureSeen": null
+    },
+    {
+      "position": "中军",
+      "heroName": "陆抗",
+      "heroId": "h574",
+      "level": 38,
+      "troopTrait": null,
+      "skillNames": [
+        "西陵克晋",
+        "无心恋战",
+        "避其锋芒"
+      ],
+      "treasure": null,
+      "treasureSeen": null
+    },
+    {
+      "position": "前锋",
+      "heroName": "曹操",
+      "heroId": "h23",
+      "level": 41,
+      "troopTrait": null,
+      "skillNames": [
+        "魏武之世",
+        "战必断金",
+        "长兵方阵"
+      ],
+      "treasure": null,
+      "treasureSeen": null
+    }
+  ],
+  "unrecognized": [
+    "二级兵种（图标）",
+    "兵种特性（截图未显示特性名）"
+  ],
+  "resolved": {
+    "slots": [
+      {
+        "position": "大营",
+        "heroId": "h494",
+        "heroName": "祝融夫人",
+        "mainSkillId": "huoshou_chongfeng",
+        "troopType": "cavalry",
+        "rawLevel": 41,
+        "level": 41,
+        "levelClampedTo40": false,
+        "troopTrait": null,
+        "skillNames": [
+          "火兽冲锋",
+          "先驱突击",
+          "温酒斩将"
+        ],
+        "skillIds": [
+          "huoshou_chongfeng",
+          "xianqu_tuji",
+          "wenjiu_zhanjiang"
+        ],
+        "treasure": null,
+        "treasureSeen": null
+      },
+      {
+        "position": "中军",
+        "heroId": "h574",
+        "heroName": "陆抗",
+        "mainSkillId": "xiling_kejin",
+        "troopType": "infantry",
+        "rawLevel": 38,
+        "level": 40,
+        "levelClampedTo40": true,
+        "troopTrait": null,
+        "skillNames": [
+          "西陵克晋",
+          "无心恋战",
+          "避其锋芒"
+        ],
+        "skillIds": [
+          "xiling_kejin",
+          "wuxin_lianzhan",
+          "biqi_fengmang"
+        ],
+        "treasure": null,
+        "treasureSeen": null
+      },
+      {
+        "position": "前锋",
+        "heroId": "h23",
+        "heroName": "曹操",
+        "mainSkillId": "weiwu_zhishi",
+        "troopType": "cavalry",
+        "rawLevel": 41,
+        "level": 41,
+        "levelClampedTo40": false,
+        "troopTrait": null,
+        "skillNames": [
+          "魏武之世",
+          "战必断金",
+          "长兵方阵"
+        ],
+        "skillIds": [
+          "weiwu_zhishi",
+          "zhanbi_duanjin",
+          "changbing_fangzhen"
+        ],
+        "treasure": null,
+        "treasureSeen": null
+      }
+    ],
+    "issues": [
+      {
+        "level": "warn",
+        "rule": "level",
+        "message": "原图 Lv38 → 入库按 Lv40 跑（用户口径）",
+        "slot": 1
+      }
+    ]
+  }
+}

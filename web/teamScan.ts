@@ -2,12 +2,13 @@
  * 截图识别 · 敌对队伍集：识别 JSON → 库校验 → 对手配置
  * ---------------------------------------------------------------------------
  * spec：`docs/截图识别-敌对队伍集.md` §三/§四/§五。
- * **纯逻辑**：本文件不 import 任何武将/宝物数据文件，数据表由调用方注入
- * （浏览器用 `web/teamScanBrowser.ts`；node 脚本用 `web/data/heroes.json` + `src/data/*.ts`），
- * 保证「一份实现三处调用」，校验口径不会漂移。
+ * **纯逻辑**：`validateScan` 不读库，数据表由调用方注入
+ * （浏览器用 `web/teamScanBrowser.ts`；node 脚本用 `web/data/heroes.json` + `src/data/*.ts`）。
+ * `toOpponentEntries` 另读默认加点名单（截图看不到加点）。
  */
 import type { TreasureLoadout, TroopType } from '../src/engine/types';
 import type { GeneralTrait } from '../src/engine/secondaryTroop';
+import { defaultFreePoints } from './heroes';
 
 export const SCAN_POSITIONS = ['大营', '中军', '前锋'] as const;
 export type ScanPosition = (typeof SCAN_POSITIONS)[number];
@@ -102,6 +103,8 @@ export interface ResolvedSlot {
   position: ScanPosition;
   heroId: string;
   heroName: string;
+  /** 该武将主战法 id（`buildGeneral` 会按它自带挂槽，导出 cfg 时要把它从 skillIds 里剔除） */
+  mainSkillId: string;
   troopType: TroopType;
   /** 原图等级（照录） */
   rawLevel: number;
@@ -129,7 +132,9 @@ export interface ScanSlotCfg {
   heroId: string;
   level: number;
   addAttack: number;
+  addDefense?: number;
   addStrategy: number;
+  addSpeed?: number;
   troopType: TroopType;
   skillIds: string[];
   traits?: GeneralTrait[];
@@ -252,6 +257,7 @@ export function validateScan(scan: ScanJson, tables: ScanTables): ScanResult {
       position: s.position as ScanPosition,
       heroId: hero?.id ?? '',
       heroName: s.heroName,
+      mainSkillId: hero?.mainSkillId ?? '',
       troopType: (hero?.troopType ?? 'infantry') as TroopType,
       rawLevel,
       level,
@@ -289,23 +295,40 @@ export function validateScan(scan: ScanJson, tables: ScanTables): ScanResult {
   };
 }
 
-/** 校验结果 → L4 对手池配置（加点一律 0：由用户在配将面板上分配） */
+/**
+ * 槽位识别到的 3 个战法 → `ViewCfg.skillIds`：**剔除首个主战法**。
+ *
+ * 为什么必须剔：`buildGeneral` 已按武将 `mainSkillId` 自带挂一次主战法，若 cfg 里再带一份，
+ * 引擎的 `pursuitSkillIds / activeSkillIds` 循环会把它**判定两次**——实测太史慈（追击型主战法
+ * 方阵突击）200 场：带重复 场均发动 6.6 次 / 伤害 3524，不带 3.0 次 / 伤害 1551。
+ * 口径与配将面板 `extraSkillIds`（四槽战法排除主战法）及 `web/data/opponent_benchmark.json` 一致。
+ */
+function learnableSkillIds(s: ResolvedSlot): string[] {
+  return s.skillIds.filter((id, i) => !(i === 0 && s.mainSkillId !== '' && id === s.mainSkillId));
+}
+
+/** 校验结果 → L4 对手池配置。截图看不到加点：名单内武将按默认项加满，其余为 0。 */
 export function toOpponentEntries(
   records: Array<{ label: string; slots: ResolvedSlot[] }>
 ): Array<{ name: string; cfg: ScanViewCfg }> {
   return records.map((rec) => ({
     name: rec.label,
     cfg: {
-      slots: rec.slots.map((s) => ({
+      slots: rec.slots.map((s) => {
+        const pts = defaultFreePoints(s.heroId, 0, s.level);
+        return {
         heroId: s.heroId,
         level: s.level,
-        addAttack: 0,
-        addStrategy: 0,
+        addAttack: pts.attack,
+        addDefense: pts.defense,
+        addStrategy: pts.strategy,
+        addSpeed: pts.speed,
         troopType: s.troopType,
-        skillIds: [...s.skillIds],
+        skillIds: learnableSkillIds(s),
         ...(s.troopTrait ? { traits: [s.troopTrait as GeneralTrait] } : {}),
         treasure: s.treasure,
-      })),
+        };
+      }),
       morale: 120,
       enemy: { defense: 150, strategy: 100, troopType: 'infantry' as TroopType },
       rounds: 8,
