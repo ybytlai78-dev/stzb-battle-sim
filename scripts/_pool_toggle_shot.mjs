@@ -103,9 +103,17 @@ const until = async (expr, timeout = 20000) => {
 };
 
 const openPool = async () => {
-  await until(`!!document.querySelector('[data-sheet="pool"]')`);
+  await until(`!!document.querySelector('[data-sheet="pool"]')`, 45000);
   await evaluate(`document.querySelector('[data-sheet="pool"]').click(); true`);
-  await until(`document.querySelectorAll('.advisor-pool-row').length > 0`);
+  await until(`document.querySelectorAll('.advisor-pool-row').length > 0`, 45000);
+};
+
+/** 导航并等 URL 落地（readyState 在 about:blank 上也是 complete，不能拿它当就绪判据） */
+const gotoAdvisor = async () => {
+  const target = `${url}/advisor.html`;
+  await send('Page.navigate', { url: target }, sessionId);
+  await until(`location.href === ${JSON.stringify(target)}`, 60000);
+  await openPool();
 };
 
 const snapshot = () =>
@@ -128,9 +136,7 @@ const snapshot = () =>
 const log = (tag, s) =>
   console.log(`\n[${tag}]\n  标题：${s.head}\n  条数 ${s.count}｜开 ${s.onClasses.filter(Boolean).length}｜关 ${s.offRows.length}\n  已关：${s.offRows.join('、') || '（无）'}\n  存储：${JSON.stringify(s.storageOff)}`);
 
-await send('Page.navigate', { url: `${url}/advisor.html` }, sessionId);
-await until(`document.readyState === 'complete'`, 30000);
-await openPool();
+await gotoAdvisor();
 
 const s1 = await snapshot();
 log('初始', s1);
@@ -144,9 +150,7 @@ log('关掉第 1 条后', s2);
 await shot('2-one-off.png');
 
 // 刷新 → 应仍然关着（持久化）
-await send('Page.navigate', { url: `${url}/advisor.html` }, sessionId);
-await until(`document.readyState === 'complete'`, 30000);
-await openPool();
+await gotoAdvisor();
 const s3 = await snapshot();
 log('刷新后', s3);
 await shot('3-after-reload.png');
