@@ -163,9 +163,11 @@ npx tsc --noEmit                    # 类型检查（strict）
 **可无限叠加**、**下一次受到伤害后全部清空**（那一次伤害仍吃满所有层数）——「只覆盖一次攻击」；
 清空由 `applyDamage` 扣兵后调 `consumeNextHitReduce` 完成（与奉令护蜀 `consumePendingStacks` 同型，发 `status_expired`）。
 ⚠️ 与【不屈】区分：【不屈】是 `hurt_stack`、**「本回合」**语义（回合开始清零、最多 10 层），不吃这套清空。回归 `tests/treasure_jishi.test.ts`（5 例）。
-**例外 —— 士气提升不与任何效果冲突（用户 2026-09-22）**：`morale_boost` **正值**一律独立共存（同源仍走刷新 / 显式叠层），
+**例外 —— 士气增减**（提升 2026-09-22 / 降低 2026-10-18）**都不与任何效果冲突**：`morale_boost` **正负两个方向一律独立共存**（同源仍走刷新 / 显式叠层），
 由 `effectiveMorale` 逐实例相加 —— 例如 司马炎【谋议宏图】每回合 +8 与 司马徽【徽言龙凤】+10 同时生效（不再取较高替换）；
-士气**降低**（负值）仍按原规则（同号取较高、与提升正负相反各自共存）。
+士气**降低**同口径（用户 2026-10-18 原话「士气降低/提高都是不和任何效果冲突的，可稳定触发不冲突」）——两条不同战法的 −10 与 −5 是两条实例、合计 −15，
+**不再「同号取较高」**（旧行为：−5 被判成替换 −10）。实现：`inflictStatus` 对 `morale_boost` 两个方向都直接 `pushStatus` 返回（`src/engine/action.ts`），
+同源重复触发仍是刷新（官方未写「可叠加」，如烈火焚舟反复引爆稳定 −10）。回归 `tests/morale.test.ts`「士气增减不与任何效果冲突」三例 + `tests/conflict.test.ts` 该条已改口径。
 **不同类型** → 各自独立计数共存。
 僵尸清理 hack（施加前清 `remaining ≤ 0` 的同名状态）已删除：默认刷新会把僵尸实例数值替换、`remaining` 取 max，怀橘遗亲等每回合重挂仍是原值。
 
@@ -173,6 +175,39 @@ npx tsc --noEmit                    # 类型检查（strict）
 > **未写**「可叠加 / 层数」，按上表本应走刷新；但**用户 2026-09-19 确认可叠加**（最多 9 次 → 净士气 −45）。
 > 该效果按显式标记落库：施加模板带 `CreateStatus.stack: true`（`action.ts` `triggerHealOnDamageCommands`），
 > 走「显式叠层 → 数值累加」分支，**不是靠特判**保留。除本条外任何未标 stack 的战法一律刷新不叠加。
+
+### `allyDealStack`（友军造成伤害后叠层）跟踪状态的身份契约（2026-10-18，知己知彼报障后钉死）
+
+用户口径（原话）：「知己知彼对敌方也有增伤效果，目标选取对方是**使敌方受到伤害提高**，不是给敌方增伤」。
+
+- **机制**：`allyDealStack` = 某战法在**友军身上**挂一份「跟踪状态」，持有者每次造成匹配伤害后把该状态**同源再施加一次**（叠层 / 上限由状态自身 `maxStacks` 管）。实现 = `src/engine/action.ts` 的 `triggerAllyDealStack(ctx, source, damageType?)`，由 `applyDamage` 扣兵后调用。
+- **必须按「轨」匹配状态身份（`isDealStackTrack`）**：只有与某条轨的 `cfg.initialStatus ?? cfg.status` **同 `type` + 同 `direction`（缺省 `caused`）+ 同 `damageType`** 的状态，才算该轨的跟踪状态。
+  ⚠️ **不能只按载体状态的 `sourceSkillId` 回溯战法**：同一战法可以**同时在两侧各挂一套状态** —— 知己知彼我军侧（`allyDealStack`）挂 `caused` 增伤跟踪、敌军侧（`initialOutput` + `onHurt`）挂 `taken` 增伤；
+  只按 skillId 回溯时，敌方单位**自己打出伤害**会用身上那份 `taken` 状态命中**我军侧 caused 轨**，给**敌方自己**叠「造成的伤害提高 8%」（5 层 = +40% 输出）——这正是用户报障的症状。
+- **同一条轨在载体身上的多份状态只算一次**（`seen` 按 `${skill.id}#${轨序}` 去重）；轨的 `damageType` 过滤（`cfg.damageType !== damageType`）仍在按轨匹配之后生效，双轨战法（physical / strategy）因此不会串轨。
+- 随机叠层（`cfg.rate`：反间 70% / 知己知彼 60%）走**原施法者**士气修正并逐次发 `skill_trigger`（`targetId` = 叠层载体）；窗口字段 `endRound` / `requireMoraleBelow` 语义不变。
+- 回归：`tests/ally_deal_stack_track.test.ts`（3 条机制契约 + 2 条数据方向断言）＋端到端 `npx tsx scripts/_diag_zhiji_zhibi.mts`（双方裸将、我方 3 人只带知己知彼，按阵营统计「造成的 / 受到的」条数：敌方 caused 必须 0、我方 caused > 0、敌方 taken > 0）。
+  ⚠️ 数据侧口径同样要守：知己知彼**敌军侧必须是 `direction:'taken'`**（受到伤害提高），不是 `caused`。
+
+### 包内「效果冲突分类」（`replace_type`）与引擎的分域差异（2026-10-18 审计）
+
+包内机制字典 `tb_cfg_skill_effect` 有一条 `replace_type` 字段（206 条全覆盖，分布 **0:30 · 1:15 · 2:57 · 3:104**）。
+⚠️ **包内没有人话标签**（客户端 36 个 dll / 13,316 个 bin / 文本表按 UTF-8 与 UTF-16LE 双编码搜索「属性替换 / 效果不叠加 / 任何效果都不冲突」= 0 命中），
+用户给的三条规则名与数值的对应关系是按「数据同质性 + 已确认口径」反推的：
+
+- `0` **属性替换**（单值效果：属性四维±、受兵种伤害±、DoT、急救/休整、资源收益…）→ 新数值替换旧数值；
+- `1` **任何效果都不冲突**（士气±、标记、子技能、直接伤害、触发/移除效果）；
+- `2` **效果不叠加·数值档**（百分比修正：发动率±、造成/受到各类伤害±、恢复±…）→ 同类取较高；
+- `3` **效果不叠加·状态档**（控制/规避/免疫/洞察·看破·镇静/连击·分兵·反击…）→ 先施加者生效。
+
+**引擎现状与包内分组的错位**（`inflictStatusCore` 里 `sameSource` / `sameType` 都以 `sourceSkillType` 为域，`action.ts:3526-3560`）：
+
+- 状态类跨战法类型**各挂一条**（指挥混乱 + 主动混乱并存）→ 与 `3`「不叠加」不符；
+- 数值类跨战法类型**进同一加算池累加**（0.3 + 0.2 = 0.5）→ 与 `2`「不叠加」不符；
+- `0` 类同类型内走「**取较高**」（+50 后 +30 被拒）、急救走「指挥互斥拒绝」→ 与「替换」不符。
+
+逐条对照、探针（`scripts/_probe_conflict_class.mts`）与三档修复提案见 **`docs/包内冲突分类-审计.md`**。
+现状是**如实登记未修**：改动会动到 golden 与整体伤害期望，等用户拍板档位。
 
 ### 状态语义（容易写错，务必遵守）
 
@@ -380,6 +415,33 @@ npx tsc --noEmit                    # 类型检查（strict）
   （旧实现按「后 N 个战法格」列序对齐，司马懿这类只有第 1 格代打的会取到空名单 → 弹窗只有标题）；
   ② `.st-team` **不要**给 `z-index` —— 自成层叠上下文会把行内绝对定位弹层（`.sk-d` 的 z-index:20）关在本队里，
   往下超出时被另一队整块盖住。回归 `tests/turn_order.test.ts`（同速 tie-break / ignoreExpired / 长弓兵先发 4 例）。
+
+### 控制扩散（`control_spread`，鸾凤和鸣）口径（2026-10-18，小乔报障后建立）
+
+用户报障（原话，m00246）：「小乔给队友的状态没有正确生效，控制目标为加一」。截图现场：第 7 回合【小乔&大乔】（h424）
+发动【双艳】→ 目标：贾诩、荀彧 → 紧接一行「小乔&大乔 的**control_spread**状态解除」—— 既看不到「+1 目标」，
+还漏出裸状态 key。
+
+- **机制**：`鸾凤和鸣`（h687 小乔·二类指挥 `phase:'round'` + `roundTrigger:'on_act'` + `targetMode:'all'` / `targetSide:'ally'`）
+  每回合自身行动时给我军全体挂 `control_spread { duration: 999 }`（**消耗制**：不进 `NEXT_ACT_TICK_TYPES`、不按回合递减）。
+  携带者**下一次真正打出控制**（混乱/犹豫/暴走/怯战，`CONTROL_STATUS_TYPES`）时，额外对 1 个敌军生效。
+- **三条口径（勿再动摇）**：① **额外目标优先取「当前没有该控制」的敌军**（`pickExtraControlTarget(..., preferType)` 的
+  `fresh` 过滤），全候选都已受控才退回任意候选；② 额外施加后**必发一条 `status_changed` 战报**
+  （「【曹操】被【双艳】的控制扩散额外命中（新增控制 / 刷新已有控制）」）；③ **只有额外目标真被新挂上该控制才消耗标记**
+  （没有额外目标 / 只能刷新 → 标记保留到下一次控制，不白消耗）。
+- **同源重挂的控制刷新必须发事件**（`inflictStatus` 同源分支）：控制类同源重挂只刷新 `remaining`（不新增实例），
+  旧实现完全静默 —— 这正是玩家「状态被消耗却什么都没发生」的观感来源。现在发
+  `status_inflicted`「暴走持续 2 回合（刷新）」，与属性类「（刷新）」同口径（`tests/__snapshots__/golden.json`
+  因此新增 5 条刷新行，T6 +1 / T7 +4，**胜负/回合/兵力全不变**）。
+- **战报文案**：`status_expired` 遇 `control_spread` 写「的控制扩散已用掉（本次控制额外命中 1 个目标）」，
+  不再写「control_spread状态解除」；`statusName` 两处（`src/engine/report.ts` / `web/battleView.ts`）补 `control_spread: '控制扩散'`。
+- **代码位置**：`src/engine/action.ts` 的 `pickExtraControlTarget`（已 export，供测试直测）/ `consumeControlSpread` /
+  `inflict_status` 分支（额外命中与消耗判定）/ `inflictStatus` 同源刷新分支。
+- **回归**：`tests/control_spread.test.ts`（7 例机制契约：+1 生效并消耗 / 优先未受控 / 无额外目标不消耗 /
+  全场受控只刷新不消耗 / 非控制段不触发 / 数据口径）＋ `tests/control_spread_ui.test.ts`（2 例 jsdom：
+  网页战报第 2、3 回合必须出现「额外命中」「已用掉」「暴走…（刷新）」三行、且不再出现裸 `control_spread`）。
+  端到端取证 `scripts/_diag_control_spread.mts`（`npx tsx scripts/_diag_control_spread.mts` 统计、
+  `... dump 1` 打印战报行）：6 个真实种子 19 次带标记的双艳，「应当加却没加 0 次」。
 
 ### 战法槽级作用范围（2026-10-06，法正/田丰报障后建立）
 

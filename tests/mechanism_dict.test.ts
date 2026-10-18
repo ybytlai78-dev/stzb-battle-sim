@@ -159,16 +159,16 @@ describe('战法机制码挂载', () => {
     expect(dist).toEqual({ 0: 30, 1: 15, 2: 57, 3: 104 });
   });
 
-  it('冲突类型锚点（与客户端资源表逐条对拍）：0 = 属性类 · 1 = 不参与判定 · 2 = 伤害增减 · 3 = 与任意战法冲突', () => {
+  it('冲突类型锚点（与客户端资源表逐条对拍）：0 = 属性替换 · 1 = 任何效果都不冲突 · 2/3 = 效果不叠加（数值档/状态档）', () => {
     const ct = (code: number) => MECHANISM_DICT.find((m) => m.code === code)!.conflictType;
-    expect(ct(101)).toBe(0); // 攻击属性提高——仅同类型战法之间冲突
-    expect(ct(401)).toBe(0); // 急救
-    expect(ct(77)).toBe(1); // 标记——不参与冲突判定
-    expect(ct(322)).toBe(2); // 主动战法伤害提高——伤害增减族
-    expect(ct(514)).toBe(3); // 规避——与任意战法冲突（状态类互斥）
+    expect(ct(101)).toBe(0); // 攻击属性提高——属性替换（新数值替换旧数值）
+    expect(ct(401)).toBe(0); // 急救——同为单值效果
+    expect(ct(77)).toBe(1); // 标记——任何效果都不冲突
+    expect(ct(322)).toBe(2); // 主动战法伤害提高——效果不叠加·数值档
+    expect(ct(514)).toBe(3); // 规避——效果不叠加·状态档（先施加者生效）
   });
 
-  it('冲突类型 3（状态类互斥）：规避 / 控制 / 免疫 / 状态开关全族一致', () => {
+  it('冲突类型 3（效果不叠加·状态档）：规避 / 控制 / 免疫 / 状态开关全族一致', () => {
     const ct = (code: number) => MECHANISM_DICT.find((m) => m.code === code)!.conflictType;
     // 规避 / 无视规避（含预备 · 设施场景变体）
     for (const code of [514, 714, 814, 515, 715, 815]) expect(ct(code), `码 ${code}`).toBe(3);

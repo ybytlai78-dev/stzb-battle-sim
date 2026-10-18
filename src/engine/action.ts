@@ -3538,7 +3538,7 @@ function inflictStatusCore(
   // 大赏 +30% 被当成「正负相反、共存」，同号的 +16.8% 永远进不了取较高。
   const sameTypeUsesSign =
     type === 'damage_boost' ||
-    type === 'morale_boost' || // 士气提高 vs 士气降低（负值）：正负相反各自共存，由 effectiveMorale 相加
+    type === 'morale_boost' || // 士气提高 / 降低：两个方向都不与任何效果冲突，由 effectiveMorale 逐实例相加（2026-10-18）
     type === 'attack_buff' || type === 'defense_buff' ||
     type === 'strategy_buff' || type === 'speed_buff';
   const incomingSign = sameTypeUsesSign ? conflictSign(statusValue(create)) : undefined;
@@ -3685,14 +3685,40 @@ function inflictStatusCore(
     if (sameSource.type === 'counter' && create.type === 'counter') {
       sameSource.appliedRound = ctx.currentRound;
     }
+    /**
+     * 控制类同源重挂 = 只刷新剩余回合（不新增实例）：必须发一条可见事件（与属性类「（刷新）」同口径）。
+     * 2026-10-18 用户报障「小乔给队友的状态没有正确生效，控制目标为加一」：控制扩散「额外对一个目标生效」
+     * 落在**已被同一战法控制**的敌军身上时，旧实现完全静默 —— 战报里只剩「control_spread 状态解除」，
+     * 玩家看到的就是「状态被消耗、什么都没发生」。
+     */
+    if (CONTROL_STATUS_TYPES.includes(type)) {
+      const durCfg = 'duration' in create ? create.duration : undefined;
+      const durNum = Array.isArray(durCfg) ? durCfg[0] : durCfg;
+      const durText =
+        durNum === undefined
+          ? '已刷新'
+          : durNum >= 999
+            ? '持续至战斗结束'
+            : `持续 ${durNum} 回合`;
+      ctx.events.push({
+        type: 'status_inflicted',
+        unitId: target.general.id,
+        statusType: type,
+        detail: `${statusName(type)}${durText}（刷新）`,
+      });
+    }
     return;
   }
 
-  // 士气提升（morale_boost 正值）：**不与任何效果冲突**（用户 2026-09-22）——不同战法的士气提升
-  // 各自独立共存，由 `effectiveMorale` 逐实例相加（司马炎【谋议宏图】+ 司马徽【徽言龙凤】同时生效）。
-  // 同源重挂已在上方按刷新 / 显式叠层（谋议宏图 stack）处理；士气**降低**（负值）仍走原规则
-  // （同号取较高，与提升正负相反时各自共存）。
-  if (type === 'morale_boost' && create.type === 'morale_boost' && (create.amount ?? 0) > 0) {
+  // 士气增减（morale_boost，**两个方向都算**）：**不与任何效果冲突**——不同战法的士气提升/降低
+  // 各自独立共存，由 `effectiveMorale` 逐实例相加。
+  //   · 正值：用户 2026-09-22 口径（司马炎【谋议宏图】+8 与 司马徽【徽言龙凤】+10 同时生效）；
+  //   · 负值：用户 2026-10-18 口径（原话）「士气降低/提高都是不和任何效果冲突的，可稳定触发不冲突」
+  //     ——旧实现让负值走「同号取较高」，两条不同战法的士气降低互相顶掉（烈火焚舟引爆 −10 与本方
+  //     其他士气削减并存时只剩一条），实测与口径不符。
+  // 同源重挂仍在上方按刷新 / 显式叠层（谋议宏图 stack）处理 —— 官方未写「可叠加」的同源重复触发
+  // 不累加（如烈火焚舟反复引爆，目标士气稳定 −10）。
+  if (type === 'morale_boost' && create.type === 'morale_boost') {
     pushStatus(ctx, target, create, sourceSkillType, sourceSkillId, casterId);
     return;
   }
@@ -6138,6 +6164,40 @@ function countLightCavalryAttack(ctx: CombatContext, attacker: UnitState, hit?: 
   ctx.lightCavalryAttacks.set(attacker.general.id, used + 1);
 }
 
+/**
+ * 追击战法「已发动」即消耗「下一次追击增伤」类次数状态（势无虚动）。
+ *
+ * 官方 200949：「战斗中，自身每次试图发动追击战法时，使下一次造成伤害无视规避，且下一次发动追击战法
+ * 造成的伤害提升40.0%，伤害提升效果最多可叠加3次」——消耗点是**下一次追击战法发动**（仓库 2026-09-19
+ * 用户确认的「消耗制」，下次追击打出即整条消耗）。
+ *
+ * 2026-10-18 用户报障（黄盖 100% 发动 烈火焚舟）：「释放以后势无虚动的 buff 没有正确清除，反而叠加两次」。
+ * 根因：`consumeAttackCharges` 只挂在 `executeSkillOutputs` 的**伤害分支**上，而烈火焚舟的 output 只有
+ * `inflict_status`（挂燃烧，无直接伤害）→ 伤害分支永不执行 → 层数只涨不清（第 2 次判定就显示「提高 80%」，
+ * 挂上的燃烧也随之按 2 层放大）。
+ * 现口径：成功发动后兜底扣一次；本次已在伤害分支扣过（charges 已变小 / 状态已移除）的不再重复扣。
+ */
+function snapshotPursuitBoostCharges(unit: UnitState): Map<Status, number> {
+  const snap = new Map<Status, number>();
+  for (const s of unit.statuses) {
+    if (s.type !== 'damage_boost' || s.charges == null) continue;
+    if (s.direction === 'taken') continue;
+    if (s.skillTypes && !s.skillTypes.includes('pursuit')) continue;
+    snap.set(s, s.charges);
+  }
+  return snap;
+}
+
+function consumePursuitBoostOnCast(unit: UnitState, snap: Map<Status, number>): void {
+  for (const [s, charges] of snap) {
+    if (s.type !== 'damage_boost' || s.charges == null) continue;
+    if (!unit.statuses.includes(s)) continue; // 已被伤害分支整条消耗
+    if (s.charges !== charges) continue; // 伤害分支已扣过一次
+    s.charges -= 1;
+    if (s.charges <= 0) unit.statuses = unit.statuses.filter((x) => x !== s);
+  }
+}
+
 function consumeAttackCharges(ctx: CombatContext, attacker: UnitState, hit?: DamageHitContext): void {
   countLightCavalryAttack(ctx, attacker, hit);
   for (const s of [...attacker.statuses]) {
@@ -6742,20 +6802,30 @@ function findSealLedger(
 
 /**
  * 「控制效果 +1 目标」的额外目标（鸾凤和鸣）：施法者**距离内**、未在本段目标池内的随机 1 个存活敌军。
- * 无可用目标时返回 undefined（标记照常消耗——「下一次控制」已用掉）。
+ * 无可用目标时返回 undefined —— 此时标记保留到下一次控制（不白消耗）。
+ * 导出供机制契约测试（tests/control_spread.test.ts）直接断言「优先取未受该控制的敌军」。
  */
-function pickExtraControlTarget(
+export function pickExtraControlTarget(
   ctx: CombatContext,
   caster: UnitState,
   range: number,
-  hitIds: string[]
+  hitIds: string[],
+  preferType?: StatusType
 ): UnitState | undefined {
   const enemies = caster.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
   const candidates = enemies.filter(
     (e) => e.alive && !hitIds.includes(e.general.id) && distanceBetween(ctx, caster, e) <= range
   );
   if (candidates.length === 0) return undefined;
-  return candidates[ctx.rng.int(candidates.length)];
+  /**
+   * 优先选「当前还没有该控制」的敌军（2026-10-18 用户报障后加）：
+   * 「额外对一个目标生效」要在战报里看得见 —— 若随机到的额外目标本来就处于该控制，
+   * 同源重挂只是刷新、不发事件，玩家看到的就是「状态被消耗却什么都没发生」。
+   * 全部候选都已被该控制时退回全体候选（仍按官方口径额外施加一次，走刷新）。
+   */
+  const fresh = preferType ? candidates.filter((e) => !hasStatus(e, preferType)) : candidates;
+  const pool = fresh.length > 0 ? fresh : candidates;
+  return pool[ctx.rng.int(pool.length)];
 }
 
 /** 消耗「控制效果 +1 目标」标记（鸾凤和鸣）：打出控制后移除并记 status_expired */
@@ -7298,24 +7368,46 @@ function scaleDirectStatus(create: CreateStatus, caster: UnitState): CreateStatu
 }
 
 /**
+ * 载体身上的这条状态是否就是某条 `allyDealStack` 轨的「跟踪状态」：
+ * 同 `type` + 同 `direction`（缺省按 `caused`）+ 同 `damageType`（都缺省视为相同）。
+ * ⚠️ 不能只按 `sourceSkillId` 回溯：同一战法可能**同时在两侧**挂状态——知己知彼我军侧挂
+ * `caused` 增伤跟踪、敌军侧挂 `taken` 增伤（官方「使其受到该类型伤害提升」），
+ * 若不比对身份，敌军身上那份 taken 状态会触发我军侧的 caused 轨，让**敌方自己**叠出
+ * 「造成的伤害提高」（2026-10-18 用户报障：「目标选取对方是使敌方受到伤害提高，不是给敌方增伤」）。
+ */
+function isDealStackTrack(s: Status, track: CreateStatus): boolean {
+  if (s.type !== track.type) return false;
+  const read = (v: unknown, key: 'direction' | 'damageType'): string | undefined =>
+    (v as Record<string, unknown>)[key] as string | undefined;
+  if ((read(s, 'direction') ?? 'caused') !== (read(track, 'direction') ?? 'caused')) return false;
+  return read(s, 'damageType') === read(track, 'damageType');
+}
+
+/**
  * 友军「造成匹配伤害后叠层」（久战熟谋）：持有者每次造成匹配伤害（实际扣兵 > 0）后，
  * 把「挂在其身上、来源战法带 `allyDealStack`」的状态**同源再施加一次**（叠层与上限由状态自身 `maxStacks` 控制）。
  * 注意：状态挂在**友军**身上，而战法由指挥携带者持有——故按「持有者身上的状态 → 来源战法」回溯，
  * 而不是查持有者自己的 commandSkillIds。归属沿用原施法者（`sourceUnitId`）。
+ * ⚠️ 但只认「**该条轨的跟踪状态**」本身（`isDealStackTrack`）：同一战法可能同时在两侧挂状态
+ * （知己知彼：我军侧 caused 增伤跟踪 + 敌军侧 taken 增伤），只按 `sourceSkillId` 回溯会让敌军的
+ * taken 状态触发**我军侧 caused 轨**——敌方自己打出伤害后白叠「造成伤害提高」（2026-10-18 用户报障）。
  */
 function triggerAllyDealStack(ctx: CombatContext, source: UnitState, damageType?: DamageType): void {
   if (!source.alive) return;
+  // 键 = `战法:轨序`：同一战法的多条轨各自独立判定，但同一条轨在载体身上的多份状态只算一次
   const seen = new Set<string>();
   for (const s of [...source.statuses]) {
     const skill = resolveSkill(ctx, s.sourceSkillId);
     const raw = skill?.allyDealStack;
     if (!skill || !raw) continue;
-    // 同一战法的状态可能有多条（反间：攻击 / 策略两条独立轨）——本次伤害只处理该战法一次
-    if (seen.has(skill.id)) continue;
-    seen.add(skill.id);
     const cfgs = Array.isArray(raw) ? raw : [raw];
     const casterId = 'sourceUnitId' in s ? s.sourceUnitId : undefined;
-    for (const cfg of cfgs) {
+    for (const [idx, cfg] of cfgs.entries()) {
+      // 只认该条轨的跟踪状态（type + direction + damageType）；战法在两侧各挂一套状态时不串轨
+      if (!isDealStackTrack(s, cfg.initialStatus ?? cfg.status)) continue;
+      const key = `${skill.id}#${idx}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
       if (cfg.damageType && cfg.damageType !== damageType) continue;
       // 窗口 / 士气门槛（悬权而动「战斗前 2 回合」「士气低于 160 时」）
       if (cfg.endRound != null && ctx.currentRound > cfg.endRound) continue;
@@ -8652,7 +8744,8 @@ function executeSkillOutputs(
       }
       case 'inflict_status': {
         // 控制效果 +1 目标（鸾凤和鸣）：携带者本段实际打出控制（混乱/犹豫/暴走/怯战）后，
-        // 额外对 1 个敌军目标生效，随后消耗该标记（未打出控制则不消耗）
+        // 额外对 1 个敌军目标生效；只在「额外目标真被新挂上该控制」时消耗标记
+        // （未打出控制 / 没有额外目标 / 额外目标本就处于该控制 → 标记保留到下一次控制）
         const controlSpread = getStatus(caster, 'control_spread');
         let spreadCreate: CreateStatus | undefined;
         const hitIds: string[] = [];
@@ -8710,6 +8803,19 @@ function executeSkillOutputs(
                   for (const adj of adjacentUnits(t, team)) {
                     if (!adj.alive) continue;
                     inflictStatus(ctx, adj, burnCreate, skill.type, skill.id, caster.general.id);
+                  }
+                }
+                // 引爆同时降士气（官方 200251：「并使其和相邻的敌军士气降低 10.0」）：
+                // 范围 = 目标 + 同上相邻单位；官方未写可叠加 → 同源重复引爆按仓库口径刷新
+                if (out.detonate.moraleDrop) {
+                  const moraleCreate: CreateStatus = { type: 'morale_boost', amount: -out.detonate.moraleDrop, duration: 999 };
+                  const moraleHit: UnitState[] = t.alive ? [t] : [];
+                  if (out.detonate.adjacent) {
+                    const team = t.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+                    for (const adj of adjacentUnits(t, team)) if (adj.alive) moraleHit.push(adj);
+                  }
+                  for (const u of moraleHit) {
+                    inflictStatus(ctx, u, moraleCreate, skill.type, skill.id, caster.general.id);
                   }
                 }
                 continue;
@@ -8832,11 +8938,28 @@ function executeSkillOutputs(
           }
           }
         }
-        // 控制效果 +1 目标（鸾凤和鸣）：额外命中 1 个「距离内、未在本段目标池内」的随机敌军，随后消耗
+        // 控制效果 +1 目标（鸾凤和鸣）：额外命中 1 个「距离内、未在本段目标池内」的敌军。
+        // 2026-10-18 用户报障「小乔给队友的状态没有正确生效，控制目标为加一」后钉死的三条口径：
+        //   ① 额外目标优先取「当前没有该控制」的敌军 → +1 一定带来一个新的被控对象；
+        //   ② 额外施加后**必发一条战报**（同源重挂只是刷新时也发）—— 否则玩家只看到「状态解除」；
+        //   ③ 只有「额外目标真的新挂了这条控制」才消耗标记；没有额外目标（敌军全在本段池内 /
+        //      已阵亡 / 距离外）或额外目标本就处于该控制时，标记保留到下一次控制，不白消耗。
         if (controlSpread && spreadCreate) {
-          const extra = pickExtraControlTarget(ctx, caster, skill.range, hitIds);
-          if (extra) inflictStatus(ctx, extra, spreadCreate, skill.type, skill.id, caster.general.id);
-          consumeControlSpread(ctx, caster, controlSpread);
+          const extra = pickExtraControlTarget(ctx, caster, skill.range, hitIds, spreadCreate.type);
+          if (extra) {
+            const hadControl = hasStatus(extra, spreadCreate.type);
+            inflictStatus(ctx, extra, spreadCreate, skill.type, skill.id, caster.general.id);
+            const landedOnExtra = !hadControl && hasStatus(extra, spreadCreate.type);
+            ctx.events.push({
+              type: 'status_changed',
+              unitId: extra.general.id,
+              statusType: spreadCreate.type,
+              detail: `【${extra.general.name}】被【${skill.name}】的控制扩散额外命中（${
+                hadControl ? '刷新已有控制' : '新增控制'
+              }）`,
+            });
+            if (landedOnExtra) consumeControlSpread(ctx, caster, controlSpread);
+          }
         }
         break;
       }
@@ -9830,8 +9953,10 @@ function triggerPursuitSkill(
     skillId: skill.id,
     skillName: skill.name,
   });
+  // 势无虚动：「下一次追击增伤」的消耗点是**追击战法发动**（不要求该战法有直接伤害段）
+  const pursuitBoostSnap = snapshotPursuitBoostCharges(unit);
   executeSkillOutputs(ctx, unit, skill, targets);
-  // 正始之变：友军「再次发动」监听同样覆盖追击战法（重打同一目标）
+  consumePursuitBoostOnCast(unit, pursuitBoostSnap);
   triggerAllyRecastCommands(ctx, unit, skill, targets[0]);
   // 三军夺帅：成功发动追击战法后触发；奉令护蜀：本侧友军行动叠层
   triggerActHooks(ctx, unit);

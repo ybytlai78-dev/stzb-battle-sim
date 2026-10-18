@@ -9802,7 +9802,7 @@
         5618,
         7248
       ],
-      "eventCount": 263,
+      "eventCount": 264,
       "events": [
         {
           "type": "battle_start",
@@ -12268,6 +12268,12 @@
           "afterTroops": 7248
         },
         {
+          "type": "status_inflicted",
+          "unitId": "enemy-back",
+          "statusType": "confusion",
+          "detail": "混乱持续 1 回合（刷新）"
+        },
+        {
           "type": "unit_act_end",
           "unitId": "taishici"
         },
@@ -12507,7 +12513,7 @@
         2135,
         4096
       ],
-      "eventCount": 409,
+      "eventCount": 413,
       "events": [
         {
           "type": "battle_start",
@@ -14772,6 +14778,24 @@
           "afterTroops": 6845
         },
         {
+          "type": "status_inflicted",
+          "unitId": "enemy-front",
+          "statusType": "cowardice",
+          "detail": "怯战持续 2 回合（刷新）"
+        },
+        {
+          "type": "status_inflicted",
+          "unitId": "enemy-mid",
+          "statusType": "cowardice",
+          "detail": "怯战持续 2 回合（刷新）"
+        },
+        {
+          "type": "status_inflicted",
+          "unitId": "enemy-back",
+          "statusType": "cowardice",
+          "detail": "怯战持续 2 回合（刷新）"
+        },
+        {
           "type": "prepare_end",
           "unitId": "zhouyu",
           "skillId": "hunshui_moyu",
@@ -14798,6 +14822,12 @@
           "unitId": "enemy-front",
           "statusType": "confusion",
           "detail": "混乱 2 回合"
+        },
+        {
+          "type": "status_inflicted",
+          "unitId": "enemy-mid",
+          "statusType": "confusion",
+          "detail": "混乱持续 2 回合（刷新）"
         },
         {
           "type": "unit_act_start",

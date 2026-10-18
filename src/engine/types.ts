@@ -475,6 +475,12 @@ export type SkillOutput =
         duration: number;
         /** 是否波及目标相邻单位 */
         adjacent: boolean;
+        /**
+         * 引爆附带士气降低点数（烈火焚舟 200251：「并使其和相邻的敌军士气降低 10.0」）。
+         * 施加范围 = 目标 + `adjacent` 波及到的相邻敌军，走 `morale_boost` 负值状态、持续至战斗结束；
+         * 官方未写「可叠加」→ 同源重复引爆按仓库口径刷新（不累加）。
+         */
+        moraleDrop?: number;
       };
       /** 只对这些兵种的当前目标池结算 */
       troopTypes?: TroopType[];

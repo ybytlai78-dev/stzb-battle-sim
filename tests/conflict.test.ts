@@ -274,17 +274,19 @@ describe('重复施加：默认刷新 / 显式叠层才累加（用户口径）'
     expect(effectiveMorale(u)).toBe(138);
   });
 
-  it('士气压低（morale_boost 负值）仍按原规则：同号取较高、与提升各自共存', () => {
+  it('士气压低（morale_boost 负值）：同样不与任何效果冲突，不同战法各自共存相加（用户 2026-10-18）', () => {
     const ctx = makeCtx();
     const u = makeUnit('r6');
     inflictStatus(ctx, u, { type: 'morale_boost', amount: -10, duration: 999 }, 'active', 'jifeng_ershi');
     inflictStatus(ctx, u, { type: 'morale_boost', amount: -5, duration: 999 }, 'active', 'other_reduce');
     const negatives = u.statuses.filter((s) => s.type === 'morale_boost');
-    expect(negatives).toHaveLength(1); // 同号冲突取较高：−5 替换 −10
-    expect((negatives[0] as { amount: number }).amount).toBe(-5);
+    // 旧口径「同号取较高」会把 −5 判成替换 −10（旧断言 = 1 条 −5）；
+    // 2026-10-18 用户口径：「士气降低/提高都是不和任何效果冲突的，可稳定触发不冲突」→ 两条独立实例、相加
+    expect(negatives).toHaveLength(2);
+    expect(effectiveMorale(u)).toBe(85); // 100 − 10 − 5
 
     inflictStatus(ctx, u, { type: 'morale_boost', amount: 12, duration: 999 }, 'command', 'mouyi_hongtu');
-    expect(effectiveMorale(u)).toBe(107); // 100 − 5 + 12（提升与降低正负相反，各自共存）
+    expect(effectiveMorale(u)).toBe(97); // 100 − 10 − 5 + 12（提升与降低同样各自共存）
   });
 
   it('概率规避（evade_chance）同源重挂：冲突被拒、不刷新、状态数不增加', () => {

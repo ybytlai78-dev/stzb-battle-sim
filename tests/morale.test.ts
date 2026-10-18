@@ -10,6 +10,8 @@ import { moraleRate } from '../src/engine/formulas';
 import { Rng } from '../src/engine/rng';
 import {
   actUnit,
+  effectiveMorale,
+  inflictStatus,
   triggerRoundCommandOnAct,
   triggerCommandSkills,
   type CombatContext,
@@ -299,5 +301,38 @@ describe('战报几率显示（skill_trigger 携带士气修正后的当前生�
     const h100 = run(100);
     const h120 = run(120);
     expect(h120).toBeGreaterThan(h100); // 56% > 50%：120 士气触发次数更多
+  });
+});
+
+describe('士气增减不与任何效果冲突（用户 2026-10-18 口径）', () => {
+  it('两条不同战法的「士气降低」各自共存：−10 与 −10 相加 = −20（旧实现同号取较高只剩 −10）', () => {
+    const ctx = makeCtx();
+    const u = makeUnit('u');
+    inflictStatus(ctx, u, { type: 'morale_boost', amount: -10, duration: 999 }, 'pursuit', 'liehuo_fenzhou');
+    inflictStatus(ctx, u, { type: 'morale_boost', amount: -10, duration: 999 }, 'active', 'other_skill');
+
+    const morale = u.statuses.filter((s) => s.type === 'morale_boost');
+    expect(morale).toHaveLength(2); // 两条独立实例（不冲突、不顶掉）
+    expect(effectiveMorale(u)).toBe(80); // 100 − 10 − 10
+  });
+
+  it('同源重复触发仍走刷新（官方未写「可叠加」）：同一战法两次 −10 只留 −10', () => {
+    const ctx = makeCtx();
+    const u = makeUnit('u');
+    inflictStatus(ctx, u, { type: 'morale_boost', amount: -10, duration: 999 }, 'pursuit', 'liehuo_fenzhou');
+    inflictStatus(ctx, u, { type: 'morale_boost', amount: -10, duration: 999 }, 'pursuit', 'liehuo_fenzhou');
+
+    expect(u.statuses.filter((s) => s.type === 'morale_boost')).toHaveLength(1);
+    expect(effectiveMorale(u)).toBe(90);
+  });
+
+  it('士气提高 +8 与士气降低 −10（不同战法）共存：净 −2 → 98', () => {
+    const ctx = makeCtx();
+    const u = makeUnit('u');
+    inflictStatus(ctx, u, { type: 'morale_boost', amount: 8, duration: 999 }, 'passive', 'mouyi_hongtu');
+    inflictStatus(ctx, u, { type: 'morale_boost', amount: -10, duration: 999 }, 'pursuit', 'liehuo_fenzhou');
+
+    expect(u.statuses.filter((s) => s.type === 'morale_boost')).toHaveLength(2);
+    expect(effectiveMorale(u)).toBe(98);
   });
 });

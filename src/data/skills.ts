@@ -1754,7 +1754,9 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
   /**
    * 烈火焚舟（黄盖主战法·追击）：普通攻击后，使攻击目标陷入燃烧状态（伤害率 150%，受谋略，成长 1.35），持续 2 回合。
    * 目标已处于烈火焚舟的燃烧状态时：立即引爆剩余燃烧伤害（剩余回合数 × 每次燃烧伤害）并移除该燃烧，
-   * 再使目标及其相邻敌军陷入伤害率 270%（受谋略，成长 2.26）、持续 1 回合的燃烧状态。士气降低暂未建模。
+   * 再使目标及其相邻敌军陷入伤害率 270%（受谋略，成长 2.26）、持续 1 回合的燃烧状态，
+   * 并使其与相邻敌军**士气降低 10**（官方 200251「并使其和相邻的敌军士气降低10.0」；
+   * 官方未写可叠加 → 同源重复引爆按仓库口径刷新，`detonate.moraleDrop: 10`）。
    */
   liehuo_fenzhou: {
     id: 'liehuo_fenzhou',
@@ -1767,7 +1769,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       {
         kind: 'inflict_status',
         status: { type: 'burning', duration: 2, rate: 150, growthRate: 1.35 },
-        detonate: { rate: 270, growthRate: 2.26, duration: 1, adjacent: true },
+        detonate: { rate: 270, growthRate: 2.26, duration: 1, adjacent: true, moraleDrop: 10 },
       },
     ],
   },
@@ -5740,6 +5742,10 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    *   ① 复用既有 `ignore_evasion`（消耗制：下次造成伤害时移除）；
    *   ② 复用 `damage_boost`（`direction:'caused'` + `skillTypes:['pursuit']` + `stacks/maxStacks:3`
    *   + `charges:1` + `chargesStack:true`）：每次试图发动 +1 层并累加 rate，追击打出消耗 charges 即整条移除。
+   *   ⚠️ 消耗点 = **追击战法「发动」**（`triggerPursuitSkill` 里 `consumePursuitBoostOnCast`，在
+   *   `executeSkillOutputs` 之后），不是「伤害分支打出」：2026-10-18 报障 —— 黄盖 100% 发动【烈火焚舟】
+   *   的 output 只有 `inflict_status`（挂燃烧，无直接伤害段），伤害分支永不执行 → 层数只涨不清
+   *   （第 2 次判定即「提高 80%」）。有伤害段的追击已在 `consumeAttackCharges` 扣过，兜底不重复扣。
    */
   shiwu_xudong: {
     id: 'shiwu_xudong',

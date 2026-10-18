@@ -165,6 +165,38 @@ describe('烈火焚舟（黄盖·追击：燃烧 + 引爆剩余燃烧）', () =>
     expect(liehuoBurn(e3)).toBeUndefined();
   });
 
+  it('引爆同时降士气：目标与相邻敌军各 −10（持续至战斗结束），非相邻单位不受影响', () => {
+    const { ctx, huanggai, e1, e2, e3 } = field();
+    inflictStatus(ctx, huanggai, { type: 'combo', duration: 1 }, 'command', 'xianqu_tuji');
+
+    actUnit(ctx, huanggai);
+
+    const moraleOf = (u: UnitState) =>
+      u.statuses.filter((s) => s.type === 'morale_boost') as Extract<Status, { type: 'morale_boost' }>[];
+    // 官方 200251：「并使其和相邻的敌军士气降低 10.0」
+    expect(moraleOf(e1).map((s) => s.amount)).toEqual([-10]);
+    expect(moraleOf(e2).map((s) => s.amount)).toEqual([-10]);
+    expect(moraleOf(e3)).toEqual([]);
+    expect(moraleOf(e1)[0].remaining).toBe(999);
+    // 战报可见：「士气降低 10 持续至战斗结束」
+    const lines = ctx.events.filter((e) => e.type === 'status_inflicted' && e.statusType === 'morale_boost');
+    expect(lines.length).toBe(2);
+    expect(lines.every((e) => (e as { detail?: string }).detail?.includes('士气降低 10'))).toBe(true);
+  });
+
+  it('重复引爆按仓库口径刷新士气降低（官方未写可叠加 → 不累加）', () => {
+    const { ctx, huanggai, e1 } = field();
+    // 第一轮：挂 2 回合燃烧
+    actUnit(ctx, huanggai);
+    // 第二轮：目标身上仍有烈火焚舟燃烧 → 再引爆一次
+    if (!liehuoBurn(e1)) preApplyBurn(e1, 2);
+    actUnit(ctx, huanggai);
+
+    const morale = e1.statuses.filter((s) => s.type === 'morale_boost') as Extract<Status, { type: 'morale_boost' }>[];
+    expect(morale.length).toBe(1);
+    expect(morale[0].amount).toBe(-10);
+  });
+
   it('引爆剩余 1 回合燃烧：只结算 1 次燃烧伤害', () => {
     const { ctx, huanggai, e1 } = field();
     preApplyBurn(e1, 1);

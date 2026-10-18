@@ -190,7 +190,12 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
       lines.push(`  ✘ ${ev.unitId} ${ev.detail}`);
       break;
     case 'status_expired':
-      lines.push(`  ✦ ${ev.unitId} 的${statusName(ev.statusType)}状态解除`);
+      // 控制扩散（鸾凤和鸣）是「消耗制」：写清楚是「已用掉」，而不是「到期的状态解除」
+      lines.push(
+        ev.statusType === 'control_spread'
+          ? `  ✦ ${ev.unitId} 的控制扩散已用掉（本次控制额外命中 1 个目标）`
+          : `  ✦ ${ev.unitId} 的${statusName(ev.statusType)}状态解除`
+      );
       break;
     case 'evasion_blocked':
       lines.push(`  ✦ 规避！${ev.unitId} 免疫伤害（剩余 ${ev.remainingStacks} 层）`);
@@ -325,6 +330,7 @@ function statusName(type: string): string {
     case 'cover': return '援護';
     case 'rest': return '休整';
     case 'ignore_def': return '无视防御';
+    case 'control_spread': return '控制扩散';
     case 'skill_range_buff': return '战法距离';
     case 'range_buff': return '攻击距离';
     default: return type;

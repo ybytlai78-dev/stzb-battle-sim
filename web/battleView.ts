@@ -583,7 +583,13 @@ function renderEvents(
         );
         break;
       case 'status_expired':
-        add('dim', `　${nm(ev.unitId)} 的${statusName(ev.statusType)}状态解除`);
+        // 控制扩散（鸾凤和鸣）是消耗制：写「已用掉」，别让玩家以为是状态到期
+        add(
+          'dim',
+          ev.statusType === 'control_spread'
+            ? `　${nm(ev.unitId)} 的控制扩散已用掉（本次控制额外命中 1 个目标）`
+            : `　${nm(ev.unitId)} 的${statusName(ev.statusType)}状态解除`
+        );
         break;
       case 'evasion_blocked':
         add('good', `规避：「${nm(ev.unitId)}」免疫伤害（剩余 ${ev.remainingStacks} 层）`);
@@ -795,6 +801,7 @@ function statusName(t: string): string {
     insight: '洞察', siege: '围困', sorcery: '妖术', burning: '燃烧', panic: '恐慌', unrest: '动摇',
     split: '分兵', jump_prep: '跳过准备', taunt: '挑衅', cover: '援護',
     first_aid: '持续型急救', rest: '休整',
+    control_spread: '控制扩散',
   };
   return m[t] ?? t;
 }
