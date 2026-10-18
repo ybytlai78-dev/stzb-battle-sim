@@ -31,3 +31,6 @@ verify-shots/
 
 # 生成物备份文件（*.bak-<epoch>）
 *.bak-*
+
+# 会话自检副本（整仓拷贝含 tests/，会被 vitest 重复收集）
+/.verify-*/
