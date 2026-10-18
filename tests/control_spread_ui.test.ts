@@ -8,7 +8,8 @@
  * 本测试钉住网页战报三行字（口径见 tests/control_spread.test.ts 的机制契约）：
  *   ① 额外目标命中：「【曹操】被【双艳】的控制扩散额外命中（新增控制）」
  *   ② 标记被用掉：「【小乔&大乔】 的控制扩散已用掉（本次控制额外命中 1 个目标）」（不再裸写 control_spread）
- *   ③ 同源重挂暴走要看得见：「暴走持续 2 回合（刷新）」
+ *   ③ 重复施加暴走要看得见，且按包内「不叠加·先施加者生效」不顺延时长：
+ *      「暴走已生效（先施加者生效，本次不生效）」 + 「…额外命中（该目标已有此控制，先施加者生效，本次不生效）」
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -54,16 +55,17 @@ describe('详细战报 · 控制扩散可见性', () => {
     document.body.innerHTML = '';
   });
 
-  it('第 3 回合：同源重挂的暴走刷新要看得见（旧实现全静默）', () => {
+  it('第 3 回合：重复施加的暴走按「先施加者生效」不生效，且战报看得见（旧实现全静默）', () => {
     const report = battleReport(1);
     const view = createBattleView(report);
     document.body.append(view.el);
     view.setRound(3);
     const text = view.el.textContent ?? '';
 
-    expect(text).toContain('暴走持续 2 回合（刷新）');
-    // 本回合额外目标已经处于暴走 → 只能刷新，标记保留（不发「已用掉」）
-    expect(text).toContain('的控制扩散额外命中（刷新已有控制）');
+    expect(text).toContain('暴走已生效（先施加者生效，本次不生效）');
+    expect(text).not.toContain('（刷新）');
+    // 本回合额外目标已经处于暴走 → 本次不生效，标记保留（不发「已用掉」）
+    expect(text).toContain('的控制扩散额外命中（该目标已有此控制，先施加者生效，本次不生效）');
     expect(text).not.toContain('的控制扩散已用掉');
 
     document.body.innerHTML = '';

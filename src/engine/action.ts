@@ -3581,6 +3581,24 @@ function inflictStatusCore(
     // 次数型下一次增减伤 / 待生效暴走 / 待生效怯战：已有则不刷新，避免叠加或永控
     if (type === 'damage_boost' && create.type === 'damage_boost' && create.charges != null && !create.chargesStack) return;
     if ((type === 'rampage' || type === 'cowardice') && create.type === type && create.pendingNextAct) return;
+    /**
+     * 控制类（混乱 / 暴走 / 怯战 / 犹豫）：包内 `replace_type = 3`「不叠加 · 先施加者生效」——
+     * **同源重挂同样不生效**：不新增实例、不刷新 `remaining`、不顺延时长，只留一条可见战报。
+     * 用户 2026-10-19 口径（原话）：「包内状态类不是不可叠加吗，也就是冲突无法生效」。
+     * 旧实现走下方「默认刷新」兜底（`remaining = max(旧, 新)`），等于同战法每命中一次就续命：
+     * 实测【双艳】20 局里 37.3% 的控制施加都是在续时长（79 新增 / 47 刷新），控制因此可长期锁人。
+     * ⚠️ 待生效（`pendingNextAct`）的暴走/怯战在上一条已静默返回，不走这里。
+     */
+    if (CONTROL_STATUS_TYPES.includes(type)) {
+      ctx.events.push({
+        type: 'status_conflict',
+        unitId: target.general.id,
+        statusType: type,
+        sourceSkillType,
+        detail: `${statusName(type)}已生效（先施加者生效，本次不生效）`,
+      });
+      return;
+    }
     // 同战法同过滤维叠层达到 maxStacks 后不再加 rate（文德椒房 3 / 张昭 竭忠尽智 2）
     if (type === 'damage_boost' && create.type === 'damage_boost' && create.maxStacks != null) {
       const stacks = (sameSource as { stacks?: number }).stacks ?? 1;
@@ -3684,28 +3702,6 @@ function inflictStatusCore(
     // 反击同战法重挂：刷新 appliedRound（原因同上；rate 已在上方替换）
     if (sameSource.type === 'counter' && create.type === 'counter') {
       sameSource.appliedRound = ctx.currentRound;
-    }
-    /**
-     * 控制类同源重挂 = 只刷新剩余回合（不新增实例）：必须发一条可见事件（与属性类「（刷新）」同口径）。
-     * 2026-10-18 用户报障「小乔给队友的状态没有正确生效，控制目标为加一」：控制扩散「额外对一个目标生效」
-     * 落在**已被同一战法控制**的敌军身上时，旧实现完全静默 —— 战报里只剩「control_spread 状态解除」，
-     * 玩家看到的就是「状态被消耗、什么都没发生」。
-     */
-    if (CONTROL_STATUS_TYPES.includes(type)) {
-      const durCfg = 'duration' in create ? create.duration : undefined;
-      const durNum = Array.isArray(durCfg) ? durCfg[0] : durCfg;
-      const durText =
-        durNum === undefined
-          ? '已刷新'
-          : durNum >= 999
-            ? '持续至战斗结束'
-            : `持续 ${durNum} 回合`;
-      ctx.events.push({
-        type: 'status_inflicted',
-        unitId: target.general.id,
-        statusType: type,
-        detail: `${statusName(type)}${durText}（刷新）`,
-      });
     }
     return;
   }
@@ -8939,23 +8935,25 @@ function executeSkillOutputs(
           }
         }
         // 控制效果 +1 目标（鸾凤和鸣）：额外命中 1 个「距离内、未在本段目标池内」的敌军。
-        // 2026-10-18 用户报障「小乔给队友的状态没有正确生效，控制目标为加一」后钉死的三条口径：
+        // 2026-10-18 用户报障「小乔给队友的状态没有正确生效，控制目标为加一」后钉死的口径：
         //   ① 额外目标优先取「当前没有该控制」的敌军 → +1 一定带来一个新的被控对象；
-        //   ② 额外施加后**必发一条战报**（同源重挂只是刷新时也发）—— 否则玩家只看到「状态解除」；
+        //   ② 额外施加后**必发一条战报** —— 否则玩家只看到「状态解除」；
         //   ③ 只有「额外目标真的新挂了这条控制」才消耗标记；没有额外目标（敌军全在本段池内 /
         //      已阵亡 / 距离外）或额外目标本就处于该控制时，标记保留到下一次控制，不白消耗。
+        // 2026-10-19 补：控制类按包内 `replace_type=3`「不叠加·先施加者生效」——已有该控制时
+        // **连时长都不刷新**，故这里不再调 inflictStatus（否则会多一条同义 status_conflict）。
         if (controlSpread && spreadCreate) {
           const extra = pickExtraControlTarget(ctx, caster, skill.range, hitIds, spreadCreate.type);
           if (extra) {
             const hadControl = hasStatus(extra, spreadCreate.type);
-            inflictStatus(ctx, extra, spreadCreate, skill.type, skill.id, caster.general.id);
+            if (!hadControl) inflictStatus(ctx, extra, spreadCreate, skill.type, skill.id, caster.general.id);
             const landedOnExtra = !hadControl && hasStatus(extra, spreadCreate.type);
             ctx.events.push({
               type: 'status_changed',
               unitId: extra.general.id,
               statusType: spreadCreate.type,
               detail: `【${extra.general.name}】被【${skill.name}】的控制扩散额外命中（${
-                hadControl ? '刷新已有控制' : '新增控制'
+                hadControl ? '该目标已有此控制，先施加者生效，本次不生效' : '新增控制'
               }）`,
             });
             if (landedOnExtra) consumeControlSpread(ctx, caster, controlSpread);

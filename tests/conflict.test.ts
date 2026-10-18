@@ -84,13 +84,17 @@ describe('效果冲突规则', () => {
     expect(countConflict(ctx, 'cowardice')).toBe(1);
   });
 
-  it('同一战法重复触发：控制刷新剩余时间（不冲突）', () => {
+  it('同一战法重复触发：控制「先施加者生效」，不顺延时长（用户 2026-10-19 口径）', () => {
     const ctx = makeCtx();
     const u = makeUnit('b');
     inflictStatus(ctx, u, cow, 'command', 'zhanbi_duanjin'); // remaining 3
-    inflictStatus(ctx, u, cow, 'command', 'zhanbi_duanjin'); // 同战法刷新 → remaining 3
-    expect(countConflict(ctx, 'cowardice')).toBe(0);
-    expect(getStatus(u, 'cowardice')!.remaining).toBe(3);
+    const first = getStatus(u, 'cowardice')!;
+    first.remaining = 1; // 模拟已经过了一部分回合
+    inflictStatus(ctx, u, cow, 'command', 'zhanbi_duanjin'); // 同战法再挂：包内 replace_type=3 → 不生效
+    expect(countConflict(ctx, 'cowardice')).toBe(1);
+    expect(u.statuses.filter((s) => s.type === 'cowardice')).toHaveLength(1);
+    // 关键：时长没有被续回 3
+    expect(getStatus(u, 'cowardice')!.remaining).toBe(1);
   });
 
   it('跨类型同名控制各自计数共存：指挥怯战 + 主动怯战', () => {
@@ -350,12 +354,15 @@ describe('重复施加：默认刷新 / 显式叠层才累加（用户口径）'
     expect((u.statuses.find((s) => s.type === 'evasion') as { stacks: number }).stacks).toBe(2);
   });
 
-  it('同源控制类仍刷新 remaining（不叠加实例）', () => {
+  it('同源控制类：不叠加也不刷新（先施加者生效，时长取首次）', () => {
     const ctx = makeCtx();
     const u = makeUnit('r5');
     inflictStatus(ctx, u, { type: 'confusion', duration: 2 }, 'active', 'same_skill');
+    const before = getStatus(u, 'confusion')!.remaining;
     inflictStatus(ctx, u, { type: 'confusion', duration: 3 }, 'active', 'same_skill');
     expect(u.statuses.filter((s) => s.type === 'confusion')).toHaveLength(1);
-    expect(getStatus(u, 'confusion')!.remaining).toBe(3);
+    // 包内 replace_type=3「不叠加·先施加者生效」：后施加的 duration 3 不生效
+    expect(getStatus(u, 'confusion')!.remaining).toBe(before);
+    expect(getStatus(u, 'confusion')!.remaining).toBe(2);
   });
 });

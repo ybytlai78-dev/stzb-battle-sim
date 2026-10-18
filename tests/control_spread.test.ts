@@ -205,7 +205,7 @@ describe('控制扩散（control_spread，鸾凤和鸣）', () => {
     expect(hasStatus(caster, 'control_spread')).toBe(true);
   });
 
-  it('全场都已处于该控制（只能刷新）→ 标记保留，但仍发「刷新已有控制」战报', () => {
+  it('全场都已处于该控制 → 标记保留，且按「先施加者生效」不刷新时长（只发一条「本次不生效」）', () => {
     const caster = unit('caster', 'my');
     const enemies = [unit('e1', 'enemy'), unit('e2', 'enemy'), unit('e3', 'enemy')];
     const ctx = ctxOf([caster], enemies);
@@ -218,14 +218,21 @@ describe('控制扩散（control_spread，鸾凤和鸣）', () => {
 
     cast(ctx, caster, skill);
 
-    // 同源重挂 = 刷新，现在会发事件（旧实现全静默）
+    // 包内 replace_type=3「不叠加·先施加者生效」（用户 2026-10-19 口径）：
+    // 同源重挂不再刷新 remaining，而是明确「本次不生效」
     expect(
-      ctx.events.some((e) => e.type === 'status_inflicted' && e.statusType === 'rampage' && e.detail.includes('刷新'))
+      ctx.events.some((e) => e.type === 'status_conflict' && e.statusType === 'rampage' && e.detail.includes('先施加者生效'))
     ).toBe(true);
-    // 额外目标只能刷新，没有产生新的被控对象 → 标记保留
+    expect(
+      ctx.events.some((e) => e.type === 'status_inflicted' && e.statusType === 'rampage' && e.detail.includes('（刷新）'))
+    ).toBe(false);
+    // 时长没有被续上
+    const rampage = enemies[0].statuses.find((x) => x.type === 'rampage')!;
+    expect(rampage.remaining).toBeLessThanOrEqual(2);
+    // 额外目标只能落空，没有产生新的被控对象 → 标记保留
     const changed = spreadEvents(ctx);
     expect(changed).toHaveLength(1);
-    expect(changed[0].type === 'status_changed' && changed[0].detail).toContain('刷新已有控制');
+    expect(changed[0].type === 'status_changed' && changed[0].detail).toContain('先施加者生效');
     expect(hasStatus(caster, 'control_spread')).toBe(true);
   });
 
