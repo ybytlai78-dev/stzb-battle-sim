@@ -19,6 +19,9 @@
   --blue: #2a4a7c;
   --blue-soft: #1e2a3a;
   --green: #3a6b4a;
+  /* 战报详情里的武将名分色：红方（我方）偏珊瑚红，蓝方（敌方）偏薄荷绿（用户口径） */
+  --hero-red: #e08b84;
+  --hero-green: #84c98f;
   --orange: #cf8f3e;
   --purple: #a18fcf;
   --font-kai: "Noto Serif SC", "Source Han Serif SC", "STSong", "SimSun", serif;
@@ -2306,6 +2309,23 @@ main {
   letter-spacing: 2px;
   color: var(--gold-bright);
 }
+/* 阵容内的四段加成：比【阵容】低一档，避免四个大标题抢视觉 */
+.es-phase.es-sub {
+  margin: 8px 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: color-mix(in srgb, var(--gold-bright) 76%, var(--text-dim));
+}
+/* 每回合的「回合前阶段」：标题列（用户 2026-10-19 口径），与行动组区分开 */
+.es-phase.es-round-pre {
+  margin: 2px 0 6px;
+  padding: 4px 10px;
+  background: color-mix(in srgb, var(--gold) 12%, var(--panel-2));
+  border-left: 2px solid var(--gold);
+  border-radius: 3px;
+  font-size: 12.5px;
+}
 .act-group { margin-bottom: 8px; }
 .act-head {
   display: flex;
@@ -2347,6 +2367,13 @@ main {
 }
 .dv .act-head.red { background: color-mix(in srgb, var(--color-crimson) 22%, var(--color-surface-2)); }
 .dv .act-head.blue { background: color-mix(in srgb, var(--color-blue) 28%, var(--color-surface-2)); }
+/* 战报详情武将名分色：红方（我方）红字、蓝方（敌方）绿字（用户口径） */
+.hn-my { color: var(--hero-red); }
+.hn-enemy { color: var(--hero-green); }
+.act-head .hn-my, .act-head.red .hl { color: var(--hero-red); }
+.act-head .hn-enemy, .act-head.blue .hl { color: var(--hero-green); }
+.ev .hn-my, .dmg-popup .hn-my { color: var(--hero-red); }
+.ev .hn-enemy, .dmg-popup .hn-enemy { color: var(--hero-green); }
 .ev { padding: 0 8px 0 26px; font-size: 12px; line-height: 1.8; }
 .ev .hl { font-weight: 600; color: var(--ink); }
 .ev .sub { color: var(--text-weak); font-size: 10.5px; }

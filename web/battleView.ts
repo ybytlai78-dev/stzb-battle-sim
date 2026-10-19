@@ -2,8 +2,9 @@
  * 战报详情：紧凑结果横幅 + 图三三栏（出手顺序 / 事件流 / 回合轨）。
  * 事件文案仍由 `renderEvents` / `renderPrepEvents` / `appendDamageModifierLine` 产出。
  */
-import type { BattleEvent, BattleReport, DamageModifierSource, DamageModifiers } from '../src/engine/types';
+import type { BattleEvent, BattleReport, DamageModifierSource, DamageModifiers, General } from '../src/engine/types';
 import { formatBonusText } from '../src/engine/troopBonus';
+import { SECONDARY_TROOPS } from '../src/engine/secondaryTroop';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import { avatarSrc, heroIdOf } from './heroes';
 import { RESULT_GLYPH } from './resultGlyph';
@@ -18,10 +19,9 @@ interface RenderEvCtx {
   iconOf?: (unitId: string) => string;
 }
 
-/** 准备阶段三段标题：阵容 / 兵种 / 战法 */
-const PHASE_LABEL: Record<'formation' | 'troop' | 'treasure' | 'chenshou' | 'skill', string> = {
+/** 准备阶段标题：阵容（内含四段加成）/ 宝物 / 陈寿特性 / 战法 */
+const PHASE_LABEL: Record<'formation' | 'treasure' | 'chenshou' | 'skill', string> = {
   formation: '阵容',
-  troop: '兵种',
   treasure: '宝物',
   chenshou: '陈寿特性',
   skill: '战法',
@@ -35,6 +35,82 @@ const PHASE_NAME: Record<string, string> = {
   passive_skill: '被动战法',
   dot_tick: '持续伤害',
 };
+
+/** 站位序：准备阶段的行按 大营 → 中军 → 前锋 排 */
+const POS_ORDER: Record<string, number> = { 大营: 0, 中军: 1, 前锋: 2 };
+
+/** 阵营/称号/兵种/兵种特性四段：标题下各自的展示行 */
+type PrepBonusCategory = 'faction' | 'title' | 'troop';
+
+const PREP_CATEGORY_LABEL: Record<PrepBonusCategory, string> = {
+  faction: '阵营加成',
+  title: '称号加成',
+  troop: '兵种加成',
+};
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"']/g, (c) =>
+    c === '&' ? '&amp;' : c === '<' ? '&lt;' : c === '>' ? '&gt;' : c === '"' ? '&quot;' : '&#39;'
+  );
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * 二级兵种专属特性名：数据里是「名字：效果」或「名字A / 名字B：效果」。
+ * 准备阶段「兵种特性加成」只列名字（效果交给战斗过程），与官方准备面板一致。
+ */
+function traitNamesOf(desc: string): string[] {
+  const head = desc.split(/[：:]/, 1)[0] ?? desc;
+  return head
+    .split(/\s*\/\s*/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+/** 准备阶段里的标题行；`sub` 用于四段加成（比【阵容】低一档） */
+function appendPhaseHead(container: HTMLElement, label: string, cls = ''): HTMLElement {
+  const h = document.createElement('div');
+  h.className = `es-phase${cls ? ` ${cls}` : ''}`;
+  h.textContent = `【${label}】`;
+  container.appendChild(h);
+  return h;
+}
+
+/** 准备阶段里的一行事件文案（HTML，名字已分色） */
+function appendPhaseLine(container: HTMLElement, cls: string, html: string): void {
+  const d = document.createElement('div');
+  d.className = `ev ${cls}`;
+  d.innerHTML = html;
+  container.appendChild(d);
+}
+
+/**
+ * 兵种特性加成条目：专属特性 + 已学习的通用特性，按队伍 / 站位排序。
+ * 只在配置了二级兵种或通用特性时产生；没有条目就不出标题。
+ */
+function troopTraitEntries(teams: General[][]): Array<{ unitId: string; trait: string }> {
+  const out: Array<{ unitId: string; trait: string }> = [];
+  for (const team of teams) {
+    const sorted = [...team].sort(
+      (a, b) => (POS_ORDER[a.position] ?? 9) - (POS_ORDER[b.position] ?? 9)
+    );
+    for (const g of sorted) {
+      if (!g.secondaryTroop && (g.secondaryTraits?.length ?? 0) === 0) continue;
+      const names = new Set<string>();
+      if (g.secondaryTroop) {
+        for (const desc of SECONDARY_TROOPS[g.secondaryTroop]?.exclusiveTrait ?? []) {
+          for (const name of traitNamesOf(desc)) names.add(name);
+        }
+      }
+      for (const trait of g.secondaryTraits ?? []) names.add(trait);
+      for (const trait of names) out.push({ unitId: g.id, trait });
+    }
+  }
+  return out;
+}
 
 export interface BattleView {
   el: HTMLElement;
@@ -71,6 +147,70 @@ export function createBattleView(report: BattleReport, opts: BattleViewOpts = {}
   const nm = (id: string) => nameById.get(id) ?? id;
   /** 头像等展示素材按真实武将 id 取（跨队同将的副本 id 不能直接查武将） */
   const heroIcon = (id: string) => avatarSrc(heroIdById.get(id) ?? id);
+
+  // ── 武将名分色（用户口径：红方/我方红字，蓝方/敌方绿字）──
+  const sideById = new Map<string, 'my' | 'enemy'>();
+  for (const g of report.myTeam) sideById.set(g.id, 'my');
+  for (const g of report.enemyTeam) sideById.set(g.id, 'enemy');
+  /** 名字 → 出现过的阵营；同一名字横跨红蓝（镜像局）时不猜，保留行原色 */
+  const nameSides = new Map<string, Set<'my' | 'enemy'>>();
+  for (const [id, side] of sideById) {
+    const name = nm(id);
+    const set = nameSides.get(name) ?? new Set<'my' | 'enemy'>();
+    set.add(side);
+    nameSides.set(name, set);
+  }
+  const heroNameRe = nameSides.size > 0
+    ? new RegExp(
+        [...nameSides.keys()]
+          .sort((a, b) => b.length - a.length)
+          .map(escapeRegExp)
+          .join('|'),
+        'g'
+      )
+    : null;
+  /** 已知 unitId 的名字 HTML（前缀/顺序行用，镜像局也能按 id 分色） */
+  const nameHtml = (id: string): string => {
+    const side = sideById.get(id);
+    if (!side) return escapeHtml(nm(id));
+    return `<span class="${side === 'my' ? 'hn-my' : 'hn-enemy'}">${escapeHtml(nm(id))}</span>`;
+  };
+  /**
+   * 把已渲染文本里的武将名包成侧别色。只处理「名字只属于一队」的情况：
+   * 跨队同名（镜像局）无法从纯文本判断是谁，保留原色，避免染错。
+   * 已经包过 `.hn-*` 的节点跳过（重复渲染不会套娃）。
+   */
+  const colorizeHeroNames = (rootEl: HTMLElement): void => {
+    if (!heroNameRe) return;
+    const walker = document.createTreeWalker(rootEl, NodeFilter.SHOW_TEXT);
+    const nodes: Text[] = [];
+    while (walker.nextNode()) nodes.push(walker.currentNode as Text);
+    for (const node of nodes) {
+      const parent = node.parentElement;
+      if (!parent || parent.closest('.hn-my, .hn-enemy')) continue;
+      const text = node.nodeValue ?? '';
+      if (!text || !heroNameRe.test(text)) continue;
+      heroNameRe.lastIndex = 0;
+      const frag = document.createDocumentFragment();
+      let last = 0;
+      let m: RegExpExecArray | null;
+      while ((m = heroNameRe.exec(text)) !== null) {
+        if (m.index > last) frag.append(text.slice(last, m.index));
+        const sides = nameSides.get(m[0]);
+        if (sides?.size === 1) {
+          const span = document.createElement('span');
+          span.className = sides.has('my') ? 'hn-my' : 'hn-enemy';
+          span.textContent = m[0];
+          frag.append(span);
+        } else {
+          frag.append(m[0]);
+        }
+        last = m.index + m[0].length;
+      }
+      if (last < text.length) frag.append(text.slice(last));
+      node.replaceWith(frag);
+    }
+  };
 
   // 按回合分组事件
   const roundEvents: Array<Array<BattleEvent>> = [];
@@ -233,6 +373,7 @@ export function createBattleView(report: BattleReport, opts: BattleViewOpts = {}
     popupOwner = link;
     line.style.zIndex = '20';
     line.appendChild(popup);
+    colorizeHeroNames(popup);
     const gap = 8;
     const spaceRight = line.clientWidth - link.offsetLeft - link.offsetWidth - gap;
     const needLeft = popup.offsetWidth > spaceRight && link.offsetLeft > popup.offsetWidth;
@@ -293,7 +434,14 @@ export function createBattleView(report: BattleReport, opts: BattleViewOpts = {}
     renderTurnOrder(current);
     log.innerHTML = '';
     if (current === 0) {
-      renderPrepEvents(log, prepEvents(report.events), nm, { toggle: togglePopup }, evCtx);
+      renderPrepEvents(
+        log,
+        prepEvents(report.events),
+        nm,
+        { toggle: togglePopup },
+        { nameHtml, myTeam: report.myTeam, enemyTeam: report.enemyTeam },
+        evCtx
+      );
     } else {
       const evs = roundEvents[current - 1] ?? [];
       if (evs.length === 0) {
@@ -302,9 +450,20 @@ export function createBattleView(report: BattleReport, opts: BattleViewOpts = {}
         empty.textContent = '（本回合无行动）';
         log.appendChild(empty);
       } else {
-        renderEvents(log, evs, nm, { toggle: togglePopup }, evCtx);
+        // 回合前阶段 = 首个 unit_act_start 之前的事件（谋谟帷幄 / 先发 / 出奇 / DoT 回合前结算…）。
+        // 单独加标题，避免这些行看起来像是第一位行动武将的行动组。
+        const firstAct = evs.findIndex((e) => e.type === 'unit_act_start');
+        const preEnd = firstAct < 0 ? evs.length : firstAct;
+        const pre = evs.slice(0, preEnd);
+        const rest = evs.slice(preEnd);
+        if (pre.length > 0) {
+          appendPhaseHead(log, '回合前阶段', 'es-round-pre');
+          renderEvents(log, pre, nm, { toggle: togglePopup }, evCtx);
+        }
+        if (rest.length > 0) renderEvents(log, rest, nm, { toggle: togglePopup }, evCtx);
       }
     }
+    colorizeHeroNames(log);
   }
 
   btnPrev.onclick = () => setRound(current - 1);
@@ -345,17 +504,18 @@ function prepEvents(events: BattleEvent[]): BattleEvent[] {
 }
 
 /**
- * 准备阶段事件流：【阵容】出手顺序 + 部队加成、【兵种】暂无效果、【战法】被动/指挥。
- * 不调用 `appendEv(null, …)`（group 为 null 时直接 return）。
+ * 准备阶段事件流：【阵容】四段加成（阵营 / 称号 / 兵种 / 兵种特性）、
+ * 【宝物】【陈寿特性】【战法】。不调用 `appendEv(null, …)`（group 为 null 时直接 return）。
+ * 出手顺序不在战报里重复展示（用户 2026-10-19 口径）。
  */
 function renderPrepEvents(
   container: HTMLElement,
   evs: BattleEvent[],
   nm: (id: string) => string,
   popupApi: { toggle: (link: HTMLElement, mods: DamageModifiers) => void },
+  heroApi: { nameHtml: (id: string) => string; myTeam: General[]; enemyTeam: General[] },
   ctx?: RenderEvCtx
 ): void {
-  const start = evs.find((e) => e.type === 'battle_start');
   const sections: Record<'formation' | 'troop' | 'treasure' | 'chenshou' | 'skill', BattleEvent[]> = {
     formation: [],
     troop: [],
@@ -373,65 +533,58 @@ function renderPrepEvents(
     if (cur) sections[cur].push(ev);
   }
 
-  const addHead = (label: string) => {
-    const h = document.createElement('div');
-    h.className = 'es-phase';
-    h.textContent = `【${label}】`;
-    container.appendChild(h);
-  };
+  appendPhaseHead(container, PHASE_LABEL.formation);
 
-  addHead(PHASE_LABEL.formation);
-  if (start && start.type === 'battle_start') {
-    const order = document.createElement('div');
-    order.className = 'ev status';
-    order.textContent = `出手顺序：${start.turnOrder.map(nm).join(' > ')}`;
-    container.appendChild(order);
-  }
-  const fac = sections.formation.filter((e) => e.type === 'formation_bonus');
-  if (fac.length === 0) {
-    const d = document.createElement('div');
-    d.className = 'ev dim';
-    d.textContent = '无部队加成';
-    container.appendChild(d);
+  const bonuses = sections.formation.filter(
+    (e): e is Extract<BattleEvent, { type: 'formation_bonus' }> => e.type === 'formation_bonus'
+  );
+  // 兵种特性加成：按武将配置列「获得【特性】」，不再把 grantSecondaryTroopStatuses 的
+  // 施加日志（sections.troop）原样混进来，避免与特性名重复。
+  const traits = troopTraitEntries([heroApi.myTeam, heroApi.enemyTeam]);
+
+  if (bonuses.length === 0 && traits.length === 0) {
+    appendPhaseLine(container, 'dim', '无部队加成');
   } else {
-    for (const ev of fac) {
-      if (ev.type !== 'formation_bonus') continue;
-      const cat =
-        ev.category === 'faction' ? '阵营加成'
-          : ev.category === 'title' ? `称号加成「${ev.titleName ?? ''}」`
-            : '兵种加成';
-      const d = document.createElement('div');
-      d.className = 'ev good';
-      d.textContent = `${nm(ev.unitId)} ${cat}：${formatBonusText(ev.bonuses)}`;
-      container.appendChild(d);
+    for (const cat of ['faction', 'title', 'troop'] as const) {
+      const lines = bonuses.filter((e) => e.category === cat);
+      if (lines.length === 0) continue;
+      appendPhaseHead(container, PREP_CATEGORY_LABEL[cat], 'es-sub');
+      for (const ev of lines) {
+        const name = heroApi.nameHtml(ev.unitId);
+        const title = cat === 'title' && ev.titleName ? `「${escapeHtml(ev.titleName)}」` : '';
+        const suffix = title ? ` ${title}：` : ' ';
+        appendPhaseLine(container, 'good', `${name}${suffix}${formatBonusText(ev.bonuses)}`);
+      }
+    }
+
+    if (traits.length > 0) {
+      appendPhaseHead(container, '兵种特性加成', 'es-sub');
+      for (const entry of traits) {
+        appendPhaseLine(
+          container,
+          'good',
+          `${heroApi.nameHtml(entry.unitId)} 获得【${escapeHtml(entry.trait)}】`
+        );
+      }
     }
   }
 
-  addHead(PHASE_LABEL.troop);
-  const empty = document.createElement('div');
-  empty.className = 'ev dim';
-  empty.textContent = '暂无效果';
-  container.appendChild(empty);
-
   // 宝物（佩戴才发 prep_phase: 'treasure'）：展示准备阶段挂载的宝物效果
   if (sections.treasure.length > 0) {
-    addHead(PHASE_LABEL.treasure);
+    appendPhaseHead(container, PHASE_LABEL.treasure);
     renderEvents(container, sections.treasure, nm, popupApi, ctx);
   }
 
   // 陈寿特性（使用才发 prep_phase: 'chenshou'）：展示准备阶段挂载的特性效果
   if (sections.chenshou.length > 0) {
-    addHead(PHASE_LABEL.chenshou);
+    appendPhaseHead(container, PHASE_LABEL.chenshou);
     renderEvents(container, sections.chenshou, nm, popupApi, ctx);
   }
 
-  addHead(PHASE_LABEL.skill);
+  appendPhaseHead(container, PHASE_LABEL.skill);
   const skillEvs = sections.skill;
   if (skillEvs.length === 0) {
-    const d = document.createElement('div');
-    d.className = 'ev dim';
-    d.textContent = '（无战法）';
-    container.appendChild(d);
+    appendPhaseLine(container, 'dim', '（无战法）');
   } else {
     renderEvents(container, skillEvs, nm, popupApi, ctx);
   }
