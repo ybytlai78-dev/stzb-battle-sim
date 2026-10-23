@@ -186,11 +186,11 @@ export type SkillOutput =
       lockedSide?: 'ally' | 'enemy' | 'self';
       /**
        * 首次攻击标记（辕门射戟）：伤害结算后对本次攻击的每个目标施加「造成攻击伤害降低」debuff
-       * （damage_boost caused 方向，rate 为小数如 -99.99 = -9999%，配合 buffMult 10% 伤害下限
+       * （damage_boost caused 方向，rate 取 `HUGE_MODIFIER_RATE` 的负值 = −1000%，配合 buffMult 10% 伤害下限
        * 强制目标造成伤害降为 min 10%），持续 duration 回合。第二次攻击目标独立选择、不受影响。
        */
       markCausedReduce?: {
-        /** 造成伤害降低倍率（小数，如 -99.99 = -9999%） */
+        /** 造成伤害降低倍率（小数；「大幅度」类取 `-HUGE_MODIFIER_RATE` = −1000%） */
         rate: number;
         /** 持续回合数（行动中施加：duration 2 = 覆盖目标下一个行动回合，如辕门射戟「持续1回合」） */
         duration: number;
@@ -800,10 +800,20 @@ export type CreateStatus =
   | { type: 'damage_share'; rate: number; duration: number; damageKind?: 'physical' | 'strategy'; charges?: number; scope?: 'heart_sync' | 'all_allies' }
   /**
    * 策略伤害浮动（敛微穷极，刘徽）：携带者造成策略伤害时，伤害率 × 当前浮动系数——系数在
-   * `[low, high]`（百分点）内均匀随机，区间随回合线性收敛到 `mid`（`convergeRounds` 回合起恒为 mid）；
-   * 上限/中点「受谋略属性影响」→ `strategyScaled + growthRate` 给定时按施法者谋略缩放（未确认 → 基值）。
+   * 「当前回合那一档」的 `[low, high]`（百分点）内均匀随机。
+   *
+   * **逐档区间（包内口径，2026-10-23 改）**：`steps[i]` = 第 i+1 回合的区间，超出档数取末档。
+   * 包内 tb_cfg_skill_detail 200296 给了 6 档真值（第 1 回合 80~150、第 2 87~142.6、…、第 6 回合 115~115），
+   * 每档自带成长率（机制 82「伤害率波动上限」/ 83「下限」）：`值 = constant_param + 0.4×intel_param`、
+   * `成长率 = intel_param/200`。施法时按**施法者**生效谋略逐档 `scaledValue` 缩放并冻结进 Status。
+   * 下限档 1 的 intel=0 ⇒ 第 1 回合下限 80% 不随谋略（与官方「(上限受谋略属性影响)」一致）。
    */
-  | { type: 'strategy_flux'; low: number; high: number; mid: number; convergeRounds: number; duration: number; strategyScaled?: boolean; growthRate?: number }
+  | {
+      type: 'strategy_flux';
+      /** 逐回合区间（值 = 谋略 80 时的满级基准；带 growthRate 的档按施法者谋略缩放） */
+      steps: Array<{ low: number; high: number; lowGrowthRate?: number; highGrowthRate?: number }>;
+      duration: number;
+    }
   /**
    * 避锐（疲兵沮意，XP陆逊）：层数式「受到伤害前消耗 1 层」减伤 —— 携带者每次受到伤害（伤害结算前）
    * 消耗 1 层，令**该次**伤害降低 `perStackRate`（受谋略缩放：strategyScaled + growthRate 给定时按
@@ -826,7 +836,7 @@ export type CreateStatus =
    *  strategyScaled / defenseScaled + growthRate 给定时按属性缩放（公式同 damage_reduce），growthRate 缺省用基值；
    *  `stack: true` = 显式可叠加（同源重复施加累加 rate）。 */
   | { type: 'heal_boost'; rate: number; duration: number; strategyScaled?: boolean; defenseScaled?: boolean; growthRate?: number; stack?: true }
-  | { type: 'damage_reduce'; rate: number; duration: number; strategyScaled?: boolean; /** 受防御缩放（一夫当关 −50%，公式同受谋略，属性换生效防御）；growthRate === undefined 时不缩放、用基值 */ defenseScaled?: boolean; /** 受攻击缩放（对称字段）；growthRate === undefined 时不缩放、用基值 */ attackScaled?: boolean; growthRate?: number; /** 按 8 份衰减（谋议宏图）：第 1 回合 8/8，第 2 回合起每回合回合前 −1/8（第 8 回合 1/8） */ decayEighths?: number; /** 按 N 份受击衰减（疮痍累身 12）：受匹配伤害且实际扣兵后 −1 份，rate = baseRate × 剩余/初始 */ decayFifths?: number; /** 按 N 份「造成伤害」衰减（抚民励德 4）：携带者每次造成伤害（实际扣兵 > 0）后 −1 份，rate = baseRate × 剩余/初始；与 decayFifths（受击衰减）独立 */ decayOnDeal?: number; /** 显式「可叠加」（同仇敌忾等官方写「可叠加」/「层数」）：同源重复施加累加；缺省刷新 */ stack?: true; /** 同战法同过滤维叠层上限（张昭 竭忠尽智「该效果可以叠加 1 次」= 2 层）；达到后不再加 rate */ maxStacks?: number; /** 伤害来源过滤：basic=普攻（分类键小类「普通」）/ skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效（分类键小类「主动/追击/指挥」）；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省攻击+策略都吃（分类键「大类」，见 action.ts damageClassKey） */ damageType?: 'physical' | 'strategy'; /** 只对这些 DoT 类型生效（全主诿异：被施加的燃烧/恐慌/妖术诅咒伤害提升 20%）；缺省不限（非 DoT 伤害也吃） */ dotTypes?: DotType[]; /** 条件减伤（人公将军「敌方武将存在妖术效果时造成的攻击伤害降低 20%」）：仅当**携带者自身**带该状态时本减伤才生效 */ requireSelfStatus?: StatusType | StatusType[]; /** 宝物「强固」：**每回合首次**受到的伤害降低（该回合第一次实际扣兵享受，其余不吃） */ firstHitPerRound?: true | 'attack' | 'strategy'; /** 排除持续性伤害（计险远近「首次**攻击或策略攻击**」）：DoT 跳伤 / 引燃 / 引爆不算攻击，不吃本减伤 */ excludeDot?: boolean; /** 宝物「济世」：可**无限叠加**，但受到**下一次**伤害后全部清空（本次伤害仍计入；用户 2026-10-17 口径） */ consumeOnHurt?: true; /** 宝物「威势」：仅当**当前行动者（伤害来源）初始统率 < 携带者初始统率**时生效 */ enemyCostBelowSelf?: boolean; /** 次数型（磐阵善守「受到首次攻击/策略攻击的伤害大幅降低」）：匹配伤害实际扣兵后 −1，用尽即移除 */ charges?: number }
+  | { type: 'damage_reduce'; rate: number; duration: number; strategyScaled?: boolean; /** 受防御缩放（一夫当关 −50%，公式同受谋略，属性换生效防御）；growthRate === undefined 时不缩放、用基值 */ defenseScaled?: boolean; /** 受攻击缩放（对称字段）；growthRate === undefined 时不缩放、用基值 */ attackScaled?: boolean; /** 受速度缩放（退避 18% 受速度）；growthRate === undefined 时不缩放、用基值 */ speedScaled?: boolean; growthRate?: number; /** 按 8 份衰减（谋议宏图）：第 1 回合 8/8，第 2 回合起每回合回合前 −1/8（第 8 回合 1/8） */ decayEighths?: number; /** 按 N 份受击衰减（疮痍累身 12）：受匹配伤害且实际扣兵后 −1 份，rate = baseRate × 剩余/初始 */ decayFifths?: number; /** 按 N 份「造成伤害」衰减（抚民励德 4）：携带者每次造成伤害（实际扣兵 > 0）后 −1 份，rate = baseRate × 剩余/初始；与 decayFifths（受击衰减）独立 */ decayOnDeal?: number; /** 显式「可叠加」（同仇敌忾等官方写「可叠加」/「层数」）：同源重复施加累加；缺省刷新 */ stack?: true; /** 同战法同过滤维叠层上限（张昭 竭忠尽智「该效果可以叠加 1 次」= 2 层）；达到后不再加 rate */ maxStacks?: number; /** 伤害来源过滤：basic=普攻（分类键小类「普通」）/ skill=战法；缺省两类都吃 */ damageSource?: 'basic' | 'skill'; /** 只对这些战法类型生效（分类键小类「主动/追击/指挥」）；缺省主动+追击+指挥+被动都吃 */ skillTypes?: SkillType[]; /** 只对该伤害类型生效；缺省攻击+策略都吃（分类键「大类」，见 action.ts damageClassKey） */ damageType?: 'physical' | 'strategy'; /** 只对这些 DoT 类型生效（全主诿异：被施加的燃烧/恐慌/妖术诅咒伤害提升 20%）；缺省不限（非 DoT 伤害也吃） */ dotTypes?: DotType[]; /** 条件减伤（人公将军「敌方武将存在妖术效果时造成的攻击伤害降低 20%」）：仅当**携带者自身**带该状态时本减伤才生效 */ requireSelfStatus?: StatusType | StatusType[]; /** 宝物「强固」：**每回合首次**受到的伤害降低（该回合第一次实际扣兵享受，其余不吃） */ firstHitPerRound?: true | 'attack' | 'strategy'; /** 排除持续性伤害（计险远近「首次**攻击或策略攻击**」）：DoT 跳伤 / 引燃 / 引爆不算攻击，不吃本减伤 */ excludeDot?: boolean; /** 宝物「济世」：可**无限叠加**，但受到**下一次**伤害后全部清空（本次伤害仍计入；用户 2026-10-17 口径） */ consumeOnHurt?: true; /** 宝物「威势」：仅当**当前行动者（伤害来源）初始统率 < 携带者初始统率**时生效 */ enemyCostBelowSelf?: boolean; /** 次数型（磐阵善守「受到首次攻击/策略攻击的伤害大幅降低」）：匹配伤害实际扣兵后 −1，用尽即移除 */ charges?: number }
   /** direction：'caused'=自身造成伤害提高/降低（血溅黄砂、强势）；'taken'=自身受到伤害提高/降低（神兵天降、名士在野）。缺省 'taken'。
    *  stacks：叠层计数（带上限的增减伤，银龙冲阵），同战法累加时 +1
    *  strategyScaled=true 且给 growthRate 时（密谋定蜀每次发动 +5% 受谋略）：rate 为谋略 80 时的基础值，实际数值按 scaledValue 缩放
@@ -859,7 +869,7 @@ export type CreateStatus =
   | { type: 'no_retaliate'; duration: number }
   /**
    * 受击叠层（宝物「不屈」= 本回合受到伤害降低 / 「破浪」= 本回合造成伤害提升）：
-   * 每次**实际扣兵**后 +1 层（上限 maxStacks），**每回合开始清零**；
+   * 每次**实际扣兵**后 +1 层（上限 maxStacks），**每回合结束清零**（用户 2026-10-23 口径）；
    * 生效值 = stacks × perStack（reduce 进受击方减伤池、boost 进造成方增伤池）。
    */
   | { type: 'hurt_stack'; mode: 'reduce' | 'boost'; perStack: number; maxStacks: number; duration: number }
@@ -948,10 +958,10 @@ export type CreateStatus =
   | { type: 'curse'; duration: number; rate: number; growthRate: number; sourceStrategy?: number }
   /** 引燃标记（火势风威）：携带者受到下一次伤害时额外引发一次燃烧（rate% 受谋略），触发后移除 */
   | { type: 'ignite'; duration: number; rate: number; growthRate: number; sourceStrategy?: number }
-  | { type: 'split'; duration: number; rate: number; /** 次数型分兵（鱼鳞）：有值时按攻击输出次数消耗，不按回合递减；无 charges 走第 2 组（duration 1 = 只覆盖本次行动） */ charges?: number; /** 受谋略缩放（鹤翼） */ strategyScaled?: boolean; /** 分兵伤害率成长/点；施加时按施法者谋略冻结进 rate */ growthRate?: number }
+  | { type: 'split'; duration: number; rate: number; /** 次数型分兵（鱼鳞）：有值时按攻击输出次数消耗，不按回合递减；无 charges 走第 2 组（duration 1 = 只覆盖本次行动） */ charges?: number; /** 受谋略缩放（鹤翼） */ strategyScaled?: boolean; /** 受速度缩放（令明负榇分兵伤害率） */ speedScaled?: boolean; /** 分兵伤害率成长/点；施加时按对应属性冻结进 rate */ growthRate?: number }
   /** 跳过准备：只对 `mainSkillOnly` 指定时携带者的**主战法**生效（难知如阴 / 胜兵求战「需要准备的**主战法**」）；
    *  缺省 = 所有准备主动战法都吃（历史行为） */
-  | { type: 'jump_prep'; duration: number; rate: number; mainSkillOnly?: boolean }
+  | { type: 'jump_prep'; duration: number; rate: number; mainSkillOnly?: boolean; /** 受速度缩放（难知如阴「跳过准备几率 60%（受速度属性影响）」） */ speedScaled?: boolean; /** 跳过准备几率的成长率（百分点/点）；施加时按施法者速度冻结进 rate */ growthRate?: number }
   /** 下一次造成伤害无视规避（缚父临危）：无 duration——消耗制，不按回合递减 */
   /** 下一次造成伤害无视规避（缚父临危）：duration 仅占位——消耗制，不按回合递减（两个 tick 函数显式跳过） */
   | { type: 'ignore_evasion'; duration: number; /** 宝物「识破」：只在前 N 回合有效（不消耗，到回合即失效）；缺省 = 消耗制（缚父临危） */ throughRound?: number }
@@ -1007,6 +1017,24 @@ export type CreateStatus =
   | { type: 'retaliate'; duration: number; rate: number; maxTriggers: number };
 
 // ─── 战法（联合类型）───
+
+/**
+ * 「再发动 + 无视敌方属性」规格（未雨绸缪 200301）。
+ * 官方原文：「自身下一次造成策略伤害的主动战法发动后可再次发动一次（跳过准备回合），
+ *   造成原战法 50.0% 的伤害和恢复效果，**该战法造成的伤害**无视目标 30.0% 的谋略属性（受谋略属性影响）」。
+ *
+ * 口径（用户 2026-10-21 确认）：「该战法造成的伤害」= 被触发的那一整个战法 —— **本次发动与再次发动都吃**，
+ * 引擎分两趟注入（首次在 `executeSkillWithTargets` 执行前、再次在 `triggerRepeatStrategy`），
+ * 同一伤害段只保留一份比例（取较大者，不做加算）。
+ */
+export interface RepeatStrategySpec {
+  /** 再次发动按原战法多少比例结算（0.5 = 50.0%） */
+  recastRate: number;
+  /** 无视目标谋略属性的比例（属性 80 时的百分比，30 = 30%）；机制 161 */
+  ignoreStrategyPct: number;
+  /** 无视比例的成长率（每点谋略，0.15 = 每点 +0.15%）；缺省不缩放 */
+  ignoreStrategyGrowthRate?: number;
+}
 
 interface BaseSkill {
   id: string;
@@ -1069,6 +1097,13 @@ interface BaseSkill {
    * 该段内部结算不再触发 repeatBonus（执行路径带 skipRepeat 保护，防自递归）。
    */
   repeatBonus?: { output: SkillOutput[] };
+  /**
+   * 「造成策略伤害的主动战法再发动一次 + 该战法伤害无视敌方谋略」（未雨绸缪 200301）：
+   * 携带者身上的 `repeat_strategy` 标记存在时，其下一次含 `strategy_damage` 的主动战法
+   * **本次发动与再次发动**的策略伤害都按 `ignoreStrategyPct`（受谋略缩放）折减目标谋略属性，
+   * 再次发动按 `recastRate` 缩放伤害与恢复。数值只在此配置（引擎不硬编码）。
+   */
+  repeatStrategy?: RepeatStrategySpec;
   /**
    * 回合内子战法集齐奖励（光武中兴「单回合内上述 3 个战法均发动后，使敌军全体降低 20 士气」）：
    * `combo_tag` 段把自己的 `key` 记入本回合集合，集齐 `keys` 全部后结算 `outputs` 并清空集合。
@@ -1461,6 +1496,9 @@ export interface CommandSkill extends BaseSkill {
    * **将被施加控制效果**时计 1 次（无论判定成败，共 `count` 次），每次按 `rate`（走携带者士气修正）判定：
    * 命中则整段化解（伤害 = 完全规避、控制 = 抵御不落状态），失败照常结算；
    * 第 `count` 次计满后立即对**造成伤害累计最高**的敌方单体结算 `punish`（下回合造成伤害大幅降低）。
+   * ⚠️ 抵御对「**一类指挥的预备 / 延迟判定**」施加的控制不生效（战必断金 / 措手不及 / 白衣渡江的预备怯战、
+   * 帝临回光延迟围困…）：`ctx.resolvingPreparedCommand` 窗口内**既不掷判定、也不消耗本计数**；
+   * 一类指挥即时段与后续触发（合纵连横普攻后围困）、二类指挥、主动 / 追击 / 被动来源仍照常可抵御。
    */
   instanceGuard?: { count: number; rate: number; punish: SkillOutput[] };
   /** 二类指挥动态发动率：初始 base，未生效每回合 +increment，生效后重置（奇兵拒北 30% 起始，未生效+5%） */
@@ -1606,6 +1644,8 @@ export interface CommandSkill extends BaseSkill {
    * 「我军全体被施加挑衅/围困/控制效果时」抵御（审时定计，XP程昱）：
    * 本侧单位被施加 `statuses` 中的状态时，由存活携带者按 `rate` 判定（士气修正）；命中则该次施加
    * **整段取消**（不落状态、不刷新、不叠加），并推 `status_resisted` 战报事件。
+   * ⚠️ 与七擒七纵同口径：**一类指挥的预备 / 延迟判定**不在抵御范围（战必断金预备怯战、帝临回光延迟围困…；
+   * `ctx.resolvingPreparedCommand` 窗口内直接跳过）；一类指挥即时段与后续触发（合纵连横普攻后围困）仍可抵御。
    */
   debuffResist?: { rate: number; statuses: StatusType[] };
   /**
@@ -2039,6 +2079,8 @@ export interface PassiveSkill extends BaseSkill {
     maxStacks: number;
     duration: number;
     attackScaled?: boolean;
+    /** 受攻击缩放：每点攻击增加 `growthRate` 个百分点（包内 21029902 intel 1 ⇒ 1/200 = 0.005） */
+    growthRate?: number;
     onRoundStart?: boolean;
     onDealPhysical?: boolean;
   };
@@ -2460,12 +2502,12 @@ export type Status =
    */
   | { type: 'avoid_charge'; stacks: number; perStackRate: number; perStackRateStrategy?: number; maxStacks?: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   /**
-   * 策略伤害浮动（敛微穷极，刘徽）：携带者造成**策略伤害**时，其伤害率 × 当前浮动系数——
-   * 系数在 [low, high]（百分点）内均匀随机，区间随回合**线性收敛**到 `mid`（第 `convergeRounds` 回合起
-   * 恒为 mid）。`low/high/mid` 均为百分点（80/150/115），上限/中点「受谋略属性影响」时在施加阶段
-   * 由 `strategyScaled + growthRate` 统一缩放（未确认 → 基值）。不按回合递减（remaining 仅占位）。
+   * 策略伤害浮动（敛微穷极，刘徽）：携带者造成**策略伤害**时，其伤害率 × 当前档浮动系数——
+   * 系数在第 N 回合那一档的 [low, high]（百分点）内均匀随机（`steps[0]` = 第 1 回合，超出取末档）。
+   * 施加阶段已按**施法者**生效谋略逐档缩放并冻结（见 CreateStatus 同名分支），此处只存结果值。
+   * 不按回合递减（remaining 仅占位，收敛靠回合档位而非递减）。
    */
-  | { type: 'strategy_flux'; low: number; high: number; mid: number; convergeRounds: number; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
+  | { type: 'strategy_flux'; steps: Array<{ low: number; high: number }>; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   | { type: 'attack_buff'; amount: number; percent?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; /** 造成伤害衰减：满额数值（抚民励德 80） */ baseAmount?: number; /** 剩余份数（抚民励德 4→3→…） */ dealParts?: number; /** 份数初始值（4） */ dealPartsBase?: number; /** 层数（兵贵神速：每受到 1 次攻击伤害 +1 层，上限 maxStacks；缺省不计数） */ stacks?: number; maxStacks?: number }
   | { type: 'defense_buff'; amount: number; percent?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; baseAmount?: number; dealParts?: number; dealPartsBase?: number; /** 层数（兵贵神速：每受到 1 次攻击伤害 +1 层，上限 maxStacks；缺省不计数） */ stacks?: number; maxStacks?: number }
   | { type: 'strategy_buff'; amount: number; percent?: boolean; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; /** 造成伤害衰减：满额数值（抚民励德 80） */ baseAmount?: number; /** 剩余份数（抚民励德 4→3→…）；无此字段则不按造成伤害衰减 */ dealParts?: number; /** 份数初始值（4），衰减公式分母 */ dealPartsBase?: number; /** 层数（兵贵神速：每受到 1 次攻击伤害 +1 层，上限 maxStacks；缺省不计数） */ stacks?: number; maxStacks?: number }
@@ -2696,12 +2738,17 @@ export type BattleEvent =
       recastBy?: string;
       /** 再次发动时的效果比例（未雨绸缪 50%：伤害/恢复按原战法 50% 结算） */
       recastRate?: number;
+      /** 子战法名（连环计 · 落雷 / 河内世泽 · 火辎）：链式战法**归属父战法**（skillId / skillName = 父），
+       *  子战法名另存此处，战报显示为「河内世泽·火辎」（与 `damage.subSkill` 同口径） */
+      subSkill?: string;
     }
   | {
       type: 'skill_target';
       unitId: string;
       skillId: string;
       targetIds: string[];
+      /** 子战法名（链式战法）：同 `skill_cast.subSkill` */
+      subSkill?: string;
     }
   | {
       type: 'damage';
@@ -2715,11 +2762,20 @@ export type BattleEvent =
       damageType: DamageType;
       damage: number;
       breakdown: DamageBreakdown;
+      /**
+       * 本次实际生效的**伤害率**（百分点，保留 1 位小数）：含每回合首次递增 / 受属性缩放 / 策略伤害浮动。
+       * 只对**谋略伤害**段给（策略伤害无系统随机，伤害率与伤害一一对应，战报可直接核对）；
+       * 物理段有内置 0.30~0.39 系统随机系数，给了会误导，故不给。
+       */
+      damageRate?: number;
+      /** 策略伤害浮动（敛微穷极）本次抽中的系数与所在档区间：low/high = 本回合档位区间，factor = 本次系数 */
+      rateFlux?: { low: number; high: number; factor: number };
       /** 本次伤害的增减伤归因（神兵天降/大赏三军/减伤/兵种克制），无增减伤时为 undefined */
       modifiers?: DamageModifiers;
       /** 机制 161「无视敌方属性」：本段策略伤害结算时目标谋略被折减的比例（未雨绸缪再次发动 30% + 0.15/点谋略） */
       ignoreStrategy?: { pct: number; skillId: string; skillName: string };
-      /** 子战法名（光武中兴 · 落雷 / 落石 / 绝水遏敌）：由 `combo_tag.label` 标注，战报显示为「光武中兴·落雷」 */
+      /** 子战法名（光武中兴 · 落雷 / 落石 / 绝水遏敌 由 `combo_tag.label` 标注；连环计 / 河内世泽 等
+       *  链式战法由引擎把归属改记到父战法时标注）。战报显示为「光武中兴·落雷」「连环计·落雷」 */
       subSkill?: string;
       /** 一类指挥 delayedOutput：预存伤害在 atRound 打出（白衣渡江/西乡武功）。详情用官方「效果使…损失兵力」口径 */
       delayedEffect?: boolean;
@@ -2758,7 +2814,7 @@ export type BattleEvent =
       unitId: string;
       statusType: StatusType;
       detail: string;
-      /** 子战法名（光武中兴 · 落雷 / 落石 / 绝水遏敌）：同 `damage.subSkill` */
+      /** 子战法名（光武中兴 · 落雷 / 连环计 · 落雷 等）：同 `damage.subSkill` */
       subSkill?: string;
     }
   /** 已有状态被就地改动（疮痍累身受击后减伤按 1/12 递减）：官方战报「【周泰】的受到攻击伤害降低效果下降了」 */
@@ -2795,6 +2851,8 @@ export type BattleEvent =
       amount: number;
       before: number;
       after: number;
+      /** 子战法名（链式战法的恢复段）：同 `damage.subSkill` */
+      subSkill?: string;
     }
   | {
       type: 'evasion_blocked';
@@ -2829,8 +2887,10 @@ export type BattleEvent =
       sourceId: string;
       targetId: string;
       dotType: DotType;
-      /** 来源战法（DoT 伤害计入该战法杀伤统计） */
+      /** 来源战法（DoT 伤害计入该战法杀伤统计）：链式战法产生的 DoT 记父战法 */
       skillId: string;
+      /** 子战法名（链式战法的 DoT，如 河内世泽 · 火辎）：同 `damage.subSkill` */
+      subSkill?: string;
       /** 施法者（DoT 伤害归属） */
       casterId: string;
       damage: number;
@@ -2876,6 +2936,8 @@ export type BattleEvent =
       skillId?: string;
       /** 该战法施法者（长兵方阵给友军挂分兵时 ≠ sourceId）；缺省 = sourceId */
       creditToId?: string;
+      /** 子战法名（链式战法产生的分兵）：同 `damage.subSkill` */
+      subSkill?: string;
     }
   | {
       type: 'round_end';

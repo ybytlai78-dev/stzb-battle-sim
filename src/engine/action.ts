@@ -20,6 +20,7 @@ import type {
   PassiveSkill,
   PendingRoundOutput,
   Position,
+  RepeatStrategySpec,
   Skill,
   SkillOutput,
   SkillType,
@@ -31,10 +32,11 @@ import type {
   WoundedMortalityConfig,
 } from './types';
 import type { Rng } from './rng';
-import { calcDamage, applyTroopCap, scaledValue, roundRate, sumRates, buffMult, calcHealAmount, moraleRate, applyIgnoreDef, troopCounterReduce } from './formulas';
+import { calcDamage, applyTroopCap, scaledValue, roundRate, sumRates, buffMult, calcHealAmount, moraleRate, applyIgnoreDef, troopCounterReduce, HUGE_MODIFIER_RATE } from './formulas';
 import { troopCounterReduceOf as secondaryCounterReduceOf, traitCombatModifiers, traitStatBonus, statModOf, effectiveTroopLine, SECONDARY_TROOPS, type TraitCombatContext } from './secondaryTroop';
 import { isTreasureSource, treasureLabel } from './treasure-source';
 import { isChenshouSource, chenshouLabel } from './chenshou-source';
+import { asSubSkillOf, labelSubSkillEvents } from './subSkill';
 import { TREASURES_BY_ID } from '../data/treasures';
 import type { TreasureType } from '../data/treasures';
 import { nearestEnemy, skillTargets, distanceBetween, adjacentUnits, sameSideDistance, attackRangeOf, attackTargetsInRange, attackDistanceBetween, skillRangeOf, POSITION_INDEX, unitsInSkillRange } from './target';
@@ -632,6 +634,36 @@ function remainingFromDuration(duration: number | [number, number] | undefined):
   return duration ?? 0;
 }
 
+/**
+ * 保留 1 位小数（四舍五入）。
+ * 用于**展示型 / 区间端点**数值：官方文案给的就是一位小数（浮动上限 150.0 / 142.6 / 128.8），
+ * 与「1% 粒度八舍九入」的 `roundRate`（只用于最终伤害率 / 恢复率 / 增减伤率等 rate 字段）区分开。
+ */
+function round1(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+/**
+ * 策略伤害浮动某一档的展示文案：两端不等 → `80.0%~165.0%`；已收敛到一点 → `127.5%（固定）`。
+ * 战报的状态行与伤害行共用同一口径，避免两处各写一套小数位。
+ */
+function fmtFluxStep(step: { low: number; high: number }): string {
+  return step.low === step.high
+    ? `${step.low.toFixed(1)}%（固定）`
+    : `${step.low.toFixed(1)}%~${step.high.toFixed(1)}%`;
+}
+
+/**
+ * 取策略伤害浮动在**当前回合**生效的那一档：`steps[回合-1]`，越界取末档。
+ * 官方「每回合收敛 1/6、第六回合收敛至 115.0%」= 6 档表（包内 200296 逐档给出），故按回合号直接索引，
+ * 不按「持有回合数」——同一场战斗里第 3 回合无论何时挂上都是同一档。
+ */
+function fluxStepAt(steps: Array<{ low: number; high: number }>, round: number): { low: number; high: number } {
+  if (steps.length === 0) return { low: 100, high: 100 };
+  const idx = Math.min(Math.max(round, 1), steps.length) - 1;
+  return steps[idx];
+}
+
 /** 指挥战法锁定目标：准备阶段锁定，后续回合/延迟结算用 */
 export interface LockedCommand {
   skill: CommandSkill;
@@ -867,6 +899,15 @@ export interface CombatContext {
   resolvingMoraleRaise?: boolean;
   /** 「特殊负面效果前」判定重入保护（审时定计）：判定段自身挂负面时不回灌 */
   resolvingSpecialDebuff?: boolean;
+  /**
+   * 「一类指挥预备/延迟判定」窗口（用户口径）：`triggerPreparedEffectOnAct`（roundRepeat 预备负面）与
+   * `triggerDelayedOutputs`（一类指挥 delayedOutput/delayedOutputs 延迟结算）执行期间施加的状态，视为
+   * 「一类指挥的预备控制/预备负面」——**抵御对它不生效**（审时定计 `debuffResist` 与七擒七纵
+   * `instanceGuard` 控制分支都不掷判定、也不消耗 7 次计数）。
+   * 反例（不在窗口内 → 照常可抵御）：一类指挥的即时段、它派生的后续触发（合纵连横普攻后围困）、
+   * 二类指挥即时施加、主动 / 追击 / 被动来源。
+   */
+  resolvingPreparedCommand?: boolean;
   /** 「敌军每回合首次受到持续伤害」去重（衔命建功）：key `${回合}:${skillId}:${targetId}` */
   dotReceivedKeys?: Set<string>;
   /** 伤害分摊重入保护（言出必克 / 雅虑适时）：分摊出去的伤害不再被二次分摊 */
@@ -1022,8 +1063,11 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
       // 延迟结算目标：默认锁定目标；白衣为全体伤害，用 delayedOutput.targetMode 覆盖
       const mode = resolveCombatTargetMode(skill.delayedOutput.targetMode ?? skill.targetMode, 'all');
       const dmgTargets = skillTargets(ctx, unit, enemies, skill.range, mode);
-      // 常驻伤害前叠层（持节镇西）：延迟结算战法在准备阶段对每个目标结算伤害前触发
-      const delayedType: 'physical' | 'strategy' = skill.delayedOutput.output.some((o) => o.kind === 'strategy_damage')
+      // 常驻伤害前叠层（持节镇西）：延迟结算战法在准备阶段对每个目标结算伤害前触发。
+      // 2026-10-23 口径：谋略类 DoT（恐慌 / 燃烧 / 妖术 / 引燃）在施加那一刻就冻结伤害，
+      // 属「预结算伤害段」⇒ 与 strategy_damage 同等判为 strategy（灵帝的恐慌因此叠谋略而非攻击）；
+      // 分兵 / 攻城 / 属性类状态不结算伤害，不参与判定。
+      const delayedType: 'physical' | 'strategy' = skill.delayedOutput.output.some(isStrategySettleOutput)
         ? 'strategy'
         : 'physical';
       // 各目标结算一次 → 触发一次「造成伤害前叠层」；全体 3 目标叠 3 层，群体 2 目标叠 2 层
@@ -1037,6 +1081,15 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
         const dmg = computeStoredDamage(ctx, unit, skill, t, skill.delayedOutput.output);
         if (dmg) storedDamage.push({ targetId: t.general.id, ...dmg });
       }
+    }
+
+    // delayedOutputs（匠心不竭：R1/R3/R5 分段施加恐慌 / 燃烧 / 妖术）：
+    // 准备阶段结算延迟效果**前**先叠一次层（用户 2026-10-23 口径：叠层点扩到「准备阶段结算延迟效果前」）。
+    // 只按最早一条条目（atRound 最小）的目标池叠 —— 与 delayedOutput「一次结算 = 一次叠层」同量级；
+    // 三条目 × 3 目标会把 maxStacks 直接打满，收益高于吕蒙（3 层）。
+    if (skill.delayedOutputs && skill.delayedOutputs.length > 0) {
+      const firstEntry = [...skill.delayedOutputs].sort((a, b) => a.atRound - b.atRound)[0];
+      stackBeforeDelayedStrategy(ctx, unit, skill, firstEntry.output, targets);
     }
 
     // roundRepeat 目标侧与战法不同时（母仪浮梦：友军规避 + 敌军减伤）另锁一套预备判定目标
@@ -1173,7 +1226,7 @@ export function triggerPreparedEffectOnAct(ctx: CombatContext, unit: UnitState):
           baseRate: Math.round(baseRate * 100),
           morale,
         });
-        if (hit) executeSkillOutputs(ctx, caster ?? unit, skill, [unit], [out]);
+        if (hit) runAsPreparedCommand(ctx, () => executeSkillOutputs(ctx, caster ?? unit, skill, [unit], [out]));
       }
       continue;
     }
@@ -1190,7 +1243,7 @@ export function triggerPreparedEffectOnAct(ctx: CombatContext, unit: UnitState):
       morale,
     });
     if (!success) continue;
-    executeSkillOutputs(ctx, caster ?? unit, skill, [unit]);
+    runAsPreparedCommand(ctx, () => executeSkillOutputs(ctx, caster ?? unit, skill, [unit]));
   }
 }
 
@@ -1330,6 +1383,9 @@ function triggerStrategyAdjacentBonus(
         breakdown,
         modifiers: mods,
         creditToId: source.general.id === owner.general.id ? undefined : owner.general.id,
+        // 诛杀（包内机制码 546 株杀 = 其徐如林 的「相邻跳伤」）：详情战报在这笔伤害旁标〈诛杀〉，
+        // 才看得出哪部分是跳伤、哪部分是别的战法打出来的策略伤害（用户 2026-10-23 口径）。
+        subSkill: '诛杀',
       });
       applyDamage(ctx, raw, capped, source, 'strategy', 'skill', mods, { skillType: l.skill.type });
     }
@@ -1340,6 +1396,78 @@ function triggerStrategyAdjacentBonus(
  *  ① `delayedOutput`（单次、伤害预存）：白衣渡江第 3 回合打出预先结算的伤害。
  *     战报口径（官方）：「【施法者】【战法】的效果使【目标】损失了X兵力(剩余)」+ 「【目标】的来自【施法者】【战法】的策略攻击伤害效果消失了」
  *  ② `delayedOutputs`（多次、不预存）：匠心不竭第 1/3/5 回合分别对锁定目标施加恐慌 / 燃烧 / 妖术。 */
+/**
+ * 「预结算策略伤害」的输出段（持节镇西叠层判定口径，用户 2026-10-23 口径）：
+ * - `strategy_damage`：直接结算策略伤害；
+ * - `inflict_status` 且状态为谋略类 DoT / 引燃（panic / burning / sorcery / curse / ignite）：
+ *   在**施加那一刻**就把每次跳伤冻结（`computeDotTickDamage`），伤害已经算完 ⇒ 等同于一次策略伤害结算。
+ *   灵帝的恐慌正是这种「预结算伤害段」。
+ *
+ * ⚠️ 分兵 / 攻城 / 属性类状态**不**属此列：它们只施加状态、不结算伤害，不产生叠层段
+ *   （帝临回光的 split / siege / range_buff 因此不参与判定，不存在「物理段叠攻击层」）。
+ */
+const STRATEGY_SETTLE_DOT_TYPES: ReadonlySet<StatusType> = new Set<StatusType>([
+  'panic',
+  'burning',
+  'sorcery',
+  'curse',
+  'ignite',
+]);
+
+function isStrategySettleOutput(out: SkillOutput): boolean {
+  if (out.kind === 'strategy_damage') return true;
+  if (out.kind !== 'inflict_status') return false;
+  const list = Array.isArray(out.status) ? out.status : [out.status];
+  return list.some((s) => STRATEGY_SETTLE_DOT_TYPES.has(s.type as StatusType));
+}
+
+/**
+ * 延迟结算**前**先叠层（持节镇西）：预结算口径要求叠层发生在伤害冻结之前，
+ * 与 `delayedOutput`「先全员叠层、再逐目标预存」同一时序（`triggerCommandSkills` 的 delayedOutput 分支）。
+ * 目标池按**段级** `targetSide` / `targetMode` 解析 —— 谋略 DoT 常带 `targetSide:'enemy'`，
+ * 与战法整体目标（帝临回光为 self）不同，不能直接用锁定目标。
+ */
+function stackBeforeDelayedStrategy(
+  ctx: CombatContext,
+  caster: UnitState,
+  skill: Skill,
+  outputs: SkillOutput[],
+  locked: UnitState[],
+): void {
+  for (const out of outputs) {
+    if (!isStrategySettleOutput(out)) continue;
+    let pool: UnitState[];
+    if (out.kind === 'strategy_damage') {
+      pool = locked;
+    } else if (out.kind === 'inflict_status') {
+      // 段级 targetSide 缺省 = 沿用战法整体锁定目标（与 executeSkillOutputs 的默认段一致）；
+      // 只有带 targetSide 的段（帝临回光 targetMode:self、恐慌段 targetSide:enemy）才重选目标池。
+      if (!out.targetSide) {
+        pool = locked;
+      } else {
+        const enemyPool = caster.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
+        const allyPool = caster.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
+        const base = out.targetSide === 'enemy' ? enemyPool : out.targetSide === 'ally' ? allyPool : [caster];
+        const mode = resolveCombatTargetMode(out.targetMode, 'random_single');
+        pool = skillTargets(
+          ctx,
+          caster,
+          base.filter((u) => u.alive),
+          skill.range,
+          mode,
+          out.groupCount,
+        );
+      }
+    } else {
+      continue;
+    }
+    for (const t of pool) {
+      if (!t.alive) continue;
+      triggerStackBuff(ctx, caster, t, 'strategy');
+    }
+  }
+}
+
 export function triggerDelayedOutputs(ctx: CombatContext, round: number): void {
   for (const l of ctx.lockedCommands) {
     const { skill } = l;
@@ -1386,7 +1514,9 @@ export function triggerDelayedOutputs(ctx: CombatContext, round: number): void {
         // 非伤害类延迟输出（令明负榇：第 4 回合起进入分兵状态）→ 对锁定目标执行 output
         const aliveTargets = l.targets.filter((t) => t.alive);
         if (aliveTargets.length > 0) {
-          executeSkillOutputs(ctx, caster, skill, aliveTargets, skill.delayedOutput.output);
+          // 谋略 DoT 在施加那一刻冻结伤害 ⇒ 叠层必须早于 executeSkillOutputs（帝临回光 R3 恐慌）
+          stackBeforeDelayedStrategy(ctx, caster, skill, skill.delayedOutput!.output, aliveTargets);
+          runAsPreparedCommand(ctx, () => executeSkillOutputs(ctx, caster, skill, aliveTargets, skill.delayedOutput!.output));
         }
       }
     }
@@ -1396,7 +1526,11 @@ export function triggerDelayedOutputs(ctx: CombatContext, round: number): void {
       for (const entry of skill.delayedOutputs) {
         if (entry.atRound !== round) continue;
         const aliveTargets = l.targets.filter((t) => t.alive);
-        if (aliveTargets.length > 0) executeSkillOutputs(ctx, caster, skill, aliveTargets, entry.output);
+        if (aliveTargets.length > 0) {
+          // 施加前叠层（匠心不竭 R1/R3/R5）：恐慌 / 燃烧 / 妖术同属「挂上即结算伤害」⇒ 本次挂载即吃层
+          stackBeforeDelayedStrategy(ctx, caster, skill, entry.output, aliveTargets);
+          runAsPreparedCommand(ctx, () => executeSkillOutputs(ctx, caster, skill, aliveTargets, entry.output));
+        }
       }
     }
   }
@@ -3318,8 +3452,11 @@ function inflictStatusCore(
 
   // 审时定计①：敌方被施加**特殊负面效果**前 → 存活携带者按 rate 判定（命中则先结算 output）
   triggerSpecialDebuffBefore(ctx, target, type);
+  // 抵御（审时定计② / 七擒七纵）对**一类指挥的预备 / 延迟判定**不生效（用户口径）：战必断金 / 措手不及 /
+  // 白衣渡江的预备怯战、帝临回光延迟围困等在窗口内既不掷判定，也不消耗七擒七纵的 7 次计数。
+  const resistAllowed = !ctx.resolvingPreparedCommand;
   // 审时定计②：我军被施加挑衅/围困/控制时 → 按 rate 抵御（命中则该次施加整段取消）
-  if (triggerDebuffResist(ctx, target, type)) return;
+  if (resistAllowed && triggerDebuffResist(ctx, target, type)) return;
 
   // 宝物（用户口径 2026-09-21）+ 陈寿特性（2026-10-16）：**与任何来源都不冲突**，纯提升、可叠加
   // → 跳过后续全部冲突判定，直接入栈。反向同理：它们作为既有状态时也不参与 `sameType` 冲突
@@ -3412,7 +3549,7 @@ function inflictStatusCore(
 
   // 七擒七纵：我方单位**被施加控制效果**时计入共享抵挡计数（敌对来源、且未被洞察 / 免控拦截的才计；
   // 命中则整段抵御不落状态）
-  if (CONTROL_STATUS_TYPES.includes(type) && casterId) {
+  if (resistAllowed && CONTROL_STATUS_TYPES.includes(type) && casterId) {
     const src = castUnit(ctx, casterId);
     if (src && src.side !== target.side && resolveInstanceGuard(ctx, target, 'control', type)) return;
   }
@@ -4101,6 +4238,21 @@ function recastWindowActive(
   return until != null && ctx.currentRound <= until;
 }
 
+/**
+ * 一类指挥「预备 / 延迟判定」窗口（用户口径）：窗口内执行的效果视为「一类指挥的预备控制 / 预备负面」，
+ * 抵御（审时定计 `debuffResist` / 七擒七纵 `instanceGuard` 控制分支）对它**不生效**（不掷判定、不计次）。
+ * 只包住 `executeSkillOutputs` 调用本身；try/finally 还原上一个值，可重入、嵌套安全。
+ */
+function runAsPreparedCommand<T>(ctx: CombatContext, fn: () => T): T {
+  const prev = ctx.resolvingPreparedCommand;
+  ctx.resolvingPreparedCommand = true;
+  try {
+    return fn();
+  } finally {
+    ctx.resolvingPreparedCommand = prev;
+  }
+}
+
 function triggerDebuffResist(ctx: CombatContext, target: UnitState, statusType: StatusType): boolean {
   const team = target.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
   for (const caster of team) {
@@ -4473,23 +4625,19 @@ function pushStatus(
     return;
   }
   if (type === 'strategy_flux') {
-    // 策略伤害浮动（敛微穷极）：整场光环；同战法重复施加只刷新（数值替换 + remaining 取 max）
+    // 策略伤害浮动（敛微穷极）：整场光环；同战法重复施加只刷新（逐档区间替换 + remaining 取 max）。
+    // steps 已在施加点按施法者谋略缩放好（见 executeSkillOutputs 的 strategy_flux 分支）——此处只存结果。
+    const steps = create.steps.map((s) => ({ low: s.low, high: s.high }));
     const existing = target.statuses.find(
       (s): s is Extract<Status, { type: 'strategy_flux' }> => s.type === 'strategy_flux' && s.sourceSkillId === sourceSkillId
     );
     if (existing) {
-      existing.low = create.low;
-      existing.high = create.high;
-      existing.mid = create.mid;
-      existing.convergeRounds = create.convergeRounds;
+      existing.steps = steps;
       existing.remaining = Math.max(existing.remaining, remaining);
     } else {
       target.statuses.push({
         type: 'strategy_flux',
-        low: create.low,
-        high: create.high,
-        mid: create.mid,
-        convergeRounds: create.convergeRounds,
+        steps,
         remaining,
         appliedRound,
         sourceSkillType,
@@ -4501,7 +4649,7 @@ function pushStatus(
       type: 'status_inflicted',
       unitId: target.general.id,
       statusType: type,
-      detail: `策略伤害浮动 ${create.low}%~${create.high}%（${create.convergeRounds} 回合内收敛至 ${create.mid}%）`,
+      detail: `策略伤害浮动 ${fmtFluxStep(steps[0])}（每回合收敛，第 ${steps.length} 回合起 ${fmtFluxStep(steps[steps.length - 1])}）`,
     });
     return;
   }
@@ -4868,6 +5016,12 @@ function pushStatus(
     } else if (type === 'ignore_def') {
       const isStrategy = create.damageType === 'strategy';
       detail = `${isStrategy ? '无视谋略' : '无视防御'} ${Math.round(create.rate * 100)}% ${durText}`;
+    } else if (type === 'damage_reduce' && Math.abs(create.rate) * 100 >= HUGE_MODIFIER_RATE * 100) {
+      // 「大幅度降低」类（哨兵 HUGE_MODIFIER_RATE = 1000%：磐阵善守 / 西乡武功 / 息交2）：
+      // 账面数字只是哨兵，战报照文案写成「大幅降低」；普通减伤（≤84%）仍走下方通用的「减伤 X」
+      const kind = damageKindText(create.damageType);
+      const once = 'charges' in create && create.charges ? '下一次' : '';
+      detail = `${once}受到${kind}大幅降低 ${durText}`;
     } else if (type === 'heal_boost') {
       // 受到恢复效果提升（勇挚刚毅）：百分数化，不输出原始小数；rate<0 = 受到恢复效果降低
       const pct = Math.round(Math.abs(create.rate) * 100);
@@ -5133,7 +5287,7 @@ function pushStatus(
       : {}),
     // 宝物「坚毅」：免疫的控制类型清单
     ...(create.type === 'control_immune' ? { types: create.types } : {}),
-    // 宝物「不屈」/「破浪」：受击叠层（stacks 每回合开始清零）
+    // 宝物「不屈」/「破浪」：受击叠层（stacks 每回合结束清零，见 tickStatuses）
     ...(create.type === 'hurt_stack'
       ? { mode: create.mode, perStack: create.perStack, maxStacks: create.maxStacks, stacks: 0 }
       : {}),
@@ -5217,6 +5371,22 @@ export function tickStatuses(ctx: CombatContext, units: UnitState[]): void {
         ctx.events.push({ type: 'status_expired', unitId: unit.general.id, statusType: s.type });
         continue;
       }
+      // 宝物「不屈」/「破浪」：受击叠层是「本回合」语义 -> **回合结束时清零**。
+      // 用户 2026-10-23 口径：「每回合独立计算，第一回合受击 8 次叠 8 层，到大回合结束才清除，
+      // 而非行动前移除」—— 本回合内受击叠出的层数活到回合结束（先手/后手同口径），
+      // 下回合从 0 层重新累积。清零前发一条事件，战报能看出本回合实际吃到的层数。
+      if (s.type === 'hurt_stack') {
+        if (s.stacks > 0 && s.mode === 'boost') {
+          ctx.events.push({
+            type: 'status_changed',
+            unitId: unit.general.id,
+            statusType: 'hurt_stack',
+            detail: `【破浪】本回合叠至 ${s.stacks} 层（造成伤害 +${Math.round(s.stacks * s.perStack * 100)}%），回合结束清除`,
+          });
+        }
+        s.stacks = 0;
+        continue;
+      }
       if (s.appliedRound !== 0) continue; // 行动中施加：下次行动开始前递减
       if (s.type === 'pending_stacks') continue; // 叠层待发：不按回合递减（奉令护蜀）
       if (s.type === 'ignore_evasion') continue; // 无视规避：消耗制，不按回合递减（缚父临危）
@@ -5255,10 +5425,6 @@ export function tickStatuses(ctx: CombatContext, units: UnitState[]): void {
 export function tickRoundStartStatuses(ctx: CombatContext): void {
   const decayEighthsNow = ctx.currentRound !== 1; // 第 1 回合不衰减（保 8/8）
   const units = [...ctx.myTeam, ...ctx.enemyTeam];
-  // 宝物「不屈」/「破浪」：受击叠层「本回合」语义 → 每回合开始清零（先于本回合任何伤害结算）
-  for (const u of units) {
-    for (const s of u.statuses) if (s.type === 'hurt_stack') s.stacks = 0;
-  }
   // 百战无怯：每回合开始失去 1 层并恢复（0 层不掉也不回血）——先于本回合任何伤害结算
   for (const u of units) loseStacksReduceOnEvent(ctx, u);
   // 玉玺结转（僭号天子）：第二回合起，每回合开始时对持有者结算「上一回合承担量 × 本回合承担比例」；
@@ -5293,6 +5459,17 @@ export function tickRoundStartStatuses(ctx: CombatContext): void {
   }
   for (const unit of units) {
     if (!unit.alive || !decayEighthsNow) continue;
+    // 策略伤害浮动逐档收敛（敛微穷极）：第 2 回合起每回合把「本回合档位区间」发一条 status_changed，
+    // 战报状态行因此能看到区间从满区间收窄（第 1 回合的区间已在 status_inflicted 里写出）。
+    for (const s of unit.statuses) {
+      if (s.type !== 'strategy_flux') continue;
+      ctx.events.push({
+        type: 'status_changed',
+        unitId: unit.general.id,
+        statusType: s.type,
+        detail: `策略伤害浮动区间收敛至 ${fmtFluxStep(fluxStepAt(s.steps, ctx.currentRound))}`,
+      });
+    }
     for (const s of [...unit.statuses]) {
       // 每回合结束按份衰减（敛微穷极 6）：−1 份，rate = baseRate × 剩余/初始
       if ((s.type === 'damage_boost' || s.type === 'damage_reduce') && s.roundParts !== undefined && s.baseRate !== undefined && s.roundPartsBase !== undefined) {
@@ -5908,7 +6085,7 @@ function firstHitReduceMatches(
   return kind === 'attack' ? damageType === 'physical' : damageType === 'strategy';
 }
 
-/** 宝物「不屈」：受击叠层式减伤（值 = stacks × perStack；stacks 由受击钩子累加、回合开始清零） */
+/** 宝物「不屈」：受击叠层式减伤（值 = stacks × perStack；stacks 由受击钩子累加、**回合结束**清零） */
 function hurtStackReduceOf(target: UnitState): number {
   return target.statuses
     .filter((s): s is Extract<Status, { type: 'hurt_stack' }> => s.type === 'hurt_stack' && s.mode === 'reduce')
@@ -6505,6 +6682,7 @@ function applySelfPhysBoost(ctx: CombatContext, unit: UnitState, skill: Extract<
       stacks: 1,
       maxStacks: cfg.maxStacks,
       attackScaled: cfg.attackScaled,
+      ...(cfg.growthRate !== undefined ? { growthRate: cfg.growthRate } : {}),
     },
     skill.type,
     skill.id,
@@ -6565,8 +6743,17 @@ function executeDamageChain(
  * （官方「每个战法的效果与原战法在同等级下效果相同」→ 直接用注册表里该战法的 output，事件归属该战法）。
  * 每步条件在**该步执行时**求值：前一步可能降主目标谋略（伐谋）或给主目标挂暴走（迷阵命中主目标），
  * 从而影响后一步（迷阵 / 落雷）是否结算——顺序不可预先求值。
+ *
+ * `rewrite` 由未雨绸缪传入（见 `RecastRewrite`）：本次是「再发动」（factor 0.5）或「本次发动但吃机制 161」
+ * （factor 1）时，被引用战法的输出要跟着改写 —— 否则这类**伤害全在子战法里**的战法再发动一次等于空转。
  */
-function runChainSkills(ctx: CombatContext, caster: UnitState, skill: Skill, targets: UnitState[]): void {
+function runChainSkills(
+  ctx: CombatContext,
+  caster: UnitState,
+  skill: Skill,
+  targets: UnitState[],
+  rewrite?: RecastRewrite
+): void {
   const chain = 'chainSkills' in skill ? skill.chainSkills : undefined;
   if (!chain || chain.length === 0) return;
   const enemies = caster.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
@@ -6588,19 +6775,35 @@ function runChainSkills(ctx: CombatContext, caster: UnitState, skill: Skill, tar
           ? [primary]
           : [];
     if (pool.length === 0) continue;
+    // 归属父战法（连环计）+ 子战法名标 `subSkill`（详情战报显示「连环计·落雷」）：
+    // 否则子战法的伤害记在落雷 / 迷阵自己的统计行上，战报里【连环计】那一格永远是「杀伤 0」。
     ctx.events.push({
       type: 'skill_target',
       unitId: caster.general.id,
-      skillId: ref.id,
+      skillId: skill.id,
       targetIds: pool.map((t) => t.general.id),
+      subSkill: ref.name,
     });
     ctx.events.push({
       type: 'skill_cast',
       unitId: caster.general.id,
-      skillId: ref.id,
-      skillName: ref.name,
+      skillId: skill.id,
+      skillName: skill.name,
+      ...(rewrite ? { recastBy: RECAST_SOURCE, recastRate: rewrite.factor } : {}),
+      subSkill: ref.name,
     });
-    executeSkillOutputs(ctx, caster, ref, pool, ref.output, false);
+    // 被引用战法按父战法归属执行（只改 id/name；选敌距离与数值一仍其旧），
+    // 结算窗口内的事件再打子战法标签（伤害 / 分兵 / DoT / 恢复 / 状态）
+    const evStart = ctx.events.length;
+    executeSkillOutputs(
+      ctx,
+      caster,
+      asSubSkillOf(skill, ref),
+      pool,
+      rewrite ? scaleRecastOutputs(ref.output, rewrite.factor, rewrite.ignore) : ref.output,
+      false
+    );
+    labelSubSkillEvents(ctx, evStart, skill, ref.name);
     if (!caster.alive) break;
   }
 }
@@ -6613,8 +6816,16 @@ function runChainSkills(ctx: CombatContext, caster: UnitState, skill: Skill, tar
  *    同等级下效果相同」）；
  *  - 准备段被跳过（只执行 output，官方「跳过准备回合」）；
  *  - 事件 / 战报归属**被引用战法**（skill_target + skill_cast，同 chainSkills 口径）。
+ *
+ * `rewrite`（未雨绸缪）：同 `runChainSkills` —— 河内世泽的伤害 100% 在被随机到的子战法里，
+ * 再发动时若不下钻改写，等于只重播那段司马懿追加效果（用户报障「子技能造成谋略伤害不触发」）。
  */
-function runChainSkillPickGroups(ctx: CombatContext, caster: UnitState, skill: Skill): void {
+function runChainSkillPickGroups(
+  ctx: CombatContext,
+  caster: UnitState,
+  skill: Skill,
+  rewrite?: RecastRewrite
+): void {
   const groups = 'chainSkillPickGroups' in skill ? skill.chainSkillPickGroups : undefined;
   if (!groups || groups.length === 0) return;
   const allies = caster.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
@@ -6632,17 +6843,21 @@ function runChainSkillPickGroups(ctx: CombatContext, caster: UnitState, skill: S
         ? [caster]
         : skillTargets(ctx, caster, source, skill.range, ref.targetMode, ref.groupCount ?? 2);
     if (pool.length === 0) continue;
+    // 归属父战法（河内世泽）+ 子战法名标 `subSkill`：同 runChainSkills 口径
     ctx.events.push({
       type: 'skill_target',
       unitId: caster.general.id,
-      skillId: ref.id,
+      skillId: skill.id,
       targetIds: pool.map((t) => t.general.id),
+      subSkill: ref.name,
     });
     ctx.events.push({
       type: 'skill_cast',
       unitId: caster.general.id,
-      skillId: ref.id,
-      skillName: ref.name,
+      skillId: skill.id,
+      skillName: skill.name,
+      ...(rewrite ? { recastBy: RECAST_SOURCE, recastRate: rewrite.factor } : {}),
+      subSkill: ref.name,
     });
     // 战法觉醒（15 级口径）：当**本战法**被登记为觉醒时，由本链发动的战法按觉醒倍率结算。
     // 倍率沿用率土等级斜率：15 级 = 0.5 + 0.5×14/9，相对满级（10 级 = 1.0）⇒ ≈ 1.27778。
@@ -6663,7 +6878,12 @@ function runChainSkillPickGroups(ctx: CombatContext, caster: UnitState, skill: S
             }
             return next;
           });
-    executeSkillOutputs(ctx, caster, ref, pool, chainOuts, true);
+    const chainScaled = rewrite ? scaleRecastOutputs(chainOuts, rewrite.factor, rewrite.ignore) : chainOuts;
+    // 按父战法归属执行（只改 id/name），窗口内事件打子战法标签：否则落雷 / 火辎 / 毒泉的伤害与
+    // DoT 跳伤都记在子战法自己的统计行上，【河内世泽】一格永远是「杀伤 0」（用户 2026-10-23 报障）。
+    const evStart = ctx.events.length;
+    executeSkillOutputs(ctx, caster, asSubSkillOf(skill, ref), pool, chainScaled, true);
+    labelSubSkillEvents(ctx, evStart, skill, ref.name);
     if (!caster.alive) break;
   }
 }
@@ -7998,7 +8218,14 @@ function executeSkillOutputs(
    * 缺省 = caster（既有调用全部零回归）；after_first_active / afterActive 的触发者本就是携带者，无需传。
    * 注意：skipRepeat 占第 6 位，本参数为第 7 位——监听类调用点须写 `..., false, actor`。
    */
-  statSource?: UnitState
+  statSource?: UnitState,
+  /**
+   * 未雨绸缪的改写口径（第 8 位，只有**最外层**发动/再发动会传）：
+   * 本战法自己把伤害委派给子战法时（`chainSkillPickGroups` 河内世泽 / `chainSkills` 连环计），
+   * 子战法那几段也要跟着 ×factor 并挂机制 161。`undefined` = 常规发动，既有行为零变化。
+   * ⚠️ 本函数内部的递归调用**一律不传**（防重复缩放 / 重复执行战法链）。
+   */
+  rewrite?: RecastRewrite
 ): void {
   // 象兵「野性」：指挥战法产生的任何效果都对它无效（敌我双方一视同仁）。
   // 注意：targets 允许为空数组（监听类战法自行选目标，如七步释嫌），故这里**不能**因空数组提前 return。
@@ -8023,10 +8250,10 @@ function executeSkillOutputs(
       return false;
     });
   }
-  // 战法链（连环计）：仅最外层发动执行（nested 调用都带显式 outputs，故不会递归触发）
-  if (!outputs) runChainSkills(ctx, caster, skill, targets);
+  // 战法链（连环计）：仅最外层发动执行（nested 调用都带显式 outputs 且不传 rewrite，故不会递归触发）
+  if (!outputs || rewrite) runChainSkills(ctx, caster, skill, targets, rewrite);
   // 随机战法组（河内世泽）：同样仅最外层执行
-  if (!outputs) runChainSkillPickGroups(ctx, caster, skill);
+  if (!outputs || rewrite) runChainSkillPickGroups(ctx, caster, skill, rewrite);
   // 延迟到后续回合开始的 output（当阳桥 / 正始之变）：仅最外层登记
   if (!outputs) scheduleDelayedRoundOutputs(ctx, caster, skill);
   // 随机复制发动（奇门遁甲）：同样仅最外层执行；显式 outputs 传入被复制战法 → 其自身 chain/copy 不递归
@@ -8828,13 +9055,14 @@ function executeSkillOutputs(
             if (out.strategyScaled && out.growthRate !== undefined) {
               rate = roundRate(scaledValue(rate, out.growthRate, effStrategy));
             }
-            // 策略伤害浮动（敛微穷极）：率 × 当前收敛区间内均匀随机系数（区间随回合线性收敛到 mid）
+            // 策略伤害浮动（敛微穷极）：率 × 本回合档位区间内均匀随机系数（6 档表，见 skill 数据注释）
             const flux = getStatus(stratSrc, 'strategy_flux');
+            let fluxHit: { low: number; high: number; factor: number } | undefined;
             if (flux && flux.type === 'strategy_flux') {
-              const t01 = Math.max(0, 1 - (ctx.currentRound - 1) / Math.max(1, flux.convergeRounds - 1));
-              const low = flux.mid - (flux.mid - flux.low) * t01;
-              const high = flux.mid + (flux.high - flux.mid) * t01;
-              rate = rate * ((low + (high - low) * ctx.rng.next()) / 100);
+              const step = fluxStepAt(flux.steps, ctx.currentRound);
+              const factor = step.low + (step.high - step.low) * ctx.rng.next();
+              rate = rate * (factor / 100);
+              fluxHit = { low: step.low, high: step.high, factor: round1(factor) };
             }
             const hit: DamageHitContext = {
               damageSource: 'skill',
@@ -8883,6 +9111,9 @@ function executeSkillOutputs(
               damage: capped,
               breakdown,
               modifiers: stratMods,
+              // 本次实际生效伤害率（%）：战报详情用它显示「伤害率 X%」，可核对浮动是否生效
+              damageRate: round1(rate),
+              ...(fluxHit ? { rateFlux: fluxHit } : {}),
               // 机制 161「无视敌方属性」（未雨绸缪再次发动）：战报要能看见「无视目标 X% 谋略属性」
               ...(ignorePct > 0
                 ? { ignoreStrategy: { pct: Math.round(ignorePct * 100), skillId: 'weiyu_choumou', skillName: '未雨绸缪' } }
@@ -9146,8 +9377,8 @@ function executeSkillOutputs(
                 100) *
               sign;
             inflictStatus(ctx, t, { ...create, rate: scaled }, skill.type, skill.id, caster.general.id);
-          } else if (create.type === 'damage_boost' && create.speedScaled) {
-            /** 增减伤受速度影响（攻其不备 11.6% + 成长 0.02/点）；growthRate 缺省时不缩放、用基值 */
+          } else if ((create.type === 'damage_boost' || create.type === 'damage_reduce') && create.speedScaled) {
+            /** 增减伤/减伤受速度影响（攻其不备 11.6% + 成长 0.02/点、退避 18% 受速度）；growthRate 缺省时不缩放、用基值 */
             if (create.growthRate !== undefined) {
               const sign = Math.sign(create.rate) || 1;
               const scaled =
@@ -9176,6 +9407,30 @@ function executeSkillOutputs(
           } else if (create.type === 'split' && create.strategyScaled && create.growthRate !== undefined) {
             const scaled = roundRate(scaledValue(create.rate, create.growthRate, effectiveStat(caster, 'strategy')));
             inflictStatus(ctx, t, { ...create, rate: scaled }, skill.type, skill.id, caster.general.id);
+          } else if (create.type === 'split' && create.speedScaled && create.growthRate !== undefined) {
+            /** 分兵伤害率受速度影响（令明负榇「分兵伤害率 50.0%（受速度属性影响）」，包内 20083701 const 36 + intel 35
+             *  ⇒ 值@80 = 50%、成长 0.175/点）：与受谋略同类，施加时按施法者生效速度冻结进 rate */
+            const scaled = roundRate(scaledValue(create.rate, create.growthRate, effectiveStat(caster, 'speed')));
+            inflictStatus(ctx, t, { ...create, rate: scaled }, skill.type, skill.id, caster.general.id);
+          } else if (create.type === 'jump_prep' && create.speedScaled && create.growthRate !== undefined) {
+            /** 跳过准备几率受速度影响（难知如阴「60.0% 的几率（受速度属性影响）」，包内子战法 21082803
+             *  const 48 + intel 30 ⇒ 值@80 = 60%、成长 0.15/点）：rate 是 0~1 概率，按 1% 粒度八舍九入后转回小数 */
+            const scaled =
+              Math.min(1, roundRate(scaledValue(create.rate * 100, create.growthRate, effectiveStat(caster, 'speed'))) / 100);
+            inflictStatus(ctx, t, { ...create, rate: scaled }, skill.type, skill.id, caster.general.id);
+          } else if (create.type === 'strategy_flux') {
+            /**
+             * 策略伤害浮动逐档受谋略（敛微穷极，包内机制 82「伤害率波动上限」/ 83「下限」）：
+             * 每档端点 = `scaledValue(该档值, 该档成长率, 施法者生效谋略)`，保留 1 位小数
+             * （官方文案 150.0 / 142.6 / 128.8 就是一位小数）。缩放结果冻结进 Status ——
+             * 「持续到战斗结束」，施法者阵亡、后续属性变化都不再改档位（同减伤/增伤受谋略的冻结口径）。
+             */
+            const fluxStrategy = effectiveStat(caster, 'strategy');
+            const steps = create.steps.map((s) => ({
+              low: round1(scaledValue(s.low, s.lowGrowthRate ?? 0, fluxStrategy)),
+              high: round1(scaledValue(s.high, s.highGrowthRate ?? 0, fluxStrategy)),
+            }));
+            inflictStatus(ctx, t, { ...create, steps }, skill.type, skill.id, caster.general.id);
           } else if (
             (create.type === 'attack_buff' || create.type === 'defense_buff' || create.type === 'strategy_buff' || create.type === 'speed_buff') &&
             ((create.strategyScaled && create.growthRate !== undefined) ||
@@ -9437,14 +9692,20 @@ function executeSkillOutputs(
  * 主动战法**发动后可**再次发动一次** —— 跳过准备回合、造成原战法 **50%** 的伤害与恢复效果。
  *
  * 实现：`repeat_strategy` 纯标记型状态（duration 2），在主动战法结算末尾消费。
- *   · 「造成策略伤害」= 该战法 output 里存在 `strategy_damage` 段（纯控制 / 纯 DoT 不触发）；
- *   · 再发动直接执行 output（**不经准备段与发动率判定** = 跳过准备回合）；
- *   · 数值按 50% 缩放（顶层 `rate` 与 DoT 的 `status.rate` 两层，口径同战法觉醒的缩放）；
+ *   · 「造成策略伤害」的判定见 `skillCanDealStrategyDamage`（**唯一真源**）：自有输出树 / 委派子战法 /
+ *     谋略型 DoT 三条来源都算 —— 旧实现只看自有 output 树里的 `strategy_damage` 段，
+ *     十常侍·乱政（谋略伤害全在恐慌/燃烧/妖术的跳伤里）与河内世泽（伤害全在被随机到的子战法里）
+ *     永远不会触发（用户 2026-10-22 报障）；
+ *   · 再发动直接执行 output（**不经准备段与发动率判定** = 跳过准备回合）；自有输出为空也要再走一趟
+ *     —— 战法链（连环计 `output: []`）/ 随机战法组（河内世泽）的伤害全在被委派的子战法里；
+ *   · 数值按 50% 缩放（顶层 `rate`、`status.rate`（含**状态数组**逐项）与子战法输出一起缩）；
  *   · 自身不触发（防自递归）。
  *
- * ⚠️ 待确认：官方同句另有「该战法造成的伤害无视目标 30000% 的谋略属性」—— 数值存疑
- *   （疑为未除量纲的显示值），且「该战法」指未雨绸缪自身还是被再次发动的原战法尚不明确，
- *   故**未建模**，留待与游戏内实测对照后再补。
+ * 机制 161「无视敌方属性」两趟都吃（用户 2026-10-21 口径：「本次发动与再次发动都具备无视 X% 谋略」）：
+ *   · **本次发动**在 `executeSkillWithTargets` 结算前由 `repeatStrategyRewrite` 注入；
+ *   · **再次发动**在本函数里由 `scaleRecastOutputs` 注入；
+ *   · 数值只来自战法配置 `repeatStrategy`（经 `repeatStrategySpec` 读取），同段不做加算
+ *     （段上已有更大的无视比例时保留原值 = 不重复叠加）。
  */
 function triggerRepeatStrategy(
   ctx: CombatContext,
@@ -9457,87 +9718,286 @@ function triggerRepeatStrategy(
   if (skill.id === 'weiyu_choumou') return;
   const idx = unit.statuses.findIndex((s) => s.type === 'repeat_strategy');
   if (idx < 0) return;
-  const outputs = 'output' in skill ? skill.output : undefined;
-  if (!outputs || outputs.length === 0) return;
-  // 「造成策略伤害的主动战法」判定必须**递归**：光武中兴的伤害藏在 random_pick → combo_tag 里、
-  // 道行险阻藏在 schedule_strike 里 —— 旧实现只看顶层 `kind === 'strategy_damage'`，
-  // 这两类战法永远不会再发动（用户 2026-10-21 报障 ①）。
-  if (!hasStrategyDamageIn(outputs)) return;
-  unit.statuses.splice(idx, 1);
-  const outs = scaleRecastOutputs(outputs, { pct: 30, growth: 0.15 });
+  // 「造成策略伤害的主动战法」判定：递归自有输出树（光武中兴藏在 random_pick → combo_tag、
+  // 道行险阻藏在 schedule_strike）+ **委派子战法**（河内世泽 / 连环计）+ **谋略型 DoT**（乱政）。
+  if (!skillCanDealStrategyDamage(ctx, skill)) return;
+  // 标记**一次性全清**（不是只 splice 命中的那一条）：同源重复施加若在栈里留下多份同型标记，
+  // 每份都会触发一次「再发动」—— 表现为效果叠加。一次发动只吃一次。
+  unit.statuses = unit.statuses.filter((s) => s.type !== 'repeat_strategy');
+  const spec = repeatStrategySpec(ctx);
+  const outputs = 'output' in skill ? skill.output : [];
+  const rewrite: RecastRewrite = {
+    factor: spec.recastRate,
+    ignore: { pct: spec.ignoreStrategyPct, growth: spec.ignoreStrategyGrowthRate },
+  };
   ctx.events.push({
     type: 'skill_cast',
     unitId: unit.general.id,
     skillId: skill.id,
     skillName: skill.name,
-    recastBy: '未雨绸缪',
-    recastRate: 0.5,
+    recastBy: RECAST_SOURCE,
+    recastRate: spec.recastRate,
   });
-  executeSkillOutputs(ctx, unit, skill, enemies, outs, true);
-}
-
-/** 递归判定输出树里是否存在策略伤害段（含 random_pick / conditional / chance_group / combo_tag / morale_branch / schedule_strike） */
-function hasStrategyDamageIn(outs: SkillOutput[]): boolean {
-  return outs.some((o) => {
-    switch (o.kind) {
-      case 'strategy_damage':
-        return true;
-      case 'schedule_strike':
-        return hasStrategyDamageIn(o.output);
-      case 'conditional':
-        return hasStrategyDamageIn(o.outputs);
-      case 'chance_group':
-        return hasStrategyDamageIn(o.outputs);
-      case 'combo_tag':
-        return hasStrategyDamageIn(o.outputs);
-      case 'random_pick':
-        return o.options.some((g) => hasStrategyDamageIn(g));
-      case 'morale_branch':
-        return hasStrategyDamageIn(o.high) || hasStrategyDamageIn(o.low);
-      default:
-        return false;
-    }
-  });
+  // `rewrite` 一并下传：本战法自己 output 为空 / 只有增益时，子战法链会借它重新执行一次（×50%）。
+  executeSkillOutputs(
+    ctx,
+    unit,
+    skill,
+    enemies,
+    scaleRecastOutputs(outputs, rewrite.factor, rewrite.ignore),
+    true,
+    undefined,
+    rewrite
+  );
 }
 
 /**
- * 未雨绸缪「再次发动」修正后的输出：伤害 / 恢复率 × 0.5，并给**每个**策略伤害段挂机制 161
- * （无视目标 30% 谋略属性，受谋略缩放、成长率 0.15/点）。
+ * 输出树判定 / 改写用的**结构递归**（不按 kind 枚举）。
+ *
+ * 为什么不能枚举：战法的输出除了顶层与 `random_pick / conditional / chance_group / combo_tag /
+ * morale_branch / schedule_strike` 这几层，还会挂在**钩子容器**上 —— `heal.onHealCast.outputs`
+ * （光武中兴 6 段策略伤害就在这里：治疗结算时再判定一次落雷/落石/绝水遏敌）。
+ * 只枚举已知 kind 时这些段落既不会被识别、也不会被注入（`scripts/_scan_weiyu_hooks.mts` 探明）。
+ */
+function isOutputNode(v: unknown): v is SkillOutput {
+  return !!v && typeof v === 'object' && typeof (v as { kind?: unknown }).kind === 'string';
+}
+
+/** 跳过非输出字段：`status` 是状态模板、`label` 是子战法名、`kind` 是类型标识 */
+function isOutputTreeKey(key: string): boolean {
+  return key !== 'status' && key !== 'label' && key !== 'kind';
+}
+
+/** 数组逐项改写（没有变化就返回原引用，避免无谓复制） */
+function mapOutputArray(value: unknown[], visit: (v: unknown) => unknown): unknown[] {
+  let changed = false;
+  const arr = value.map((v) => {
+    const out = visit(v);
+    if (out !== v) changed = true;
+    return out;
+  });
+  return changed ? arr : value;
+}
+
+/**
+ * 下钻对象里所有「可能挂着输出」的字段（没有变化返回 undefined）。
+ * ⚠️ **钩子容器也要下钻**：`heal.onHealCast` 这类配置对象本身**没有 `kind`**，
+ * 光武中兴的 6 段策略伤害就藏在 `onHealCast.outputs` 里 —— 只认 `kind` 节点会整块跳过。
+ */
+function mapOutputChildren(
+  obj: Record<string, unknown>,
+  visit: (v: unknown) => unknown
+): Record<string, unknown> | undefined {
+  let out: Record<string, unknown> | undefined;
+  for (const [key, value] of Object.entries(obj)) {
+    if (!isOutputTreeKey(key)) continue;
+    const replaced = visit(value);
+    if (replaced === value) continue;
+    out ??= { ...obj };
+    out[key] = replaced;
+  }
+  return out;
+}
+
+/** 递归判定输出树里是否存在策略伤害段（任意层级，含钩子容器） */
+function hasStrategyDamageIn(outs: SkillOutput[]): boolean {
+  return outs.some((o) => hasStrategyDamageInNode(o));
+}
+
+function hasStrategyDamageInNode(node: SkillOutput): boolean {
+  if (node.kind === 'strategy_damage') return true;
+  // 谋略型 DoT：伤害不在本段结算，靠后续跳伤出（乱政的恐慌/燃烧/妖术），同样是「该战法造成的策略伤害」
+  if (node.kind === 'inflict_status' && hasStrategyDotStatus(node.status)) return true;
+  const src = node as unknown as Record<string, unknown>;
+  for (const [key, value] of Object.entries(src)) {
+    if (!isOutputTreeKey(key)) continue;
+    if (hasStrategyDamageInValue(value)) return true;
+  }
+  return false;
+}
+
+function hasStrategyDamageInValue(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some((v) => hasStrategyDamageInValue(v));
+  if (!value || typeof value !== 'object') return false;
+  const obj = value as Record<string, unknown>;
+  if (obj.kind === 'strategy_damage') return true;
+  for (const [key, child] of Object.entries(obj)) {
+    if (!isOutputTreeKey(key)) continue;
+    if (hasStrategyDamageInValue(child)) return true;
+  }
+  return false;
+}
+
+/**
+ * 谋略型 DoT —— `dealDotDamage` 里 damageType = strategy 的**全部** DoT：
+ * 恐慌 / 燃烧 / 妖术 / 妖术诅咒 / 引燃。
+ * ⚠️ 动摇 `unrest` 按**物理**伤害结算（`dealDotDamage` 唯一的 strategy 例外），不在其列。
+ * 十常侍·乱政的效果池里两类并存，判定必须能区分：抽到恐慌/燃烧/妖术 = 造成策略伤害，
+ * 只挂动摇 + 控制 = 不算。
+ */
+const STRATEGY_DOT_TYPES = ['panic', 'burning', 'sorcery', 'curse', 'ignite'] as const;
+
+/** `inflict_status` 段是否施加谋略型 DoT（`status` 可为**数组** —— 乱政的 10 选 1 池即数组口径） */
+function hasStrategyDotStatus(status: CreateStatus | CreateStatus[]): boolean {
+  const list = Array.isArray(status) ? status : [status];
+  return list.some((s) => (STRATEGY_DOT_TYPES as readonly string[]).includes(s.type));
+}
+
+/**
+ * 「造成策略伤害的主动战法」判定 —— 未雨绸缪触发条件的**唯一真源**，三条来源：
+ *  ① 自有输出树（任意嵌套层 + 钩子容器，见 `hasStrategyDamageIn`）；
+ *  ② **谋略型 DoT**（`STRATEGY_DOT_TYPES`）：乱政把恐慌/燃烧/妖术挂到目标身上，伤害靠后续跳伤出；
+ *  ③ **委派子战法**：`chainSkillPickGroups`（河内世泽「随机发动落雷/迷阵/溃堤/夹攻 + 伐谋/雀伏/火辎/毒泉」）
+ *     与 `chainSkills`（连环计依次发动伐谋/迷阵/落雷）—— 伤害事件归被引用战法，
+ *     但「造成策略伤害的主动战法」仍是本战法（用户 2026-10-22 报障：这两类完全不触发）。
+ * `copyRandomActive`（奇门遁甲）**不计**：复制到的是别人的战法，与本战法自身口径无关。
+ */
+function skillCanDealStrategyDamage(ctx: CombatContext, skill: Skill, seen: Set<string> = new Set()): boolean {
+  if (seen.has(skill.id)) return false;
+  seen.add(skill.id);
+  if (hasStrategyDamageIn('output' in skill ? skill.output : [])) return true;
+  const chain = 'chainSkills' in skill ? skill.chainSkills : undefined;
+  for (const step of chain ?? []) {
+    const ref = resolveSkill(ctx, step.skillId);
+    if (ref && skillCanDealStrategyDamage(ctx, ref, seen)) return true;
+  }
+  const groups = 'chainSkillPickGroups' in skill ? skill.chainSkillPickGroups : undefined;
+  for (const group of groups ?? []) {
+    for (const id of group.skillIds) {
+      const ref = resolveSkill(ctx, id);
+      if (ref && skillCanDealStrategyDamage(ctx, ref, seen)) return true;
+    }
+  }
+  return false;
+}
+
+/** 未雨绸缪在战报里的来源名（`skill_cast.recastBy`） */
+const RECAST_SOURCE = '未雨绸缪';
+
+/**
+ * 未雨绸缪的改写口径（由 `executeSkillOutputs` 下传给子战法链）：
+ * `factor` = 效果倍率（再次发动 = `recastRate`；本次发动 = 1，只注入机制 161、不缩放）。
+ */
+interface RecastRewrite {
+  factor: number;
+  ignore: { pct: number; growth?: number };
+}
+
+/** 未雨绸缪数值的缺省（战法配置 `repeatStrategy` 缺失时才用；正常路径一律走配置） */
+const REPEAT_STRATEGY_DEFAULTS: Required<RepeatStrategySpec> = {
+  recastRate: 0.5,
+  ignoreStrategyPct: 30,
+  ignoreStrategyGrowthRate: 0.15,
+};
+
+/** 读未雨绸缪的数值配置（X = 该战法配置的数值，引擎不硬编码；缺配置时回退缺省） */
+function repeatStrategySpec(ctx: CombatContext): Required<RepeatStrategySpec> {
+  const spec = ctx.skills.get('weiyu_choumou')?.repeatStrategy;
+  return { ...REPEAT_STRATEGY_DEFAULTS, ...(spec ?? {}) };
+}
+
+/**
+ * **本次发动**的改写口径：身上有 `repeat_strategy` 标记 + 本战法是「会造成策略伤害的主动战法」
+ * （且不是未雨绸缪自身）时返回 `{ factor: 1, ignore }` —— 调用方用它给自有输出注入机制 161，
+ * 并把同一份口径下传给子战法链（河内世泽/连环计的子战法伤害同样「无视目标 X% 谋略属性」）。
+ * 返回 `undefined` = 不改写：其它战法 / 无标记时零影响。
+ */
+function repeatStrategyRewrite(ctx: CombatContext, unit: UnitState, skill: Skill): RecastRewrite | undefined {
+  if (skill.type !== 'active') return undefined;
+  if (skill.id === 'weiyu_choumou') return undefined;
+  if (!unit.statuses.some((s) => s.type === 'repeat_strategy')) return undefined;
+  if (!skillCanDealStrategyDamage(ctx, skill)) return undefined;
+  const spec = repeatStrategySpec(ctx);
+  return { factor: 1, ignore: { pct: spec.ignoreStrategyPct, growth: spec.ignoreStrategyGrowthRate } };
+}
+
+/**
+ * 给输出树里的**每个**策略伤害段挂机制 161「无视目标 X% 谋略属性」（只注入、不缩放）。
+ * 结构递归（同 `hasStrategyDamageIn`）：**钩子容器一起改** —— 官方「该战法造成的伤害」包含
+ * 该战法（含其 `onHealCast` 等附加结算）打出的伤害，只改顶层/枚举层会让钩子里那几段按原值结算。
+ * 同段**只保留一份**比例：段上已有 ≥ 本次的 `ignoreStrategyPct`（原战法自带更强的无视）时原样保留，
+ * 不做加算 —— 这就是「效果不重复叠加」的落点。
+ */
+function injectIgnoreStrategy(outs: SkillOutput[], pct: number, growth?: number): SkillOutput[] {
+  return outs.map((o) => injectIgnoreStrategyNode(o, pct, growth));
+}
+
+function injectIgnoreStrategyNode(node: SkillOutput, pct: number, growth?: number): SkillOutput {
+  if (node.kind === 'strategy_damage') {
+    if (node.ignoreStrategyPct != null && node.ignoreStrategyPct >= pct) return node;
+    return { ...node, ignoreStrategyPct: pct, ignoreStrategyGrowthRate: growth } as SkillOutput;
+  }
+  const src = node as unknown as Record<string, unknown>;
+  const next = mapOutputChildren(src, (v) => injectIgnoreStrategyValue(v, pct, growth));
+  return (next ?? node) as unknown as SkillOutput;
+}
+
+function injectIgnoreStrategyValue(value: unknown, pct: number, growth?: number): unknown {
+  if (Array.isArray(value)) return mapOutputArray(value, (v) => injectIgnoreStrategyValue(v, pct, growth));
+  if (!value || typeof value !== 'object') return value;
+  const obj = value as Record<string, unknown>;
+  if (isOutputNode(obj)) return injectIgnoreStrategyNode(obj, pct, growth);
+  // 非输出节点 = 钩子容器（heal.onHealCast / X.onHit …）：本身不是输出，但里面挂着输出树
+  return mapOutputChildren(obj, (v) => injectIgnoreStrategyValue(v, pct, growth)) ?? value;
+}
+
+/**
+ * 未雨绸缪「**再次发动**」修正后的输出：伤害 / 恢复率 × `factor`（配置 `recastRate`，50%），
+ * 并给每个策略伤害段挂机制 161（无视目标 X% 谋略属性，受谋略缩放）。
  * 递归下钻的理由同 `hasStrategyDamageIn`：只改顶层会让嵌套段按原值结算。
  */
-function scaleRecastOutputs(outs: SkillOutput[], ignore: { pct: number; growth: number }): SkillOutput[] {
-  return outs.map((o) => {
-    let next = o;
-    if ('rate' in next && typeof next.rate === 'number') {
-      next = { ...next, rate: next.rate * 0.5 } as SkillOutput;
-    }
-    const st = 'status' in next ? (next.status as { rate?: number } | undefined) : undefined;
-    if (st && typeof st.rate === 'number') {
-      next = { ...next, status: { ...st, rate: st.rate * 0.5 } } as SkillOutput;
-    }
-    switch (next.kind) {
-      case 'strategy_damage':
-        return { ...next, ignoreStrategyPct: ignore.pct, ignoreStrategyGrowthRate: ignore.growth } as SkillOutput;
-      case 'schedule_strike':
-        return { ...next, output: scaleRecastOutputs(next.output, ignore) } as SkillOutput;
-      case 'conditional':
-        return { ...next, outputs: scaleRecastOutputs(next.outputs, ignore) } as SkillOutput;
-      case 'chance_group':
-        return { ...next, outputs: scaleRecastOutputs(next.outputs, ignore) } as SkillOutput;
-      case 'combo_tag':
-        return { ...next, outputs: scaleRecastOutputs(next.outputs, ignore) } as SkillOutput;
-      case 'random_pick':
-        return { ...next, options: next.options.map((g) => scaleRecastOutputs(g, ignore)) } as SkillOutput;
-      case 'morale_branch':
-        return {
-          ...next,
-          high: scaleRecastOutputs(next.high, ignore),
-          low: scaleRecastOutputs(next.low, ignore),
-        } as SkillOutput;
-      default:
-        return next;
-    }
-  });
+function scaleRecastOutputs(
+  outs: SkillOutput[],
+  factor: number,
+  ignore: { pct: number; growth?: number }
+): SkillOutput[] {
+  return outs.map((o) => scaleRecastNode(o, factor, ignore));
+}
+
+/** 与 `injectIgnoreStrategyNode` 同构：结构递归（含 `onHealCast` 等钩子容器），逐段 ×`factor` 并注入无视 */
+function scaleRecastNode(
+  node: SkillOutput,
+  factor: number,
+  ignore: { pct: number; growth?: number }
+): SkillOutput {
+  let next = node;
+  if ('rate' in next && typeof next.rate === 'number') {
+    next = { ...next, rate: next.rate * factor } as SkillOutput;
+  }
+  // DoT / 状态类段：真实数值在 `status.rate`；**`status` 为数组时逐项缩**（乱政的 10 选 1 池即数组口径，
+  // 旧实现按单个对象读 `status.rate` → 数组整段跳过，再次发动 50% 缩不到 DoT 上）
+  if ('status' in next && next.status != null) {
+    next = {
+      ...next,
+      status: scaleStatusRates(next.status as CreateStatus | CreateStatus[], factor),
+    } as SkillOutput;
+  }
+  if (next.kind === 'strategy_damage') return injectIgnoreStrategyNode(next, ignore.pct, ignore.growth);
+  const src = next as unknown as Record<string, unknown>;
+  const out = mapOutputChildren(src, (v) => scaleRecastValue(v, factor, ignore));
+  return (out ?? next) as unknown as SkillOutput;
+}
+
+function scaleRecastValue(value: unknown, factor: number, ignore: { pct: number; growth?: number }): unknown {
+  if (Array.isArray(value)) return mapOutputArray(value, (v) => scaleRecastValue(v, factor, ignore));
+  if (!value || typeof value !== 'object') return value;
+  const obj = value as Record<string, unknown>;
+  if (isOutputNode(obj)) return scaleRecastNode(obj, factor, ignore);
+  return mapOutputChildren(obj, (v) => scaleRecastValue(v, factor, ignore)) ?? value;
+}
+
+/**
+ * 状态模板（或状态数组）里的 `rate` × factor：
+ * 无 `rate` 的状态 / factor 为 1 时**原样返回**（不复制 —— 本次发动只注入机制 161 的那一趟不该改动状态对象）。
+ */
+function scaleStatusRates(st: CreateStatus | CreateStatus[], factor: number): CreateStatus | CreateStatus[] {
+  if (factor === 1) return st;
+  const one = (s: CreateStatus): CreateStatus => {
+    const rate = (s as unknown as { rate?: number }).rate;
+    if (typeof rate !== 'number') return s;
+    return { ...s, rate: rate * factor } as unknown as CreateStatus;
+  };
+  return Array.isArray(st) ? st.map(one) : one(st);
 }
 
 export function triggerActiveSkill(
@@ -10270,7 +10730,23 @@ function executeSkillWithTargets(
     skillId: skill.id,
     skillName: skill.name,
   });
-  executeSkillOutputs(ctx, unit, skill, targets);
+  // 未雨绸缪（机制 161）：标记在身且本战法「造成策略伤害」时，**本次发动**的策略伤害同样无视目标 X% 谋略
+  //（用户 2026-10-21 口径：本次与再次发动都吃；再次发动那一趟由 triggerRepeatStrategy 自行注入）。
+  // 同一份改写口径也下传给**子战法链**：河内世泽 / 连环计的伤害全在被委派的子战法里，
+  // 只改自有输出等于没改（factor 1 = 不缩放，只注入机制 161）。
+  const recastRewrite = repeatStrategyRewrite(ctx, unit, skill);
+  executeSkillOutputs(
+    ctx,
+    unit,
+    skill,
+    targets,
+    recastRewrite
+      ? scaleRecastOutputs('output' in skill ? skill.output : [], recastRewrite.factor, recastRewrite.ignore)
+      : undefined,
+    false,
+    undefined,
+    recastRewrite
+  );
   // 每次成功发动后计数 +1（及锋而试 / 自擅江表**段级**递增；结算中读到的即此前发动次数）
   if (skill.damageRatePerCast != null || hasRatePerCastSegment(skill.output)) {
     ctx.skillCastCounters ??= new Map();

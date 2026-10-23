@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest';
 import { actUnit, type CombatContext } from '../src/engine/action';
 import type { General, Position, Skill, Status, UnitState } from '../src/engine/types';
 import { Rng } from '../src/engine/rng';
+import { HUGE_MODIFIER_RATE } from '../src/engine/formulas';
 
 function makeUnit(id: string, position: Position, side: 'my' | 'enemy', extra: Partial<General> = {}): UnitState {
   const g: General = {
@@ -43,7 +44,7 @@ function strategySkill(): Skill {
 /** 辕门射戟 debuff：目标「进行攻击的伤害」降到引擎下限（10%），attackOnly 让它不吃策略伤害 */
 function yuanmenDebuff(): Status {
   return {
-    type: 'damage_boost', direction: 'caused', rate: -99.99, remaining: 1, appliedRound: 0,
+    type: 'damage_boost', direction: 'caused', rate: -HUGE_MODIFIER_RATE, remaining: 1, appliedRound: 0,
     sourceSkillType: 'active', sourceSkillId: 'yuanmen_sheji', attackOnly: true,
   };
 }

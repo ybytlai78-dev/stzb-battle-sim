@@ -22,6 +22,7 @@ import {
 import { SKILL_REGISTRY } from '../src/data/skills';
 import { initHeroDB, HERO_REGISTRY, withSkills, level40 } from '../src/data/heroes';
 import { Rng } from '../src/engine/rng';
+import { HUGE_MODIFIER_RATE } from '../src/engine/formulas';
 import type { BattleEvent, General, Position, Skill, UnitState } from '../src/engine/types';
 
 beforeAll(async () => {
@@ -253,7 +254,7 @@ describe('西乡武功 · 「下一次受到的伤害大幅降低」', () => {
     skillType: 'active',
   });
 
-  it('准备阶段给锁定友军挂攻击 / 策略两条 90% 次数型减伤（各 1 次）', () => {
+  it('准备阶段给锁定友军挂攻击 / 策略两条「大幅降低」次数型减伤（各 1 次）', () => {
     const ctx = makeCtx([zhu(), dummy('ally-mid', '中军'), dummy('ally-back', '大营')]);
     lockPrep(ctx, 'zhu');
 
@@ -261,7 +262,8 @@ describe('西乡武功 · 「下一次受到的伤害大幅降低」', () => {
       const reds = t.statuses.filter((s) => s.type === 'damage_reduce');
       expect(reds, `${t.general.id} 应有两条减伤轨`).toHaveLength(2);
       for (const r of reds) {
-        expect(r.rate).toBeCloseTo(0.9);
+        // 「大幅度降低」= 极大值哨兵 1000%（用户 2026-10-21 口径），不是 90%
+        expect(r.rate).toBeCloseTo(HUGE_MODIFIER_RATE);
         expect('charges' in r ? r.charges : undefined).toBe(1);
       }
       const kinds = reds.map((r) => ('damageType' in r ? r.damageType : undefined)).sort();
@@ -269,21 +271,21 @@ describe('西乡武功 · 「下一次受到的伤害大幅降低」', () => {
     }
   });
 
-  it('走真实结算路径：下一次策略伤害降 90%，用完即移除，攻击轨仍留着', () => {
+  it('走真实结算路径：下一次策略伤害大幅降低，用完即移除，攻击轨仍留着', () => {
     const ctx = makeCtx([zhu(), dummy('ally-mid', '中军')]);
     lockPrep(ctx, 'zhu');
 
     const ally = ctx.myTeam.find((u) => u.general.id === 'ally-mid')!;
     const foe = ctx.enemyTeam[0];
 
-    // 两条轨各自匹配自家的伤害类型，各降 90%
-    expect(sumReduce(ctx, ally, hitOf('strategy'), foe)).toBeCloseTo(0.9);
-    expect(sumReduce(ctx, ally, hitOf('physical'), foe)).toBeCloseTo(0.9);
+    // 两条轨各自匹配自家的伤害类型，各取「大幅」哨兵
+    expect(sumReduce(ctx, ally, hitOf('strategy'), foe)).toBeCloseTo(HUGE_MODIFIER_RATE);
+    expect(sumReduce(ctx, ally, hitOf('physical'), foe)).toBeCloseTo(HUGE_MODIFIER_RATE);
 
     // 策略伤害打进来 → 策略轨消耗（扣兵后 −1 到 0 移除），攻击轨不受影响
     applyDamage(ctx, ally, 1000, foe, 'strategy', 'skill', undefined, { skillType: 'active' });
     expect(sumReduce(ctx, ally, hitOf('strategy'), foe)).toBeCloseTo(0);
-    expect(sumReduce(ctx, ally, hitOf('physical'), foe)).toBeCloseTo(0.9);
+    expect(sumReduce(ctx, ally, hitOf('physical'), foe)).toBeCloseTo(HUGE_MODIFIER_RATE);
     expect(ally.statuses.filter((s) => s.type === 'damage_reduce')).toHaveLength(1);
 
     // 该单位无其他减伤来源：非匹配类型（攻击轨道已被用掉后）不再减免

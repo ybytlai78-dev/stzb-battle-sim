@@ -4703,6 +4703,7 @@
             "taken": [],
             "reduce": []
           },
+          "damageRate": 201,
           "afterTroops": 8993
         },
         {
@@ -4723,6 +4724,7 @@
             "taken": [],
             "reduce": []
           },
+          "damageRate": 201,
           "afterTroops": 9411
         },
         {
@@ -5017,6 +5019,7 @@
             "taken": [],
             "reduce": []
           },
+          "damageRate": 201,
           "afterTroops": 3293
         },
         {
@@ -5037,6 +5040,7 @@
             "taken": [],
             "reduce": []
           },
+          "damageRate": 201,
           "afterTroops": 8829
         },
         {
@@ -5843,6 +5847,7 @@
             "taken": [],
             "reduce": []
           },
+          "damageRate": 201,
           "afterTroops": 7114
         },
         {
@@ -5863,6 +5868,7 @@
             "taken": [],
             "reduce": []
           },
+          "damageRate": 201,
           "afterTroops": 8291
         },
         {
@@ -11328,6 +11334,7 @@
               }
             ]
           },
+          "damageRate": 192,
           "afterTroops": 6574
         },
         {
@@ -11356,6 +11363,7 @@
               }
             ]
           },
+          "damageRate": 192,
           "afterTroops": 7679
         },
         {
@@ -11384,6 +11392,7 @@
               }
             ]
           },
+          "damageRate": 192,
           "afterTroops": 9183
         },
         {
@@ -13643,6 +13652,7 @@
               }
             ]
           },
+          "damageRate": 192,
           "afterTroops": 8752
         },
         {
@@ -13671,6 +13681,7 @@
               }
             ]
           },
+          "damageRate": 192,
           "afterTroops": 7036
         },
         {
@@ -13699,6 +13710,7 @@
               }
             ]
           },
+          "damageRate": 192,
           "afterTroops": 7996
         },
         {
@@ -14727,6 +14739,7 @@
               }
             ]
           },
+          "damageRate": 192,
           "afterTroops": 4777
         },
         {
@@ -14755,6 +14768,7 @@
               }
             ]
           },
+          "damageRate": 192,
           "afterTroops": 6236
         },
         {
@@ -14783,6 +14797,7 @@
               }
             ]
           },
+          "damageRate": 192,
           "afterTroops": 6845
         },
         {
@@ -16324,6 +16339,7 @@
               }
             ]
           },
+          "damageRate": 192,
           "afterTroops": 2828
         },
         {
@@ -16352,6 +16368,7 @@
               }
             ]
           },
+          "damageRate": 192,
           "afterTroops": 2583
         },
         {
@@ -16380,6 +16397,7 @@
               }
             ]
           },
+          "damageRate": 192,
           "afterTroops": 6057
         },
         {
@@ -17249,6 +17267,7 @@
               }
             ]
           },
+          "damageRate": 406,
           "afterTroops": 7953
         },
         {
@@ -17277,6 +17296,7 @@
               }
             ]
           },
+          "damageRate": 406,
           "afterTroops": 8206
         },
         {
@@ -17305,6 +17325,7 @@
               }
             ]
           },
+          "damageRate": 406,
           "afterTroops": 9230
         },
         {
@@ -18500,6 +18521,7 @@
               }
             ]
           },
+          "damageRate": 406,
           "afterTroops": 4566
         },
         {
@@ -18528,6 +18550,7 @@
               }
             ]
           },
+          "damageRate": 406,
           "afterTroops": 5242
         },
         {
@@ -18556,6 +18579,7 @@
               }
             ]
           },
+          "damageRate": 406,
           "afterTroops": 6999
         },
         {

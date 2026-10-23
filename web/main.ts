@@ -200,6 +200,17 @@ function saveHotAsMine(hot: TeamPreset, name: string): PresetActionResult {
 }
 
 /**
+ * 「上传图片」识图建预设（用户 2026-10-21）：把确认卡定下来的三槽写进「我的预设」。
+ * 与 `saveCurrentAsPreset` 同一条落库路径（同边同名 = 覆盖、编号不变），只是槽位来源是截图而不是配将区。
+ */
+function saveScannedPreset(input: { name: string; side: TeamSide; slots: SlotState[] }): PresetActionResult {
+  if (heroCount(input.slots) === 0) return { error: '一个武将都没认出来，没法存预设' };
+  const bad = presetTeamError(input.slots);
+  if (bad) return { error: `识别结果不能直接存：${bad}` };
+  return saveSlotsAsPreset(input.side, input.name, input.slots);
+}
+
+/**
  * 预设上场：整边替换（含空槽原样）。
  * 同一武将可以同时出现在红蓝两队（对方可能有相同武将，用户 2026-09-26 口径）——**不再清空对面上阵的同名槽位**。
  */
@@ -248,6 +259,7 @@ function presetPanelDeps(opts: { dummyMode?: boolean } = {}): PresetPanelDeps {
     getHotPresets: () => hotPresets,
     saveCurrent: saveCurrentAsPreset,
     saveAsMine: saveHotAsMine,
+    saveScanned: saveScannedPreset,
     apply: applyPresetToSide,
     rename: renamePresetById,
     remove: removePresetById,

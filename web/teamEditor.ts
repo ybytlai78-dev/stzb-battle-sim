@@ -1679,6 +1679,8 @@ export function openHeroPicker(team: 'red' | 'blue', slotIndex: number, h: Edito
 // ─── 战法背包（可携带战法一览，武将主战法除外）───
 
 export function openSkillBag(): void {
+  // 百家战法（bj_*）已在 skills.ts 里并入 SKILL_REGISTRY，这里天然全量；
+  // 「百家」分类由 draw() 里的 BAIJIA_SKILL_META 分组负责。
   const bagSkills = Object.entries(SKILL_REGISTRY)
     .filter(([id]) => !isMainSkill(id) && isLearnableSkillListed(id));
   const mask = document.createElement('div');

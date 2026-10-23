@@ -37,3 +37,9 @@ verify-shots/
 
 # 设计稿截图 / Playwright 临时脚本（临时产物，不入库）
 /.shot/
+
+# 本地浏览器配置 / 旧验证产物 / 编辑器配置（会话临时，不入库）
+/.chrome-profile/
+/verify/
+/chrome.log
+/.cursor/

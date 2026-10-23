@@ -309,7 +309,8 @@ export const SKILL_TYPE_ORDER: Record<string, number> = {
   pursuit: 4,
 };
 
-/** 按武将槽位把战法 id 挂入对应类型槽位（主战法已在 recordToGeneral 中挂第一位，装配战法追加在后） */
+/** 按武将槽位把战法 id 挂入对应类型槽位（主战法已在 recordToGeneral 中挂第一位，装配战法追加在后）。
+ *  百家战法（bj_*）在 `skills.ts` 里已由 `...BAIJIA_SKILLS` 并入 SKILL_REGISTRY，与普通战法同池，无需另查表。 */
 export function attachSkills(g: General, skillIds: string[]): General {
   const out = { ...g, activeSkillIds: [...g.activeSkillIds], passiveSkillIds: [...g.passiveSkillIds], commandSkillIds: [...g.commandSkillIds], pursuitSkillIds: [...g.pursuitSkillIds] };
   for (const id of skillIds) {

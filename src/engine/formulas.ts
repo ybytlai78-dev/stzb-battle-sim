@@ -103,6 +103,20 @@ export function atkBaseRandomCoeff(rng: Rng): number {
 const MIN_DAMAGE_FACTOR = 0.1; // 增减伤总和 < -90% 时最低保留 10%
 
 /**
+ * 「大幅度降低 / 大幅减伤」类效果的哨兵值（= 1000%）。
+ *
+ * 官方文案写「大幅（度）降低」时**不给数字**，包内槽位（effect 522 受攻击伤害降低 / 524 受策略攻击伤害降低
+ * 等）统一编码为 `constant_param = 9000`；按仓库既有「百分比修正 = const / 100」换算恰好是 90.0% ——
+ * 但 90% 会被敌方的「造成伤害提高」抵掉（`1 + 0.5 − 0.9 = 0.6`，只剩 60% 伤害），
+ * 与「大幅」的语义不符（用户 2026-10-21 口径：大幅减伤是一个**很大的值**，如 1000%）。
+ *
+ * 故凡写「大幅度」的一律取本哨兵：配合 {@link MIN_DAMAGE_FACTOR} ⇒ 无论对方增伤多高都压到 10% 伤害下限。
+ * 两个方向通用：减伤 = `+HUGE_MODIFIER_RATE`（damage_reduce / damage_boost·taken），
+ * 使对方造成的伤害大幅降低 = `-HUGE_MODIFIER_RATE`（damage_boost·caused）。
+ */
+export const HUGE_MODIFIER_RATE = 10;
+
+/**
  * 增减伤因子 = max(10%, 1 + Σ增伤 − Σ减伤)（单一总和模型，攻击/谋略统一）。
  * 造成侧/受到侧增伤（causedMult/takenMult，各为 1+Σrate）与受击方减伤（reduce = Σdamage_reduce rate）
  * 全部数值相加：mult = 1 + Σ增伤 − Σ减伤。例：增 60% + 减 60% → 1.0（增伤与减伤相互抵消）。

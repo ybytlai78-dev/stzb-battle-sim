@@ -1,0 +1,67 @@
+[heroes] 库 `stzb战斗系统` 不可用（ECONNREFUSED），回退到 web/data/heroes.json（DSH 工作树未建独立库时属正常；见 AGENTS.md「工作树与提交」）
+=== 40 级真面板（9000 兵，无加点）===
+卫瓘(weiguan) speed=82 strategy=146 attack=151 defense=144 主战法=chijie_zhenxi registry槽位=[chijie_zhenxi]
+吕蒙(lvmeng) speed=88 strategy=157 attack=151 defense=179 主战法=baiyi_dujiang registry槽位=[baiyi_dujiang]
+黄月英(h20) speed=47 strategy=168 attack=54 defense=114 主战法=jiangxin_bujie registry槽位=[jiangxin_bujie]
+灵帝(h101) speed=102 strategy=146 attack=143 defense=163 主战法=diling_huiguang registry槽位=[diling_huiguang]
+
+[关键] 准备阶段释放顺序 = turnOrder 速度降序（combat.ts:170-173）→ 卫瓘必须比核心快，才能把自己注册进 ctx.stackBuffs 后核心才叠层
+
+--- A 吕蒙 + 白衣（卫瓘先手） ---
+  速度：卫瓘 82 vs 吕蒙 88（释放顺序：卫瓘→核心）
+  核心 谋略层=3 层 / 合计 +96；攻击层=0 层 / +0
+  核心 生效谋略=253
+  敌方 taken rate = [0.56, 0, 0.56]；我方 caused rate 合计=1.12
+  主战法 lockedCommands：存在=true storedDamage 条数=3（空数组=该战法的 delayedOutput 无伤害段）
+  预存伤害明细：e1:895(兵力104+基础70+主721) | e2:895(兵力104+基础70+主721) | e3:895(兵力104+基础70+主721)
+--- A2 吕蒙 不带白衣（卫瓘先手，对照组） ---
+  速度：卫瓘 82 vs 吕蒙 88（释放顺序：卫瓘→核心）
+  核心 谋略层=0 层 / 合计 +0；攻击层=0 层 / +0
+  核心 生效谋略=157
+  敌方 taken rate = [0.41, 0.41, 0]；我方 caused rate 合计=0.82
+  主战法 lockedCommands：存在=false storedDamage 条数=0（空数组=该战法的 delayedOutput 无伤害段）
+--- B 黄月英 + 匠心不竭（卫瓘先手） ---
+  速度：卫瓘 82 vs 黄月英 47（释放顺序：卫瓘→核心）
+  核心 谋略层=0 层 / 合计 +0；攻击层=0 层 / +0
+  核心 生效谋略=168
+  敌方 taken rate = [0.43, 0.43, 0]；我方 caused rate 合计=0.86
+  主战法 lockedCommands：存在=false storedDamage 条数=0（空数组=该战法的 delayedOutput 无伤害段）
+--- C 灵帝 + 帝临回光（卫瓘先手） ---
+  速度：卫瓘 82 vs 灵帝 102（释放顺序：卫瓘→核心）
+  核心 谋略层=0 层 / 合计 +0；攻击层=3 层 / +99
+  核心 生效谋略=146
+  敌方 taken rate = [0.39, 0.39, 0]；我方 caused rate 合计=0.78
+  主战法 lockedCommands：存在=true storedDamage 条数=0（空数组=该战法的 delayedOutput 无伤害段）
+--- A3 吕蒙 + 白衣（无卫瓘 = 预存伤害裸对照） ---
+  速度：卫瓘 82 vs 吕蒙 88（释放顺序：卫瓘→核心）
+  核心 谋略层=0 层 / 合计 +0；攻击层=0 层 / +0
+  核心 生效谋略=157
+  敌方 taken rate = [0.41, 0, 0.41]；我方 caused rate 合计=0.82
+  主战法 lockedCommands：存在=true storedDamage 条数=3（空数组=该战法的 delayedOutput 无伤害段）
+  预存伤害明细：e1:610(兵力104+基础43+主463) | e2:610(兵力104+基础43+主463) | e3:610(兵力104+基础43+主463)
+--- E 吕蒙 + 白衣（卫瓘后手 = 反序） ---
+  速度：卫瓘 82 vs 吕蒙 88（释放顺序：核心→卫瓘）
+  核心 谋略层=0 层 / 合计 +0；攻击层=0 层 / +0
+  核心 生效谋略=157
+  敌方 taken rate = [0.41, 0, 0.41]；我方 caused rate 合计=0.82
+  主战法 lockedCommands：存在=true storedDamage 条数=3（空数组=该战法的 delayedOutput 无伤害段）
+  预存伤害明细：e1:610(兵力104+基础43+主463) | e2:610(兵力104+基础43+主463) | e3:610(兵力104+基础43+主463)
+--- F 灵帝 + 帝临回光（卫瓘后手 = 反序） ---
+  速度：卫瓘 82 vs 灵帝 102（释放顺序：核心→卫瓘）
+  核心 谋略层=0 层 / 合计 +0；攻击层=0 层 / +0
+  核心 生效谋略=146
+  敌方 taken rate = [0.39, 0.39, 0]；我方 caused rate 合计=0.78
+  主战法 lockedCommands：存在=true storedDamage 条数=0（空数组=该战法的 delayedOutput 无伤害段）
+[DBG-BOOST-READ] h20 []
+[DBG-READ] h20 []
+[DBG-BOOST-READ] h20 []
+[DBG-READ] h20 []
+[DBG-BOOST-READ] h20 []
+[DBG-READ] h20 []
+--- G 月英：prep 后 → 第 1 回合 delayedOutputs（挂恐慌）---
+  prep 后谋略层=0；挂上 DoT 状态数=0；调用后谋略层=0
+  ⇒ 挂 DoT 本身不叠层（叠层在 DoT 跳伤时 dealDotDamage）
+--- H 数据口径 ---
+  帝临回光 delayedOutput.output kinds = [inflict_status, inflict_status, inflict_status, inflict_status] → 无 strategy_damage ⇒ delayedType 缺省 physical
+  匠心不竭 delayedOutputs(复数)=true，kinds=[inflict_status, inflict_status, inflict_status] ⇒ 不进 delayedOutput 分支，prep 不叠层
+  白衣渡江 delayedOutput.output kinds = [strategy_damage] ⇒ 有 strategy_damage ⇒ strategy 层
