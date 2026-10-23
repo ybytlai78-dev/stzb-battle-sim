@@ -664,6 +664,22 @@ function fluxStepAt(steps: Array<{ low: number; high: number }>, round: number):
   return steps[idx];
 }
 
+/**
+ * 策略伤害浮动（敛微穷极）：取携带者当前回合档位，抽出本次系数。
+ * 直接策略伤害与谋略类 DoT（挂上时冻结）共用同一口径 —— 用户 2026-10-24 报障
+ * 「刘徽会增幅策略伤害的伤害率，但黄盖的燃烧伤害率一直没变」，旧实现只给 strategy_damage 段用。
+ */
+function strategyFluxHit(
+  ctx: CombatContext,
+  unit: UnitState
+): { low: number; high: number; factor: number } | undefined {
+  const flux = getStatus(unit, 'strategy_flux');
+  if (!flux || flux.type !== 'strategy_flux') return undefined;
+  const step = fluxStepAt(flux.steps, ctx.currentRound);
+  const factor = step.low + (step.high - step.low) * ctx.rng.next();
+  return { low: step.low, high: step.high, factor: round1(factor) };
+}
+
 /** 指挥战法锁定目标：准备阶段锁定，后续回合/延迟结算用 */
 export interface LockedCommand {
   skill: CommandSkill;
@@ -3687,10 +3703,21 @@ function inflictStatusCore(
   if (DOT_TYPES.includes(type)) {
     const caster = casterId ? castUnit(ctx, casterId) : undefined;
     let stored: DotStoredDamage | undefined;
+    let appliedCreate: CreateStatus = create;
     if (caster) {
       const dotCreate = create as Extract<CreateStatus, { type: 'sorcery' | 'burning' | 'panic' | 'unrest' | 'curse' | 'ignite' }>;
+      // 谋略类 DoT 同样吃「策略伤害浮动」（用户 2026-10-24 报障：燃烧伤害率不随刘徽变化）；
+      // 动摇是物理 DoT，不参与。DoT 在挂上时冻结，所以系数取施加当回合的档位。
+      let dotRate = dotCreate.rate;
+      if (dotCreate.type !== 'unrest') {
+        const fluxHit = strategyFluxHit(ctx, caster);
+        if (fluxHit) {
+          dotRate = roundRate(dotRate * (fluxHit.factor / 100));
+          appliedCreate = { ...dotCreate, rate: dotRate } as CreateStatus;
+        }
+      }
       stored = computeDotTickDamage(ctx, caster, target, {
-        rate: dotCreate.rate,
+        rate: dotRate,
         ...(dotCreate.type === 'unrest'
           ? { sourceAttack: dotCreate.sourceAttack ?? effectiveStat(caster, 'attack') }
           : { sourceStrategy: dotCreate.sourceStrategy ?? effectiveStat(caster, 'strategy') }),
@@ -3698,7 +3725,7 @@ function inflictStatusCore(
         dotType: dotCreate.type,
       });
     }
-    pushStatus(ctx, target, create, sourceSkillType, sourceSkillId, casterId, stored);
+    pushStatus(ctx, target, appliedCreate, sourceSkillType, sourceSkillId, casterId, stored);
     // 第 N 回合起，敌军陷入持续伤害时立即额外引发一次该伤害（衔命建功）
     const pushed = target.statuses.find(
       (s): s is Extract<Status, { type: 'sorcery' | 'burning' | 'panic' | 'unrest' | 'curse' | 'ignite' }> =>
@@ -9056,14 +9083,8 @@ function executeSkillOutputs(
               rate = roundRate(scaledValue(rate, out.growthRate, effStrategy));
             }
             // 策略伤害浮动（敛微穷极）：率 × 本回合档位区间内均匀随机系数（6 档表，见 skill 数据注释）
-            const flux = getStatus(stratSrc, 'strategy_flux');
-            let fluxHit: { low: number; high: number; factor: number } | undefined;
-            if (flux && flux.type === 'strategy_flux') {
-              const step = fluxStepAt(flux.steps, ctx.currentRound);
-              const factor = step.low + (step.high - step.low) * ctx.rng.next();
-              rate = rate * (factor / 100);
-              fluxHit = { low: step.low, high: step.high, factor: round1(factor) };
-            }
+            const fluxHit = strategyFluxHit(ctx, stratSrc);
+            if (fluxHit) rate = rate * (fluxHit.factor / 100);
             const hit: DamageHitContext = {
               damageSource: 'skill',
               damageType: 'strategy',

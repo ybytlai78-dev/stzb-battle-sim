@@ -984,6 +984,9 @@ base 76/88/72/78 · grow 1.48/2.32/1.38/1.16）** 全量纠正（id 仍为 `h42`
     物理段有内置 0.30~0.39 随机系数，给了会误导）。详情战报 `web/battleView.ts` 伤害行渲染 `.dmg-rate`「（伤害率 512.4%，浮动 101.0%~128.8% → 118.3%）」，
     文本战报 `report.ts` 同步 `rateSuffix`。状态行不再写死 `80%~150%（收敛至 115%）`，改为**受谋略后的首档区间 + 末档终值**，
     且第 2 回合起 `tickRoundStartStatuses` 每回合发一条 `status_changed`「策略伤害浮动区间收敛至 …」；
+    ⚠️ **DoT 也吃浮动（用户 2026-10-24 紧急修复，不进公告）**：旧口径「浮动只作用于 `strategy_damage` 段」已作废——
+    谋略类 DoT（恐慌/燃烧/妖术/诅咒/引燃）在 `inflictStatusCore` 挂上时同样乘本回合系数并冻结，状态行与冻结伤害同步变化；
+    动摇（`unrest`）是物理 DoT，不吃策略浮动。回归 `tests/strategy_flux.test.ts`（燃烧 360% → 459%、动摇不变）。
   - `CommandSkill.onDotReceived`（敌军每回合首次吃 DoT → 判定 + 策略攻击）+ `extraTickOnDotApply`（陷入 DoT 立即额外引爆一次）——`3283c9b`；
   - 新状态 `damage_share`（伤害分摊：同侧友军受击时携带者按 rate 承担；`share_damage` 事件 + `resolvingDamageShare` 防递归；
     `damageKind`/`charges` 过滤，言出必克 / 雅虑适时共用）+ `triggerOnActSegmentsForPrepCommands`
