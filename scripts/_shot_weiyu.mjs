@@ -12,6 +12,8 @@ import path from 'node:path';
 
 const URL_APP = process.argv[2] ?? 'http://127.0.0.1:5173/';
 const OUT = process.argv[3] ?? path.resolve('docs/逆向对拍/baseline/weiyu-report.png');
+/** 可选：第 4 参数 = `_dump_weiyu_report.mts` 导出的**真实引擎**战报（不给则用下面的合成事件） */
+const REPORT_JSON = process.argv[4] ?? '';
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
 const PORT = 9334;
 
@@ -106,7 +108,7 @@ const report = {
   stats: [],
 };
 
-const record = {
+const synthetic = {
   id: 'demo_weiyu',
   ts: Date.now(),
   label: '未雨绸缪 · 再次发动演示',
@@ -117,6 +119,12 @@ const record = {
   enemyTeam: ['敌甲', '', ''],
   report,
 };
+
+const record =
+  REPORT_JSON && fs.existsSync(REPORT_JSON)
+    ? JSON.parse(fs.readFileSync(REPORT_JSON, 'utf8')).record
+    : synthetic;
+console.log('战报来源:', REPORT_JSON && fs.existsSync(REPORT_JSON) ? 'real-engine ' + REPORT_JSON : 'synthetic');
 
 const chrome = spawn(
   CHROME,
@@ -265,18 +273,27 @@ console.log(
 );
 await sleep(900);
 
-// 战报按回合分页：点 rail 上的「1」号回合页签
+// 战报按回合分页：逐个数 rail 上的回合页签，停在**第一个出现「无视谋略」标注**的回合
+//（真实引擎战报里未雨绸缪的生效回合不固定，合成事件则固定在第 1 回合）
 console.log(
   '切回合:',
   JSON.stringify(
     (
       await send('Runtime.evaluate', {
-        expression: `(() => {
-          const tab = [...document.querySelectorAll('.dv-rail .rtab')].find((t) => (t.textContent || '').trim() === '1');
-          if (!tab) return 'no-tab';
-          tab.click();
-          return 'ok';
+        expression: `(async () => {
+          const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+          const tabs = [...document.querySelectorAll('.dv-rail .rtab')];
+          if (!tabs.length) return 'no-tab';
+          for (const t of tabs) {
+            t.click();
+            await sleep(150);
+            if ((document.body.textContent || '').includes('无视目标')) {
+              return 'ok @ 第 ' + (t.textContent || '').trim() + ' 回合';
+            }
+          }
+          return 'ok @ 无 ignore 回合（tabs=' + tabs.length + '）';
         })()`,
+        awaitPromise: true,
         returnByValue: true,
       })
     ).result?.value
@@ -289,8 +306,9 @@ const verify = await send('Runtime.evaluate', {
     const text = document.body.textContent || '';
     return {
       recast: text.includes('未雨绸缪：再次发动，效果 50%'),
-      ignore: text.includes('未雨绸缪：无视目标 32% 谋略属性'),
+      ignore: /未雨绸缪：无视目标 [0-9]+% 谋略属性/.test(text),
       ignoreNodes: document.querySelectorAll('.dmg-ignore').length,
+      ignoreTexts: [...document.querySelectorAll('.dmg-ignore')].map((e) => (e.textContent || '').trim()),
       snippet: text.replace(/\\s+/g, ' ').match(/发动【落雷】[^。]{0,60}/g),
     };
   })()`,
