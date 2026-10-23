@@ -15,17 +15,19 @@
  *      第 1 回合 80.0~150.0、第 2 87.0~142.6、第 3 94.0~135.2、第 4 101.0~128.8、第 5 108.0~121.4、第 6 起 115.0~115.0；
  *  - 施加阶段按**施法者**生效谋略逐档 `scaledValue(值, 该档成长率, 谋略)` 缩放并冻结（与 damage_boost 受谋略同口径）；
  *  - 每击 `伤害率 = 基础率 × 档位区间内均匀随机系数`，事件写 `damageRate`（%）与 `rateFlux{low,high,factor}`；
- *  - DoT 挂上时冻结、**不参与浮动**（官方「造成策略伤害时」= 直接伤害段）。
+ *  - 谋略类 DoT（恐慌 / 燃烧 / 妖术 / 诅咒 / 引燃）挂上时同样乘系数并冻结；动摇是物理 DoT，不参与
+ *    （用户 2026-10-24 报障「刘徽会增幅策略伤害的伤害率，但黄盖的燃烧伤害率一直没有变化」）。
  */
 import { describe, it, expect, beforeAll } from 'vitest';
 import { Rng } from '../src/engine/rng';
-import { triggerActiveSkill, triggerCommandSkills, type CombatContext } from '../src/engine/action';
+import { triggerActiveSkill, triggerCommandSkills, inflictStatus, type CombatContext } from '../src/engine/action';
 import { runBattle } from '../src/engine/combat';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import { initHeroDB, HERO_REGISTRY, level40, withSkills } from '../src/data/heroes';
 import type {
   BattleEvent,
   CommandSkill,
+  CreateStatus,
   General,
   Position,
   Skill,
@@ -239,6 +241,50 @@ describe('敛微穷极 · 每击伤害率 = 基础率 × 档位内随机系数',
       expect(h.rateFlux).toBeUndefined();
       expect(h.damageRate).toBe(TEST_STRATEGY_RATE);
     }
+  });
+});
+
+describe('敛微穷极 · 谋略类 DoT 也吃浮动（用户 2026-10-24 报障）', () => {
+  /** 第 6 回合区间收敛到 127.5%（谋略 180），系数确定，便于对账 */
+  function applyDot(flux: boolean, type: 'burning' | 'unrest', rate: number) {
+    // 两个对照都保留刘徽的 40% 策略增伤，只差「有没有浮动态」——否则增伤会被误算进浮动倍数
+    const { ctx, caster, foes } = scene({ flux: true, strategy: 180 });
+    if (!flux) caster.statuses = caster.statuses.filter((s) => s.type !== 'strategy_flux');
+    ctx.currentRound = 6;
+    inflictStatus(
+      ctx,
+      foes[0],
+      { type, rate, duration: 2 } as CreateStatus,
+      'active',
+      'test_dot',
+      caster.general.id
+    );
+    const status = foes[0].statuses.find((s) => s.type === type) as
+      | { rate: number; stored?: { damage: number; breakdown: { main: number } } }
+      | undefined;
+    const line = ctx.events.find(
+      (e): e is Extract<BattleEvent, { type: 'status_inflicted' }> =>
+        e.type === 'status_inflicted' && e.statusType === type
+    );
+    return { status, line };
+  }
+
+  it('燃烧 360% → 459%（×127.5%），状态行同步，冻结伤害的主伤害项同比放大', () => {
+    const fluxed = applyDot(true, 'burning', 360);
+    expect(fluxed.status?.rate).toBe(459);
+    expect(fluxed.line?.detail).toContain('燃烧 459%');
+
+    const base = applyDot(false, 'burning', 360);
+    expect(base.status?.rate).toBe(360);
+    expect(base.line?.detail).toContain('燃烧 360%');
+
+    const ratio = fluxed.status!.stored!.breakdown.main / base.status!.stored!.breakdown.main;
+    expect(Math.abs(ratio - 1.275)).toBeLessThan(0.01);
+  });
+
+  it('动摇是物理 DoT，不吃策略浮动', () => {
+    const { status } = applyDot(true, 'unrest', 100);
+    expect(status?.rate).toBe(100);
   });
 });
 
