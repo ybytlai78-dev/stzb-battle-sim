@@ -16,6 +16,7 @@ import { getHeroById, avatarSrc, rednessStars, skillGrade } from './heroes';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import { TREASURES_BY_ID, AFFIXES } from '../src/data/treasures';
 import { SECONDARY_TROOPS } from '../src/engine/secondaryTroop';
+import { openPresetUploadDialog, type PresetScanSaveInput } from './presetUpload';
 import type { SlotState } from './teamEditor';
 
 /** 面板动作结果：`error` 有值 = 失败（面板内提示），`presetId` = 新建/覆盖后的预设（自动选中） */
@@ -45,6 +46,11 @@ export interface PresetPanelDeps {
   useAsDummy?: (preset: TeamPreset) => void;
   rename: (id: string, name: string) => PresetActionResult;
   remove: (id: string) => void;
+  /**
+   * 「上传图片」识图建预设（用户 2026-10-21）：把截图识别出的三槽直接写进「我的预设」。
+   * 不提供 = 不显示该入口（老调用方 / 单测向后兼容）。
+   */
+  saveScanned?: (input: PresetScanSaveInput) => PresetActionResult;
   /** 木桩模式（从伤害测试实验室打开）：「设为木桩队伍」当主按钮，上场按钮退成米黄 beige */
   dummyMode?: boolean;
   /** 关闭面板（可选） */
@@ -221,10 +227,15 @@ export function openPresetPanel(deps: PresetPanelDeps): PresetPanelHandle {
   mask.className = 'modal-mask page-mask';
   const modal = document.createElement('div');
   modal.className = 'modal page-modal preset-modal';
+  // 「上传图片」入口在标题行右端（× 左边，用户 2026-10-21 在截图上标注的位置）
+  const uploadBtn = deps.saveScanned
+    ? '<button class="btn beige preset-upload" type="button" title="上传游戏「阵容详情」截图，自动识别三将 / 红度 / 战法，确认后存进「我的预设」">上传图片</button>'
+    : '';
   modal.innerHTML = `
     <div class="m-head">
       <h3>热门预设</h3>
       <input class="preset-search" type="text" placeholder="搜索预设名 / 武将名 / #编号…" />
+      ${uploadBtn}
       <span class="m-close">×</span>
     </div>
     <div class="m-body preset-body">
@@ -428,6 +439,20 @@ export function openPresetPanel(deps: PresetPanelDeps): PresetPanelHandle {
     armedDelete = false;
     renderList();
     renderDetail();
+  });
+  // 上传图片 → 识图建预设：落库成功后刷新列表并选中新条目（用户 2026-10-21）
+  modal.querySelector('.preset-upload')?.addEventListener('click', () => {
+    if (!deps.saveScanned) return;
+    openPresetUploadDialog({
+      save: deps.saveScanned,
+      defaultSide: 'red',
+      onSaved: (presetId) => {
+        armedDelete = false;
+        if (presetId) selectedId = presetId;
+        renderList();
+        renderDetail();
+      },
+    });
   });
   modal.querySelectorAll<HTMLElement>('.preset-save').forEach((btn) => {
     btn.addEventListener('click', () => {

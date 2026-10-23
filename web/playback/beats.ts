@@ -219,6 +219,9 @@ export function statusLabel(st: StatusType, detail?: string): StatusLabel {
 
   // 百分比类：把 detail 里的 0.05 变成 5%
   if (st === 'damage_reduce' || st === 'heal_boost') {
+    // 「大幅度降低」类（引擎 detail = 「受到…伤害大幅降低 持续 N 回合」，账面是 1000% 哨兵）：
+    // 不能把后面的「N 回合」当百分比，直接给一句中文
+    if (raw.includes('大幅')) return { t: st === 'damage_reduce' ? '大幅减伤' : '受到恢复大幅提升', c: color };
     const m = raw.match(/(-?\d+(?:\.\d+)?)/);
     if (m) return { t: `${st === 'damage_reduce' ? '减伤' : '受到恢复'} ${pct(m[1])}`, c: color };
   }

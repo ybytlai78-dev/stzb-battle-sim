@@ -1,5 +1,5 @@
 {
-  "version": "2026-10-16.3",
+  "version": "2026-10-16.10",
   "entries": [
     {
       "id": "hot-caochun-zhangliao-wenyang",
@@ -348,6 +348,1105 @@
             "affix": {
               "name": "选锋",
               "value": 30
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "hot-hanxunyu-jushou-simayi",
+      "name": "汉荀彧·沮授·司马懿",
+      "side": "red",
+      "slots": [
+        {
+          "heroId": "h794",
+          "extraSkillIds": [
+            "bugong",
+            "xitun_duoqi"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 40,
+            "speed": 0
+          },
+          "redness": 0,
+          "level": 40,
+          "secondaryTroop": "重步兵",
+          "secondaryTraits": [
+            "守备",
+            "文韬"
+          ],
+          "treasure": null
+        },
+        {
+          "heroId": "h771",
+          "extraSkillIds": [
+            "xiansheng_duoren",
+            "kuidi"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 40,
+            "speed": 0
+          },
+          "redness": 0,
+          "level": 40,
+          "secondaryTroop": "重步兵",
+          "secondaryTraits": [
+            "守备",
+            "勇毅"
+          ],
+          "treasure": null
+        },
+        {
+          "heroId": "h807",
+          "extraSkillIds": [
+            "jiuzhan_shumou",
+            "fanji_zhence"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 40,
+            "speed": 0
+          },
+          "redness": 0,
+          "level": 40,
+          "secondaryTroop": "白衣死士",
+          "secondaryTraits": [
+            "守备",
+            "勇毅"
+          ],
+          "treasure": null
+        }
+      ]
+    },
+    {
+      "id": "hot-ganning-simayan-sunquan",
+      "name": "甘宁·司马炎·孙权",
+      "side": "red",
+      "slots": [
+        {
+          "heroId": "h34",
+          "extraSkillIds": [
+            "jifeng_ershi",
+            "sishuiguan"
+          ],
+          "freePoints": {
+            "attack": 90,
+            "defense": 0,
+            "strategy": 0,
+            "speed": 0
+          },
+          "redness": 5,
+          "level": 40,
+          "secondaryTroop": "长枪兵",
+          "secondaryTraits": [
+            "列阵"
+          ],
+          "treasure": {
+            "treasureId": 1003,
+            "affix": {
+              "name": "至策",
+              "value": 16
+            }
+          }
+        },
+        {
+          "heroId": "h703",
+          "extraSkillIds": [
+            "zhanbi_duanjin",
+            "wuxin_lianzhan"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 40,
+            "speed": 0
+          },
+          "redness": 0,
+          "level": 40,
+          "secondaryTroop": "禁卫",
+          "secondaryTraits": [
+            "守备",
+            "勇毅"
+          ],
+          "treasure": {
+            "treasureId": 1027,
+            "affix": {
+              "name": "艮止",
+              "value": 21
+            }
+          }
+        },
+        {
+          "heroId": "sunquan",
+          "extraSkillIds": [
+            "hunshui_moyu",
+            "leishi_yingji"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 40,
+            "strategy": 0,
+            "speed": 0
+          },
+          "redness": 0,
+          "level": 40,
+          "secondaryTroop": "死士",
+          "secondaryTraits": [
+            "地利",
+            "迂回"
+          ],
+          "treasure": {
+            "treasureId": 1072,
+            "affix": {
+              "name": "机敏",
+              "value": 6
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "hot-lejin-simayan-dianwei",
+      "name": "乐进·司马炎·典韦",
+      "side": "blue",
+      "slots": [
+        {
+          "heroId": "h703",
+          "extraSkillIds": [
+            "sanjun_zhizhong",
+            "bairen"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 40,
+            "speed": 0
+          },
+          "redness": 0,
+          "level": 40,
+          "treasure": null
+        },
+        {
+          "heroId": "h685",
+          "extraSkillIds": [
+            "jishi",
+            "baizhan_jingbing"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 0,
+            "speed": 40
+          },
+          "redness": 0,
+          "level": 40,
+          "secondaryTroop": "禁卫",
+          "secondaryTraits": [
+            "利刃"
+          ],
+          "treasure": null
+        },
+        {
+          "heroId": "h769",
+          "extraSkillIds": [
+            "kongcheng",
+            "shanbing_bugua"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 40,
+            "strategy": 0,
+            "speed": 0
+          },
+          "redness": 0,
+          "level": 40,
+          "secondaryTroop": "长枪兵",
+          "secondaryTraits": [
+            "守备"
+          ],
+          "treasure": null
+        }
+      ]
+    },
+    {
+      "id": "hot-liuxiu-simayi-simayan",
+      "name": "刘秀·司马懿·司马炎",
+      "side": "red",
+      "slots": [
+        {
+          "heroId": "h841",
+          "extraSkillIds": [
+            "weiyu_choumou",
+            "lingwu_kongxuan"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 90,
+            "speed": 0
+          },
+          "redness": 5,
+          "level": 40,
+          "secondaryTroop": "轻骑兵",
+          "secondaryTraits": [
+            "疾行",
+            "扰后"
+          ],
+          "treasure": {
+            "treasureId": 1051,
+            "affix": {
+              "name": "筹算",
+              "value": 15
+            }
+          }
+        },
+        {
+          "heroId": "h807",
+          "extraSkillIds": [
+            "wuxin_lianzhan",
+            "jiuzhan_shumou"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 90,
+            "speed": 0
+          },
+          "redness": 5,
+          "level": 40,
+          "secondaryTroop": "白衣死士",
+          "secondaryTraits": [
+            "守备",
+            "勇毅"
+          ],
+          "treasure": {
+            "treasureId": 1054,
+            "affix": {
+              "name": "艮止",
+              "value": 30
+            }
+          }
+        },
+        {
+          "heroId": "h703",
+          "extraSkillIds": [
+            "leishi_yingji",
+            "qiqin_qizong"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 90,
+            "speed": 0
+          },
+          "redness": 5,
+          "level": 40,
+          "secondaryTroop": "禁卫",
+          "secondaryTraits": [
+            "守备",
+            "勇毅"
+          ],
+          "treasure": {
+            "treasureId": 1072,
+            "affix": {
+              "name": "稳固",
+              "value": 20
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "hot-pangtong-simayi-liubei",
+      "name": "庞统·司马懿·刘备",
+      "side": "blue",
+      "slots": [
+        {
+          "heroId": "h477",
+          "extraSkillIds": [
+            "huoshaolianying",
+            "sanshu_qimou"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 90,
+            "speed": 0
+          },
+          "redness": 5,
+          "level": 40,
+          "secondaryTroop": "弩兵",
+          "secondaryTraits": [
+            "地利",
+            "齐射"
+          ],
+          "treasure": {
+            "treasureId": 1051,
+            "affix": {
+              "name": "筹算",
+              "value": 15
+            }
+          }
+        },
+        {
+          "heroId": "h807",
+          "extraSkillIds": [
+            "wuxin_lianzhan"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 90,
+            "speed": 0
+          },
+          "redness": 5,
+          "level": 40,
+          "secondaryTroop": "白衣死士",
+          "secondaryTraits": [
+            "守备",
+            "勇毅"
+          ],
+          "treasure": {
+            "treasureId": 1057,
+            "affix": {
+              "name": "天资",
+              "value": 15
+            }
+          }
+        },
+        {
+          "heroId": "h16",
+          "extraSkillIds": [
+            "leishi_yingji",
+            "lianzhong_dingqi"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 90,
+            "speed": 0
+          },
+          "redness": 5,
+          "level": 40,
+          "secondaryTroop": "禁卫",
+          "secondaryTraits": [
+            "勇毅",
+            "守备"
+          ],
+          "treasure": {
+            "treasureId": 1048,
+            "affix": {
+              "name": "仁心",
+              "value": 15
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "hot-caozhang-zhangchunhua-sunquan",
+      "name": "曹彰·张春华·孙权",
+      "side": "blue",
+      "slots": [
+        {
+          "heroId": "h683",
+          "extraSkillIds": [
+            "lingwu_kongxuan",
+            "yiji_dangqian"
+          ],
+          "freePoints": {
+            "attack": 90,
+            "defense": 0,
+            "strategy": 0,
+            "speed": 0
+          },
+          "redness": 5,
+          "level": 40,
+          "secondaryTroop": "轻骑兵",
+          "secondaryTraits": [
+            "扰后",
+            "挫锐"
+          ],
+          "treasure": {
+            "treasureId": 1003,
+            "affix": {
+              "name": "英勇",
+              "value": 15
+            }
+          }
+        },
+        {
+          "heroId": "h29",
+          "extraSkillIds": [
+            "shiji",
+            "dingzujiangdong"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 110,
+            "speed": 0
+          },
+          "redness": 5,
+          "level": 40,
+          "secondaryTroop": "长弓兵",
+          "secondaryTraits": [
+            "地利",
+            "迂回"
+          ],
+          "treasure": {
+            "treasureId": 1027,
+            "affix": {
+              "name": "机敏",
+              "value": 9
+            }
+          }
+        },
+        {
+          "heroId": "sunquan",
+          "extraSkillIds": [
+            "zhanbi_duanjin",
+            "jixian_yuanjin"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 0,
+            "speed": 90
+          },
+          "redness": 5,
+          "level": 40,
+          "secondaryTroop": "长弓兵",
+          "secondaryTraits": [
+            "地利",
+            "散射"
+          ],
+          "treasure": {
+            "treasureId": 1072,
+            "affix": {
+              "name": "机敏",
+              "value": 9
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "hot-caozhang-molu-caocao",
+      "name": "曹彰·木鹿大王·曹操",
+      "side": "blue",
+      "slots": [
+        {
+          "heroId": "h683",
+          "extraSkillIds": [
+            "lingwu_kongxuan",
+            "yiji_dangqian"
+          ],
+          "freePoints": {
+            "attack": 90,
+            "defense": 0,
+            "strategy": 0,
+            "speed": 0
+          },
+          "redness": 5,
+          "level": 40,
+          "secondaryTroop": "轻骑兵",
+          "secondaryTraits": [
+            "疾行",
+            "扰后"
+          ],
+          "treasure": {
+            "treasureId": 1003,
+            "affix": {
+              "name": "英勇",
+              "value": 15
+            }
+          }
+        },
+        {
+          "heroId": "h452",
+          "extraSkillIds": [
+            "gongqi_bubei",
+            "fengshi"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 0,
+            "speed": 90
+          },
+          "redness": 5,
+          "level": 40,
+          "secondaryTroop": "象兵",
+          "secondaryTraits": [
+            "出奇",
+            "难测"
+          ],
+          "treasure": {
+            "treasureId": 1027,
+            "affix": {
+              "name": "灵动",
+              "value": 30
+            }
+          }
+        },
+        {
+          "heroId": "h23",
+          "extraSkillIds": [
+            "fanji_zhence",
+            "danqijiuzhu"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 90,
+            "speed": 0
+          },
+          "redness": 5,
+          "level": 40,
+          "secondaryTroop": "重骑兵",
+          "secondaryTraits": [
+            "出奇",
+            "难测"
+          ],
+          "treasure": {
+            "treasureId": 1072,
+            "affix": {
+              "name": "稳固",
+              "value": 20
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "hot-haozhao-masu-caocao",
+      "name": "郝昭·马谡·曹操",
+      "side": "blue",
+      "slots": [
+        {
+          "heroId": "h475",
+          "extraSkillIds": [
+            "sanjun_qichu",
+            "jianzu_budai"
+          ],
+          "freePoints": {
+            "attack": 90,
+            "defense": 0,
+            "strategy": 0,
+            "speed": 0
+          },
+          "redness": 5,
+          "level": 40,
+          "secondaryTroop": "禁卫",
+          "secondaryTraits": [
+            "利刃",
+            "守备"
+          ],
+          "treasure": {
+            "treasureId": 1108,
+            "affix": {
+              "name": "不屈",
+              "value": 9
+            }
+          }
+        },
+        {
+          "heroId": "h799",
+          "extraSkillIds": [
+            "chue_wujin",
+            "henge"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 90,
+            "speed": 0
+          },
+          "redness": 5,
+          "level": 40,
+          "secondaryTroop": "铁骑兵",
+          "secondaryTraits": [
+            "难测",
+            "出奇"
+          ],
+          "treasure": {
+            "treasureId": 1027,
+            "affix": {
+              "name": "艮止",
+              "value": 30
+            }
+          }
+        },
+        {
+          "heroId": "h23",
+          "extraSkillIds": [
+            "cuoshou_buji",
+            "bairen"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 90,
+            "speed": 0
+          },
+          "redness": 5,
+          "level": 40,
+          "secondaryTroop": "重骑兵",
+          "secondaryTraits": [
+            "出奇",
+            "难测"
+          ],
+          "treasure": {
+            "treasureId": 1072,
+            "affix": {
+              "name": "稳固",
+              "value": 20
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "hot-xpluxun-xpchengyu-xpzhouyu",
+      "name": "XP陆逊·XP程昱·XP周瑜",
+      "side": "red",
+      "slots": [
+        {
+          "heroId": "h791",
+          "extraSkillIds": [
+            "shenmou_yuanlv",
+            "huoshaolianying"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 40,
+            "speed": 0
+          },
+          "redness": 0,
+          "level": 40,
+          "secondaryTroop": "弩兵",
+          "secondaryTraits": [
+            "地利",
+            "迂回"
+          ],
+          "treasure": {
+            "treasureId": 1051,
+            "affix": {
+              "name": "天资",
+              "value": 10
+            }
+          }
+        },
+        {
+          "heroId": "h787",
+          "extraSkillIds": [
+            "jiuzhan_shumou",
+            "dingzujiangdong"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 25,
+            "speed": 15
+          },
+          "redness": 0,
+          "level": 40,
+          "secondaryTroop": "死士",
+          "secondaryTraits": [
+            "地利",
+            "迂回"
+          ],
+          "treasure": {
+            "treasureId": 1027,
+            "affix": {
+              "name": "仁心",
+              "value": 10
+            }
+          }
+        },
+        {
+          "heroId": "h784",
+          "extraSkillIds": [
+            "zhanbi_duanjin",
+            "panzhen_shanshou"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 40,
+            "speed": 0
+          },
+          "redness": 0,
+          "level": 40,
+          "secondaryTroop": "长枪兵",
+          "secondaryTraits": [
+            "守备",
+            "勇毅"
+          ],
+          "treasure": {
+            "treasureId": 1027,
+            "affix": {
+              "name": "坚忍",
+              "value": 16
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "hot-sptaishici-weiguan-lvmeng",
+      "name": "SP太史慈·卫瓘·吕蒙",
+      "side": "blue",
+      "slots": [
+        {
+          "heroId": "h102003",
+          "extraSkillIds": [
+            "xianqu_tuji",
+            "xiaoxiong"
+          ],
+          "freePoints": {
+            "attack": 90,
+            "defense": 0,
+            "strategy": 0,
+            "speed": 0
+          },
+          "redness": 5,
+          "level": 40,
+          "secondaryTroop": "弩兵",
+          "secondaryTraits": [
+            "齐射",
+            "散射"
+          ],
+          "treasure": {
+            "treasureId": 1102,
+            "affix": {
+              "name": "骁锐",
+              "value": 15
+            }
+          }
+        },
+        {
+          "heroId": "weiguan",
+          "extraSkillIds": [
+            "jixian_yuanjin",
+            "fanji_zhence"
+          ],
+          "freePoints": {
+            "attack": 80,
+            "defense": 0,
+            "strategy": 0,
+            "speed": 10
+          },
+          "redness": 5,
+          "level": 40,
+          "secondaryTroop": "重步兵",
+          "secondaryTraits": [
+            "利刃",
+            "勇毅"
+          ],
+          "treasure": {
+            "treasureId": 1057,
+            "affix": {
+              "name": "骁锐",
+              "value": 15
+            }
+          }
+        },
+        {
+          "heroId": "lvmeng",
+          "extraSkillIds": [
+            "dashang_sanjun",
+            "shenbing_tianjiang"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 90,
+            "speed": 0
+          },
+          "redness": 5,
+          "level": 40,
+          "secondaryTroop": "死士",
+          "secondaryTraits": [
+            "地利",
+            "迂回"
+          ],
+          "treasure": {
+            "treasureId": 1045,
+            "affix": {
+              "name": "天资",
+              "value": 15
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "hot-zhangfei-zhugeliang-sunquan",
+      "name": "张飞·诸葛亮·孙权",
+      "side": "red",
+      "slots": [
+        {
+          "heroId": "h22",
+          "extraSkillIds": [
+            "shengbing_qiuzhan",
+            "jishi"
+          ],
+          "freePoints": {
+            "attack": 40,
+            "defense": 0,
+            "strategy": 0,
+            "speed": 0
+          },
+          "redness": 0,
+          "level": 40,
+          "secondaryTroop": "轻骑兵",
+          "secondaryTraits": [
+            "扰后",
+            "挫锐"
+          ],
+          "treasure": {
+            "treasureId": 1087,
+            "affix": {
+              "name": "熟虑",
+              "value": 14
+            }
+          }
+        },
+        {
+          "heroId": "h496",
+          "extraSkillIds": [
+            "shiji",
+            "dingzujiangdong"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 3,
+            "speed": 37
+          },
+          "redness": 0,
+          "level": 40,
+          "secondaryTroop": "长弓兵",
+          "secondaryTraits": [
+            "地利",
+            "迂回"
+          ],
+          "treasure": {
+            "treasureId": 1057,
+            "affix": {
+              "name": "天资",
+              "value": 10
+            }
+          }
+        },
+        {
+          "heroId": "sunquan",
+          "extraSkillIds": [
+            "jixian_yuanjin",
+            "zhanbi_duanjin"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 15,
+            "strategy": 0,
+            "speed": 25
+          },
+          "redness": 0,
+          "level": 40,
+          "secondaryTroop": "长弓兵",
+          "secondaryTraits": [
+            "地利",
+            "迂回"
+          ],
+          "treasure": {
+            "treasureId": 1072,
+            "affix": {
+              "name": "机敏",
+              "value": 6
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "hot-liubei-xpmaliang-xiahoudun",
+      "name": "刘备·XP马良·夏侯惇",
+      "side": "red",
+      "slots": [
+        {
+          "heroId": "h16",
+          "extraSkillIds": [
+            "lianzhong_dingqi",
+            "taoyuanjieyi"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 40,
+            "speed": 0
+          },
+          "redness": 0,
+          "level": 40,
+          "secondaryTroop": "重步兵",
+          "secondaryTraits": [
+            "守备",
+            "勇毅"
+          ],
+          "treasure": {
+            "treasureId": 1048,
+            "affix": {
+              "name": "仁心",
+              "value": 10
+            }
+          }
+        },
+        {
+          "heroId": "h792",
+          "extraSkillIds": [
+            "wuxin_lianzhan",
+            "yaoshu"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 40,
+            "speed": 0
+          },
+          "redness": 0,
+          "level": 40,
+          "secondaryTroop": "重步兵",
+          "secondaryTraits": [
+            "守备",
+            "勇毅"
+          ],
+          "treasure": {
+            "treasureId": 1048,
+            "affix": {
+              "name": "艮止",
+              "value": 22
+            }
+          }
+        },
+        {
+          "heroId": "h449",
+          "extraSkillIds": [
+            "yifudangguan",
+            "baizhan_wuqie"
+          ],
+          "freePoints": {
+            "attack": 40,
+            "defense": 0,
+            "strategy": 0,
+            "speed": 0
+          },
+          "redness": 0,
+          "level": 40,
+          "secondaryTroop": "重骑兵",
+          "secondaryTraits": [
+            "难测",
+            "出奇"
+          ],
+          "treasure": {
+            "treasureId": 1108,
+            "affix": {
+              "name": "戒备",
+              "value": 22
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": "hot-caozhang-molu-caocao-gongqi",
+      "name": "曹彰·木鹿大王·曹操（攻其不备）",
+      "side": "red",
+      "slots": [
+        {
+          "heroId": "h683",
+          "level": 40,
+          "redness": 5,
+          "extraSkillIds": [
+            "yiji_dangqian",
+            "lingwu_kongxuan"
+          ],
+          "freePoints": {
+            "attack": 90,
+            "defense": 0,
+            "strategy": 0,
+            "speed": 0
+          },
+          "secondaryTroop": "轻骑兵",
+          "secondaryTraits": [
+            "疾行",
+            "扰后"
+          ],
+          "treasure": {
+            "treasureId": 1003,
+            "affix": {
+              "name": "英勇",
+              "value": 15
+            }
+          }
+        },
+        {
+          "heroId": "h452",
+          "level": 40,
+          "redness": 5,
+          "extraSkillIds": [
+            "hunshui_moyu",
+            "bj_550008"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 0,
+            "speed": 90
+          },
+          "secondaryTroop": "象兵",
+          "secondaryTraits": [
+            "疾行",
+            "出奇"
+          ],
+          "treasure": {
+            "treasureId": 1012,
+            "affix": {
+              "name": "坚毅",
+              "value": 6
+            }
+          }
+        },
+        {
+          "heroId": "h23",
+          "level": 40,
+          "redness": 5,
+          "extraSkillIds": [
+            "fanji_zhence",
+            "gongqi_bubei"
+          ],
+          "freePoints": {
+            "attack": 0,
+            "defense": 0,
+            "strategy": 90,
+            "speed": 0
+          },
+          "secondaryTroop": "重骑兵",
+          "secondaryTraits": [
+            "难测",
+            "出奇"
+          ],
+          "treasure": {
+            "treasureId": 1072,
+            "affix": {
+              "name": "稳固",
+              "value": 20
             }
           }
         }

@@ -4,6 +4,7 @@
  */
 import type { BattleEvent, BattleReport, DamageModifierSource, DamageModifiers, General } from '../src/engine/types';
 import { formatBonusText } from '../src/engine/troopBonus';
+import { HUGE_MODIFIER_RATE } from '../src/engine/formulas';
 import { SECONDARY_TROOPS } from '../src/engine/secondaryTroop';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import { avatarSrc, heroIdOf } from './heroes';
@@ -660,16 +661,20 @@ function renderEvents(
         break;
       }
       case 'skill_target': {
-        add('dim', `　目标：${ev.targetIds.map(nm).join('、')}`);
+        // 链式战法（连环计 / 河内世泽）标出这一步是哪个子战法在选目标
+        const sub = ev.subSkill ? `〈${ev.subSkill}〉` : '';
+        add('dim', `　${sub}目标：${ev.targetIds.map(nm).join('、')}`);
         break;
       }
       case 'skill_cast': {
         // 再次发动（未雨绸缪）：同一战法在同一行动里第二次出现，不标注会被读成「重复发动了两次」
+        // 链式战法：显示「父战法·子战法」（河内世泽·火辎），否则子战法在战报里看不出是谁放出来的
+        const name = ev.subSkill ? `${ev.skillName}·${ev.subSkill}` : ev.skillName;
         add(
           'status',
           ev.recastBy
-            ? `【${nm(ev.unitId)}】发动【${ev.skillName}】！（${ev.recastBy}：再次发动，效果 ${Math.round((ev.recastRate ?? 1) * 100)}%）`
-            : `【${nm(ev.unitId)}】发动【${ev.skillName}】！`
+            ? `【${nm(ev.unitId)}】发动【${name}】！（${ev.recastBy}：再次发动，效果 ${Math.round((ev.recastRate ?? 1) * 100)}%）`
+            : `【${nm(ev.unitId)}】发动【${name}】！`
         );
         break;
       }
@@ -683,8 +688,17 @@ function renderEvents(
         appendDamageModifierLine(group, ev.modifiers, popupApi);
         const cls = ev.damageType === 'physical' ? 'dmg-phy' : 'dmg-stg';
         const typeName = ev.damageType === 'physical' ? '攻击' : '谋略';
+        // 伤害率（谋略伤害才有：策略伤害无系统随机，伤害率与伤害一一对应，可核对浮动是否生效）
+        const rateText = ev.damageRate === undefined
+          ? ''
+          : `<span class="dmg-rate">（伤害率 ${ev.damageRate.toFixed(1)}%` +
+            (ev.rateFlux
+              ? `，浮动 ${ev.rateFlux.low.toFixed(1)}%~${ev.rateFlux.high.toFixed(1)}% → ${ev.rateFlux.factor.toFixed(1)}%`
+              : '') +
+            '）</span>';
         add(cls,
           `${ev.subSkill ? `<span class="dmg-sub">〈${ev.subSkill}〉</span>` : ''}对「${nm(ev.targetId)}」造成<b> ${typeName}伤害 ${ev.damage.toLocaleString()} </b>${afterSuffix(ev.afterTroops)}` +
+            rateText +
             (ev.ignoreStrategy
               ? `<span class="dmg-ignore">（${ev.ignoreStrategy.skillName}：无视目标 ${ev.ignoreStrategy.pct}% 谋略属性）</span>`
               : ''));
@@ -927,8 +941,15 @@ function buildModPopup(mods: DamageModifiers, nm: (id: string) => string): HTMLE
   pop.appendChild(title);
   pop.appendChild(buildModSection(`伤害提升合计：${boostTotalPct(mods)}%`, boostSources(mods), '提升', nm));
   // 降低合计按账面全量显示：减伤本身可以过 100%（用户 2026-10-21 口径），
-  // 90% 下限只作用在下面的「净合计」上（buffMult 的 MIN_DAMAGE_FACTOR）
-  pop.appendChild(buildModSection(`伤害降低合计：${reduceTotalPct(mods)}%`, [...negativeBoostSources(mods), ...mods.reduce], '降低', nm));
+  // 90% 下限只作用在下面的「净合计」上（buffMult 的 MIN_DAMAGE_FACTOR）；
+  // 「大幅度」类哨兵（HUGE_MODIFIER_RATE）账面是 1000%+，统一显示成「大幅降低」
+  const redPct = reduceTotalPct(mods);
+  pop.appendChild(buildModSection(
+    redPct >= HUGE_MODIFIER_RATE * 100 ? '伤害降低合计：大幅降低' : `伤害降低合计：${redPct}%`,
+    [...negativeBoostSources(mods), ...mods.reduce],
+    '降低',
+    nm
+  ));
   pop.appendChild(buildNetLine(mods));
   return pop;
 }
@@ -942,9 +963,11 @@ function buildNetLine(mods: DamageModifiers): HTMLElement {
   const verb = raw > 0 ? '提升' : '降低';
   const tail = raw > 0
     ? `提升 ${raw}%`
-    : raw < -90
-      ? `降低 ${Math.abs(raw)}%（已触伤害下限保护，实际按降低 ${Math.abs(eff)}% 结算）`
-      : `降低 ${Math.abs(raw)}%`;
+    : raw <= -HUGE_MODIFIER_RATE * 100
+      ? `大幅降低（已触伤害下限保护，实际按降低 ${Math.abs(eff)}% 结算）`
+      : raw < -90
+        ? `降低 ${Math.abs(raw)}%（已触伤害下限保护，实际按降低 ${Math.abs(eff)}% 结算）`
+        : `降低 ${Math.abs(raw)}%`;
   div.textContent = `净合计：${tail}`;
   void verb;
   return div;
@@ -967,9 +990,10 @@ function buildModSection(
     item.className = 'dmg-pop-item';
     const pct = Math.round(Math.abs(s.rate) * 100);
     const kind = s.attackOnly ? '攻击伤害' : '伤害';
-    // 极端负增伤（辕门射戟 -9999% 这类哨兵值）：显示「攻击伤害大幅降低」不显示数值；
-    // 阈值放到 1000% —— 普通减伤可以过 100%（用户 2026-10-21 口径），得照实显示数字
-    item.textContent = pct >= 1000 && s.rate < 0
+    // 「大幅度」类哨兵值（HUGE_MODIFIER_RATE = 1000%，辕门射戟 / 磐阵善守 / 迟智难酬 / 息交2）：
+    // 一律显示「伤害大幅降低」不显示数值——文案本来就是「大幅度降低」，账面 1000% 只是哨兵；
+    // 普通减伤可以过 100%（用户 2026-10-21 口径），照实显示数字
+    item.textContent = pct >= HUGE_MODIFIER_RATE * 100
       ? `【${nm(s.unitId)}】【${s.skillName}】${kind}大幅降低`
       : `【${nm(s.unitId)}】【${s.skillName}】${kind}${label} ${pct}%`;
     sec.appendChild(item);
@@ -989,6 +1013,8 @@ function statusName(t: string): string {
     split: '分兵', jump_prep: '跳过准备', taunt: '挑衅', cover: '援護',
     first_aid: '持续型急救', rest: '休整',
     control_spread: '控制扩散',
+    /** 策略伤害浮动（敛微穷极）：状态行与回合收敛行都靠这张表显示中文名 */
+    strategy_flux: '策略伤害浮动',
   };
   return m[t] ?? t;
 }

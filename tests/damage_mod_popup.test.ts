@@ -6,6 +6,7 @@
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { createBattleView } from '../web/battleView';
+import { HUGE_MODIFIER_RATE } from '../src/engine/formulas';
 import type { BattleEvent, BattleReport, DamageModifiers, General } from '../src/engine/types';
 
 function makeGeneral(id: string, name: string, position: General['position']): General {
@@ -54,6 +55,19 @@ const MODS_OVERFLOW: DamageModifiers = {
   reduce: [
     { unitId: 'my1', skillId: 'a', skillName: '甲', rate: 1.2, direction: 'reduce' },
     { unitId: 'my2', skillId: 'b', skillName: '乙', rate: 0.8, direction: 'reduce' },
+  ],
+};
+
+/**
+ * 战法文案「大幅度降低」= 哨兵 `HUGE_MODIFIER_RATE`（1000%，磐阵善守 / 西乡武功 / 息交2 / 辕门射戟）：
+ * 账面 1000% 只是哨兵，界面既不露这个数字，也不能退化成 90% 那种「能被增伤抵掉」的数值。
+ */
+const MODS_HUGE: DamageModifiers = {
+  caused: [],
+  taken: [],
+  reduce: [
+    { unitId: 'my1', skillId: 'panzhen_shanshou', skillName: '磐阵善守', rate: HUGE_MODIFIER_RATE, direction: 'reduce' },
+    { unitId: 'my1', skillId: 'mouyi', skillName: '谋议宏图', rate: 0.46, direction: 'reduce' },
   ],
 };
 
@@ -170,5 +184,21 @@ describe('详细战报 · 增减伤统计弹窗', () => {
     expect(popupText).toContain('伤害降低合计：200%');
     expect(popupText).toContain('净合计：降低 200%');
     expect(popupText).toContain('已触伤害下限保护');
+  });
+
+  it('「大幅度降低」的哨兵值（1000%）界面不露账面数字，一律「大幅降低」', () => {
+    const { netLine, popupText } = openPopup(MODS_HUGE);
+
+    // 明细条目：文案本来就是「大幅度降低」，账面 1000% 只是哨兵，不出现在玩家视野
+    expect(popupText).toContain('【磐阵善守】伤害大幅降低');
+    expect(popupText).not.toContain('1000%');
+
+    // 同一栏里的普通减伤照实显示（不被「大幅」吞掉）
+    expect(popupText).toContain('【谋议宏图】伤害降低 46%');
+
+    // 降低合计整栏也是「大幅降低」，净合计行同样注明触底按 90% 结算
+    expect(popupText).toContain('伤害降低合计：大幅降低');
+    expect(popupText).toContain('净合计：大幅降低（已触伤害下限保护');
+    expect(netLine).toContain('90%');
   });
 });

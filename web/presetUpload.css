@@ -1,0 +1,103 @@
+/* 预设识图 · 上传弹窗（`web/presetUpload.ts`）
+ * .modal / .modal-mask / .btn / .m-head / .m-body / .m-foot 骨架来自 web/styles.css；
+ * 这里只补「选图区 + 三行识别结果 + 预设名/落队」自己的排版。
+ * 配色一律走主站变量（--panel / --line / --gold / --text-dim…），不引新色板。 */
+
+.scan-modal { width: min(760px, 92vw); }
+.scan-modal .m-head { display: flex; align-items: center; gap: 8px; }
+.scan-modal .m-head .spacer,
+.scan-foot .spacer { flex: 1 1 auto; }
+.scan-badge {
+  font-size: 11px; line-height: 16px; padding: 0 6px;
+  color: var(--text-weak); border: 1px solid transparent;
+}
+.scan-badge.on { color: var(--gold-bright); border-color: var(--line-strong); background: rgba(196, 154, 54, .12); }
+
+.scan-body { display: flex; flex-direction: column; gap: 10px; }
+
+/* ── 选图区 ── */
+.scan-drop {
+  border: 1px dashed var(--line-strong);
+  background: var(--panel-2);
+  padding: 26px 18px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .12s, background .12s;
+}
+.scan-drop:hover, .scan-drop.on { border-color: var(--gold); background: var(--panel-3); }
+.scan-drop-title { font-family: var(--font-kai); font-size: 14px; color: var(--gold-bright); letter-spacing: 1px; }
+.scan-drop-sub { margin-top: 6px; font-size: 12px; color: var(--text-dim); line-height: 1.6; }
+.scan-thumb { text-align: center; }
+.scan-thumb img { max-width: 100%; max-height: 220px; border: 1px solid var(--line); }
+.scan-status { font-size: 12px; color: var(--text-dim); line-height: 1.6; min-height: 18px; }
+.scan-status.bad { color: var(--orange); }
+.scan-status.busy { color: var(--gold); }
+
+/* ── 识别结果（三行） ── */
+.scan-review-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.scan-review-title { font-family: var(--font-kai); font-size: 14px; color: var(--gold-bright); letter-spacing: 1px; }
+.scan-sum { font-size: 12px; color: var(--text-dim); }
+.scan-unrec { font-size: 11.5px; color: var(--orange); }
+.scan-rows { display: flex; flex-direction: column; border: 1px solid var(--line); }
+.scan-row {
+  display: flex; gap: 9px; align-items: flex-start;
+  padding: 8px 10px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--line);
+}
+.scan-row:last-child { border-bottom: none; }
+.scan-row.bad { background: rgba(143, 44, 44, .12); }
+.scan-pos {
+  flex: 0 0 auto; width: 34px; text-align: center;
+  font-size: 12px; line-height: 20px; letter-spacing: 1px;
+  color: var(--gold-bright); background: rgba(196, 154, 54, .12);
+  border: 1px solid var(--line-strong);
+}
+.scan-av { flex: 0 0 auto; width: 42px; height: 42px; border-radius: 50%; object-fit: cover; border: 1px solid var(--line-strong); }
+.scan-av.none { display: inline-flex; align-items: center; justify-content: center; color: var(--text-weak); font-size: 15px; background: var(--panel); }
+.scan-main { flex: 1 1 auto; min-width: 0; }
+.scan-hero { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.scan-name { font-family: var(--font-kai); font-size: 14px; color: var(--text); }
+.scan-lv { font-size: 11px; color: var(--text-dim); }
+.scan-red { font-size: 11px; letter-spacing: 1px; }
+.scan-troop { font-size: 11px; color: var(--text-dim); border: 1px solid var(--line); padding: 0 4px; }
+.scan-tag { font-size: 10.5px; color: var(--orange); border: 1px solid currentColor; padding: 0 4px; }
+.scan-skills { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.scan-skill {
+  font-size: 12px; color: var(--text);
+  background: var(--panel); border: 1px solid var(--line-strong);
+  padding: 1px 7px;
+}
+.scan-skill.main { color: var(--gold-bright); border-color: var(--gold); }
+.scan-skill.none { color: var(--text-weak); border-style: dashed; }
+.scan-note { margin-top: 4px; font-size: 11.5px; color: var(--text-dim); line-height: 1.55; }
+.scan-cands { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
+.scan-pick { font-size: 11.5px; padding: 1px 7px; }
+
+/* ── 问题清单（不静默丢） ── */
+.scan-issues { display: flex; flex-direction: column; gap: 3px; }
+.scan-issue { font-size: 11.5px; color: var(--text-dim); line-height: 1.55; }
+.scan-issue.err { color: var(--orange); }
+
+/* ── 预设名 / 落哪一队 ── */
+.scan-form { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; }
+.scan-name-wrap { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; color: var(--text-dim); flex: 1 1 260px; }
+.scan-name-input {
+  background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+  border-radius: 3px; padding: 5px 8px; font: inherit; font-size: 13px;
+}
+.scan-name-input:focus { outline: none; border-color: var(--gold); }
+.scan-side { display: flex; gap: 6px; align-items: center; }
+.scan-side-label { font-size: 11.5px; color: var(--text-dim); }
+.scan-side-btn.on { border-color: var(--gold); color: var(--gold-bright); }
+.scan-hint-line { font-size: 11px; color: var(--text-weak); line-height: 1.6; }
+
+.scan-foot { display: flex; align-items: center; gap: 8px; }
+.scan-foot-hint { font-size: 11.5px; color: var(--text-dim); }
+.scan-foot-hint:not(:empty) { color: var(--orange); }
+
+@media (max-width: 720px) {
+  .scan-modal { width: 100vw; }
+  .scan-row { flex-wrap: wrap; }
+  .scan-av { width: 34px; height: 34px; }
+}
