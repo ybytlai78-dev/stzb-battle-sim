@@ -162,7 +162,7 @@ npx tsc --noEmit                    # 类型检查（strict）
 **宝物「下一次」类减伤的叠层与消耗（用户 2026-10-17 口径，勿再询问）**：【济世】每次恢复给效果目标 +1 层 5%~15%（`damage_reduce` + `consumeOnHurt: true`），
 **可无限叠加**、**下一次受到伤害后全部清空**（那一次伤害仍吃满所有层数）——「只覆盖一次攻击」；
 清空由 `applyDamage` 扣兵后调 `consumeNextHitReduce` 完成（与奉令护蜀 `consumePendingStacks` 同型，发 `status_expired`）。
-⚠️ 与【不屈】区分：【不屈】是 `hurt_stack`、**「本回合」**语义（回合开始清零、最多 10 层），不吃这套清空。回归 `tests/treasure_jishi.test.ts`（5 例）。
+⚠️ 与【不屈】区分：【不屈】是 `hurt_stack`、**「本回合」**语义（**回合结束**清零、最多 10 层；破浪同口径，2026-10-23 用户口径「第一回合受击 8 次叠 8 层，到大回合结束才清除，而非行动前移除」），不吃这套清空。回归 `tests/treasure_jishi.test.ts`（5 例）。
 **例外 —— 士气增减**（提升 2026-09-22 / 降低 2026-10-18）**都不与任何效果冲突**：`morale_boost` **正负两个方向一律独立共存**（同源仍走刷新 / 显式叠层），
 由 `effectiveMorale` 逐实例相加 —— 例如 司马炎【谋议宏图】每回合 +8 与 司马徽【徽言龙凤】+10 同时生效（不再取较高替换）；
 士气**降低**同口径（用户 2026-10-18 原话「士气降低/提高都是不和任何效果冲突的，可稳定触发不冲突」）——两条不同战法的 −10 与 −5 是两条实例、合计 −15，
@@ -234,6 +234,27 @@ base 76/88/72/78 · grow 1.48/2.32/1.38/1.16）** 全量纠正（id 仍为 `h42`
   **百分比修正类 值@80 = (const + 0.4×intel)/100、成长率 = intel/200**；
   **全属性百分比升降 值@80 = (const + 0.4×intel)/10⁶、成长率 = intel/(2×10⁸)**（魏武之世 11,400,000/9,000,000
   → 15.0% / 0.045，与 `weiwu_zhishi` 完全吻合，可作锚点）。
+
+### 「大幅度降低 / 大幅减伤」的取值口径（2026-10-24，用户报障后钉死）
+
+用户口径（原话）：「许多战法描述为大幅减伤的效果都错误的计算为 90% 减伤。这是错误的，大幅减伤是一个很大的值，
+如 1000%，如磐阵善守等战法都挂成了 90% 减伤」。
+
+- **证据链**：包内 `tb_cfg_skill_detail` 里 effect 522（受攻击伤害降低）/ 524（受策略攻击伤害降低）对「大幅度」类
+  统一写 `constant_param = 9000` —— 磐阵善守 21081601/21081602、西乡武功 21079112/21079113、息交2 55103301；
+  按上表「百分比修正 = const / 100」恰好 90.0%。**90% 会被敌方增伤抵掉**（`buffMult(1+2, 1, 0.9) = 2.1`，
+  即对方 +200% 增伤时一次「大幅度降低」后仍挨 210% 伤害），与文案语义不符 ⇒ 这类不走 /100 换算。
+- **哨兵值**：`src/engine/formulas.ts` 导出 `HUGE_MODIFIER_RATE = 10`（= 1000%）。
+  - 受击侧：`damage_reduce.rate = HUGE_MODIFIER_RATE`（磐阵善守 / 西乡武功 / 息交2）；
+  - 造成侧：`damage_boost{ direction:'caused' }.rate = -HUGE_MODIFIER_RATE`（辕门射戟 / 十面埋伏 / 反计之策 /
+    闪击 / 迟智难酬 / 鏖兵卫主 / 酒池肉林段二 / 锦车持节 / 威震类 等，原先的 `-99.99` 已统一成同一口径）。
+- **落到哪里**：两者都靠 `buffMult` 的 `MIN_DAMAGE_FACTOR = 0.1` 落到「最终伤害 = 下限 10%」——
+  这才是「无论对方增伤多高」的语义；**别**再把它写成 0.9 或别的「能算出百分比」的小数。
+- **显示口径**：引擎 `status_inflicted` detail 写「（下一次）受到…伤害大幅降低」；
+  Web 弹窗条目 `pct ≥ HUGE_MODIFIER_RATE×100` 一律「伤害大幅降低」、降低合计栏写「大幅降低」、
+  净合计行写「大幅降低（已触伤害下限保护…）」；播放器状态条写「大幅减伤」。账面数字不进玩家视野。
+- **不受影响**：官方给了数字的普通减伤（疮痍累身 84%、金匮要略 20.4%、形兵之极 50%…）照实参与加算。
+- 回归：`tests/huge_modifier.test.ts`（90% 被抵掉 vs 哨兵触底 / 三战法数据断言 / 真实状态汇总路径 / detail 文案与 charges 消耗）。
 
 ### 状态语义（容易写错，务必遵守）
 
@@ -313,9 +334,9 @@ base 76/88/72/78 · grow 1.48/2.32/1.38/1.16）** 全量纠正（id 仍为 `h42`
 
 ### 本会话新增机制（辕门射戟，v0.13，用户确认）
 
-- **辕门射戟**（h479 群弓 SP 吕布·主动 S·距离5·35%）：对敌军群体发动二次攻击（140%，每次攻击目标独立选择），第一次攻击命中后对目标施加「造成攻击伤害降低 9999%」debuff（持续 1 回合），第二次攻击独立选目标不受影响。
+- **辕门射戟**（h479 群弓 SP 吕布·主动 S·距离5·35%）：对敌军群体发动二次攻击（140%，每次攻击目标独立选择），第一次攻击命中后对目标施加「造成攻击伤害大幅降低」debuff（哨兵 `-HUGE_MODIFIER_RATE`，持续 1 回合），第二次攻击独立选目标不受影响。
   - **新机制 1：`groupCount?: number | [number, number]`**（BaseSkill + physical/strategy_damage 输出）：`[2,3]` = 50% 概率 2 目标 / 50% 概率 3 目标（`skillTargets` 第 6 参）。
-  - **新机制 2：`markCausedReduce?: { rate, duration }`**（physical_damage 输出）：伤害结算后对本次攻击每个目标施加 `damage_boost` caused 负值（-99.99 = -9999%）；`buffMult` 既有 `MIN_DAMAGE_FACTOR = 0.1`（v0.14 单一总和模型，增减伤总和 < -90% 最低保留 10%）→ 强制目标造成伤害 min 10%。**注意**：`calcDamage` 的 `troopBase`（兵力基础）不乘 mult，故实际伤害 = 兵力基础 + 其余 ×10%。
+  - **新机制 2：`markCausedReduce?: { rate, duration }`**（physical_damage 输出）：伤害结算后对本次攻击每个目标施加 `damage_boost` caused 负值（`-HUGE_MODIFIER_RATE` = −1000%；2026-10-24 前的 `-99.99` 已统一）；`buffMult` 既有 `MIN_DAMAGE_FACTOR = 0.1`（v0.14 单一总和模型，增减伤总和 < -90% 最低保留 10%）→ 强制目标造成伤害 min 10%。**注意**：`calcDamage` 的 `troopBase`（兵力基础）不乘 mult，故实际伤害 = 兵力基础 + 其余 ×10%。
   - **debuff 持续时间语义**：`damage_boost` 属第 2 组 → 行动中施加（appliedRound>0）按「下次行动前递减」结算，
     「持续 1 回合」= duration **1**（目标未出手 → 生效本次行动；已出手 → 生效下一次行动；2026-09-20 口径）。
 - 「无视兵种相克」：引擎无兵种相克系统，自动满足（无需建模）。
@@ -342,7 +363,7 @@ base 76/88/72/78 · grow 1.48/2.32/1.38/1.16）** 全量纠正（id 仍为 `h42`
 ### 本会话新增（战报展示精简，v0.14，用户确认）
 
 - **Web 详细战报（battleView）小字精简**：①skill_trigger 只显示主干「【目标】来自【施法者】的【战法】当前生效几率为78%」（去掉括号内 35%*1.12 士气增幅与判定字样，成功/失败由颜色区分）；②damage/attack_hit/dot_tick/split_damage 不再输出 breakdown 括号「（兵力基础219 + 属性基础198 + 主要676）」（bkd 函数删除）。
-- **增伤显示百分数化（引擎 detail，pushStatus）**：damage_boost 由「增伤 0.08」改为「造成的伤害提高8%」（caused→造成的/受到侧→受到的伤害，正负→提高/降低）；**≤ -90% 的负增伤（如辕门射戟 -99.99）显示「造成的伤害大幅降低」**（不显示 9999%）。
+- **增伤显示百分数化（引擎 detail，pushStatus）**：damage_boost 由「增伤 0.08」改为「造成的伤害提高8%」（caused→造成的/受到侧→受到的伤害，正负→提高/降低）；**负增伤 ≥ `HUGE_MODIFIER_RATE`（−1000%）显示「造成的伤害大幅降低」**（不显示 1000%；< 1000% 的普通负增伤照实显示百分比，2026-10-24 收窄，见 §「大幅度降低 / 大幅减伤」的取值口径）。
 - **伤害下限保护的显示**（buffMult min 10%）：Web 增减伤净合计行净降低 >90% 显示 90%（实际增减伤）；弹窗「伤害降低合计」clamp 90；弹窗来源条目 pct>90 且负 → 「伤害大幅降低」。
 - **duration ≥ 999（战斗结束约定）统一显示「持续至战斗结束」**（属性类/damage_boost/damage_reduce/DoT/split/jump_prep/taunt 全部 detail）。
 - 测试更新：`tests/main_skills_b3.test.ts` / `b4.test.ts` 的 detail 断言改为百分数格式（「造成的伤害提高 40%」等）；golden 重新生成（detail 文案变化为预期）。
@@ -883,8 +904,11 @@ base 76/88/72/78 · grow 1.48/2.32/1.38/1.16）** 全量纠正（id 仍为 `h42`
   逐条核对该战法自己的官方原文**（勿套用同类战法的措辞）；审计脚本思路 = 「OFFLINE 键 ↔ 官方 desc 是否含 `受…(谋略|防御|攻击|速度|兵力|最高属性)`」，
   现存唯一另一处命中是 `xuefen_duanbing`（属**有意**登记：动摇 DoT 成长率未确认，非误判）。
 - **用户 2026-09-20 二次口径（新增，勿再询问）**：
-  ① **「大幅度」= 极大值**：凡官方写「大幅降低」而无数字的，一律 rate = **−99.99（−9999%）**（配合 buffMult 10%
-     伤害下限压到最低；战报显示「大幅降低」）——已用于 方阵掩杀 / 迟智难酬 / 鏖兵卫主 / 锦车持节（造成侧）/ 酒池肉林；
+  ① **「大幅度」= 极大值**：凡官方写「大幅降低」而无数字的，一律 rate = **`HUGE_MODIFIER_RATE`（= 10 = 1000%）**
+     —— 减伤侧 `+HUGE_MODIFIER_RATE`、造成侧 `-HUGE_MODIFIER_RATE`（配合 buffMult 10%
+     伤害下限压到最低；战报显示「大幅降低」「大幅减伤」）。⚠️ **历史 `-99.99`（−9999%）已于 2026-10-24 统一成
+     同一个哨兵**（用户口径「大幅减伤是很大的值，如 1000%」）——已用于 方阵掩杀 / 迟智难酬 / 鏖兵卫主 / 锦车持节（造成侧）/ 酒池肉林 /
+     磐阵善守 / 西乡武功 / 息交2，见 §「大幅度降低 / 大幅减伤」的取值口径；
   ② **自擅江表「对友军群体发动一次攻击」是官方原文、非笔误**（确为打友军 + 后续效果）；
   ③ **尽言直谏**：增益**持续到目标本次行动结束就消失**（非常规「下次行动前递减」）→ `expireAfterOwnAct`；
   ④ **酒池肉林**三段结构 = 前两回合减伤（持续到第 3 回合行动前）+ 第 3 回合我方造成伤害大幅降低（极大值；`afterDelayedOutputs` 晚于同回合 delayedOutput 结算，避免帝临回光恐慌快照被 −99.99% 冻住整场，用户 2026-10-19 报障）+ 第 4 回合起吸血；
@@ -949,7 +973,17 @@ base 76/88/72/78 · grow 1.48/2.32/1.38/1.16）** 全量纠正（id 仍为 `h42`
     + `inflictStatusCore` 包装层（士气监听不改既有调用点）——`e485892`；
   - `CommandSkill.specialDebuffBefore`（敌方被施加特殊负面前判定）+ `debuffResist`（我军被施加挑衅/围困/控制时整段抵御，
     新事件 `status_resisted`）——`ef5c77f`；
-  - `damage_boost.decayRoundParts`（每回合按份衰减）+ 新状态 `strategy_flux`（策略伤害率 × 收敛区间随机，敛微穷极）——`3bdafab`；
+  - `damage_boost.decayRoundParts`（每回合按份衰减）+ 新状态 `strategy_flux`（策略伤害率 × 逐回合档位区间随机，敛微穷极）——`3bdafab`；
+    **2026-10-23 按包内真值重写**：`strategy_flux` 由 `{low, high, mid, convergeRounds}` 改为**逐回合 6 档表 `steps[{low, high, lowGrowthRate?, highGrowthRate?}]`**
+    （包内 `tb_cfg_skill_detail` 200296：机制 82「伤害率波动上限」138+0.4×30 = 150.0% / 成长 0.15、机制 83「下限」80.0% / 成长 0；
+    收敛链 20029621-25 与 20029631-35 → 第 2~6 回合 87/142.6 · 94/135.2 · 101/128.8 · 108/121.4 · 115/115）。施加阶段按**施法者**生效谋略逐档
+    `scaledValue` 缩放并冻结（同 damage_boost 受谋略口径），`steps[回合-1]` 越界取末档。**旧「线性收敛 + 不缩放」推定作废**，刘徽因此**不下架**
+    （原登记下架的成长率缺口已被包内补齐）。回归 `tests/strategy_flux.test.ts`。
+    ⚠️ **战报口径（用户 2026-10-23 报障「详情战报里伤害率没有变化」后钉死）**：`damage` 事件对**谋略伤害**新增 `damageRate`（本次实际生效伤害率 %，
+    含递增/受谋略缩放/浮动）与 `rateFlux{low, high, factor}`（本回合档位区间 + 本次系数）——**只给谋略伤害**（策略伤害无系统随机，伤害率与伤害一一对应；
+    物理段有内置 0.30~0.39 随机系数，给了会误导）。详情战报 `web/battleView.ts` 伤害行渲染 `.dmg-rate`「（伤害率 512.4%，浮动 101.0%~128.8% → 118.3%）」，
+    文本战报 `report.ts` 同步 `rateSuffix`。状态行不再写死 `80%~150%（收敛至 115%）`，改为**受谋略后的首档区间 + 末档终值**，
+    且第 2 回合起 `tickRoundStartStatuses` 每回合发一条 `status_changed`「策略伤害浮动区间收敛至 …」；
   - `CommandSkill.onDotReceived`（敌军每回合首次吃 DoT → 判定 + 策略攻击）+ `extraTickOnDotApply`（陷入 DoT 立即额外引爆一次）——`3283c9b`；
   - 新状态 `damage_share`（伤害分摊：同侧友军受击时携带者按 rate 承担；`share_damage` 事件 + `resolvingDamageShare` 防递归；
     `damageKind`/`charges` 过滤，言出必克 / 雅虑适时共用）+ `triggerOnActSegmentsForPrepCommands`
@@ -1455,5 +1489,43 @@ const targetTeam = primaryTarget.side === unit.side ? allies : enemies; // ✓
 - L3 优化器没动（beam 仍用解析代价函数）；L2 的解析模型保留作对照列。
 - 决赛后没有回头补跑被 3 场粗筛错杀的战法（调大 `slotKeep` / `maxCombos` 即可缓解）。
 - 靶子只有一种木桩模板；多靶子（对手池）留给以后。
+
+---
+
+## 链式战法的统计归属与子战法标注（2026-10-23，王允/河内世泽报障后建立）
+
+用户口径（原话）：「部分含子战法的战法无法统计杀伤；对王允主战法、河内世泽等含子战法的战法，
+**参照刘秀的战报统计方式**统计其杀伤；同时在详情战报中增加对应子战法标识」。
+
+- **唯一口径 = 光武中兴那一套**：子战法的伤害 / 次数 / 恢复都记在**父战法**名下（`skillId` / `skillName` =
+  父战法），子战法名另存 `subSkill`（详情战报渲染成「【连环计·伐谋】」发动行与「〈伐谋〉」伤害行前缀）。
+  理由：`web/battleSummary.ts` 的 `columnOrder(g)` 只按**武将携带的战法**建列，`skillRowHtml` 用
+  `stats.skills.find(x => x.skillId === c.skillId)` 精确匹配 → 事件记成子战法 id 时，主战法那一格恒为「杀伤 0」。
+- **不要走「stats 侧子→父映射」**：`落雷` 同时属于连环计与河内世泽，子→父映射天然有歧义；必须在引擎事件层归属父战法。
+- **不要把父战法对象整体传给 `executeSkillOutputs`**：父的 `range`（连环计 4 / 河内世泽 4）与子战法 range 不同，
+  会改变选敌与距离口径。用 `src/engine/subSkill.ts` 的 `asSubSkillOf(parent, ref)`（只覆盖 `id` / `name`，
+  `range` / `output` / `type` 全留）。
+- **两个助手（`src/engine/subSkill.ts`，链式战法共用）**：
+  - `asSubSkillOf<T extends Skill>(parent: Skill, ref: T): T`；
+  - `labelSubSkillEvents(ctx, evStart, parent, label)` —— 对**结算窗口内**新增的事件打 `subSkill`，
+    仅限 `damage` / `split_damage` / `dot_tick` / `heal` / `status_inflicted`，且 `ev.skillId` 必须等于父战法；
+    `status_inflicted.detail` 同步把「【父】」换成「【父·子】」。`ev.subSkill` 已存在时不覆盖（同光武中兴）。
+- **DoT 必须靠这条口径兜住**：河内世泽的火辎 / 毒泉是**挂上去之后**才逐回合跳伤的，跳伤事件发生在结算窗口之外，
+  靠事件窗口标不到 → 状态创建时 `sourceSkillId` 就必须是父战法（`executeSkillOutputs` 的 DoT 分支按 `skill.id` 写）。
+- **`skill_cast` / `skill_target` 也记父战法 + `subSkill`**（`types.ts` 已加该可选字段）：否则战报里看不出这次是哪个子战法放的。
+- **其徐如林（司马懿·晋 h807）的相邻跳伤 = 包内机制码 546「株杀」（诛杀）**：`triggerStrategyAdjacentBonus` 的
+  damage 事件带 `subSkill: '诛杀'` → 详情战报该行显示「〈诛杀〉对「X」造成 策略伤害 N」，一眼区分哪部分是诛杀伤害；
+  统计仍计入【其徐如林】（`skillId` 不变）。
+- **回归**：`tests/chain_subskill_stats.test.ts`（7 例：连环计归属 / skill_cast 记父 / 统计不为 0 且子战法不成行 /
+  文本战报带标识；河内世泽 DoT 的 `sourceSkillId`；其徐如林〈诛杀〉标识 + 统计相等 + 文本战报）。
+- **端到端取证**（可复跑）：`npx tsx scripts/_gen_chain_record.mts`（真引擎跑出含三者的战报记录）→
+  `node scripts/_shot_chain_labels.mjs http://127.0.0.1:5173/`（headless Chrome + CDP：开历史 → 统计页断言
+  【连环计 次数 3 · 杀伤 1,357】【河内世泽 次数 9 · 杀伤 5,388】【其徐如林 次数 1 · 杀伤 7,530】，
+  详情战报逐回合收集 `.dmg-sub` = 〈伐谋〉〈迷阵〉〈火辎〉〈溃堤〉〈诛杀〉，截图落
+  `docs/逆向对拍/baseline/chain-stats.png` / `chain-detail-r{3..6}.png`）。
+- **golden 不受影响**：本改动只新增 `subSkill` 字段，而**被本改动触达的链式战法（连环计 / 河内世泽）与
+  其徐如林都不在 T1~T10 固定测试集里**（已用逐事件 diff 核对：golden 的差异仅来自 2026-10-23 另一批改动的
+  `damageRate` 字段，与本改动无关）。
+
 
 

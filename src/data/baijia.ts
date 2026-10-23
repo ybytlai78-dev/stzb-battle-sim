@@ -19,6 +19,7 @@ import type {
   SkillOutput,
   TroopType,
 } from '../engine/types';
+import { HUGE_MODIFIER_RATE } from '../engine/formulas';
 
 /** 百分点效果：rate 为小数，growthRate 为每点属性的百分点（减伤/增减伤口径）。 */
 function pct(f12: number, f13: number): { rate: number; growthRate: number } {
@@ -353,7 +354,9 @@ export const BAIJIA_SKILLS: Record<string, Skill> = {
         targetSide: 'ally',
         targetMode: 'group',
         groupCount: 2,
-        status: { type: 'damage_reduce', rate: 0.9, duration: 1, damageType: 'strategy', charges: 2 },
+        // 息交2（550033 / 子战法 55103301）：effect 524、constant_param 9000、available_hit 2
+        // ——「受到的前 2 次策略攻击伤害**大幅降低**」⇒「大幅度」一律取极大值哨兵（见 HUGE_MODIFIER_RATE）
+        status: { type: 'damage_reduce', rate: HUGE_MODIFIER_RATE, duration: 1, damageType: 'strategy', charges: 2 },
       }],
     }],
   }),

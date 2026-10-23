@@ -169,7 +169,7 @@ const MECHANICS: Record<string, Mechanic> = {
   坚毅: (v) => [{ type: 'control_immune', types: ['confusion', 'rampage'], duration: v } as CreateStatus],
   // 强击（锻造词条）：前 N 回合普通攻击不会触发反击
   强击: (v) => [{ type: 'no_retaliate', duration: v } as CreateStatus],
-  // 不屈（锻造词条）：每次受伤后本回合受到伤害降低（可叠加；本回合语义 → 回合开始清零，上限 10 层）
+  // 不屈（锻造词条）：每次受伤后本回合受到伤害降低（可叠加；本回合语义 → 回合结束清零，上限 10 层）
   不屈: (v) => [{ type: 'hurt_stack', mode: 'reduce', perStack: v / 100, maxStacks: 10, duration: FOREVER } as CreateStatus],
   // 破浪（沧海）：每受到 1 次伤害，本回合造成所有伤害提升 10%（最多 10 层）
   破浪: () => [{ type: 'hurt_stack', mode: 'boost', perStack: 0.1, maxStacks: 10, duration: FOREVER } as CreateStatus],

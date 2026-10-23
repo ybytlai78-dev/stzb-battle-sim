@@ -4,6 +4,7 @@
  * 治疗战法恢复率成长率以《谋略战法受谋略成长调研.md》§七为准，不得用 0.7 惯例估。
  */
 import type { CreateStatus, Skill, SkillOutput } from '../engine/types';
+import { HUGE_MODIFIER_RATE } from '../engine/formulas';
 import { BAIJIA_SKILLS } from './baijia';
 
 /**
@@ -750,8 +751,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     ],
   },
   /** 辕门射戟（群弓吕布 SP 主战法）：对敌军群体发动二次无视兵种相克的攻击（140%，每次攻击目标独立选择，
-   *  目标数 50% 概率 2 个 / 50% 概率 3 个）；第一次攻击命中后对目标施加「造成攻击伤害降低 9999%」debuff
-   *  （buffMult 10% 伤害下限 → 强制造成伤害 min 10%，官方「持续 1 回合」→ duration 1；
+   *  目标数 50% 概率 2 个 / 50% 概率 3 个）；第一次攻击命中后对目标施加「造成攻击伤害大幅降低」debuff
+   *  （哨兵 `-HUGE_MODIFIER_RATE` = −1000%；buffMult 10% 伤害下限 → 强制造成伤害 min 10%，官方「持续 1 回合」→ duration 1；
    *  新口径下行动中施加的状态在携带者行动结束后递减，duration 即字面回合数 = 目标接下来 1 次行动）；
    *  包内机制码 301 攻击伤害 / 532 攻击伤害降低 / 771 无视兵种相克：
    *  - 两段攻击都带 `ignoresTroopCounter`（兵种相克减伤不参与本战法）；
@@ -774,7 +775,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         targetMode: 'group',
         groupCount: [2, 3],
         ignoresTroopCounter: true,
-        markCausedReduce: { rate: -99.99, duration: 1, attackOnly: true },
+        markCausedReduce: { rate: -HUGE_MODIFIER_RATE, duration: 1, attackOnly: true },
       },
       { kind: 'physical_damage', rate: 140, targetMode: 'group', groupCount: [2, 3], ignoresTroopCounter: true },
     ],
@@ -1038,7 +1039,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     delayedOutput: {
       atRound: 4,
       targetMode: 'group',
-      output: [{ kind: 'inflict_status', status: { type: 'split', duration: 999, rate: 50 } }],
+      output: [{ kind: 'inflict_status', status: { type: 'split', duration: 999, rate: 50, speedScaled: true, growthRate: 0.175 } }],
     },
     output: [
       {
@@ -1493,7 +1494,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     triggerRate: 1,
     targetMode: 'self',
     tags: ['damage_reduce'],
-    output: [{ kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.3, duration: 999 }, target: 'self' }],
+    output: [{ kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.3, duration: 999, attackScaled: true, growthRate: 0.1 }, target: 'self' }],
   },
   /**
    * 宣威再战（张绣主战法·追击）：发动率 100%。
@@ -1772,7 +1773,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     output: [
       { kind: 'physical_damage', rate: 120 },
       { kind: 'inflict_status', status: { type: 'taunt', duration: 2, targetId: '' } },
-      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.25, duration: 2 }, target: 'self' },
+      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.25, duration: 2, defenseScaled: true, growthRate: 0.175 }, target: 'self' },
     ],
   },
   /**
@@ -1792,7 +1793,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    *   ③ 「使我军群体每回合都能优先行动」= 准备阶段给锁定目标挂 `priority`（duration 2 = 第 1~2 回合）；
    *      朱儁自身的 `priorityRounds: 2` 保留（既有口径）。⚠️ 推定：锁定 2 人未含朱儁时他仍先手。
    *   ④ 伤害段的「距离4以内」用**段级** `range: 4`（战法自身距离 2 是选我军群体用的）。
-   *   ⑤ 「且下一次受到的伤害大幅降低」= **攻击 / 策略两条次数型减伤，各 1 次、各降 90%**：
+   *   ⑤ 「且下一次受到的伤害大幅降低」= **攻击 / 策略两条次数型减伤，各 1 次、各降 1000%（极大的值）**：
    *      官方效果组子技能（本战法 id + 10000）里两条槽位各一条 —— effect 522 受到攻击伤害降低、
    *      524 受到策略攻击伤害降低，取值同为 90.0（同值 ⇒ 无属性缩放，两条轨数值相同），
    *      对应官方文案「且下一次受到的伤害大幅降低」；落在被锁定的我军群体身上。
@@ -1815,8 +1816,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     // ③ 我军群体第 1~2 回合优先行动 + ⑤ 「下一次受到的伤害大幅降低」（攻击 / 策略两条轨，各 1 次）
     initialOutput: [
       { kind: 'inflict_status', status: { type: 'priority', duration: 2 } },
-      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.9, duration: 999, damageType: 'physical', charges: 1 } },
-      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.9, duration: 999, damageType: 'strategy', charges: 1 } },
+      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: HUGE_MODIFIER_RATE, duration: 999, damageType: 'physical', charges: 1 } },
+      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: HUGE_MODIFIER_RATE, duration: 999, damageType: 'strategy', charges: 1 } },
     ],
     // ①② 第 2 回合行动前：我军群体各自对距离 4 以内的敌军群体 2 人发动一次策略攻击（实时结算）
     delayedOutputs: [
@@ -1852,7 +1853,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     retainAfterDeath: true,
     roundRepeat: { startRound: 1, endRound: 3, rate: 0.9 },
     initialOutput: [
-      { kind: 'inflict_status', status: { type: 'damage_boost', damageType: 'physical', rate: 0.25, duration: 3, direction: 'caused' }, target: 'self' },
+      { kind: 'inflict_status', status: { type: 'damage_boost', damageType: 'physical', rate: 0.25, duration: 3, direction: 'caused', attackScaled: true, growthRate: 0.15 }, target: 'self' },
     ],
     tags: ['insight', 'damage_boost'],
     output: [{ kind: 'inflict_status', status: { type: 'insight', duration: 1 } }],
@@ -2800,7 +2801,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     triggerRate: 0.35,
     targetMode: 'group',
     tags: ['damage_boost'],
-    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', damageType: 'physical', rate: 0.13, duration: 2 } }],
+    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', damageType: 'physical', rate: 0.13, duration: 2, speedScaled: true, growthRate: 0.1 } }],
   },
   /** 拒盾（C 主动）：使自身受到攻击和策略攻击的伤害降低 15%（受防御影响，取基值），持续 2 回合 */
   judun: {
@@ -2812,7 +2813,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     triggerRate: 0.35,
     targetMode: 'self',
     tags: ['damage_reduce'],
-    output: [{ kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.15, duration: 2 }, target: 'self' }],
+    output: [{ kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.15, duration: 2, defenseScaled: true, growthRate: 0.125 }, target: 'self' }],
   },
   /** 毒泉（C 主动）：1 回合准备，使敌军群体陷入恐慌状态（85%），持续 2 回合 */
   duquan: {
@@ -2986,7 +2987,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     triggerRate: 0.35,
     targetMode: 'group',
     tags: ['damage_boost'],
-    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', rate: -0.15, duration: 2, direction: 'caused' } }],
+    output: [{ kind: 'inflict_status', status: { type: 'damage_boost', rate: -0.15, duration: 2, direction: 'caused', defenseScaled: true, growthRate: 0.125 } }],
   },
   /** 退避（C 主动）：使自身受到攻击和策略攻击的伤害降低 18%（受速度影响，取基值），持续 2 回合 */
   tuibi: {
@@ -2998,7 +2999,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     triggerRate: 0.35,
     targetMode: 'self',
     tags: ['damage_reduce'],
-    output: [{ kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.18, duration: 2 }, target: 'self' }],
+    output: [{ kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.18, duration: 2, speedScaled: true, growthRate: 0.15 }, target: 'self' }],
   },
   /** 陷阱（C 主动·发动率满级 35%）：使敌军单体陷入混乱状态，持续 1 回合 */
   xianjing: {
@@ -3298,7 +3299,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         kind: 'inflict_status',
         status: { type: 'trigger_boost', rate: 1.2, duration: 1, additive: true, mainSkillOnly: true, skillTypes: ['active'] },
       },
-      { kind: 'inflict_status', status: { type: 'jump_prep', rate: 0.6, duration: 1, mainSkillOnly: true } },
+      { kind: 'inflict_status', status: { type: 'jump_prep', rate: 0.6, duration: 1, mainSkillOnly: true, speedScaled: true, growthRate: 0.15 } },
     ],
   },
   /** 黄天余音（张宁主战法·主动）：吸取敌军单体 26 全属性（受谋略，成长率 0.20/点）并附加于自身与友军单体，持续 1 回合。
@@ -3543,9 +3544,11 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    *      由 `triggerRepeatStrategy` 消费（准备型战法在 `executePreparedSkill` 处同样挂钩）；
    *   ③ 机制 161「无视敌方属性」**已建模**（2026-10-21 修）：包内 detail 21130101 = `effect_id 161`
    *      `constant_param 18000` + `intel_param 30000`，按 /1000 口径 ⇒ 谋略 80 时 30.0%、
-   *      成长 0.15/点（同 击势 60000→60% 的标定）。只在**再次发动**的那一份伤害上生效，
-   *      通过 `strategy_damage.ignoreStrategyPct/ignoreStrategyGrowthRate` 传给引擎，
-   *      战报在伤害行尾追加「无视目标 X% 谋略属性」。
+   *      成长 0.15/点（同 击势 60000→60% 的标定）。
+   *      数值全部落在 `repeatStrategy` 配置上，引擎（`repeatStrategySpec` / `injectIgnoreStrategy`）
+   *      两趟注入：**本次发动**（`executeSkillWithTargets` 执行前）与**再次发动**（`triggerRepeatStrategy`）
+   *      的策略伤害都带 `ignoreStrategyPct/ignoreStrategyGrowthRate`，战报在伤害行尾追加
+   *      「无视目标 X% 谋略属性」。同段只保留一份比例（取较大者），不做加算。
    */
   weiyu_choumou: {
     id: 'weiyu_choumou',
@@ -3555,6 +3558,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     range: 1,
     triggerRate: 0.45,
     targetMode: 'self',
+    repeatStrategy: { recastRate: 0.5, ignoreStrategyPct: 30, ignoreStrategyGrowthRate: 0.15 },
     tags: [],
     output: [
       { kind: 'inflict_status', status: { type: 'repeat_strategy', duration: 2 }, target: 'self' },
@@ -4343,6 +4347,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
           damageSource: 'skill',
           skillTypes: ['active', 'pursuit'],
           defenseScaled: true,
+          // 包内 20071602（主动 322）/ 20071603（追击 325）：const 10 + intel 17(防御) ⇒ 16.8%、成长 17/200 = 0.085
+          growthRate: 0.085,
         },
       },
     ],
@@ -4442,6 +4448,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
           damageSource: 'skill',
           skillTypes: ['active'],
           speedScaled: true,
+          // 包内 20071801（主动 322）：const 10 + intel 20(速度) ⇒ 18%、成长 20/200 = 0.10（与速度成长调研表一致）
+          growthRate: 0.1,
         },
       },
     ],
@@ -4793,6 +4801,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
           direction: 'caused',
           damageType: 'strategy',
           attackScaled: true,
+          // 包内 20071402（机制 534）：const 36 + intel 35(攻击) ⇒ 50%、成长 35/200 = 0.175
+          growthRate: 0.175,
         },
       },
     ],
@@ -4880,6 +4890,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
           direction: 'taken',
           damageType: 'strategy',
           attackScaled: true,
+          // 包内子战法 21029901（机制 524）：const 22 + intel 20(攻击) ⇒ 30%、成长 20/200 = 0.10
+          growthRate: 0.1,
           decayFifths: 5,
         },
       },
@@ -4889,6 +4901,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       maxStacks: 12,
       duration: 999,
       attackScaled: true,
+      // 包内子战法 21029902（机制 531，value_add_max 12 = 叠 12 层）：const 3 + intel 1(攻击) ⇒ 3.4%、成长 1/200 = 0.005
+      growthRate: 0.005,
       onRoundStart: true,
       onDealPhysical: true,
     },
@@ -5086,8 +5100,10 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
   /**
    * 始计（S 二类指挥·距离 5·目标自己）：
    * 战斗前 4 回合、**自身行动时**（用户确认走 `roundTrigger:'on_act'`，非回合开始）：
-   *  ① 我军大营 下一次攻击或策略攻击伤害 +20%（受谋略，成长率未确认 → 留空按基值）；
-   *  ② 敌方**兵力最多**单体 下一次攻击或策略攻击**造成**的伤害 −30%（受谋略，同上；造成侧 direction:'caused'，不是受到侧）；
+   *  ① 我军大营 下一次攻击或策略攻击伤害 +20%（受谋略，**成长率 0.15/点**：谋略 80→20%、100→23%、250→45%）；
+   *  ② 敌方**兵力最多**单体 下一次攻击或策略攻击**造成**的伤害 −30%（受谋略，**成长率 0.25/点**：谋略 80→30%、100→35%、250→72%；造成侧 direction:'caused'，不是受到侧）；
+   * ⚠️ 成长率权威值见《谋略战法受谋略成长调研.md》§调查表「始计 20.0 / 30.0 → 0.15 / 0.25（已验证）」。两段**必须**同时带
+   *   `strategyScaled: true` **与** `growthRate` —— 缺 `growthRate` 会落进 `action.ts` 的缩放 else 分支、永远按基值施加（本战法曾经的 bug）。
    *  ③ 自身受到攻击或策略攻击伤害后，于本回合内进入**洞察**（免疫混乱/犹豫/怯战/暴走/挑衅）。
    * 实现：**整次判定**都限制在前 4 回合 —— `actRounds:[1,2,3,4]`（`currentRound ∉ actRounds` 时整次跳过、
    *   不再发「发动【始计】」日志，用户 2026-10-20 报障「第七回合还在施加」）+ 段窗口 `onActSegments`
@@ -5125,6 +5141,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
             status: {
               type: 'damage_boost',
               rate: 0.2,
+              growthRate: 0.15,
               duration: 999,
               direction: 'caused',
               charges: 1,
@@ -5139,6 +5156,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
             status: {
               type: 'damage_boost',
               rate: -0.3,
+              growthRate: 0.25,
               duration: 999,
               direction: 'caused',
               charges: 1,
@@ -5262,7 +5280,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         low: [
           {
             kind: 'inflict_status',
-            status: { type: 'strategy_buff', amount: -20, duration: 2, strategyScaled: true },
+            // 包内 20099202（机制 203）：const 20 / intel 0 ⇒ 文案「谋略属性降低 20.0」**不带**受属性影响，固定值
+            status: { type: 'strategy_buff', amount: -20, duration: 2 },
           },
         ],
       },
@@ -5752,7 +5771,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    * 闪击（B 主动·距离 4·50%·敌军群体 2 目标）：
    * 对敌军群体发动一次攻击（伤害率 50%），并使**敌军单体**进行下一次攻击的伤害大幅度降低。
    * 官方 id 200690（1 级 25%）；「大幅度降低」官方未给数值 → 用户 2026-09-19 口径：
-   *   按辕门射戟同款「伤害降至引擎下限 10%」建模（`damage_boost caused -99.99` → buffMult 下限 10%）。
+   *   按辕门射戟同款「伤害降至引擎下限 10%」建模（`damage_boost caused -HUGE_MODIFIER_RATE`（−1000%） → buffMult 下限 10%）。
    * 引擎配套：**无需新机制** —— 既有 `damage_boost` + `attackOnly`（仅「进行攻击」：普攻/物理主动/追击）
    *   + `charges: 1`（下次攻击打出后消耗）；debuff 目标为敌军单体（`targetSide:'enemy'` + `random_single`，
    *   独立于本次攻击的 2 个目标）。
@@ -5776,7 +5795,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         targetMode: 'random_single',
         status: {
           type: 'damage_boost',
-          rate: -99.99,
+          rate: -HUGE_MODIFIER_RATE,
           duration: 999,
           direction: 'caused',
           attackOnly: true,
@@ -6224,7 +6243,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    * 并在**首回合**有 100% 几率使其陷入犹豫状态，无法发动主动战法。
    * 官方 id 200220（1 级 50%；「大幅下降」官方未给数值）。
    * 引擎配套：**无需新机制** —— ① 主动伤害大幅下降按用户 2026-09-19 口径取辕门射戟同款
-   *   「伤害降至引擎下限 10%」（`damage_boost caused -99.99` + `skillTypes:['active']`，duration 3 = 前 3 回合）；
+   *   「伤害降至引擎下限 10%」（`damage_boost caused -HUGE_MODIFIER_RATE`（−1000%） + `skillTypes:['active']`，duration 3 = 前 3 回合）；
    *   ② 首回合犹豫（满级 100%）= `hesitation` duration 1（准备阶段施加、回合末递减掉）。
    */
   fanji_zhence: {
@@ -6243,7 +6262,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         kind: 'inflict_status',
         status: {
           type: 'damage_boost',
-          rate: -99.99,
+          rate: -HUGE_MODIFIER_RATE,
           duration: 3,
           direction: 'caused',
           skillTypes: ['active'],
@@ -6307,8 +6326,9 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     targetSide: 'enemy',
     tags: ['debuff_defense', 'debuff_strategy', 'damage'],
     output: [
-      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -50, duration: 2, attackScaled: true } },
-      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -50, duration: 2, strategyScaled: true } },
+      // 包内 20068401 / 20068402：const 2600 + intel 6000 ⇒ 50 点；点数类成长 = 6000/20000 = 0.30/点
+      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -50, duration: 2, attackScaled: true, growthRate: 0.3 } },
+      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -50, duration: 2, strategyScaled: true, growthRate: 0.3 } },
       {
         kind: 'schedule_strike',
         output: [
@@ -6363,7 +6383,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    * targetShow 写「敌军群体（有效距离内 3 个目标）」，但满级 desc 明确伤害段为**敌军全体**（距离 5 已覆盖全场）
    * → 战法目标取 `'all'`，减伤段用输出级 `targetMode:'group'` + `groupCount:[1,2]` 另选 1-2 目标
    * （全主诿异既有先例）。
-   * 「大幅度降低」无官方数值 → 沿用用户口径 `caused -99.99`（`buffMult` 下限 10%，Web 显示「造成的伤害大幅降低」）；
+   * 「大幅度降低」无官方数值 → 沿用用户口径 `caused -HUGE_MODIFIER_RATE`（−1000%）（`buffMult` 下限 10%，Web 显示「造成的伤害大幅降低」）；
    * 减伤对象为敌军、在自身行动中施加 → 「持续 1 回合」按 duration 2（辕门射戟口径）。
    * 策略伤害 130% 受谋略缩放，官方未给成长率 → `growthRate` 留空（登记《成长率待补名单》§三）。
    */
@@ -6384,7 +6404,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         targetSide: 'enemy',
         targetMode: 'group',
         groupCount: [1, 2],
-        status: { type: 'damage_boost', rate: -99.99, duration: 2, direction: 'caused' },
+        status: { type: 'damage_boost', rate: -HUGE_MODIFIER_RATE, duration: 2, direction: 'caused' },
       },
     ],
   },
@@ -7238,8 +7258,9 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         excludeSelf: true,
         applyAll: true,
         status: [
-          { type: 'defense_buff', amount: 24, duration: 2, strategyScaled: true },
-          { type: 'strategy_buff', amount: 24, duration: 2, strategyScaled: true },
+          // 包内 20079614/20079626（机制 102）：const 1000 + intel 3500 ⇒ 24 点、成长 3500/20000 = 0.175
+          { type: 'defense_buff', amount: 24, duration: 2, strategyScaled: true, growthRate: 0.175 },
+          { type: 'strategy_buff', amount: 24, duration: 2, strategyScaled: true, growthRate: 0.175 },
         ],
       },
       // ④ 若有目标存在妖术效果 → 额外附加属性至自身
@@ -7249,8 +7270,9 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         applyAll: true,
         requireAnyPrevDamageTargetStatus: ['sorcery', 'curse'],
         status: [
-          { type: 'defense_buff', amount: 24, duration: 2, strategyScaled: true },
-          { type: 'strategy_buff', amount: 24, duration: 2, strategyScaled: true },
+          // 包内 20079615/20079627（机制 103）：同 ③，成长 0.175
+          { type: 'defense_buff', amount: 24, duration: 2, strategyScaled: true, growthRate: 0.175 },
+          { type: 'strategy_buff', amount: 24, duration: 2, strategyScaled: true, growthRate: 0.175 },
         ],
       },
     ],
@@ -8678,6 +8700,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
             stacks: 1,
             maxStacks: 15,
             strategyScaled: true,
+            // 包内 20027702/20027703（机制 125，value_add_max 15 = 上限 15 层）：const 6 + intel 10 ⇒ 10%、成长 10/200 = 0.05
+            growthRate: 0.05,
           },
         },
       ],
@@ -9256,6 +9280,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    *      `targetSide:'ally' + targetMode:'random_single'`，**推定**）；
    *   ③ 段二「抵御」= 新引擎件 `CommandSkill.debuffResist`：我军被施加挑衅/围困/控制时按 50% 判定，
    *      命中则整段取消（不落状态/不刷新/不叠加；推 `status_resisted` 事件）；
+   *      ⚠️ **一类指挥的预备 / 延迟判定**不在抵御范围（用户口径）：战必断金 / 措手不及 / 白衣渡江的预备怯战、
+   *      帝临回光延迟围困等直接跳过判定；一类指挥即时段与后续触发（合纵连横普攻后围困）仍可抵御；
    *   ④ 两段判定均走士气修正并逐次发 skill_trigger（actLayer / first_aid 口径，**推定**）；
    *   ⑤ 「50.0%」两段同值；受谋略两处成长系数未给 → 基值不缩放 → 登记 OFFLINE_MAIN_SKILLS（程昱下架）。
    */
@@ -9294,20 +9320,27 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    * 官方：scripts/skill_extra.json id 200296（指挥 / 距离 5 / 友军全体 / 兵种弓步骑；effect 策略攻击伤害提高）。
    *   来源 https://stzb.163.com/m/skilllist/200296.html
    *
-   * 口径（策略 A，2026-09-20；推定处已标注）：
+   * 口径（策略 A，2026-09-20 初版；**2026-10-23 改按包内真值**）：
    *   ① 「造成策略伤害提升 40%，每回合结束时降低 1/6」= `damage_boost` direction:'caused'
-   *      damageType:'strategy' + 新引擎件 `decayRoundParts: 6`（每回合结束 −1 份，rate = 满额 × 剩余/6：
-   *      40%→33.3%→26.7%→20%→13.3%→6.7%→0；按**初始值线性**衰减，同谋议宏图 8/8 口径，**推定**）；
-   *   ② 「伤害率在原基础 80%-150% 范围随机浮动，浮动范围每回合收敛 1/6，第六回合收敛至 115%」→
-   *      新状态 `strategy_flux`（low 80 / high 150 / mid 115 / convergeRounds 6）：携带者造成策略伤害时
-   *      率 × 区间内均匀随机系数；区间随回合线性收敛、**第 6 回合恰好收敛到 mid（115%）**。
-   *      口径说明：官方「每回合收敛 1/6」与「第六回合收敛至 115%」数学上只能取一（6 步 × 1/6 会到第 7
-   *      回合；5 步 × 1/5 恰好第 6 回合到位）→ 本实现取**明写的终值（第 6 回合 = 115%）**，步长按等分，
-   *      **推定**；第 1 回合为满区间 [80,150]（与官方「80.0%-150.0% 范围」一致）；
-   *   ③ 「上限受谋略属性影响」+「收敛值 115%（受谋略）」→ 区间与中点同比例受谋略缩放
-   *      （`strategyScaled` + growthRate 未确认 → 基值；因 115 = (80+150)/2，整体等比即等价）；
-   *   ④ 浮动只作用于 `strategy_damage` 输出段（DoT 挂上时冻结、不参与浮动，**推定**）；
-   *   ⑤ 两处「受谋略属性影响」成长系数官方未给 → 基值不缩放 → 登记 OFFLINE_MAIN_SKILLS（刘徽下架）。
+   *      damageType:'strategy' + `decayRoundParts: 6`（每回合结束 −1 份，rate = 满额 × 剩余/6：
+   *      40%→33.3%→26.7%→20%→13.3%→6.7%→0；包内 20029601 的 value_add_max = −6 自证）；
+   *      包内 20029601 真值：intel_param 35 / constant_param 26 → 值 = 26 + 0.4×35 = **40.0%**、
+   *      成长 = 35/200 = **0.175/点谋略**（与引擎 growthRate 完全一致）。
+   *   ② 「伤害率在原基础 80.0%-150.0% 范围随机浮动，每回合收敛 1/6，第六回合收敛至 115.0%」→
+   *      状态 `strategy_flux` 的**逐回合 6 档区间**（`steps`，见下）。**包内给了每一档的真值**，
+   *      不再用「线性收敛」推定：
+   *        · 机制 82「伤害率波动上限」detail 20029602：intel 30 / const 138 → 150.0%，成长 0.15/点；
+   *        · 机制 83「伤害率波动下限」detail 20029603：intel **0** / const 80 → 80.0%，**不随谋略**
+   *          （与官方「(上限受谋略属性影响)」只标上限一致）；
+   *        · 收敛链 = 子技能 20029613~17（effect 122）逐回合挂 effect 125 傀儡档：
+   *          上限 20029621~25（29/131、28/124、27/118、26/111、25/105）→ 142.6 / 135.2 / 128.8 / 121.4 / 115.0；
+   *          下限 20029631~35（5/85、10/90、15/95、20/100、25/105）→ 87 / 94 / 101 / 108 / 115。
+   *          换算同 ①：值 = const + 0.4×intel、成长 = intel/200。
+   *      第 1 回合满载区间（与官方 80.0%-150.0% 对齐），第 6 回合起两位端点都落在 115.0%。
+   *   ③ 受谋略缩放：**施加阶段**按施法者生效谋略逐档 `scaledValue(值, 成长, 谋略)`（与 damage_boost 受谋略
+   *      同口径），结果冻结进 Status。例：满级刘徽谋略 ≈ 180 → 第 1 回合 80.0%~165.0%、第 6 回合 127.5%。
+   *   ④ 浮动只作用于 `strategy_damage` 输出段（DoT 挂上时冻结、不参与浮动）。
+   *   ⑤ 成长系数已由包内补齐 → **不登记下架**（原 2026-09-20 的「按基值 + 下架」结论作废）。
    */
   lianwei_qiongji: {
     id: 'lianwei_qiongji',
@@ -9320,7 +9353,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     targetSide: 'ally',
     tags: ['damage_boost'],
     output: [],
-    // 准备阶段一次性：友军全体（a）策略增伤 40% 每回合 −1/6；（b）策略伤害浮动区间 [80,150] 收敛到 115
+    // 准备阶段一次性：友军全体（a）策略增伤 40% 每回合 −1/6；（b）策略伤害浮动逐回合 6 档（包内真值）
     initialOutput: [
       {
         kind: 'inflict_status',
@@ -9338,12 +9371,16 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         kind: 'inflict_status',
         status: {
           type: 'strategy_flux',
-          low: 80,
-          high: 150,
-          mid: 115,
-          convergeRounds: 6,
+          // [下限, 上限]（谋略 80 的满级值）+ 各档成长率（上限 0.15→0.125 收敛，下限 0→0.125 收敛）
+          steps: [
+            { low: 80, high: 150, lowGrowthRate: 0, highGrowthRate: 0.15 },
+            { low: 87, high: 142.6, lowGrowthRate: 0.025, highGrowthRate: 0.145 },
+            { low: 94, high: 135.2, lowGrowthRate: 0.05, highGrowthRate: 0.14 },
+            { low: 101, high: 128.8, lowGrowthRate: 0.075, highGrowthRate: 0.135 },
+            { low: 108, high: 121.4, lowGrowthRate: 0.1, highGrowthRate: 0.13 },
+            { low: 115, high: 115, lowGrowthRate: 0.125, highGrowthRate: 0.125 },
+          ],
           duration: 999,
-          strategyScaled: true,
         },
       },
     ],
@@ -9567,8 +9604,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    * 口径（策略 A，2026-09-20；推定处已标注）：
    *   ① 追击主段沿用**本战法整体目标 `[攻击目标]`**，不受距离约束（官方有效距离栏「--」）→ `range: 0`（扬威先例）；
    *   ② 「使其进行下一次攻击的伤害大幅度降低」——用户 2026-09-20 口径：凡描述写「大幅度」的均为**极大值**，
-   *      即 rate = **−99.99（−9999%）**，配合 `buffMult` 的 10% 伤害下限使该次攻击伤害压到最低，
-   *      战报显示为「造成的伤害大幅降低」（不显示 9999%）；
+   *      即 rate = **−1000%（哨兵 HUGE_MODIFIER_RATE）**，配合 `buffMult` 的 10% 伤害下限使该次攻击伤害压到最低，
+   *      战报显示为「造成的伤害大幅降低」（不显示 1000%）；
    *   ③ 「下一次攻击」= `charges: 1` 的次数型造成侧减伤（美人计「下一次攻击或策略攻击造成伤害降低」先例：
    *      下一次造成伤害即消耗，不加伤害来源过滤），**推定**；
    *   ④ 无「受属性影响」段、无数值缺口（235% 与「大幅度=极大值」均已确定）→ **上架**（不登记 OFFLINE_MAIN_SKILLS）。
@@ -9583,10 +9620,10 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     output: [
       // ① 对攻击目标再次发动猛攻 235%
       { kind: 'physical_damage', rate: 235 },
-      // ② 使其「下一次攻击」造成的伤害大幅降低（极大值 −9999%，下一次造成伤害后消耗）
+      // ② 使其「下一次攻击」造成的伤害大幅降低（极大值 −1000%，下一次造成伤害后消耗）
       {
         kind: 'inflict_status',
-        status: { type: 'damage_boost', rate: -99.99, duration: 999, direction: 'caused', charges: 1 },
+        status: { type: 'damage_boost', rate: -HUGE_MODIFIER_RATE, duration: 999, direction: 'caused', charges: 1 },
       },
     ],
   },
@@ -9606,7 +9643,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    *   ② 「使友军群体…」= 段级 `targetSide:'ally'` + `targetMode:'group'`（群体 = 有效距离内 2 个目标，
    *      含施法者自身，仓库 `allies` 口径）；
    *   ③ 「受到…伤害大幅度降低」——用户 2026-09-20 口径「大幅度」= 极大值 → `damage_boost` direction **taken**
-   *      rate **−99.99（−9999%）**，配合 buffMult 10% 伤害下限把该次策略伤害压到最低，战报显示「受到的伤害大幅降低」；
+   *      rate **−1000%（哨兵 HUGE_MODIFIER_RATE）**，配合 buffMult 10% 伤害下限把该次策略伤害压到最低，战报显示「受到的伤害大幅降低」；
    *   ④ 「下 1-2 次」按字面取**随机 1~2 次**（`charges: [1,2]` 施加时均匀随机；辕门射戟 groupCount [2,3] 先例），**推定**；
    *      只对**策略攻击**消耗（`damageType:'strategy'` 过滤 → 普通攻击/攻击战法不吃也不扣）；
    *   ⑤ 策略伤害 240% 受谋略而官方未给成长系数 → `strategyScaled: true` + `growthRate` 缺（按基值不缩放）
@@ -9626,13 +9663,13 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     output: [
       // ① 敌军群体（2 目标）策略攻击 240%（受谋略未确认 → 基值）
       { kind: 'strategy_damage', rate: 240, growthRate: 2.75, strategyScaled: true },
-      // ② 友军群体（2 目标）「受到下 1-2 次策略攻击的伤害大幅降低」（极大值 −9999%，只吃策略攻击）
+      // ② 友军群体（2 目标）「受到下 1-2 次策略攻击的伤害大幅降低」（极大值 −1000%，只吃策略攻击）
       {
         kind: 'inflict_status',
         targetSide: 'ally',
         targetMode: 'group',
         groupCount: 2,
-        status: { type: 'damage_boost', rate: -99.99, duration: 999, direction: 'taken', damageType: 'strategy', charges: [1, 2] },
+        status: { type: 'damage_boost', rate: -HUGE_MODIFIER_RATE, duration: 999, direction: 'taken', damageType: 'strategy', charges: [1, 2] },
       },
     ],
   },
@@ -9657,7 +9694,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    *      同一次结算跨越多档只结算 1 次（与被动版 `troopThresholdBuff` 同口径，**推定**）；
    *   ④ 触发效果「必定援护友军群体 1 回合」→ 自身挂 `cover`（duration 1，缺省援护友军全体）；
    *      「自身下 2 次受到的伤害大幅度降低」→ 用户 2026-09-20 口径「大幅度」= **极大值** →
-   *      `damage_boost` direction **taken** rate **−99.99（−9999%）** + `charges: 2`（次数型，随后 2 次受击各扣 1）；
+   *      `damage_boost` direction **taken** rate **−1000%（哨兵 HUGE_MODIFIER_RATE）** + `charges: 2`（次数型，随后 2 次受击各扣 1）；
    *   ⑤ 防御点数受防御成长系数未给 → 登记 OFFLINE_MAIN_SKILLS → **武将下架**。
    */
   aobing_weizhu: {
@@ -9693,7 +9730,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         {
           kind: 'inflict_status',
           target: 'self',
-          status: { type: 'damage_boost', rate: -99.99, duration: 999, direction: 'taken', charges: 2 },
+          status: { type: 'damage_boost', rate: -HUGE_MODIFIER_RATE, duration: 999, direction: 'taken', charges: 2 },
         },
       ],
     },
@@ -9715,7 +9752,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    *      （回合开始掷一次、走士气修正、逐回合发 `skill_trigger`；命中执行 output 并登记 → 回合末执行 roundEndOutput）；
    *   ② 「两种状态之一」→ `random_pick(count:1)` **50/50 等概率**（三军夺帅「或」先例；官方未写概率，**推定**）；
    *   ③ 状态一「造成所有伤害大幅降低」→ 用户口径「大幅度」= **极大值** → `damage_boost` direction **caused**
-   *      rate **−99.99（−9999%）**、`duration: 1`（「本回合内」）；
+   *      rate **−1000%（哨兵 HUGE_MODIFIER_RATE）**、`duration: 1`（「本回合内」）；
    *   ④ 状态二「暴走 + 攻击距离与主动战法距离 −2」→ **同一目标三段状态**（`rampage` / `range_buff −2` /
    *      `skill_range_buff −2`，`applyAll: true` 保证同目标、非随机二选一）；暴走段官方未写持续 →
    *      按「本回合内」取 `duration: 1`（**推定**）；
@@ -9743,13 +9780,13 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
           kind: 'random_pick',
           count: 1, // 两种状态之一（50/50）
           options: [
-            // 状态一：造成所有伤害大幅降低（极大值 −9999%），本回合内
+            // 状态一：造成所有伤害大幅降低（极大值 −1000%），本回合内
             [
               {
                 kind: 'inflict_status',
                 targetSide: 'enemy',
                 targetMode: 'random_single',
-                status: { type: 'damage_boost', rate: -99.99, duration: 1, direction: 'caused', untilRoundEnd: true },
+                status: { type: 'damage_boost', rate: -HUGE_MODIFIER_RATE, duration: 1, direction: 'caused', untilRoundEnd: true },
               },
             ],
             // 状态二：暴走 + 攻击距离 −2 + 主动战法距离 −2（同一目标三段，applyAll）
@@ -9886,10 +9923,10 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    *   ② 目标行「我军群体（有效距离内 3 个目标）」与描述「我军全体」冲突 → 按**描述**取 `targetMode:'all'`
    *      （策略 A ③；3 人队下两者等价）；
    *   ③ 段二（该效果结束后 1 回合内 = 第 3 回合）我军全体造成所有伤害大幅降低 → `roundStartRepeat.rounds:[3]`
-   *      + `damage_boost` direction **caused**；「大幅度」= **极大值 −99.99（−9999%）**（用户 2026-09-20 口径），
+   *      + `damage_boost` direction **caused**；「大幅度」= **极大值 −1000%（哨兵 HUGE_MODIFIER_RATE）**（用户 2026-09-20 口径），
    *      `duration: 1`（第 3 回合内生效、回合末递减）；
    *      ⚠️ `afterDelayedOutputs: true`（用户 2026-10-19 报障）：段二若在回合前准备阶段就挂上，
-   *      同回合帝临回光的恐慌会在施加时把 −99.99% 冻进 stored（整场只打 10%，看起来像「全局减伤」）；
+   *      同回合帝临回光的恐慌会在施加时把 −1000% 冻进 stored（整场只打 10%，看起来像「全局减伤」）；
    *      延到 `triggerDelayedOutputs` 之后再结算，仍覆盖第 3 回合的全部行动。
    *   ④ 段三（第 4 回合开始，自身造成**攻击伤害**时恢复伤害值 35.0%）→ `healOnDamage` 新增
    *      `selfOnly`（只对携带者自身的伤害）+ `startRound: 4`；**官方现页写明 35.0%（1 级 17.5%）**，
@@ -9916,8 +9953,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         status: { type: 'damage_reduce', rate: 0.32, growthRate: 0.25, duration: 2, defenseScaled: true },
       },
     ],
-    // ③ 第 3 回合：我军全体造成的所有伤害大幅降低（极大值 −9999%）
-    // ⚠️ afterDelayedOutputs：晚于同回合的一类指挥延迟效果（帝临回光恐慌快照），否则 −99.99% 会被 DoT 冻住整场
+    // ③ 第 3 回合：我军全体造成的所有伤害大幅降低（极大值 −1000%）
+    // ⚠️ afterDelayedOutputs：晚于同回合的一类指挥延迟效果（帝临回光恐慌快照），否则 −1000% 会被 DoT 冻住整场
     roundStartRepeat: {
       rounds: [3],
       afterDelayedOutputs: true,
@@ -9926,7 +9963,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
           kind: 'inflict_status',
           targetSide: 'ally',
           targetMode: 'all',
-          status: { type: 'damage_boost', rate: -99.99, duration: 1, direction: 'caused' },
+          status: { type: 'damage_boost', rate: -HUGE_MODIFIER_RATE, duration: 1, direction: 'caused' },
         },
       ],
     },
@@ -10736,7 +10773,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    *   首次伤害或首次普通攻击有 40.0% 几率选中敌军大营。
    *   【追加】黄忠发动此战法时，选中敌军大营的几率提升至 50.0%。
    *   来源 https://stzb.163.com/m/skilllist/200293.html（id 200293；1 级 50% / 20%）。
-   * 口径：①「各自首个主动或追击战法伤害大幅降低」= `damage_boost` caused −99.99（仓库「大幅度」
+   * 口径：①「各自首个主动或追击战法伤害大幅降低」= `damage_boost` caused `-HUGE_MODIFIER_RATE`（−1000%，仓库「大幅度」
    *   极大值口径）+ `skillTypes:['active','pursuit']` + `charges: 1`（每个目标各 1 次次数制，
    *   出伤害即消耗），duration 999 占位；
    *   ② 第 4 回合 = `onActSegments`（一类指挥行动时分段）：`trigger_boost`（rate 1 = +100 个百分点、
@@ -10760,7 +10797,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         kind: 'inflict_status',
         status: {
           type: 'damage_boost',
-          rate: -99.99,
+          rate: -HUGE_MODIFIER_RATE,
           duration: 999,
           direction: 'caused',
           skillTypes: ['active', 'pursuit'],
@@ -10809,10 +10846,12 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    * 口径：① `instanceGuard`（我军**共享**计数 7 次：受到伤害实例 + 将被施加控制效果各计 1 次，
    *   无论判定成败；每次 50%（走携带者士气修正）——伤害命中 = 完全规避、控制命中 = 抵御不落状态）；
    *   ② 第 7 次计满立即惩罚「造成伤害累计最高的敌军单体」（`ctx.damageDealtTotals`）：
-   *   下回合造成伤害大幅降低（caused −99.99，duration 1）；
+   *   下回合造成伤害大幅降低（caused `-HUGE_MODIFIER_RATE`，duration 1）；
    *   ③ 追加（蜀阵营）= `conditional.casterFactions:['蜀']` 追加防御 −10% 同回合。
    * 推定：① 「前 7 次」按**全队共享**计数（官方「我军群体受到的前 7 次」）；② 「控制效果」取引擎
-   *   控制四类（混乱 / 暴走 / 怯战 / 犹豫）。
+   *   控制四类（混乱 / 暴走 / 怯战 / 犹豫）；③ 「抵御」对**一类指挥的预备 / 延迟判定**施加的控制不生效
+   *   （用户口径）：战必断金 / 措手不及 / 白衣渡江的预备怯战、帝临回光延迟围困等不掷判定也不计次；
+   *   一类指挥即时段与后续触发（合纵连横普攻后围困）、二类指挥、主动 / 追击 / 被动来源照常可抵御。
    */
   qiqin_qizong: {
     id: 'qiqin_qizong',
@@ -10832,7 +10871,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         // 下回合造成所有伤害大幅降低（极大值口径）
         {
           kind: 'inflict_status',
-          status: { type: 'damage_boost', rate: -99.99, duration: 1, direction: 'caused' },
+          status: { type: 'damage_boost', rate: -HUGE_MODIFIER_RATE, duration: 1, direction: 'caused' },
         },
         // 【追加】蜀阵营武将：同时使其防御属性降低 10%（持续 1 回合）
         {
@@ -11463,8 +11502,12 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    *   ①「每回合」= `roundStartRepeat{ startRound:1, endRound:4 }`（一类指挥每回合行动阶段结算，鹤翼 / 反击之策先例）；
    *   ②「兵力最低的武将」= `inflict_status.targetPick:'lowest_troops_ally'`（本轮新增，含施法者自身，heal 同款口径）；
    *   ③「受到**首次**攻击和**首次**策略攻击的伤害大幅度降低」= 两条独立轨 `damage_reduce`
-   *      （`damageType: 'physical' | 'strategy'` + `charges: 1`，本回合各只吃第一次；「大幅度降低」按仓库
-   *      极大值口径 = 引擎伤害下限（减伤 90% → 实际保留 10%），同辕门射戟 / 迟智难酬「大幅度」口径，**推定**）；
+   *      （`damageType: 'physical' | 'strategy'` + `charges: 1`，本回合各只吃第一次）；
+   *      **取值 = `HUGE_MODIFIER_RATE`（1000%）**：包内 effect 522 / 524 两槽 `constant_param = 9000`，
+   *      按「百分比修正 = const / 100」换算只是 90.0%，而 90% 会被敌方「造成伤害提高」抵掉
+   *      （`1 + 0.5 − 0.9 = 0.6`）——与文案「大幅度降低」不符；用户 2026-10-21 口径：
+   *      大幅减伤是**很大的值**（如 1000%），配合 `buffMult` 的 10% 下限 ⇒ 无论对方增伤多高都压到下限。
+   *      同辕门射戟 / 迟智难酬 / 息交2「大幅度」口径（哨兵值见 `formulas.ts`）；
    *   ④「我军随机单体…进入规避状态」= `inflict_status`（`targetSide:'ally'` + `targetMode:'random_single'`）
    *      挂 `evasion{ stacks:1 }`（雪奋短兵同款层数式必挡，消耗于下一次实际受击）。
    * 全文无「受 XX 属性影响」→ 上架。
@@ -11488,12 +11531,12 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         {
           kind: 'inflict_status',
           targetPick: 'lowest_troops_ally',
-          status: { type: 'damage_reduce', rate: 0.9, duration: 1, damageType: 'physical', charges: 1 },
+          status: { type: 'damage_reduce', rate: HUGE_MODIFIER_RATE, duration: 1, damageType: 'physical', charges: 1 },
         },
         {
           kind: 'inflict_status',
           targetPick: 'lowest_troops_ally',
-          status: { type: 'damage_reduce', rate: 0.9, duration: 1, damageType: 'strategy', charges: 1 },
+          status: { type: 'damage_reduce', rate: HUGE_MODIFIER_RATE, duration: 1, damageType: 'strategy', charges: 1 },
         },
         {
           kind: 'inflict_status',

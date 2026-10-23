@@ -7,7 +7,7 @@
  *  再战：第 5 回合 50% 获得连击
  */
 import { describe, it, expect } from 'vitest';
-import { actUnit, inflictStatus, getStatus, hasStatus, consumeEvasion, recoverTroops, sumReduce, markFirstHitReduceUsed, dealDotDamage, tickRoundStartStatuses, updateTreasureOnHurt, applyTreasureBasicHit, applyTreasureAfterActive } from '../src/engine/action';
+import { actUnit, inflictStatus, getStatus, hasStatus, consumeEvasion, recoverTroops, sumReduce, markFirstHitReduceUsed, dealDotDamage, tickRoundStartStatuses, tickStatuses, updateTreasureOnHurt, applyTreasureBasicHit, applyTreasureAfterActive } from '../src/engine/action';
 import type { General, Skill } from '../src/engine/types';
 import type { CombatContext } from '../src/engine/action';
 import type { CreateStatus, UnitState } from '../src/engine/types';
@@ -144,14 +144,17 @@ describe('宝物 · 控制延时 / 免疫 / 反击 / 回合钩子', () => {
     const ally = makeUnit('a', 'enemy');
     ctx.myTeam = [u];
     ctx.enemyTeam = [ally];
-    // 不屈：受击叠层减伤（3%/层，上限 10），回合开始清零
+    // 不屈：受击叠层减伤（3%/层，上限 10），**回合结束**才清零（用户 2026-10-23 口径）
     inflictStatus(ctx, u, { type: 'hurt_stack', mode: 'reduce', perStack: 0.03, maxStacks: 10, duration: 999 }, 'passive', 'treasure:affix:不屈', 'u');
     updateTreasureOnHurt(ctx, u);
     updateTreasureOnHurt(ctx, u);
     expect(getStatus(u, 'hurt_stack')!.stacks).toBe(2);
-    // 回合开始清零（tickRoundStartStatuses）
+    // 回合开始**不**清零：整回合有效
     ctx.currentRound = 2;
     tickRoundStartStatuses(ctx);
+    expect(getStatus(u, 'hurt_stack')!.stacks).toBe(2);
+    // 回合结束清零（tickStatuses）
+    tickStatuses(ctx, [u]);
     expect(getStatus(u, 'hurt_stack')!.stacks).toBe(0);
 
     // 避险：首次受击 → 获得 1 层规避，标记移除并记事件

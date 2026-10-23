@@ -25,6 +25,7 @@ import {
 } from '../src/engine/action';
 import type { General, Position, Skill, Status, UnitState } from '../src/engine/types';
 import { Rng } from '../src/engine/rng';
+import { HUGE_MODIFIER_RATE } from '../src/engine/formulas';
 import { SKILL_REGISTRY } from '../src/data/skills';
 
 function makeUnit(id: string, position: Position, opts: { strategy?: number; defense?: number } = {}): UnitState {
@@ -89,7 +90,8 @@ function advanceToRound3(ctx: CombatContext): void {
 const causedDebuff = (u: UnitState) =>
   u.statuses.find(
     (s): s is Extract<Status, { type: 'damage_boost' }> =>
-      s.type === 'damage_boost' && s.direction === 'caused' && s.rate < -50
+      // 「大幅度降低」= −HUGE_MODIFIER_RATE（−1000%），旧口径的 −99.99 已统一成同一个哨兵
+      s.type === 'damage_boost' && s.direction === 'caused' && s.rate <= -HUGE_MODIFIER_RATE
   );
 
 function panicOf(u: UnitState) {
@@ -142,7 +144,7 @@ describe('酒池肉林 × 帝临回光：第 3 回合减伤不冻结恐慌快照
     // ③ 段二没有消失：延迟结算后挂在两名友军身上，仍是「大幅降低」，且只持续 1 回合
     const debuff = causedDebuff(withDong.lingdi);
     if (!debuff) throw new Error('酒池肉林段二没有在延迟结算后生效');
-    expect(debuff.rate).toBeCloseTo(-99.99, 2);
+    expect(debuff.rate).toBeCloseTo(-HUGE_MODIFIER_RATE, 2);
     expect(debuff.remaining).toBe(1);
     expect(causedDebuff(withDong.teammate)).toBeTruthy();
   });

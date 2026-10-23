@@ -150,15 +150,18 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
       }
       break;
     }
-    case 'skill_cast':
+    case 'skill_cast': {
+      // 链式战法（连环计 / 河内世泽）显示「父战法·子战法」，否则看不出这一步是哪个子战法放出来的
+      const castName = ev.subSkill ? `${ev.skillName}·${ev.subSkill}` : ev.skillName;
       lines.push(
         ev.recastBy
-          ? `  ✦ 【${ev.unitId}】发动【${ev.skillName}】！（${ev.recastBy}：再次发动，效果 ${Math.round((ev.recastRate ?? 1) * 100)}%）`
-          : `  ✦ 【${ev.unitId}】发动【${ev.skillName}】！`
+          ? `  ✦ 【${ev.unitId}】发动【${castName}】！（${ev.recastBy}：再次发动，效果 ${Math.round((ev.recastRate ?? 1) * 100)}%）`
+          : `  ✦ 【${ev.unitId}】发动【${castName}】！`
       );
       break;
+    }
     case 'skill_target':
-      lines.push(`  → 目标：${ev.targetIds.join('、')}`);
+      lines.push(`  → ${ev.subSkill ? `〈${ev.subSkill}〉` : ''}目标：${ev.targetIds.join('、')}`);
       break;
     case 'seal_settle':
       lines.push(`  ✦ 【${ev.unitId}】【${ev.skillName}】玉玺结转：上一回合承担 ${fmt(ev.carried)}，按 ${Math.round(ev.ratio * 100)}% 使其损失 ${fmt(ev.damage)} 兵力（剩余 ${fmt(ev.afterTroops)}）`);
@@ -169,6 +172,7 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
       } else {
         lines.push(
           `  → ${ev.subSkill ? `〈${ev.subSkill}〉` : ''}对「${ev.targetId}」造成${ev.damageType === 'physical' ? '攻击' : '谋略'}伤害 ${fmt(ev.damage)}${afterSuffix(ev.afterTroops)}（${renderBreakdown(ev.breakdown)}）` +
+            rateSuffix(ev.damageRate, ev.rateFlux) +
             (ev.ignoreStrategy ? `【${ev.ignoreStrategy.skillName}：无视目标 ${ev.ignoreStrategy.pct}% 谋略属性】` : '')
         );
       }
@@ -278,6 +282,18 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
 
 function renderBreakdown(b: { troopBase: number; base: number; main: number }): string {
   return `兵力基础${b.troopBase} + 属性基础${b.base} + 主要${b.main}`;
+}
+
+/**
+ * 伤害率后缀（谋略伤害才有）：`【伤害率 512.4%】`；有策略伤害浮动时补上本回合档位区间与本次系数
+ * `【伤害率 512.4%，浮动 101.0%~128.8% → 118.3%】`。与 Web 详情战报同口径（`web/battleView.ts` 的 .dmg-rate）。
+ */
+function rateSuffix(rate?: number, flux?: { low: number; high: number; factor: number }): string {
+  if (rate === undefined) return '';
+  const head = `【伤害率 ${rate.toFixed(1)}%`;
+  return flux
+    ? `${head}，浮动 ${flux.low.toFixed(1)}%~${flux.high.toFixed(1)}% → ${flux.factor.toFixed(1)}%】`
+    : `${head}】`;
 }
 
 /** 兵种特性来源（不是注册战法）在战报里的可读名：散射 / 重骑冲阵等 */
