@@ -2975,6 +2975,7 @@ function endUnitAct(
 }
 
 export function actUnit(ctx: CombatContext, unit: UnitState): void {
+  if (!unit.alive) return;
   const enemies = unit.side === 'my' ? ctx.enemyTeam : ctx.myTeam;
   const allies = unit.side === 'my' ? ctx.myTeam : ctx.enemyTeam;
   // 行动阶段伤害目标记账（持刀从武「上次行动阶段造成伤害的目标」）：本次行动内打出的伤害累积到
@@ -3169,6 +3170,7 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
   // 每次**普攻命中后立即**结算：① 分兵 → ② 追击战法判定（连击：普攻→分兵→追击→普攻→分兵→追击），
   // 而非全部普攻结束后统一判定。时序依赖追击的战法（烈火焚舟：第二刀引爆第一刀挂上的燃烧）依赖该穿插顺序。
   const doOneAttack = (): UnitState | null => {
+    if (!unit.alive) return null;
     ctx.events.push({
       type: 'unit_act_start',
       unitId: unit.general.id,
@@ -3177,7 +3179,7 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
       phase: 'normal_attack',
     });
     const hit = normalAttack(ctx, unit, attackPool, allies, canNormalAttackNow());
-    if (hit) {
+    if (hit && unit.alive) {
       // 分兵（普攻衍生伤害）：**只由普通攻击触发**，命中后随本次普攻立即对相邻敌军溅射（无视攻击距离）。
       // 必须在追击判定之前结算——原先放在两次普攻之后（追击之后）结算，会让分兵事件落进追击战法段
       // （战报看起来像「追击触发了分兵」），且追击打死普攻目标时分兵会被整段吞掉。
@@ -3189,6 +3191,7 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
       }
       // 本次普攻命中后：逐追击槽判定（目标已死时追击对死目标判定，内部无目标则不生效）
       for (const id of unit.general.pursuitSkillIds) {
+        if (!unit.alive) break;
         const pursuit = resolveSkill(ctx, id);
         if (!pursuit) continue;
         ctx.events.push({
@@ -3201,10 +3204,10 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
         triggerPursuitSkill(ctx, unit, pursuit, hit, enemies);
       }
     }
-    if (hit && unit.general.secondaryTroop === '解烦兵' && ctx.rng.chance(0.2)) {
+    if (hit && unit.alive && unit.general.secondaryTroop === '解烦兵' && ctx.rng.chance(0.2)) {
       inflictStatus(ctx, hit, { type: 'siege', duration: 1 }, 'passive', 'trait_jiefan');
     }
-    if (hit && unit.general.secondaryTroop === '虎豹骑') {
+    if (hit && unit.alive && unit.general.secondaryTroop === '虎豹骑') {
       ctx.troopOnce ??= new Set();
       const key = `${unit.general.id}:hubao`;
       if (!ctx.troopOnce.has(key)) {
@@ -3216,12 +3219,12 @@ export function actUnit(ctx: CombatContext, unit: UnitState): void {
   };
   const comboCount = hasStatus(unit, 'combo') ? 2 : 1;
   const liannu = unit.general.secondaryTroop === '连弩兵' && (ctx.currentRound <= 1 || ctx.rng.chance(0.3));
-  for (let i = 0; i < comboCount; i++) doOneAttack();
-  if (liannu) doOneAttack();
+  for (let i = 0; i < comboCount && unit.alive; i++) doOneAttack();
+  if (liannu && unit.alive) doOneAttack();
   // 伏波扬砂（马腾）：普攻后每消耗 4 层【扬砂】追加一次普攻，可重复触发直到不足 4 层
   // （额外普攻同样是普攻 → 继续累计层数；上限 20 次防失控）
   for (let extra = 0; extra < YANGSHA_MAX_EXTRA_ATTACKS; extra++) {
-    if (!consumeStacksForExtraAttack(ctx, unit, canNormalAttackNow())) break;
+    if (!unit.alive || !consumeStacksForExtraAttack(ctx, unit, canNormalAttackNow())) break;
     doOneAttack();
   }
 
@@ -10452,10 +10455,11 @@ function normalAttack(
   const target = dealAttack(ctx, unit, chosen);
   // 宝物「劲弩」（神锋）：第 2 回合起首次发动普通攻击时，对攻击距离内敌军全体各发动 1 次普通攻击
   const sweep = unit.statuses.find((s) => s.type === 'treasure_basic_sweep');
-  if (sweep && ctx.currentRound >= 2) {
+  if (unit.alive && sweep && ctx.currentRound >= 2) {
     unit.statuses = unit.statuses.filter((s) => s !== sweep);
     // 暴走时同样敌我不分（与普攻主目标同口径；同侧距离走压缩位次）
     for (const e of attackTargetsInRange(ctx, unit, rampageAwarePool(ctx, unit, enemies))) {
+      if (!unit.alive) break;
       if (e === target) continue;
       dealAttack(ctx, unit, e);
     }
@@ -11481,7 +11485,9 @@ export function applyDamage(
               s.type === 'damage_share' && (s.damageKind == null || s.damageKind === (damageType ?? 'physical'))
           );
           if (!st || (st.charges != null && st.charges <= 0)) continue;
-          const transfer = Math.min(sharer.troops, Math.round(baseIncoming * st.rate));
+          // 各份独立四舍五入可能超过总额（101 的两个 50% = 51 + 51）。
+          // 最后一份最多承担剩余伤害，避免 incoming 变负、原目标反而加兵。
+          const transfer = Math.min(incoming, sharer.troops, Math.round(baseIncoming * st.rate));
           if (transfer <= 0) continue;
           if (st.charges != null) {
             st.charges -= 1;

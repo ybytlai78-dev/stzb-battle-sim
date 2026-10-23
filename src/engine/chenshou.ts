@@ -58,7 +58,7 @@ const STAT_BUFF: Record<StatKey, 'attack_buff' | 'defense_buff' | 'strategy_buff
 /**
  * 准备阶段**之前**的一次性改动（阵营 / 统率）。
  * 必须在 `computeTroopBonuses` 之前调用 —— 否则阵营加成会按改写前的阵营计数。
- * 就地改 `General`（与 `ensureUniqueUnitIds` 同口径：直接改队伍里的对象）。
+ * 就地改 `General`；runBattle 必须传入每场独立的面板副本，不能传用户装配原对象。
  */
 export function applyChenshouPrepass(generals: General[]): void {
   for (const g of generals) {

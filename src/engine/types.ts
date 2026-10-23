@@ -2959,8 +2959,10 @@ export interface UnitStats {
 export interface BattleReport {
   schemaVersion: string;
   seed: number;
+  /** 配置的回合上限，不等于实际进行回合数。 */
   maxRounds: number;
   result: 'win' | 'loss' | 'draw';
+  /** 实际已开始的正式回合数；提前斩首时小于 maxRounds。 */
   rounds: number;
   myTeam: General[];
   enemyTeam: General[];

@@ -84,7 +84,7 @@ describe('热门预设面板', () => {
   });
 
   it('「另存为我的预设」把内置条目交给 saveAsMine（名字可改）', () => {
-    const saveAsMine = vi.fn((): PresetActionResult => ({ presetId: 'p_new_1' }));
+    const saveAsMine = vi.fn((_preset: TeamPreset, _name: string): PresetActionResult => ({ presetId: 'p_new_1' }));
     mount({ hot: [HOT], saveAsMine });
     (document.querySelector('[data-act="copy"]') as HTMLElement).click();
     const input = document.querySelector<HTMLInputElement>('.preset-name-modal .pn-input') as HTMLInputElement;

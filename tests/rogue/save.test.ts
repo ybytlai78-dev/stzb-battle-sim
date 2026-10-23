@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import { createRun } from '../../src/rogue/run';
 import { createPool } from '../../src/rogue/pool';
 import { createWallet } from '../../src/rogue/economy';
-import { SAVE_KEY, loadRun, memoryStorage, saveRun } from '../../src/rogue/save';
+import { SAVE_KEY, loadRun, memoryStorage, saveRun, type SaveData } from '../../src/rogue/save';
 import { beginPull } from '../../src/rogue/gacha';
 import { Rng } from '../../src/engine/rng';
 
-const sample = () => ({
+const sample = (): SaveData => ({
   run: createRun(7),
   pool: createPool({ heroes: ['h479'], skills: ['tiebi'] }),
   wallet: createWallet(),
