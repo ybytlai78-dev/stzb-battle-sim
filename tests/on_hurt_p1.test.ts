@@ -39,6 +39,23 @@ function huimaSkill(): Skill {
   };
 }
 
+describe('damage sharing conserves incoming damage', () => {
+  it.each([1, 101, 100])('two 50%% shares cannot turn %s damage into healing', (damage) => {
+    const target = dummyUnit('target', '前锋');
+    const sharers = [dummyUnit('share1', '中军'), dummyUnit('share2', '大营')];
+    for (const sharer of sharers) {
+      sharer.statuses.push({ type: 'damage_share', rate: 0.5, remaining: 1, appliedRound: 1,
+        sourceSkillType: 'command', sourceSkillId: 'test_share' });
+    }
+    const ctx = makeCtx([target, ...sharers], []);
+    applyDamage(ctx, target, damage, undefined, 'strategy', 'skill');
+    expect(target.troops).toBeLessThanOrEqual(target.general.maxTroops);
+    const transferred = ctx.events.filter(e => e.type === 'share_damage');
+    expect(transferred.reduce((sum, e) => sum + e.amount, 0)).toBe(damage);
+    expect([target, ...sharers].reduce((sum, u) => sum + u.general.maxTroops - u.troops, 0)).toBe(damage);
+  });
+});
+
 describe('damageSource basic 只吃普攻', () => {
   it('applyDamage(..., physical, basic) 触发回马；同调用传 skill 不触发', () => {
     const me = dummyUnit('me', '前锋', { passiveSkillIds: ['test_huima'] });
@@ -211,6 +228,24 @@ describe('thisHitReduce 改扣兵量', () => {
 });
 
 describe('counter 只吃普攻且二次不反击', () => {
+  it('首刀被反击击杀后，不再连击或判定追击', () => {
+    const attacker = dummyUnit('attacker', '前锋', { pursuitSkillIds: ['wenjiu_zhanjiang'] });
+    attacker.troops = 1;
+    attacker.statuses.push({ type: 'combo', remaining: 2, appliedRound: 0,
+      sourceSkillType: 'command', sourceSkillId: 'test_combo' });
+    const defender = dummyUnit('defender', '前锋', {}, 'enemy');
+    defender.statuses.push({ type: 'counter', remaining: 2, rate: 100, appliedRound: 0,
+      sourceSkillType: 'command', sourceSkillId: 'test_counter', sourceUnitId: 'defender' });
+    const ctx = makeCtx([attacker], [defender]);
+    actUnit(ctx, attacker);
+    expect(attacker.alive).toBe(false);
+    const death = ctx.events.findIndex(e => e.type === 'unit_dead' && e.unitId === 'attacker');
+    expect(death).toBeGreaterThan(-1);
+    expect(ctx.events.slice(death + 1).filter(e =>
+      e.type === 'unit_act_start' && e.unitId === 'attacker')).toEqual([]);
+    expect(ctx.events.filter(e => e.type === 'attack_hit' && e.sourceId === 'attacker')).toHaveLength(1);
+  });
+
   it('basic 扣兵后对来源打 100% 攻击；skill 不触发；反击段不再套 counter', () => {
     const me = dummyUnit('me', '前锋');
     const foe = dummyUnit('foe', '前锋', {}, 'enemy');
