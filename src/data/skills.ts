@@ -1912,7 +1912,13 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       },
     ],
   },
-  /** 将门虎女（张姬主战法·主动）：对敌军群体发动一次攻击（伤害率 190%），并使其无法恢复兵力（围困），持续 2 回合。「受攻击伤害时 75% 几率引发动摇」暂未建模 */
+  /**
+   * 将门虎女（张姬主战法·主动·距离 5·35%·敌军群体 2 目标）：对敌军群体发动一次进攻（伤害率 200%），
+   * 使其无法恢复兵力（围困）2 回合，并在 1 回合内使其「受到攻击伤害时有 80% 几率引发一次动摇效果（伤害率 60%）」。
+   * 第三段 = **受击触发动摇**（`unrest{ onHurt: true, triggerRate: 0.8 }`）：不按行动跳伤、不消耗次数，
+   * 携带者每次受到攻击伤害（物理非 DoT）按几率跳 1 次逃兵，窗口（duration 1）到期移除。
+   * 取值来源：包内 200094 满级 200% / 动摇 60%（`web/data/skill_desc.json` 同口径）。
+   */
   jiangmen_hunv: {
     id: 'jiangmen_hunv',
     name: '将门虎女',
@@ -1922,10 +1928,14 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     triggerRate: 0.35,
     targetMode: 'group',
     targetSide: 'enemy',
-    tags: ['damage', 'siege'],
+    tags: ['damage', 'siege', 'unrest'],
     output: [
-      { kind: 'physical_damage', rate: 190 },
+      { kind: 'physical_damage', rate: 200 },
       { kind: 'inflict_status', status: { type: 'siege', duration: 2 } },
+      {
+        kind: 'inflict_status',
+        status: { type: 'unrest', duration: 1, rate: 60, onHurt: true, triggerRate: 0.8 },
+      },
     ],
   },
   /** 明慧通透（王元姬主战法·主动）：移除友军单体有害效果，并恢复大量兵力（恢复率 168%，受谋略）。「下回合 50% 几率进入洞察」暂未建模 */

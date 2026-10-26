@@ -945,6 +945,12 @@ export type CreateStatus =
       troopRatio?: TroopRatioCond;
       /** 普攻触发动摇（发动或受到普通攻击后跳伤，不按行动跳） */
       triggerOnBasic?: boolean;
+      /** 受击触发动摇（将门虎女「受到攻击伤害时 X% 几率引发一次动摇效果」）：行动时不跳伤，
+       *  改为携带者每次受到**攻击伤害**（物理非 DoT）时按 `triggerRate` 掷一次，命中即结算一次逃兵；
+       *  **不消耗次数**（官方无「最多生效 N 次」），窗口到期后移除。 */
+      onHurt?: boolean;
+      /** 受击触发动摇的触发几率（0~1；缺省 1 = 必定触发） */
+      triggerRate?: number;
       /** 剩余生效次数（triggerOnBasic 口径；用尽即移除） */
       charges?: number;
       /** 跳伤无视规避（张辽：动摇效果无视规避） */
@@ -1823,7 +1829,9 @@ export interface CommandSkill extends BaseSkill {
    * 额外造成一次策略伤害（伤害率为原伤害率的 15.0%），此比例每回合结束时额外提升 5.0%，可叠加，
    * 持续至战斗结束」）：**本侧**单位造成**策略伤害输出段**生效后，对目标**同侧相邻**
    * 单位额外结算一次策略伤害，伤害率 = 原伤害率 × 当前比例。
-   * 覆盖范围：`strategy_damage` 输出段（DoT 跳伤 / 分兵 / 引燃暂不触发）。
+   * 覆盖范围：`strategy_damage` 输出段 + **谋略 DoT 的每一次跳伤**（恐慌 / 燃烧 / 妖术 / 妖术诅咒 / 引燃，
+   * 每一跳都是一次「策略伤害生效」，用户 2026-10 报障 ③：谋略 DoT 出伤害不触发诛杀）；动摇（物理 DoT）
+   * 与分兵不触发；施加者阵亡后不再产生新的溅射（DoT 本体仍按冻结值走完）。
    * 当前比例（百分点）= baseRate + perRound × (当前回合 - 1)；两者均「受谋略属性影响」——
    * 给了 strategyScaled + growthRate 时按**光环施法者**谋略缩放（未确认 → 不给 growthRate，按基值）。
    */
@@ -2557,7 +2565,7 @@ export type Status =
    * `sourceAttack` = 挂上时施法者攻击（施法者不可解析时回退实时结算用）。
    * 特殊触发口径（普攻触发 / 属性下降触发 / 无视规避 / 移除有益 / 不可移除）见 CreateStatus 同名注释。
    */
-  | { type: 'unrest'; remaining: number; rate: number; sourceAttack: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; stored?: DotStoredDamage; troopRatio?: TroopRatioCond; /** 普攻触发动摇（威震逍遥） */ triggerOnBasic?: boolean; /** 剩余生效次数（triggerOnBasic 口径） */ charges?: number; /** 跳伤无视规避（张辽·威震逍遥【追加】） */ ignoresEvasionOnTick?: boolean; /** 跳伤时移除目标有益效果（关羽·汜水关【追加】） */ clearBuffsOnTick?: boolean; /** 不可被移除（威震逍遥） */ undispellable?: boolean }
+  | { type: 'unrest'; remaining: number; rate: number; sourceAttack: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; stored?: DotStoredDamage; troopRatio?: TroopRatioCond; /** 普攻触发动摇（威震逍遥） */ triggerOnBasic?: boolean; /** 受击触发动摇（将门虎女：受攻击伤害时按 triggerRate 概率跳一次，不消耗次数） */ onHurt?: boolean; /** 受击触发动摇的几率（0~1；缺省 1） */ triggerRate?: number; /** 剩余生效次数（triggerOnBasic 口径） */ charges?: number; /** 跳伤无视规避（张辽·威震逍遥【追加】） */ ignoresEvasionOnTick?: boolean; /** 跳伤时移除目标有益效果（关羽·汜水关【追加】） */ clearBuffsOnTick?: boolean; /** 不可被移除（威震逍遥） */ undispellable?: boolean }
   /**
    * 妖术诅咒（密谋定蜀）：携带者「试图发动追击战法」时（进入追击判定，无论发动率结果），
    * 立即受到一次妖术诅咒伤害（rate% 受谋略，挂上时冻结 stored 滞后触发，同 DoT），

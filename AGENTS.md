@@ -235,6 +235,29 @@ base 76/88/72/78 · grow 1.48/2.32/1.38/1.16）** 全量纠正（id 仍为 `h42`
   **全属性百分比升降 值@80 = (const + 0.4×intel)/10⁶、成长率 = intel/(2×10⁸)**（魏武之世 11,400,000/9,000,000
   → 15.0% / 0.045，与 `weiwu_zhishi` 完全吻合，可作锚点）。
 
+### 受击触发动摇 `unrest.onHurt`（将门虎女，2026-10-24；用户报障后补建）
+
+用户报障（原话）：「」并在1回合内，使其受到攻击伤害时有80.0%的几率引发一次动摇效果（伤害率60.0%）「，张姬战法后段效果为生效或者详情战报没描述，检查原因」。
+根因是**机制从未建模**（不是渲染丢失）：`jiangmen_hunv` 原只有 `physical_damage 190` + `siege 2`，注释自认后段「暂未建模」，
+所以战报里连事件都不产生；而 `web/data/skill_desc.json`（满级）早有 200%/80%/60% 的完整文案 —— 文案与机制脱节。
+
+- **口径（用户拍板，勿再询问）**：不是该状态 1 回合 DoT，而是「**受击立即结算一次动摇逃兵**」——
+  1 回合窗口内每受到一次**攻击伤害**独立判 80%，命中**立刻**打一次 60% 动摇（冻结施加时的攻击/兵力），
+  **不消耗次数**（官方无「最多生效 N 次」），只受 `duration` 窗口约束。
+- **承载**：`CreateStatus`/`Status` 的 `unrest` 增加 `onHurt?: boolean` + `triggerRate?: number`（0~1，缺省 1）。
+  施加时（`inflictStatus` 的 DoT 分支）写入标记；`status_inflicted.detail` 文案 = “动摇 60% 受击触发（攻击伤害 80% 几率）持续 1 回合”。
+- **结算**：`applyDamage` 尾部（威震逍遥「受到普通攻击后」之后）`if (actual > 0 && (damageType ?? 'physical') === 'physical' && !hit?.dotType) triggerUnrestMarkOnHurt(ctx, target)`；
+  `triggerUnrestMarkOnHurt` 逐标记走 `moraleTriggerRate(effectiveMorale(caster), triggerRate)` + `rng.chance` → 发 `skill_trigger`
+  （带 `rate`/`baseRate`/`morale`/`targetId`）→ 命中调 `dealDotDamage`，**不摘标记**。
+- ⚠️ **`!hit?.dotType` 是防递归的关键**：`dealDotDamage` 内部 `applyDamage(..., dotHit)` 带 `dotType`，否则逃兵自己会反复回灌本钩子。
+- **行动时不跳伤**：`tickDots` 里 `if (dot.type === 'unrest' && dot.onHurt) continue` —— 它只在受击时结算，不吃 DoT 回合跳伤。
+- **递减分组**：仍属第 1 组（DoT）→ 携带者**行动结束后**递减，`duration 1` 的窗口 = 到目标下一次行动结束。
+- **数据侧同步**：官方伤害率 190→**200**（用户同批指出的旧值），描述四处（`dateyuan/hero_growth_verified.json` 的
+  `default_skill_desc`/`skill_desc_max`、`scripts/seed_heroes.sql`、`web/data/heroes.json`、`dateyuan/武将数据调研.md`）统一 200%/80%/60%；
+  源头是 `hero_growth_verified.json`（`scripts/build_heroes_seed.mjs` 读它生成 SQL），改源后重跑脚本不会回退。
+- 回归：`tests/main_skills_jiangmen_hunv.test.ts`（9 例：数据三段 / 描述防回退 / detail 文案 + 行动不跳伤 / 受击物理触发 /
+  策略与 DoT 不触发 + 缺省物理触发 / 不消耗次数 / 士气 120→90% / 到期移除 / 端到端真发动）。
+
 ### 「大幅度降低 / 大幅减伤」的取值口径（2026-10-24，用户报障后钉死）
 
 用户口径（原话）：「许多战法描述为大幅减伤的效果都错误的计算为 90% 减伤。这是错误的，大幅减伤是一个很大的值，
@@ -1529,6 +1552,35 @@ const targetTeam = primaryTarget.side === unit.side ? allies : enemies; // ✓
 - **golden 不受影响**：本改动只新增 `subSkill` 字段，而**被本改动触达的链式战法（连环计 / 河内世泽）与
   其徐如林都不在 T1~T10 固定测试集里**（已用逐事件 diff 核对：golden 的差异仅来自 2026-10-23 另一批改动的
   `damageRate` 字段，与本改动无关）。
+
+### 谋略 DoT 的「策略战法」认定与跳伤溅射（2026-10-25，用户三条报障后钉死）
+
+用户报障（原话）：「1. 部分谋略dot战法无直接造成谋略伤害的tag，导致无法触发『造成谋略伤害的战法…』的效果，
+如庞统无法生效宝物词条筹算的效果，顺手查一下能否触发未雨绸缪。2. 谋略dot是选中目标以后伤害就固定了……
+3. 谋略dot出伤害时却没有触发xp司马懿的诛杀效果」。
+
+- **口径（用户拍板，勿再询问）**：**DoT 冻结语义不做任何改动** —— 「dot 按施加时施法者的兵力和谋略算，
+  后续兵力变化不影响此已有 dot 伤害量」。报障 ② 判定为**设计如此、非缺陷**（战报里「该次造成伤害共计降低
+  81%」是施加时烘进 `DotStoredDamage` 的，出伤只是转账）。本次只修 ①③ 的**认定与外溢**。
+- **单一真源**：`src/engine/action.ts` 的 `STRATEGY_DOT_TYPES = ['panic','burning','sorcery','curse','ignite']`
+  + `hasStrategyDotStatus(status | status[])`（在 `isDamageClassSkill` 之前定义，三处消费）：
+  - `isStrategyClassSkill` 新增 `o.kind === 'inflict_status' && hasStrategyDotStatus(o.status)` → 纯 DoT 战法
+    （庞统【密谋定蜀】只有 `inflict_status`，无 `strategy_damage` 段）也算「策略战法」⇒ 宝物【筹算】
+    `strategySkillsOnly` 的 `trigger_boost` 不再整条跳过（红筹算 15：35%→50%）；
+  - `hasStrategyDamageInValue`（`skillCanDealStrategyDamage` 的下钻层）同口径 → 藏在
+    `random_pick / chance_group / conditional` 内层的纯 DoT 也能触发【未雨绸缪】的 `recastBy`；
+  - `isStrategySettleOutput` 改为直接复用 `hasStrategyDotStatus`（原 `STRATEGY_SETTLE_DOT_TYPES` 已删，避免两份清单漂移）。
+  ⚠️ **动摇 `unrest` 不在其列**（物理 DoT，走攻击/防御口径），别为了「整齐」把它加进去。
+- **跃伤触发〈诛杀〉**：新函数 `triggerStrategyAdjacentBonusOnDot(ctx, unit, dot, src, actual)`，在
+  `dealDotDamage` 的**两条出伤路径**（stored 冻结 / 实时回退）里于 `applyDamage(...)` 之后各调一次 ⇒
+  谋略 DoT 每一跳都会走 `triggerStrategyAdjacentBonus(ctx, src, unit, dot.rate)`，相邻目标吃〈诛杀〉
+  （`subSkill: '诛杀'`，统计计入【其徐如林】）。守卫：`actual <= 0` / `dot.type === 'unrest'` / `!src?.alive` 全部跳过
+  —— 施加者阵亡后不再产生新的溅射，但 DoT 本体仍按冻结值走完。
+- **回归**：`tests/dot_strategy_trigger.test.ts`（9 例：数据前提 / 筹算 35%→50% + 两条反例守「口径未被放宽」
+  （不带宝物仍 35%、物理战法仍 35%）/ `random_pick` 内层 burning 触发未雨绸缪 / 恐慌 2 跳 × 相邻 2 人 = 4 条诛杀 /
+  统计相等 / 动摇不触发 / 施加者阵亡后不溅射 / 无光环零影响）。
+- **golden 不变**（已跑全量核对）：T1~T10 固定测试集里没有「纯 DoT 战法 + 筹算宝物」组合，
+  136 文件 / 1229 例全绿、快照字节一致。
 
 
 
