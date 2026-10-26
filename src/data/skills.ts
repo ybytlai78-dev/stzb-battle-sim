@@ -9285,6 +9285,10 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    *   ① 段一「特殊负面效果」官方未定义 → 取**本法自身列举**的清单：挑衅 / 围困 / 控制四类
    *      （`SPECIAL_DEBUFF_TYPES`，**推定**）；触发点为 `inflictStatus` 内、该状态落库**之前**，
    *      敌方（携带者同侧视角）单位被施加且命中改判时，对**该敌方单位**结算 output；
+   *      **2026-10-26 用户裁定补入六类持续伤害（恐慌 / 燃烧 / 妖术 / 妖术诅咒 / 引燃 / 动摇）**：
+   *      DoT 的伤害在施加时就冻结（`computeDotTickDamage`），判定必须发生在落库之前，
+   *      否则庞统【密谋定蜀】这类纯 DoT 永远吃不到 +30%（用户报障原话）；动摇虽是物理 DoT 也是
+   *      「被施加的负面效果」，同列。数值型增益 / 减伤（`damage_reduce` / `damage_boost`）仍不在清单内。
    *   ② 段一输出 = `damage_boost` direction:'taken'（本回合受到所有伤害 +30%，duration 1，**推定**）
    *      + 恢复我军单体（`heal` 65% 受谋略未确认 → 基值；目标口径官方未写 → **我军随机单体**，
    *      `targetSide:'ally' + targetMode:'random_single'`，**推定**）；
@@ -9306,7 +9310,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     targetSide: 'enemy',
     tags: ['damage_boost', 'heal'],
     output: [],
-    // ① 敌方被施加特殊负面（挑衅/围困/控制）前：50% → ② 本回合受到伤害 +30% + 恢复我军单体
+    // ① 敌方被施加特殊负面（挑衅/围困/控制四类 + 六类持续伤害）前：50% → ② 本回合受到伤害 +30% + 恢复我军单体
     specialDebuffBefore: {
       rate: 0.5,
       output: [

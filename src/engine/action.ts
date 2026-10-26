@@ -4139,8 +4139,38 @@ function inflictStatusCore(
   pushStatus(ctx, target, create, sourceSkillType, sourceSkillId, casterId);
 }
 
-/** 特殊负面效果清单（审时定计）：挑衅 / 围困 / 控制四类（官方式列举口径，配合本法段二推定）。 */
-const SPECIAL_DEBUFF_TYPES: StatusType[] = ['taunt', 'siege', 'confusion', 'rampage', 'cowardice', 'hesitation'];
+/**
+ * 特殊负面效果清单（审时定计）：挑衅 / 围困 / 控制四类（官方式列举口径，配合本法段二推定）
+ * **+ 全部持续伤害类负面**（2026-10-26 用户报障后补）。
+ *
+ * 报障（用户原话）：「庞统 程昱组队时，庞统施加 dot 负面前没有正确施加程昱增伤，
+ * 导致 dot 吃不到程昱审时定计的增伤」。
+ * 根因不是顺序：`inflictStatusCore` 顶部就先跑本判定（`triggerSpecialDebuffBefore`），
+ * 命中后 +30% taken 入栈，之后才轮到 DoT 冻结（`computeDotTickDamage` 读 `damageBoosts` 的
+ * caused × taken 与 `sumReduce`）。漏的只是**清单**——恐慌 / 燃烧 / 妖术 / 妖术诅咒 / 引燃 /
+ * 动摇都不在清单里，于是庞统【密谋定蜀】的两个 DoT（panic + curse）一次判定都不掷，
+ * 冻结里永远缺这一层增伤；直伤段（strategy_damage）能吃到，才显得「只有 DoT 吃不到」。
+ *
+ * 口径：**持续伤害类负面属于「特殊负面效果」** —— 它们都是施加在敌方身上、且需要「施加前」这一拍
+ * 就完成判定的负面（冻结型，晚了就补不回来）。动摇 `unrest`（张姬·将门虎女，物理逃兵）同样在列。
+ * 数值型增益/减益（damage_reduce、属性 buff、evasion 等）仍不在清单。
+ */
+const SPECIAL_DEBUFF_TYPES: StatusType[] = [
+  // 挑衅 / 围困 / 控制四类（混乱 / 暴走 / 怯战 / 犹豫）
+  'taunt',
+  'siege',
+  'confusion',
+  'rampage',
+  'cowardice',
+  'hesitation',
+  // 持续伤害类负面：恐慌 / 燃烧 / 妖术 / 妖术诅咒 / 引燃 / 动摇
+  'panic',
+  'burning',
+  'sorcery',
+  'curse',
+  'ignite',
+  'unrest',
+];
 
 /**
  * 「敌方被施加特殊负面效果前」判定（审时定计，XP程昱）：目标为某存活携带者的**敌方**且本次状态属于
