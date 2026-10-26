@@ -546,6 +546,28 @@ function isAttackClassSkill(skill: Skill): boolean {
   return walk(skill.output);
 }
 
+/**
+ * 谋略型 DoT —— `dealDotDamage` 里 damageType = strategy 的**全部** DoT：
+ * 恐慌 / 燃烧 / 妖术 / 妖术诅咒 / 引燃。
+ * ⚠️ 动摇 `unrest` 按**物理**伤害结算（`dealDotDamage` 唯一的 strategy 例外），不在其列。
+ * 十常侍·乱政的效果池里两类并存，判定必须能区分：抽到恐慌/燃烧/妖术 = 造成策略伤害，
+ * 只挂动摇 + 控制 = 不算。
+ *
+ * 这是「这一段算不算策略伤害」的**单一真源**，三个消费点共用：
+ *   · `isStrategyClassSkill`（宝物「筹算」的发动率过滤维）；
+ *   · `hasStrategyDamageInNode`（未雨绸缪「造成策略伤害的主动战法」判定）；
+ *   · `isStrategySettleOutput`（持节镇西「预结算策略伤害段」的叠层判定）。
+ * 用户在 2026-10 报障：庞统【密谋定蜀】整条战法只有恐慌 + 妖术诅咒、没有 `strategy_damage` 段，
+ * 旧实现下被判成「不造成策略伤害」→ 宝物【筹算】的发动率提升被整条 `continue` 掉。
+ */
+const STRATEGY_DOT_TYPES = ['panic', 'burning', 'sorcery', 'curse', 'ignite'] as const;
+
+/** `inflict_status` 段是否施加谋略型 DoT（`status` 可为**数组** —— 乱政的 10 选 1 池即数组口径） */
+function hasStrategyDotStatus(status: CreateStatus | CreateStatus[]): boolean {
+  const list = Array.isArray(status) ? status : [status];
+  return list.some((s) => (STRATEGY_DOT_TYPES as readonly string[]).includes(s.type));
+}
+
 /** 「可造成攻击伤害或策略伤害的战法」（甚陷不惧 damageSkillsOnly 过滤维）：输出树含伤害段即可 */
 function isDamageClassSkill(skill: Skill): boolean {
   const walk = (outs: SkillOutput[]): boolean =>
@@ -565,11 +587,16 @@ function isDamageClassSkill(skill: Skill): boolean {
 
 /** 「可造成策略伤害的战法」（宝物「筹算」strategySkillsOnly 过滤维）
  *  ⚠️ 与 `isAttackClassSkill` 同理：容器层必须一并下钻，尤其是 `morale_branch`
- *     （士气分支内层才挂 strategy_damage 的主战法会被误判）。 */
+ *     （士气分支内层才挂 strategy_damage 的主战法会被误判）。
+ *  ⚠️ **谋略型 DoT 也算**（`STRATEGY_DOT_TYPES`）：恐慌/燃烧/妖术/妖术诅咒/引燃的伤害不在施加段结算，
+ *     由后续跳伤出，但「该战法造成策略伤害」这件事依然成立 —— 庞统【密谋定蜀】整条战法只有
+ *     恐慌 + 妖术诅咒，旧判定把它当「非策略战法」→ 宝物【筹算】静默失效（用户 2026-10 报障）。
+ *     动摇（物理 DoT）不在其列，见 `STRATEGY_DOT_TYPES`。 */
 function isStrategyClassSkill(skill: Skill): boolean {
   const walk = (outs: SkillOutput[]): boolean =>
     outs.some((o) => {
       if (o.kind === 'strategy_damage') return true;
+      if (o.kind === 'inflict_status' && hasStrategyDotStatus(o.status)) return true;
       if (o.kind === 'chance_group') return walk(o.outputs);
       if (o.kind === 'random_pick') return walk(o.options.flat());
       if (o.kind === 'morale_branch') return walk(o.high) || walk(o.low);
@@ -1421,20 +1448,12 @@ function triggerStrategyAdjacentBonus(
  *
  * ⚠️ 分兵 / 攻城 / 属性类状态**不**属此列：它们只施加状态、不结算伤害，不产生叠层段
  *   （帝临回光的 split / siege / range_buff 因此不参与判定，不存在「物理段叠攻击层」）。
+ * DoT 集合与宝物「筹算」/ 未雨绸缪共用 `hasStrategyDotStatus`（`STRATEGY_DOT_TYPES` 单一真源）。
  */
-const STRATEGY_SETTLE_DOT_TYPES: ReadonlySet<StatusType> = new Set<StatusType>([
-  'panic',
-  'burning',
-  'sorcery',
-  'curse',
-  'ignite',
-]);
-
 function isStrategySettleOutput(out: SkillOutput): boolean {
   if (out.kind === 'strategy_damage') return true;
   if (out.kind !== 'inflict_status') return false;
-  const list = Array.isArray(out.status) ? out.status : [out.status];
-  return list.some((s) => STRATEGY_SETTLE_DOT_TYPES.has(s.type as StatusType));
+  return hasStrategyDotStatus(out.status);
 }
 
 /**
@@ -2626,6 +2645,34 @@ function computeDotTickDamage(
   };
 }
 
+/**
+ * 其徐如林〈诛杀〉对**谋略 DoT 跳伤**的钩子。
+ *
+ * 玩家报障（2026-10）：「谋略 dot 出伤害时却没有触发 xp 司马懿的诛杀效果」。
+ * 根因：`triggerStrategyAdjacentBonus` 原本只有 `strategy_damage` 输出段一个调用点（行动内直伤），
+ * DoT 走 `dealDotDamage` → `applyDamage` 这条完全独立的路径，光环看不到它。
+ *
+ * 口径（与官方「我军全体在正式回合后施加的策略伤害，在生效时会对目标相邻的敌军额外造成一次策略伤害」一致）：
+ *   · **每一次**跳伤都是一次「策略伤害生效」→ 每次都溅射一次（DoT 持续 2 回合 = 2 次）；
+ *   · 原伤害率取该 DoT 的 `rate`（施加时已含浮动与缩放，即真正打出去的那一档）；
+ *   · 动摇 `unrest` 按**物理**伤害结算，不触发；
+ *   · 施加者已阵亡或不可解析时跳过 —— 溅射是**新产生**的伤害，不能由死人再打（DoT 本身仍按冻结值走完）；
+ *   · 溅射由 `triggerStrategyAdjacentBonus` 直接 push `damage` 事件，不经 `strategy_damage` 段、
+ *     也不经 `dealDotDamage` ⇒ 不会递归回本钩子。
+ */
+function triggerStrategyAdjacentBonusOnDot(
+  ctx: CombatContext,
+  unit: UnitState,
+  dot: Extract<Status, { type: 'sorcery' | 'burning' | 'panic' | 'unrest' | 'curse' | 'ignite' }>,
+  src: UnitState | undefined,
+  actual: number
+): void {
+  if (actual <= 0) return;
+  if (dot.type === 'unrest') return;
+  if (!src?.alive) return;
+  triggerStrategyAdjacentBonus(ctx, src, unit, dot.rate);
+}
+
 /** 结算一次 DoT/诅咒/引燃伤害：先走持节镇西（策略伤害前叠谋略 / 受击前叠防御），再 push dot_tick 并扣兵。
  *  滞后触发：有挂上时冻结的 stored（引擎施加路径）时直接打出冻结伤害（仅按目标当前兵力截断）；
  *  否则（直接 inflictStatus 且施法者不可解析的单元测试）回退为触发时实时结算：
@@ -2672,6 +2719,8 @@ export function dealDotDamage(
       modifiers: dot.stored.modifiers,
     });
     applyDamage(ctx, unit, capped, src, damageType, 'skill', dot.stored.modifiers, dotHit);
+    // 其徐如林〈诛杀〉：这一跳同样是一次「策略伤害生效」，对相邻敌军额外溅射
+    triggerStrategyAdjacentBonusOnDot(ctx, unit, dot, src, capped);
     // 敌军每回合首次受到持续性伤害（衔命建功）
     triggerOnDotReceived(ctx, unit);
     // 宝物「燮理」：自身施加的燃烧每回合首次跳伤后，自身恢复一次兵力
@@ -2731,6 +2780,8 @@ export function dealDotDamage(
     modifiers: fbMods,
   });
   applyDamage(ctx, unit, capped, src, damageType, 'skill', fbMods, dotHit);
+  // 其徐如林〈诛杀〉：这一跳同样是一次「策略伤害生效」，对相邻敌军额外溅射
+  triggerStrategyAdjacentBonusOnDot(ctx, unit, dot, src, capped);
   // 敌军每回合首次受到持续性伤害（衔命建功）
   triggerOnDotReceived(ctx, unit);
   // 宝物「燮理」：自身施加的燃烧每回合首次跳伤后，自身恢复一次兵力
@@ -2854,6 +2905,8 @@ function tickDots(ctx: CombatContext, unit: UnitState): void {
     if (dot.type === 'sorcery' && dot.onHurt) continue;
     // 普攻触发动摇（威震逍遥）：不在行动时跳伤，改由携带者发动 / 受到普通攻击后触发
     if (dot.type === 'unrest' && dot.triggerOnBasic) continue;
+    // 受击触发动摇（将门虎女）：不在行动时跳伤，改由携带者受到攻击伤害时按几率触发
+    if (dot.type === 'unrest' && dot.onHurt) continue;
     // 属性下降触发恐慌（袭屯夺气）：不在行动时跳伤，改由携带者被施加属性下降效果时触发
     if (dot.type === 'panic' && dot.triggerOnAttrDown) continue;
     // 兵力阈值条件（巧音唤蝶燃烧「当目标兵力高于初始兵力 50% 时受到一次策略伤害」）：不满足则本回合不跳伤
@@ -5109,6 +5162,15 @@ function pushStatus(
     if (create.type === 'unrest' && create.clearBuffsOnTick) {
       (status as Extract<Status, { type: 'unrest' }>).clearBuffsOnTick = true;
     }
+    // 受击触发动摇（将门虎女「受到攻击伤害时 80% 几率引发一次动摇效果」）：行动时不跳伤，
+    // 改为携带者每次受到攻击伤害（物理非 DoT）时按 triggerRate 掷判定，命中立即跳一次逃兵。
+    // 不消耗次数：官方未写「最多生效 N 次」，只受 duration 窗口约束。
+    const hurtUnrest = create.type === 'unrest' && create.onHurt === true ? create : undefined;
+    if (hurtUnrest) {
+      const mark = status as Extract<Status, { type: 'unrest' }>;
+      mark.onHurt = true;
+      mark.triggerRate = hurtUnrest.triggerRate ?? 1;
+    }
     if (create.type === 'unrest' && create.undispellable) {
       (status as Extract<Status, { type: 'unrest' }>).undispellable = true;
     }
@@ -5124,7 +5186,9 @@ function pushStatus(
       type: 'status_inflicted',
       unitId: target.general.id,
       statusType: type,
-      detail: hurtMark
+      detail: hurtUnrest
+        ? `${statusName(type)} ${Math.round(create.rate)}% 受击触发（攻击伤害 ${Math.round((hurtUnrest.triggerRate ?? 1) * 100)}% 几率）${durText}`
+        : hurtMark
         ? `${statusName(type)} ${Math.round(create.rate)}% 受击触发 剩余 ${hurtMark.charges ?? 0} 次 ${durText}`
         : basicMark
           ? `${statusName(type)} ${Math.round(create.rate)}% 普攻触发 剩余 ${basicMark.charges ?? 1} 次 ${durText}`
@@ -9842,26 +9906,20 @@ function hasStrategyDamageInValue(value: unknown): boolean {
   if (!value || typeof value !== 'object') return false;
   const obj = value as Record<string, unknown>;
   if (obj.kind === 'strategy_damage') return true;
+  // 谋略型 DoT：与 `hasStrategyDamageInNode` 同一口径。下钻时必须同样认得 ——
+  // 旧实现这一层只认 `strategy_damage`，把恐慌/燃烧挂在 `random_pick` / `chance_group` / `conditional`
+  // 内层的纯 DoT 战法整块漏掉 ⇒ 未雨绸缪不触发（用户 2026-10 报障，与宝物「筹算」同源）。
+  if (
+    obj.kind === 'inflict_status' &&
+    hasStrategyDotStatus((obj as { status: CreateStatus | CreateStatus[] }).status)
+  ) {
+    return true;
+  }
   for (const [key, child] of Object.entries(obj)) {
     if (!isOutputTreeKey(key)) continue;
     if (hasStrategyDamageInValue(child)) return true;
   }
   return false;
-}
-
-/**
- * 谋略型 DoT —— `dealDotDamage` 里 damageType = strategy 的**全部** DoT：
- * 恐慌 / 燃烧 / 妖术 / 妖术诅咒 / 引燃。
- * ⚠️ 动摇 `unrest` 按**物理**伤害结算（`dealDotDamage` 唯一的 strategy 例外），不在其列。
- * 十常侍·乱政的效果池里两类并存，判定必须能区分：抽到恐慌/燃烧/妖术 = 造成策略伤害，
- * 只挂动摇 + 控制 = 不算。
- */
-const STRATEGY_DOT_TYPES = ['panic', 'burning', 'sorcery', 'curse', 'ignite'] as const;
-
-/** `inflict_status` 段是否施加谋略型 DoT（`status` 可为**数组** —— 乱政的 10 选 1 池即数组口径） */
-function hasStrategyDotStatus(status: CreateStatus | CreateStatus[]): boolean {
-  const list = Array.isArray(status) ? status : [status];
-  return list.some((s) => (STRATEGY_DOT_TYPES as readonly string[]).includes(s.type));
 }
 
 /**
@@ -11444,6 +11502,44 @@ function triggerUnrestOnBasic(ctx: CombatContext, unit: UnitState): void {
 }
 
 /**
+ * 受击触发动摇（将门虎女「在 1 回合内，使其受到攻击伤害时有 80.0% 的几率引发一次动摇效果（伤害率 60.0%）」）：
+ * 携带者每次**受到攻击伤害**（物理伤害、且不是 DoT 逃兵）并实际扣兵后，逐条 `onHurt` 动摇各掷一次判定
+ * （走施法者士气修正 `moraleTriggerRate`，逐次发 `skill_trigger`），命中即按挂上时冻结的 `stored` 跳 1 次逃兵。
+ *
+ * 与威震逍遥的 `triggerOnBasic` 区分：那条是「发动 / 受到**普通攻击**后」按 `charges` 消耗次数；
+ * 本条官方只写「有 X% 几率引发一次」，没有「最多生效 N 次」⇒ **不消耗次数**，只受 `remaining`
+ * （= duration 窗口）约束，因此不摘除标记。跳伤自身带 `hit.dotType='unrest'` ⇒ applyDamage 侧判据
+ * 会把 DoT 逃兵排除在本钩子之外，不会自我触发（无递归、无需额外闸门）。
+ */
+function triggerUnrestMarkOnHurt(ctx: CombatContext, target: UnitState): void {
+  const marks = target.statuses.filter(
+    (s): s is Extract<Status, { type: 'unrest' }> => s.type === 'unrest' && s.onHurt === true
+  );
+  for (const mark of marks) {
+    if (!target.alive) break;
+    const caster = mark.sourceUnitId ? castUnit(ctx, mark.sourceUnitId) : undefined;
+    // 施法者已阵亡时标记仍保留（战法已发动），按基础率判定（士气缺省 100）
+    const morale = caster ? effectiveMorale(caster) : 100;
+    const baseRate = mark.triggerRate ?? 1;
+    const rate = moraleTriggerRate(morale, baseRate);
+    const success = ctx.rng.chance(rate);
+    ctx.events.push({
+      type: 'skill_trigger',
+      unitId: caster?.general.id ?? target.general.id,
+      targetId: target.general.id,
+      skillId: mark.sourceSkillId,
+      skillName: resolveSkill(ctx, mark.sourceSkillId)?.name ?? mark.sourceSkillId,
+      success,
+      rate: Math.round(rate * 100),
+      baseRate: Math.round(baseRate * 100),
+      morale,
+    });
+    if (!success) continue;
+    dealDotDamage(ctx, target, mark);
+  }
+}
+
+/**
  * 属性下降触发恐慌（袭屯夺气「在被成功施加属性下降效果时损失一定兵力（伤害率 87%），最多生效 4 次，
  * **每种属性单独计算**」；官方原文是恐慌 DoT，不是动摇）：携带者被施加攻击/防御/谋略/速度**下降**状态时
  * （`inflictStatusCore` 属性分支在「成功施加之前」调用，与举贤决机 `triggerOnAttrChange` 同点），
@@ -12115,6 +12211,11 @@ export function applyDamage(
   triggerIgniteOnHurt(ctx, target);
   // 受到普通攻击后（威震逍遥）：动摇跳 1 次逃兵（仅实际扣兵时判定）
   if (actual > 0 && damageSource === 'basic') triggerUnrestOnBasic(ctx, target);
+  // 受到攻击伤害后（将门虎女）：受击触发动摇按施法者士气掷几率，命中即跳 1 次逃兵（不消耗次数）。
+  // 判据 = 物理伤害且非 DoT 逃兵（`hit.dotType`）——后者排除掉本次跳伤的回灌，避免自我触发。
+  if (actual > 0 && (damageType ?? 'physical') === 'physical' && !hit?.dotType) {
+    triggerUnrestMarkOnHurt(ctx, target);
+  }
   // 受击触发妖术（破凰「条件妖术」）：受到伤害时额外引发一次妖术伤害（charges 次用尽移除）
   triggerSorceryMarkOnHurt(ctx, target);
   // 受击判定（举义诛暴）：实际扣兵后逐个标记掷 50% 判控制（纯状态变更，不产生二次伤害，无需防重入）
