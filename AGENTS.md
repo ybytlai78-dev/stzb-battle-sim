@@ -1582,5 +1582,27 @@ const targetTeam = primaryTarget.side === unit.side ? allies : enemies; // ✓
 - **golden 不变**（已跑全量核对）：T1~T10 固定测试集里没有「纯 DoT 战法 + 筹算宝物」组合，
   136 文件 / 1229 例全绿、快照字节一致。
 
+### 审时定计「特殊负面」含六类持续伤害（2026-10-26，用户报障后钉死）
+
+用户报障（原话）：「庞统 程昱组队时，庞统施加 dot 负面前没有正确施加程昱增伤，导致 dot 吃不到程昱
+审时定计（口头写作「审时定势」，战法 id `shenshi_dingji`，XP程昱 h787）的增伤」。
+
+- **根因不是顺序、是清单**：`inflictStatusCore` 顶部（`src/engine/action.ts`）原本就**先**跑
+  `triggerSpecialDebuffBefore` 再走 DoT 冻结，`computeDotTickDamage` 的
+  `damageBoosts(caused × taken)` 也本来就读得到 +30% taken；漏的是
+  `SPECIAL_DEBUFF_TYPES`（`src/engine/action.ts:4143` 起）只列了
+  挑衅 / 围困 / 四类控制 ⇒ DoT 判定一次都不掷。
+- **现口径（用户拍板）**：清单扩成
+  `['taunt','siege','confusion','rampage','cowardice','hesitation'] + ['panic','burning','sorcery','curse','ignite','unrest']`。
+  之所以「必须」列入：DoT 一旦落库伤害就冻结，晚一步判定等于永远吃不到——这是硬约束，不是口味。
+  ⚠️ 动摇 `unrest` **在此清单里**（它是「被施加的负面效果」），
+  与上一节「`STRATEGY_DOT_TYPES` 不含 unrest」（那是**策略/物理口径**）**不矛盾**，两处别互相改。
+- **不列入**：数值型增益 / 减伤（`damage_reduce`、`damage_boost`），也不因目标在友军侧而触发
+  （判定方向是「敌方单位被施加」）。
+- **回归**：`tests/shenshi_dingji_dot.test.ts`（5 例：判定确实掷 + `rate` 0.3 + 冻结 `modifiers.taken`
+  点名 `shenshi_dingji` + 伤害高于无程昱 / 判定失败不白送 / 六类 DoT 各掷一次 / 友军侧与 `damage_reduce`
+  不触发 + 原有四类照旧 / 密谋定蜀 panic+curse 各判一次）。
+- **golden 不变**（程昱在 `OFFLINE_MAIN_SKILLS` 下架、T1~T10 无其阵容）：137 文件 / 1234 例全绿。
+
 
 
