@@ -1,0 +1,1 @@
+import"./teamEditor-7WuURGIR.js";import{m as e,c as n}from"./advisorHost-C2yqz9-c.js";function r(o){const t=e(o,{host:n()});return{destroy:()=>t.destroy()}}if(typeof document<"u"){const o=document.getElementById("app");o&&r(o)}
