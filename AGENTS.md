@@ -279,6 +279,19 @@ base 76/88/72/78 · grow 1.48/2.32/1.38/1.16）** 全量纠正（id 仍为 `h42`
 - **不受影响**：官方给了数字的普通减伤（疮痍累身 84%、金匮要略 20.4%、形兵之极 50%…）照实参与加算。
 - 回归：`tests/huge_modifier.test.ts`（90% 被抵掉 vs 哨兵触底 / 三战法数据断言 / 真实状态汇总路径 / detail 文案与 charges 消耗）。
 
+### 指挥免疫（象兵「野性」/ 藤甲突击 `commandImmune`）—— 2026-10-27 报障后统一
+
+用户口径（原话）：「凡是指挥类型的效果都无法对免疫指挥目标生效……可以选中目标但是无法产生实际效果」。
+即**允许被选中**（`skill_target` 照常列出目标），但 command 类型的一切实际效果不落地：状态、伤害、DoT、预存延迟伤害、相邻溅射。
+
+- **单一判定**：`src/engine/action.ts` 的 `isCommandImmuneTarget(ctx, target, skillType, caster?)` ——
+  `skillType !== 'command'` → false；`secondaryTroop === '象兵'` → true（**双向**，我方指挥增益也吃不到）；
+  有 `caster` 且与 target 同侧 → false（藤甲突击只写「不受**敌方**指挥战法的影响」）；
+  否则 `hasCommandImmune`。配套 `reportCommandImmune` / `filterCommandImmuneTargets`（同一目标同一战法一次结算只记一条 `command_immune_blocked`，无 `statusType`）。
+- **必须覆盖的落点**（漏一个就是这次的 bug）：① `executeSkillOutputs` 入口目标过滤 ② 输出级 `pool` 重选（outSide / outMode / targetPick / positions）③ physical / strategy / positional 三个伤害主循环 ④ 代打段 `foes` ⑤ 一类指挥预存伤害 `triggerDelayedOutputs` 的 `storedDamage`（不推 damage、不打兵，仍推 `stored_effect_expired`）⑥ 二类指挥 `executeRoundCommand` 的站位伤害 ⑦ `triggerStrategyAdjacentBonus`（其徐如林〈诛杀〉相邻溅射）⑧ `inflictStatus` 状态施加。
+- 战报文案：状态类带 `statusType` → 「免疫了怯战效果（战必断金）」；伤害 / DoT / 溅射类不带 → 「免疫了指挥战法效果（奇兵拒北）」。
+- 回归：`tests/command_immune.test.ts`（13 例：奇兵拒北 / 白衣渡江 / 匠心不竭 DoT + skill_target 仍含目标 / 〈诛杀〉相邻溅射（免疫挂前锋 → 自己 0 条、相邻普通单位照常挨）/ 战必断金 / 藤甲突击友方增益照常 vs 象兵吃不到）。
+
 ### 状态语义（容易写错，务必遵守）
 
 | 状态 | 含义 |

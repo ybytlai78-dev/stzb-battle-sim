@@ -774,9 +774,9 @@ function renderEvents(
         add('good', `洞察：「${nm(ev.unitId)}」免疫了${statusName(ev.statusType)}`);
         break;
       case 'command_immune_blocked': {
-        // 免疫负面（临时定策 / XP程昱）：整次施加被免疫；statusType 缺省时只写「负面」
+        // 免疫指挥（象兵野性 / 藤甲突击）：状态类带 statusType；伤害 / DoT / 溅射类不带，统一说「指挥战法效果」
         const s = SKILL_REGISTRY[ev.skillId];
-        add('good', `【${nm(ev.unitId)}】免疫了${ev.statusType ? statusName(ev.statusType) : '负面'}效果${s ? `（${s.name}）` : ''}`);
+        add('good', `【${nm(ev.unitId)}】免疫了${ev.statusType ? statusName(ev.statusType) : '指挥战法'}效果${s ? `（${s.name}）` : ''}`);
         break;
       }
       case 'cowardice_immune_blocked':

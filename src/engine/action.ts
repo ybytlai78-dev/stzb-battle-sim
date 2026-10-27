@@ -291,10 +291,65 @@ function decreePunish(ctx: CombatContext, target: UnitState): void {
   }
 }
 
-/** 是否「不受敌方指挥战法影响」（藤甲突击）：携带者装有任何 commandImmune 被动即为真。 */function hasCommandImmune(ctx: CombatContext, unit: UnitState): boolean {
+/** 是否「不受敌方指挥战法影响」（藤甲突击）：携带者装有任何 commandImmune 被动即为真。 */
+function hasCommandImmune(ctx: CombatContext, unit: UnitState): boolean {
   return unit.general.passiveSkillIds.some((id) => {
     const s = resolveSkill(ctx, id);
     return s?.type === 'passive' && s.commandImmune === true;
+  });
+}
+
+/**
+ * 指挥免疫判定（用户 2026-10-27 口径）：**凡是指挥类型的效果**都对免疫指挥的目标不生效 ——
+ * 不只是战必 / 反计那类控制状态，指挥战法的**伤害、DoT、延迟结算、相邻溅射**同样整段无效。
+ * 允许被选中（`skill_target` 照常列出），但不产生任何实际效果。
+ *
+ * 两个来源的覆盖范围不同，别混：
+ * - 象兵「野性」：不受**任何**指挥战法影响，敌我双向一视同仁（我方指挥增益也吃不到）；
+ * - 藤甲突击 `commandImmune`：文案只写「不受**敌方**指挥战法的影响」→ 友方指挥照常生效。
+ *
+ * @param caster 该战法的施法者；缺省（如施法者已离场）按「象兵」口径判定，藤甲突击不生效
+ */
+export function isCommandImmuneTarget(
+  ctx: CombatContext,
+  target: UnitState,
+  skillType: SkillType,
+  caster?: UnitState
+): boolean {
+  if (skillType !== 'command') return false;
+  if (target.general.secondaryTroop === '象兵') return true;
+  if (!caster || caster.side === target.side) return false;
+  return hasCommandImmune(ctx, target);
+}
+
+/** 记一条 `command_immune_blocked`；同一目标同一战法一次结算只记一条（`reported` 去重，防战报重复行）。 */
+function reportCommandImmune(
+  ctx: CombatContext,
+  target: UnitState,
+  skill: Skill,
+  reported?: Set<string>
+): void {
+  const key = target.general.id;
+  if (reported) {
+    if (reported.has(key)) return;
+    reported.add(key);
+  }
+  ctx.events.push({ type: 'command_immune_blocked', unitId: target.general.id, skillId: skill.id });
+}
+
+/** 从目标池里剔掉指挥免疫单位（并记账）。非指挥战法原样返回。 */
+function filterCommandImmuneTargets(
+  ctx: CombatContext,
+  caster: UnitState | undefined,
+  skill: Skill,
+  targets: UnitState[],
+  reported?: Set<string>
+): UnitState[] {
+  if (skill.type !== 'command' || targets.length === 0) return targets;
+  return targets.filter((t) => {
+    if (!isCommandImmuneTarget(ctx, t, skill.type, caster)) return true;
+    reportCommandImmune(ctx, t, skill, reported);
+    return false;
   });
 }
 
@@ -1396,6 +1451,11 @@ function triggerStrategyAdjacentBonus(
     const rate = (originalRate * ratioPct) / 100;
     for (const raw of adjacents) {
       if (!raw.alive) continue;
+      // 指挥免疫（象兵野性 / 藤甲突击）：其徐如林〈诛杀〉相邻溅射同样是指挥战法效果 → 对免疫目标不产生伤害
+      if (isCommandImmuneTarget(ctx, raw, l.skill.type, owner)) {
+        reportCommandImmune(ctx, raw, l.skill);
+        continue;
+      }
       triggerStackBuff(ctx, source, raw, 'strategy');
       const hit: DamageHitContext = { damageSource: 'skill', damageType: 'strategy', skillType: l.skill.type };
       const { causedMult, takenMult } = damageBoosts(ctx, source, raw, hit);
@@ -1522,19 +1582,26 @@ export function triggerDelayedOutputs(ctx: CombatContext, round: number): void {
         for (const d of l.storedDamage) {
           const target = ctx.myTeam.concat(ctx.enemyTeam).find((u) => u.general.id === d.targetId);
           if (!target || !target.alive) continue;
-          const actual = Math.min(Math.max(0, d.damage), target.troops);
-          ctx.events.push({
-            type: 'damage',
-            sourceId: l.casterId,
-            targetId: target.general.id,
-            skillId: skill.id,
-            skillName: skill.name,
-            damageType,
-            damage: d.damage,
-            breakdown: d.breakdown,
-            delayedEffect: true,
-            afterTroops: target.troops - actual,
-          });
+          // 指挥免疫（象兵野性 / 藤甲突击）：一类指挥预存的伤害同样不生效 —— 可以选中、不打伤害，
+          // 只留「效果消失」那一行（用户 2026-10-27 口径：凡是指挥类型的效果都对免疫目标无效）。
+          const immune = isCommandImmuneTarget(ctx, target, skill.type, caster);
+          if (immune) {
+            reportCommandImmune(ctx, target, skill);
+          } else {
+            const actual = Math.min(Math.max(0, d.damage), target.troops);
+            ctx.events.push({
+              type: 'damage',
+              sourceId: l.casterId,
+              targetId: target.general.id,
+              skillId: skill.id,
+              skillName: skill.name,
+              damageType,
+              damage: d.damage,
+              breakdown: d.breakdown,
+              delayedEffect: true,
+              afterTroops: target.troops - actual,
+            });
+          }
           ctx.events.push({
             type: 'stored_effect_expired',
             unitId: target.general.id,
@@ -1543,7 +1610,7 @@ export function triggerDelayedOutputs(ctx: CombatContext, round: number): void {
             skillName: skill.name,
             damageType,
           });
-          applyDamage(ctx, target, d.damage, caster, damageType, 'skill');
+          if (!immune) applyDamage(ctx, target, d.damage, caster, damageType, 'skill');
         }
       } else if (caster) {
         // 非伤害类延迟输出（令明负榇：第 4 回合起进入分兵状态）→ 对锁定目标执行 output
@@ -2148,10 +2215,15 @@ function executeRoundCommand(ctx: CombatContext, unit: UnitState, skill: Command
       executeSkillOutputs(ctx, unit, skill, targets);
       return;
     }
-    // 对指定位置的存活目标（大营/中军）；象兵「野性」：不受指挥战法效果影响，直接从池中剔除
-    const positioned = targets.filter(
-      (t) => out.positions.includes(t.general.position) && t.alive && !elephantImmuneToCommand(skill.type, t)
-    );
+    // 对指定位置的存活目标（大营/中军）；指挥免疫（象兵野性 / 藤甲突击）：不受指挥战法效果影响，直接从池中剔除
+    const positioned = targets.filter((t) => {
+      if (!(out.positions.includes(t.general.position) && t.alive)) return false;
+      if (isCommandImmuneTarget(ctx, t, skill.type, unit)) {
+        reportCommandImmune(ctx, t, skill);
+        return false;
+      }
+      return true;
+    });
     // 伤害源：施法者自己 或 速度最高的友军（不含自己）
     const source = out.source === 'self' ? unit : fastestAlly(allies, unit);
     if (!source) continue;
@@ -3555,11 +3627,11 @@ function inflictStatusCore(
     }
   }
 
-  // 不受敌方指挥战法影响（藤甲突击）：敌方指挥战法施加的状态整段拦截（友方指挥不受影响）
+  // 指挥免疫：指挥战法施加的状态整段拦截 —— 象兵「野性」双向（我方指挥增益也吃不到）、
+  // 藤甲突击 `commandImmune` 仅对敌方指挥生效（文案「不受敌方指挥战法的影响」）。
   if (sourceSkillType === 'command') {
     const from = casterId ? castUnit(ctx, casterId) : undefined;
-    const fromEnemy = from ? from.side !== target.side : false;
-    if (fromEnemy && hasCommandImmune(ctx, target)) {
+    if (isCommandImmuneTarget(ctx, target, sourceSkillType, from)) {
       ctx.events.push({
         type: 'command_immune_blocked',
         unitId: target.general.id,
@@ -8348,9 +8420,11 @@ function executeSkillOutputs(
    */
   rewrite?: RecastRewrite
 ): void {
-  // 象兵「野性」：指挥战法产生的任何效果都对它无效（敌我双方一视同仁）。
+  // 指挥免疫（象兵「野性」双向 / 藤甲突击「不受敌方指挥战法影响」）：指挥战法产生的任何效果都对它无效。
   // 注意：targets 允许为空数组（监听类战法自行选目标，如七步释嫌），故这里**不能**因空数组提前 return。
-  if (skill.type === 'command' && targets.length > 0) targets = filterCommandTargets(targets, skill.type);
+  // `immuneReported` 供本次结算内去重（入口 + 输出池重选 + 逐段伤害都会各判一次，战报只记一条）。
+  const immuneReported = new Set<string>();
+  targets = filterCommandImmuneTargets(ctx, caster, skill, targets, immuneReported);
   // 重复施加奖励（诸葛锦囊「若发动时目标已有诸葛锦囊效果，则额外恢复目标一定兵力」）：
   // 发动时逐目标判定——目标身上已带本战法施加的状态则追加结算 repeatBonus.output。
   // skipRepeat 防自递归；在入口处按「每次发动」结算一次，不随 output 段数重复。
@@ -8362,15 +8436,6 @@ function executeSkillOutputs(
     }
   }
   const list = outputs ?? skill.output;
-  // 象兵「野性」：指挥战法产生的**任何**效果对它无效（含我方指挥增益、含选目标阶段未过滤干净的旁路）。
-  // 放在输出遍历前统一过滤一次，覆盖 inflict_status / heal / grant_* / 伤害段等所有 kind。
-  if (skill.type === 'command' && targets.length > 0) {
-    targets = targets.filter((t) => {
-      if (!elephantImmuneToCommand(skill.type, t)) return true;
-      ctx.events.push({ type: 'command_immune_blocked', unitId: t.general.id, skillId: skill.id });
-      return false;
-    });
-  }
   // 战法链（连环计）：仅最外层发动执行（nested 调用都带显式 outputs 且不传 rewrite，故不会递归触发）
   if (!outputs || rewrite) runChainSkills(ctx, caster, skill, targets, rewrite);
   // 随机战法组（河内世泽）：同样仅最外层执行
@@ -8623,8 +8688,11 @@ function executeSkillOutputs(
     }
     // 站位定向伤害段（万军取首「对敌方大营」）：直接锁定该站位的存活敌军，不按 targetMode 重选
     if ((out.kind === 'physical_damage' || out.kind === 'strategy_damage') && out.positions && out.positions.length > 0) {
-      pool = enemies.filter((u) => u.alive && out.positions!.includes(u.general.position) && !elephantImmuneToCommand(skill.type, u));
+      pool = enemies.filter((u) => u.alive && out.positions!.includes(u.general.position));
     }
+    // 指挥免疫：输出段若按 targetSide / targetMode 重选了目标池（绕过入口 targets 过滤），
+    // 这里再统一剔一次 —— 象兵 / 藤甲突击都不吃任何指挥效果（伤害 / 状态 / 恢复 / 增益一视同仁）。
+    pool = filterCommandImmuneTargets(ctx, caster, skill, pool, immuneReported);
     // 恢复段选人覆盖（知人待士「我军兵力最低单体恢复一定兵力」）：按**当前兵力**取最低的存活友军
     // （含施法者自身；与 inflict_status.targetPick 的池无关，直接锁定 1 人）
     if (out.kind === 'heal' && out.targetPick === 'lowest_troops_ally') {
@@ -8885,6 +8953,11 @@ function executeSkillOutputs(
               if (!raw.alive) continue;
               const t = redirectPhysicalHit(ctx, raw);
               if (!t.alive) continue;
+              // 指挥免疫（象兵野性 / 藤甲突击）：代打段同为指挥战法效果，整段跳过
+              if (isCommandImmuneTarget(ctx, t, skill.type, caster)) {
+                reportCommandImmune(ctx, t, skill, immuneReported);
+                continue;
+              }
               riderAttacked = true;
               selectedIds.push(t.general.id);
               // 代打伤害按代打者属性孰高定轨（徽言龙凤「由攻击或谋略属性中较高的属性决定」）：
@@ -8988,9 +9061,9 @@ function executeSkillOutputs(
             if (!raw.alive) continue;
             const t = redirectPhysicalHit(ctx, raw);
             if (!t.alive) continue;
-            // 不受敌方指挥战法影响（藤甲突击）：指挥战法伤害段对其整段跳过
-            if (skill.type === 'command' && caster.side !== t.side && hasCommandImmune(ctx, t)) {
-              ctx.events.push({ type: 'command_immune_blocked', unitId: t.general.id, skillId: skill.id });
+            // 指挥免疫（象兵野性 / 藤甲突击）：指挥战法伤害段对其整段跳过
+            if (isCommandImmuneTarget(ctx, t, skill.type, caster)) {
+              reportCommandImmune(ctx, t, skill, immuneReported);
               continue;
             }
             attacked = true;
@@ -9157,9 +9230,9 @@ function executeSkillOutputs(
               : pool;
           for (const t of foePool) {
             if (!t.alive) continue;
-            // 不受敌方指挥战法影响（藤甲突击）：指挥战法的伤害段对该目标整段跳过
-            if (skill.type === 'command' && caster.side !== t.side && hasCommandImmune(ctx, t)) {
-              ctx.events.push({ type: 'command_immune_blocked', unitId: t.general.id, skillId: skill.id });
+            // 指挥免疫（象兵野性 / 藤甲突击）：指挥战法的伤害段对该目标整段跳过
+            if (isCommandImmuneTarget(ctx, t, skill.type, caster)) {
+              reportCommandImmune(ctx, t, skill, immuneReported);
               continue;
             }
             if (out.requireStatuses?.length && !out.requireStatuses.some((st) => hasStatus(t, st))) continue;
@@ -9737,7 +9810,15 @@ function executeSkillOutputs(
         break;
       }
       case 'positional_physical_damage': {
-        const positioned = enemies.filter((t) => out.positions.includes(t.general.position) && t.alive && !elephantImmuneToCommand(skill.type, t));
+        // 指挥免疫（象兵野性 / 藤甲突击）：指挥战法的站位伤害段同样整段跳过
+        const positioned = enemies.filter((t) => {
+          if (!(out.positions.includes(t.general.position) && t.alive)) return false;
+          if (isCommandImmuneTarget(ctx, t, skill.type, caster)) {
+            reportCommandImmune(ctx, t, skill, immuneReported);
+            return false;
+          }
+          return true;
+        });
         const source = out.source === 'self' ? caster : fastestAlly(allies, caster);
         if (!source) {
           rememberDamageTargets([]);
@@ -9750,9 +9831,9 @@ function executeSkillOutputs(
           if (!raw.alive) continue;
           const t = redirectPhysicalHit(ctx, raw);
           if (!t.alive) continue;
-          // 不受敌方指挥战法影响（藤甲突击）：指挥战法伤害段对其整段跳过
-          if (skill.type === 'command' && caster.side !== t.side && hasCommandImmune(ctx, t)) {
-            ctx.events.push({ type: 'command_immune_blocked', unitId: t.general.id, skillId: skill.id });
+          // 指挥免疫（象兵野性 / 藤甲突击）：指挥战法伤害段对其整段跳过
+          if (isCommandImmuneTarget(ctx, t, skill.type, caster)) {
+            reportCommandImmune(ctx, t, skill, immuneReported);
             continue;
           }
           attacked = true;
