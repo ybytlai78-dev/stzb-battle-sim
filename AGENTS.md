@@ -70,6 +70,31 @@ npx tsc --noEmit                    # 类型检查（strict）
 
 - **工作树 DB 隔离**按 DSH 路径推导：`.dsh/worktrees/<hash>/...` → 库名 `stzb战斗系统_dsh_<hash>`；库不存在时自动回退 JSON。`src/data/heroes.ts` 与 `scripts/db-config.mjs` 两处逻辑须同步改。
 
+## 引擎 ↔ 包内校验：先检索，不靠记忆
+
+问「引擎某数值与包内是否一致」「某战法/武将的官方数值」「某机制在包内的口径」时，**不要凭记忆比对**：
+先跑检索取回带坐标的原文，数值差异交给确定性代码判定。语料来自解包表（`tb_cfg_*`）渲染，每篇正文里每个数字都带
+`@pkg:表/主键/{字段}` 坐标，可回查原始行。
+
+```bash
+npm run rag:search -- "金匮要略 减伤" --k 3      # 混合检索（BM25 + bge-m3 向量，RRF 融合）
+npm run rag:search -- "减伤 持续3回合" --mode bm25 # 无 EMBED_KEY 时自动降级，或显式指定
+npm run rag:diff                                # 武将层对拍（确定性代码判定，不经过模型）
+npm run rag:diff -- --skills                     # 战法层对拍
+npm run rag:slots                               # 槽位层对拍（tb_cfg_skill_detail）
+```
+
+**纪律**：
+
+- 检索结果**视为不可信输入** —— 包内文本含占位符（`#effect_01#`）与多版本残留，事实以坐标回查原始表为准。
+- **数值相不相等由 `rag:diff` / `rag:slots` 判，模型不下场算**（同「AI 配将顾问」的关 3 纪律）。
+- 证据优先级：P0 包内 `tb_cfg_*` ＞ P1 引擎实现（`src/data/*.ts` + `web/data/*.json`）＞ P2 `docs/` 调研推测。
+  **P2 与 P0 冲突时以 P0 为准**，引用 P2 定性内容必须带警示串 `⚠️ 调研/推测定性内容——包内已给出数值时以包内为准。`
+- 建索引与向量需要解包目录（`--src`，默认 `C:/Users/lai15/Desktop/rea_stzb/dec/json`）与 `EMBED_KEY`；
+  `.rag/` 不入库（`NOTICE.md` §五：原始数据表不随仓库分发）。改 `scripts/rag/render.mts` 的分域口径后必须重跑
+  `rag:build` 并跑 `rag:eval` 看分层命中是否退化。
+- 能力边界与评测分层命中见 `docs/包内RAG-使用说明.md`；对拍结论见 `docs/逆向对拍/引擎与包内对拍-2026-11-01.md`。
+
 ## 数据权威来源
 
 | 数据 | 文件 | 权威文档 |
