@@ -54,7 +54,9 @@ const CONFIRMED: Record<string, Record<string, number>> = {
   qibu_shixian: { damage_boost: 0.008 },
   muyi_fumeng: { damage_boost: 0.2 },
   huangtian_yuyin: { attack_buff: 0.2, defense_buff: 0.2, strategy_buff: 0.2, speed_buff: 0.2 },
-  jinkui_yaolue: { damage_reduce: 0.18 },
+  /** 包内 tb_cfg_skill_detail 20077301/20077302：const 10 + intel 26 ⇒ 值@80 = 20.4%、成长 26/200 = 0.13
+   *  （旧值 0.18 无包内依据，2026-11-01 对拍修正） */
+  jinkui_yaolue: { damage_reduce: 0.13 },
   mouyi_hongtu: { damage_reduce: 0.175 },
   /** 战报反推（2026-09）：烈火焚舟一段燃烧 1.35、二段引爆 2.26 */
   liehuo_fenzhou: { burning: 1.35, detonate: 2.26 },

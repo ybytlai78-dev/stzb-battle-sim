@@ -604,7 +604,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['damage', 'damage_reduce'],
     output: [
       { kind: 'strategy_damage', rate: 85, strategyScaled: true, growthRate: 0.625 },
-      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.49, duration: 2 }, target: 'self' },
+      // 减伤 49% 受谋略成长 0.175/点（包内 20000712/20000713：const 35 + intel 35 ⇒ 值@80 = (35+14)/100 = 49%、成长 35/200）
+      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.49, strategyScaled: true, growthRate: 0.175, duration: 2 }, target: 'self' },
     ],
   },
   /** 血溅黄砂（马超主战法·战斗开始被动）：以无法发动主动战法为代价，使自身进行攻击时的伤害提高 120%（以全局增伤近似） */
@@ -671,7 +672,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['rampage', 'defense_buff'],
     output: [
       { kind: 'inflict_status', status: { type: 'rampage', duration: 3 } },
-      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -29, growthRate: 0.175, duration: 3 } },
+      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -29, strategyScaled: true, growthRate: 0.175, duration: 3 } },
     ],
   },
   /** 金吾飞将（吕布主战法）：对敌军单体发动一次猛攻 275%，并使其陷入混乱状态，持续 2 回合（「对混乱/暴走目标优先」条件简化） */
@@ -813,7 +814,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     retainAfterDeath: true,
     tags: ['damage_reduce', 'first_aid', 'heal'],
     output: [
-      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.204, duration: 3, strategyScaled: true, growthRate: 0.18 } },
+      // 减伤 20.4% 受谋略成长 0.13/点（包内 20077301/20077302：const 10 + intel 26 ⇒ 值@80 = 20.4%、成长 26/200）
+      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.204, duration: 3, strategyScaled: true, growthRate: 0.13 } },
       { kind: 'grant_first_aid', rate: 50, healRate: 80, healGrowthRate: 0.75, duration: 3 },
     ],
   },
@@ -845,7 +847,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     ],
   },
   /** 皇裔流离（刘备主战法·一类指挥）：开始前准备回合阶段释放一次，使我军全体（三目标）受到伤害时有 50% 几率恢复一定兵力
-   *  （恢复率 68%，受谋略属性影响，成长率 0.6/点：谋略 80 → 68%、谋略 200 → 140%）。该效果总生效次数每达到 3 次，
+   *  （恢复率 68%，受谋略属性影响，成长率 0.6/点：谋略 80 → 68%、谋略 200 → 140%；
+   *  包内 `tb_cfg_skill_detail` 20001601 constant 20 / intel 120 印证，子战法 21101601 constant 5 = 每次 +5%）。该效果总生效次数每达到 3 次，
    *  生效几率提升 5% 可叠加（50% → 55% → 60%…）。战法词条：持续型急救（受击触发恢复）——
    *  同为指挥战法的持续型急救冲突，先施加者生效（典型：刘备皇裔流离 vs 张机金匮要略）。战报统计为回复触发次数/回复兵力 */
   huangyi_liuli: {
@@ -881,7 +884,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['damage', 'debuff_speed'],
     output: [
       { kind: 'physical_damage', rate: 275 },
-      { kind: 'inflict_status', status: { type: 'speed_buff', amount: -28, duration: 2 } },
+      // 速度 −28 受谋略成长 0.1/点（包内 20004202：const 2000 + intel 2000 ⇒ 值@80 = 28 点、成长 2000/20000）
+      { kind: 'inflict_status', status: { type: 'speed_buff', amount: -28, strategyScaled: true, growthRate: 0.1, duration: 2 } },
     ],
   },
   /**
@@ -2146,7 +2150,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'inflict_status', status: { type: 'speed_buff', amount: 32, duration: 999 }, target: 'self' },
     ],
   },
-  /** 坚守兵法（C 被动·battle_start）：使自身防御属性提高 28（受谋略影响，取基值） */
+  /** 坚守兵法（C 被动·battle_start）：使自身防御属性提高 28、成长 0.35/点（受谋略；包内 20062001 const 0 + intel 7000） */
   jianshou_bingfa: {
     id: 'jianshou_bingfa',
     name: '坚守兵法',
@@ -2156,9 +2160,9 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     timing: 'battle_start',
     targetMode: 'self',
     tags: ['buff_defense'],
-    output: [{ kind: 'inflict_status', status: { type: 'defense_buff', amount: 28, growthRate: 0.35, duration: 999 }, target: 'self' }],
+    output: [{ kind: 'inflict_status', status: { type: 'defense_buff', amount: 28, strategyScaled: true, growthRate: 0.35, duration: 999 }, target: 'self' }],
   },
-  /** 强攻兵法（C 被动·battle_start）：使自身攻击属性提高 28（受谋略影响，取基值） */
+  /** 强攻兵法（C 被动·battle_start）：使自身攻击属性提高 28、成长 0.35/点（受谋略；包内 20061901 const 0 + intel 7000） */
   qianggong_bingfa: {
     id: 'qianggong_bingfa',
     name: '强攻兵法',
@@ -2168,9 +2172,9 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     timing: 'battle_start',
     targetMode: 'self',
     tags: ['buff_attack'],
-    output: [{ kind: 'inflict_status', status: { type: 'attack_buff', amount: 28, growthRate: 0.35, duration: 999 }, target: 'self' }],
+    output: [{ kind: 'inflict_status', status: { type: 'attack_buff', amount: 28, strategyScaled: true, growthRate: 0.35, duration: 999 }, target: 'self' }],
   },
-  /** 速战兵法（C 被动·battle_start）：使自身速度属性提高 28（受谋略影响，取基值） */
+  /** 速战兵法（C 被动·battle_start）：使自身速度属性提高 28、成长 0.35/点（受谋略；包内 20062101 const 0 + intel 7000） */
   suzhan_bingfa: {
     id: 'suzhan_bingfa',
     name: '速战兵法',
@@ -2180,7 +2184,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     timing: 'battle_start',
     targetMode: 'self',
     tags: ['buff_speed'],
-    output: [{ kind: 'inflict_status', status: { type: 'speed_buff', amount: 28, growthRate: 0.35, duration: 999 }, target: 'self' }],
+    output: [{ kind: 'inflict_status', status: { type: 'speed_buff', amount: 28, strategyScaled: true, growthRate: 0.35, duration: 999 }, target: 'self' }],
   },
   /** 坚守突击（D 被动·battle_start）：使自身攻击、防御属性提高 24 */
   jianshou_tuji: {
@@ -2470,8 +2474,9 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['damage', 'debuff_strategy', 'debuff_speed'],
     output: [
       { kind: 'strategy_damage', rate: 250, strategyScaled: true, growthRate: 2.5 },
-      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -25, duration: 2 } },
-      { kind: 'inflict_status', status: { type: 'speed_buff', amount: -25, duration: 2 } },
+      // 谋略 / 速度 −25 受谋略成长 0.11/点（包内 20095302/20095303：const 1620 + intel 2200 ⇒ 值@80 = 25 点、成长 2200/20000）
+      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -25, strategyScaled: true, growthRate: 0.11, duration: 2 } },
+      { kind: 'inflict_status', status: { type: 'speed_buff', amount: -25, strategyScaled: true, growthRate: 0.11, duration: 2 } },
     ],
   },
   /** 落雷（A 主动）：对敌军单体发动策略攻击 148%，并使其陷入混乱状态，持续 1 回合 */
@@ -2945,7 +2950,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['damage', 'debuff_defense'],
     output: [
       { kind: 'strategy_damage', rate: 105, strategyScaled: true, growthRate: 1.05 },
-      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -6, duration: 2 } },
+      // 防御 −6 受谋略成长 0.075/点（包内 20012402：const 0 + intel 1500）
+      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -6, strategyScaled: true, growthRate: 0.075, duration: 2 } },
     ],
   },
   /** 落石（C 主动）：对敌军群体发动策略攻击 92.2%，并使其防御属性降低 5.2，持续 1 回合 */
@@ -2960,7 +2966,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['damage', 'debuff_defense'],
     output: [
       { kind: 'strategy_damage', rate: 92.2, strategyScaled: true, growthRate: 0.89 },
-      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -5.2, duration: 1 } },
+      // 防御 −5.2 受谋略成长 0.065/点（包内 20012302：const 0 + intel 1300）
+      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -5.2, strategyScaled: true, growthRate: 0.065, duration: 1 } },
     ],
   },
   /** 规避（C 主动·发动率满级 42%）：使自身进入规避状态，免疫接下来受到的 1 次攻击的伤害 */
@@ -3214,7 +3221,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['taunt', 'debuff_attack'],
     output: [
       { kind: 'inflict_status', status: { type: 'taunt', duration: 2, targetId: '' } },
-      { kind: 'inflict_status', status: { type: 'attack_buff', amount: -39, growthRate: 0.05, duration: 2 } },
+      { kind: 'inflict_status', status: { type: 'attack_buff', amount: -39, strategyScaled: true, growthRate: 0.05, duration: 2 } },
     ],
   },
   /** 谨言（D 主动）：使友军全体受到策略攻击的伤害降低 16%（取基值），持续 2 回合 */
