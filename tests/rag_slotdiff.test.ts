@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SLOT_MAP, close, flattenOutputs } from '../scripts/rag/slotdiff.mts';
+import { ATTR_CODES, SLOT_MAP, close, flattenOutputs } from '../scripts/rag/slotdiff.mts';
 
 /** 槽位对拍的映射口径守卫：单位换算与机制码归属由真实行自证过，改动必须先跑 slotdiff 看差异数 */
 
@@ -64,5 +64,56 @@ describe('结构展开与容差', () => {
     expect(close(0.204, 0.204)).toBe(true);
     expect(close(190, 200)).toBe(false);
     expect(close(0.13, 0.18)).toBe(false);
+  });
+});
+
+describe('属性增减（101-104 / 201-204）：判据由引擎侧数据反向自证', () => {
+  const buff = (type: string, amount: number, growthRate?: number) => ({
+    kind: 'inflict_status',
+    status: { type, amount, ...(growthRate === undefined ? {} : { growthRate }) },
+  });
+
+  it('机制码与属性一一对应，提高 / 降低各占一端', () => {
+    expect(ATTR_CODES.attack_buff).toEqual([101, 201]);
+    expect(ATTR_CODES.defense_buff).toEqual([102, 202]);
+    expect(ATTR_CODES.strategy_buff).toEqual([103, 203]);
+    expect(ATTR_CODES.speed_buff).toEqual([104, 204]);
+    // 每个属性都必须在 SLOT_MAP 里落到具体条目，否则码表与映射会脱节
+    for (const codes of Object.values(ATTR_CODES)) {
+      for (const c of codes) expect(SLOT_MAP[c]).toBeDefined();
+    }
+  });
+
+  it('提高类不翻符号，降低类翻号 —— 包内两侧都是正值域，方向由机制码表达', () => {
+    expect(SLOT_MAP[101].valueScale).toBe(1);
+    expect(SLOT_MAP[104].valueScale).toBe(1);
+    expect(SLOT_MAP[201].valueScale).toBe(-1);
+    expect(SLOT_MAP[204].valueScale).toBe(-1);
+    // 成长率不跟着翻号：引擎侧 growthRate 恒为正
+    expect(SLOT_MAP[201].growthScale).toBe(1);
+    expect(SLOT_MAP[204].growthScale).toBe(1);
+  });
+
+  it('取 amount 而非其他字段，且只认自己的属性类型', () => {
+    const atk = buff('attack_buff', -28, 0.1);
+    expect(SLOT_MAP[201].pick(atk)).toBe(-28);
+    expect(SLOT_MAP[201].growth?.(atk)).toBe(0.1);
+    // 防御槽位不能拿攻击的 buff 当命中
+    expect(SLOT_MAP[202].pick(atk)).toBeNull();
+    expect(SLOT_MAP[203].pick(atk)).toBeNull();
+  });
+
+  it('缺 growthRate 视为不缩放（引擎侧常态），不是 undefined', () => {
+    expect(SLOT_MAP[101].growth?.(buff('attack_buff', 24))).toBe(0);
+  });
+
+  it('属性类必须成组对齐：attrType 标记存在，防止一槽多段被逐条硬比', () => {
+    for (const c of [101, 102, 103, 104, 201, 202, 203, 204]) {
+      expect(SLOT_MAP[c].attrType).toBeDefined();
+    }
+    // 伤害率 / 急救 / 减伤不走成组逻辑
+    expect(SLOT_MAP[301].attrType).toBeUndefined();
+    expect(SLOT_MAP[401].attrType).toBeUndefined();
+    expect(SLOT_MAP[522].attrType).toBeUndefined();
   });
 });

@@ -46,7 +46,30 @@ interface SlotMapping {
   pick: (o: Row) => number | null;
   /** 同一条 output 上的成长率字段 */
   growth?: (o: Row) => number | undefined;
+  /**
+   * 属性增减类的状态类型。设置后该槽位走「成组对齐」：
+   * 包内同一属性可能有多条槽位（递增段 / 分层段），引擎只写一条，
+   * 槽位数与 output 数不等时一律 ambiguous —— 拿 8.4 去比 28 会造出假差异。
+   */
+  attrType?: string;
 }
+
+/** 属性 buff 类型 → 归属它的机制码（提高 / 降低）。不按这张表配会造出大量假配对。 */
+export const ATTR_CODES: Record<string, number[]> = {
+  attack_buff: [101, 201],
+  defense_buff: [102, 202],
+  strategy_buff: [103, 203],
+  speed_buff: [104, 204],
+};
+
+const statBuff = (type: string) => (o: Row): number | null => {
+  const s = status(o);
+  return s?.type === type ? Number(s.amount) : null;
+};
+const statGrowth = (type: string) => (o: Row): number | undefined => {
+  const s = status(o);
+  return s?.type === type ? Number(s.growthRate ?? 0) : undefined;
+};
 
 const status = (o: Row): Row | undefined => o.status as Row | undefined;
 
@@ -96,6 +119,28 @@ export const SLOT_MAP: Record<number, SlotMapping> = {
     pick: (o) => (o.kind === 'grant_first_aid' ? Number(o.healRate) : null),
     growth: (o) => (o.kind === 'grant_first_aid' ? Number(o.healGrowthRate ?? 0) : undefined),
   },
+  // ── 属性增减（101-104 提高 / 201-204 降低）──
+  // 判据由 `scripts/_probe_statpoint.mts` 反向自证：引擎已实现的 33 个属性 buff 样本，
+  // 点数编码（c<10⁵ → (c+0.4i)/100）命中 31 条、单属性百分比编码（c≥10⁵ → (c+0.4i)/10⁶）命中 2 条，
+  // 合计 33/33；其余两条路径命中 0 —— 判据成立（`convertDetail` 已按量级分域，这里 valueScale 只需处理符号）。
+  // 符号：201-204 是「降低」，引擎 amount 为负，故包内正值 × (−1)。
+  101: { label: '攻击属性提高', valueScale: 1, growthScale: 1, attrType: 'attack_buff',
+    pick: statBuff('attack_buff'), growth: statGrowth('attack_buff') },
+  102: { label: '防御属性提高', valueScale: 1, growthScale: 1, attrType: 'defense_buff',
+    pick: statBuff('defense_buff'), growth: statGrowth('defense_buff') },
+  103: { label: '谋略属性提高', valueScale: 1, growthScale: 1, attrType: 'strategy_buff',
+    pick: statBuff('strategy_buff'), growth: statGrowth('strategy_buff') },
+  104: { label: '速度属性提高', valueScale: 1, growthScale: 1, attrType: 'speed_buff',
+    pick: statBuff('speed_buff'), growth: statGrowth('speed_buff') },
+  201: { label: '攻击属性降低', valueScale: -1, growthScale: 1, attrType: 'attack_buff',
+    pick: statBuff('attack_buff'), growth: statGrowth('attack_buff') },
+  202: { label: '防御属性降低', valueScale: -1, growthScale: 1, attrType: 'defense_buff',
+    pick: statBuff('defense_buff'), growth: statGrowth('defense_buff') },
+  203: { label: '谋略属性降低', valueScale: -1, growthScale: 1, attrType: 'strategy_buff',
+    pick: statBuff('strategy_buff'), growth: statGrowth('strategy_buff') },
+  204: { label: '速度属性降低', valueScale: -1, growthScale: 1, attrType: 'speed_buff',
+    pick: statBuff('speed_buff'), growth: statGrowth('speed_buff') },
+
   522: {
     label: '受到攻击伤害降低',
     valueScale: 0.01,
@@ -237,10 +282,6 @@ export function diffSlots(src: string): SlotDiffReport {
       const pkgValue = conv.value * mapping.valueScale;
       const pkgGrowth = conv.growth * mapping.growthScale;
 
-      const hits = outputs
-        .map((o) => ({ o, v: mapping.pick(o) }))
-        .filter((x) => x.v !== null && Number.isFinite(x.v)) as Array<{ o: Row; v: number }>;
-
       const base: Omit<SlotDiff, 'engine' | 'engineGrowth' | 'status'> = {
         skillId: String(entry.id),
         skillName: String(entry.name),
@@ -251,6 +292,22 @@ export function diffSlots(src: string): SlotDiffReport {
         pkg: pkgValue,
         pkgGrowth,
       };
+
+      // 属性增减类必须成组对齐：包内该属性的槽位数 ≠ 引擎同类 output 数时无从判定是哪条对哪条
+      if (mapping.attrType) {
+        const codes = ATTR_CODES[mapping.attrType] ?? [];
+        const nSlot = slots.filter((x) => codes.includes(Number(x.effect_id))).length;
+        const nOut = outputs.filter((o) => status(o)?.type === mapping.attrType).length;
+        if (nSlot !== 1 || nOut !== 1) {
+          stats.ambiguous++;
+          rows.push({ ...base, engine: null, status: 'ambiguous' });
+          continue;
+        }
+      }
+
+      const hits = outputs
+        .map((o) => ({ o, v: mapping.pick(o) }))
+        .filter((x) => x.v !== null && Number.isFinite(x.v)) as Array<{ o: Row; v: number }>;
 
       if (hits.length === 0) {
         stats.engineMissing++;
