@@ -29,6 +29,10 @@ verify-shots/
 # 会话自检截图目录（临时产物，不入库）
 /.resume-verify/
 
+# RAG 索引产物：由解包数据渲染而成，随包版本变化，不入库
+# （与 NOTICE.md §五「原始数据表不随仓库分发」一致；重建见 scripts/rag/ingest.mts）
+/.rag/
+
 # 生成物备份文件（*.bak-<epoch>）
 *.bak-*
 
