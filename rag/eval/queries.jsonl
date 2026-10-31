@@ -1,0 +1,26 @@
+{"query": "金匮要略 降低受到的伤害 前3回合", "expect": "金匮要略", "kind": "skill"}
+{"query": "同仇敌忾 叠加 8 次 减伤", "expect": "同仇敌忾", "kind": "skill"}
+{"query": "举义诛暴 怯战 犹豫 混乱 暴走", "expect": "举义诛暴", "kind": "skill"}
+{"query": "魏武之世 全属性下降 攻击距离+1", "expect": "魏武之世", "kind": "skill"}
+{"query": "战必断金 前3回合 无法普通攻击", "expect": "战必断金", "kind": "skill"}
+{"query": "白衣渡江 延迟结算 第3回合", "expect": "白衣渡江", "kind": "skill"}
+{"query": "奇兵拒北 借速度最高友军 站位伤害", "expect": "奇兵拒北", "kind": "skill"}
+{"query": "算无遗策 攻击与谋略降低 妖术诅咒", "expect": "算无遗策", "kind": "skill"}
+{"query": "将门虎女 受到攻击伤害 动摇 80%", "expect": "将门虎女", "kind": "skill"}
+{"query": "磐阵善守 大幅度降低受到伤害", "expect": "磐阵善守", "kind": "skill"}
+{"query": "皇裔流离 友军受到伤害时恢复兵力", "expect": "皇裔流离", "kind": "skill"}
+{"query": "三军之众 恢复率 谋略", "expect": "三军之众", "kind": "skill"}
+{"query": "曹操 汉 骑兵 五星 面板 攻击成长", "expect": "曹操", "kind": "hero"}
+{"query": "许褚 五星 骑兵 面板", "expect": "许褚", "kind": "hero"}
+{"query": "张机 谋略 五星", "expect": "张机", "kind": "hero"}
+{"query": "周瑜 五星 弓兵", "expect": "周瑜", "kind": "hero"}
+{"query": "前3回合使我军全体受到的伤害降低，受到伤害时还有几率恢复兵力", "expect": "金匮要略", "kind": "skill"}
+{"query": "每受到一次伤害让距离1以内友军减伤并增伤，最多叠8次", "expect": "同仇敌忾", "kind": "skill"}
+{"query": "对敌军造成攻击伤害并使其四维下降，受击两次后陷入四种控制之一", "expect": "举义诛暴", "kind": "skill"}
+{"query": "敌军全体四维下降，我军攻击距离+1，持续整场战斗", "expect": "魏武之世", "kind": "skill"}
+{"query": "前3回合高概率使敌军无法普通攻击", "expect": "战必断金", "kind": "skill"}
+{"query": "第3回合对敌军造成延迟结算的伤害，我方速度最快者还有先手", "expect": "白衣渡江", "kind": "skill"}
+{"query": "借速度最高友军对敌军大营与中军造成伤害", "expect": "奇兵拒北", "kind": "skill"}
+{"query": "敌军攻击与谋略降低，其试图发动主动战法时受妖术诅咒", "expect": "算无遗策", "kind": "skill"}
+{"query": "受到攻击伤害后八成几率引发一次动摇逃兵，伤害率六成", "expect": "将门虎女", "kind": "skill"}
+{"query": "防御型战法，无论对方增伤多高都能把受到的伤害压到下限", "expect": "磐阵善守", "kind": "skill"}
