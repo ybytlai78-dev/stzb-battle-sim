@@ -16,7 +16,8 @@
     "rag:build": "tsx scripts/rag/ingest.mts",
     "rag:search": "tsx scripts/rag/search.mts",
     "rag:eval": "tsx scripts/rag/eval.mts",
-    "rag:diff": "tsx scripts/rag/diff.mts"
+    "rag:diff": "tsx scripts/rag/diff.mts",
+    "rag:slots": "tsx scripts/rag/slotdiff.mts"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.2",

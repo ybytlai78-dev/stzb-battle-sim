@@ -111,7 +111,9 @@ export function convertDetail(constParam: number, intelParam: number, effectId?:
     return { value: raw / 100, growth: intelParam / 20000, division: DIV_STAT_POINT };
   }
   if (effectId !== undefined && DAMAGE_RATE.has(effectId)) {
-    return { value: constParam, growth: intelParam / 200, division: DIV_DAMAGE_RATE };
+    // 伤害率是百分数：301 攻击伤害的 intel 恒 0（480 条全查过），302/304/305/306 几乎全带 intel
+    // （楚歌四起 304 c=25 i=255 → 127%，不是 25%），统一按 c+0.4i 算，intel=0 时自动退化成 c。
+    return { value: raw, growth: intelParam / 200, division: DIV_DAMAGE_RATE };
   }
   if (effectId !== undefined && SKILL_REF.has(effectId)) {
     return { value: constParam, growth: 0, division: DIV_SKILL_REF };

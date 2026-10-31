@@ -91,6 +91,22 @@ describe('包内已钉死口径的端到端回归（参数取自 tb_cfg_skill_de
     expect(c.value).toBe(150);
   });
 
+  it('带 intel 的伤害率按 c+0.4i 算：楚歌四起 20013001（304，25/255）= 127%，不是 25%', () => {
+    // 这条守的是分域口径的坑：301 的 intel 恒 0（480 条全查过），302/304/305/306 则几乎全带 intel，
+    // 早前一刀切「伤害率 = constant_param」会把妖术/恐慌/燃烧/策略伤害全部低估。
+    const chuge = convertDetail(25, 255, 304);
+    expect(chuge.division).toBe(DIV_DAMAGE_RATE);
+    expect(chuge.value).toBeCloseTo(127, 6);
+    expect(chuge.growth).toBeCloseTo(1.275, 6);
+
+    const celue = convertDetail(35, 125, 302);
+    expect(celue.value).toBeCloseTo(85, 6);
+    expect(celue.growth).toBeCloseTo(0.625, 6);
+
+    // 攻击伤害 301 的 intel 恒 0，公式退化成 constant_param 本身
+    expect(convertDetail(115, 0, 301).value).toBe(115);
+  });
+
   it('举义诛暴 20028702-05 = 四维各 −5.0%，成长 0.015/点（AGENTS.md「举义诛暴」小节逐位一致）', () => {
     for (const effectId of [201, 202, 203, 204]) {
       const c = convertDetail(3_800_000, 3_000_000, effectId);
