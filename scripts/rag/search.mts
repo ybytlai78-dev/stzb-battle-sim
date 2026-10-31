@@ -10,9 +10,11 @@
  *   npx tsx scripts/rag/search.mts "金匮要略 减伤" --k 5
  *   npx tsx scripts/rag/search.mts "受击触发动摇" --kind skill
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { RagDoc } from './render.mjs';
+import { embedDocs, readConfig } from './embed.mjs';
+import { loadVectorStore, rrfFuse, vectorSearch } from './vector.mjs';
 
 /** 中文按 2-gram、英文数字按词切；剔除标点与空白 */
 export function tokenize(text: string): string[] {
@@ -150,36 +152,68 @@ export function loadDocs(path: string): RagDoc[] {
   return text.split('\n').map((l) => JSON.parse(l) as RagDoc);
 }
 
-function main(): void {
+export type SearchMode = 'bm25' | 'vector' | 'hybrid';
+
+/** 三路检索的统一入口：无 EMBED_KEY 或缺向量文件时自动降级 BM25 */
+export async function search(
+  index: SearchIndex,
+  query: string,
+  opts: { mode?: SearchMode; k?: number; kinds?: string[] } = {}
+): Promise<{ hits: Hit[]; mode: SearchMode; degraded?: string }> {
+  const k = opts.k ?? 5;
+  const mode = opts.mode ?? 'hybrid';
+  const pool = mode === 'hybrid' ? Math.max(k * 4, 40) : k;
+  const bm25 = (): Hit[] => bm25Search(index, query, { k: pool, kinds: opts.kinds });
+  if (mode === 'bm25') return { hits: bm25(), mode };
+
+  const cfg = readConfig();
+  if (!cfg.key) return { hits: bm25(), mode: 'bm25', degraded: '无 EMBED_KEY' };
+  if (!existsSync('.rag/vectors.f32') || !existsSync('.rag/vectors.meta.json')) {
+    return { hits: bm25(), mode: 'bm25', degraded: '缺 .rag/vectors.*（先 npm run rag:build 再 embed）' };
+  }
+  const store = loadVectorStore('.rag/vectors.f32', '.rag/vectors.meta.json');
+  const docById = new Map(index.docs.map((d) => [d.docId, d]));
+  const res = await embedDocs([{ docId: query, body: query }], cfg, { batch: 1 });
+  const qv = res.vectors[0];
+  if (!qv) return { hits: bm25(), mode: 'bm25', degraded: `query 嵌入失败：${res.failed[0]?.error ?? '未知'}` };
+  const vec = vectorSearch(store, qv, docById, { k: pool, kinds: opts.kinds });
+  if (mode === 'vector') return { hits: vec, mode };
+  return { hits: rrfFuse([bm25(), vec], { k }), mode };
+}
+
+async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const flag = (name: string, dflt: string): string => {
     const i = argv.indexOf(name);
     return i >= 0 && argv[i + 1] ? argv[i + 1] : dflt;
   };
-  const query = argv.filter((a) => !a.startsWith('--') && !/^\d+$/.test(a) && a !== flag('--kind', '') && a !== flag('--docs', ''))
+  const skip = new Set();
+  for (const name of ['--kind', '--docs', '--mode', '--k']) {
+    const i = argv.indexOf(name);
+    if (i >= 0 && argv[i + 1]) skip.add(argv[i + 1]);
+  }
+  const query = argv
+    .filter((a) => !a.startsWith('--') && !/^\d+$/.test(a) && !skip.has(a))
     .join(' ')
     .trim();
   if (!query) {
-    console.error('用法：npx tsx scripts/rag/search.mts "查询词" [--k 5] [--kind skill] [--docs .rag/docs.jsonl]');
+    console.error('用法：npx tsx scripts/rag/search.mts "查询词" [--k 5] [--kind skill] [--mode hybrid|bm25|vector] [--docs .rag/docs.jsonl]');
     process.exit(1);
   }
   const k = Number(flag('--k', '5'));
   const kind = flag('--kind', '');
-  const docsPath = resolve(flag('--docs', '.rag/docs.jsonl'));
-  const index = buildIndex(loadDocs(docsPath));
-  const hits = bm25Search(index, query, { k, kinds: kind ? [kind] : undefined });
+  const mode = flag('--mode', 'hybrid') as SearchMode;
+  const index = buildIndex(loadDocs(resolve(flag('--docs', '.rag/docs.jsonl'))));
+  const out = await search(index, query, { mode, k, kinds: kind ? [kind] : undefined });
 
-  console.log(`查询「${query}」→ ${hits.length} 条（索引 ${index.docs.length} 篇，BM25 基线）`);
-  for (const h of hits) {
-    console.log(`\n[${h.score.toFixed(2)}] ${h.docId}  (${h.kind}/${h.tier})  ${h.source}`);
-    console.log(
-      h.body
-        .split('\n')
-        .slice(0, 6)
-        .join('\n')
-        .slice(0, 400)
-    );
+  const label = out.mode === 'hybrid' ? 'BM25 + 向量（RRF 融合）' : out.mode === 'vector' ? '向量（bge-m3）' : 'BM25';
+  console.log(
+    `查询「${query}」→ ${out.hits.length} 条（索引 ${index.docs.length} 篇，${label}${out.degraded ? `，已降级：${out.degraded}` : ''}）`
+  );
+  for (const h of out.hits) {
+    console.log('\n[' + h.score.toFixed(3) + '] ' + h.docId + '  (' + h.kind + '/' + h.tier + ')  ' + h.source);
+    console.log(h.body.split('\n').slice(0, 6).join('\n').slice(0, 400));
   }
 }
 
-if (process.argv[1]?.replace(/\\/g, '/').endsWith('scripts/rag/search.mts')) main();
+if (process.argv[1]?.replace(/\\/g, '/').endsWith('scripts/rag/search.mts')) void main();
