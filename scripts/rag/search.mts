@@ -181,6 +181,33 @@ export async function search(
   return { hits: rrfFuse([bm25(), vec], { k }), mode };
 }
 
+/**
+ * 把文档压成能塞进上下文的精要：数值行优先。
+ * 顺序 = 标题行 → 槽位数值行 → 其余（官方描述 / 机制码 / 坐标）。
+ * 截断时明确报告丢了多少行，避免"看起来完整其实被切了"。
+ */
+export function condense(body: string, budget = 600): string {
+  const lines = body.split('\n').filter((l) => l.trim().length > 0);
+  if (budget <= 0) return lines.join('\n');
+  // 标题行 + 紧随其后的属性行（品级/类型/距离），这两行决定「这是谁」
+  const head = lines.filter((l, i) => i < 2 && !l.startsWith('## '));
+  const slots = lines.filter((l) => /^-\s*槽/.test(l));
+  const rest = lines.filter((l) => !head.includes(l) && !slots.includes(l));
+  const out: string[] = [];
+  let used = 0;
+  let dropped = 0;
+  for (const line of [...head, ...slots, ...rest]) {
+    if (used + line.length + 1 <= budget) {
+      out.push(line);
+      used += line.length + 1;
+    } else {
+      dropped += 1;
+    }
+  }
+  if (dropped > 0) out.push(`…（省略 ${dropped} 行，--full 看全文）`);
+  return out.join('\n');
+}
+
 async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const flag = (name: string, dflt: string): string => {
@@ -188,7 +215,7 @@ async function main(): Promise<void> {
     return i >= 0 && argv[i + 1] ? argv[i + 1] : dflt;
   };
   const skip = new Set();
-  for (const name of ['--kind', '--docs', '--mode', '--k']) {
+  for (const name of ['--kind', '--docs', '--mode', '--k', '--budget']) {
     const i = argv.indexOf(name);
     if (i >= 0 && argv[i + 1]) skip.add(argv[i + 1]);
   }
@@ -197,12 +224,15 @@ async function main(): Promise<void> {
     .join(' ')
     .trim();
   if (!query) {
-    console.error('用法：npx tsx scripts/rag/search.mts "查询词" [--k 5] [--kind skill] [--mode hybrid|bm25|vector] [--docs .rag/docs.jsonl]');
+    console.error(
+      '用法：npx tsx scripts/rag/search.mts "查询词" [--k 5] [--kind skill] [--mode hybrid|bm25|vector] [--budget 600] [--full] [--docs .rag/docs.jsonl]'
+    );
     process.exit(1);
   }
   const k = Number(flag('--k', '5'));
   const kind = flag('--kind', '');
   const mode = flag('--mode', 'hybrid') as SearchMode;
+  const budget = argv.includes('--full') ? 0 : Number(flag('--budget', '600'));
   const index = buildIndex(loadDocs(resolve(flag('--docs', '.rag/docs.jsonl'))));
   const out = await search(index, query, { mode, k, kinds: kind ? [kind] : undefined });
 
@@ -212,7 +242,7 @@ async function main(): Promise<void> {
   );
   for (const h of out.hits) {
     console.log('\n[' + h.score.toFixed(3) + '] ' + h.docId + '  (' + h.kind + '/' + h.tier + ')  ' + h.source);
-    console.log(h.body.split('\n').slice(0, 6).join('\n').slice(0, 400));
+    console.log(condense(h.body, budget));
   }
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bm25Search, buildIndex, tokenize, type IndexedDoc } from '../scripts/rag/search.mts';
+import { bm25Search, buildIndex, condense, tokenize, type IndexedDoc } from '../scripts/rag/search.mts';
 import type { RagDoc } from '../scripts/rag/render.mts';
 
 const doc = (docId: string, kind: 'hero' | 'skill' | 'mechanism', body: string): RagDoc => ({
@@ -82,5 +82,44 @@ describe('IndexedDoc 形状', () => {
     const index = buildIndex(docs);
     const d: IndexedDoc = index.docs[0];
     expect(d).toMatchObject({ docId: 'skill:200773', kind: 'skill', tier: 'package', source: 'test/skill:200773' });
+  });
+});
+
+describe('condense：把文档压成能塞进上下文的精要', () => {
+  const body = [
+    '# 金匮要略（战法 id 200773）',
+    '品级 S｜战法类型 指挥｜攻击距离 3',
+    '## 官方描述',
+    '战斗开始后前#available_round_01#，使我军全体受到的所有伤害降低#effect_01#%',
+    '## 槽位（2 个）',
+    '- 槽 20077301｜机制 522｜值 20.4%（成长 0.130%/点）',
+    '- 槽 20077303｜机制 401｜值 80.0%（成长 0.750%/点）',
+    '机制码：522;401',
+  ].join('\n');
+
+  it('数值行优先于官方描述：预算只够几行时先保槽位', () => {
+    const out = condense(body, 120);
+    expect(out).toContain('金匮要略');
+    expect(out).toContain('槽 20077301');
+  });
+
+  it('被丢掉的行数如实报告，不假装完整', () => {
+    const out = condense(body, 120);
+    expect(out).toMatch(/省略 \d+ 行/);
+  });
+
+  it('预算够时原样保留全部有效行', () => {
+    const out = condense(body, 10_000);
+    expect(out).not.toContain('省略');
+    expect(out.split('\n').filter(Boolean)).toHaveLength(8);
+  });
+
+  it('budget <= 0 视为 --full：不过滤也不截断', () => {
+    expect(condense(body, 0)).toBe(body);
+  });
+
+  it('短文档不会被莫名其妙加省略标记', () => {
+    const out = condense('# 只有一行', 600);
+    expect(out).toBe('# 只有一行');
   });
 });

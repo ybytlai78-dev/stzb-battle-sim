@@ -17,6 +17,10 @@ npx tsx scripts/rag/diff.mts --skills   # 战法层对拍
 检索模式：`--mode hybrid`（默认）｜`bm25`｜`vector`。**没有 `EMBED_KEY` 自动降级 BM25 并打印原因**，
 所以无网/无密钥时 `rag:search` 仍可用，只是召回按下面的分层数字打折。
 
+**输出默认按 600 字符/条压缩**（`--budget N` 可调，`--full` 出全文）：优先保留标题行、属性行与槽位数值行，
+官方描述等长文本排在后面，被截掉的行数会明确标注「…（省略 N 行）」。这样 `--k 3` 结果通常能直接塞进上下文；
+要看完整正文再 `--full` 重取。
+
 `rag:build` 需要本机存在解包目录（默认 `C:/Users/lai15/Desktop/rea_stzb/dec/json`，`--src` 可改）。
 `.rag/` 不入库（`NOTICE.md` §五：原始数据表不随仓库分发）。
 
