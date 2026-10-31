@@ -18,6 +18,13 @@
 import { readFileSync } from 'node:fs';
 import { SKILL_REGISTRY } from '../../src/data/skills.ts';
 import { convertDetail } from './render.mjs';
+import {
+  checkDivergence,
+  describeVerdicts,
+  type AcceptedDivergence,
+  type DivergenceField,
+  type DivergenceResult,
+} from './exceptions.mjs';
 
 const DEFAULT_SRC = 'C:/Users/lai15/Desktop/rea_stzb/dec/json';
 
@@ -113,7 +120,13 @@ export const SLOT_MAP: Record<number, SlotMapping> = {
   },
 };
 
-export type SlotStatus = 'match' | 'diff' | 'engine-missing' | 'ambiguous';
+/**
+ * diff 之外的三种「不报为差异」的去向：
+ *  - accepted：已裁定（两侧确有分歧，人已拍板以哪侧为准）；
+ *  - ignored：结构性不对等（百家变体 / 通用模板 vs 同名独立战法）；
+ *  - stale：已裁定条目失效（任一侧数值后来变了），必须重新裁定。
+ */
+export type SlotStatus = 'match' | 'diff' | 'engine-missing' | 'ambiguous' | 'accepted' | 'ignored' | 'stale';
 
 export interface SlotDiff {
   skillId: string;
@@ -127,6 +140,8 @@ export interface SlotDiff {
   pkgGrowth?: number;
   engineGrowth?: number;
   status: SlotStatus;
+  /** accepted / ignored / stale 的去向说明 */
+  verdictNote?: string;
 }
 
 /** 展开 conditional 分支，让嵌套的 output 也能被配到 */
@@ -152,6 +167,9 @@ export interface SlotDiffReport {
     ambiguous: number;
     engineMissing: number;
     uncovered: number;
+    accepted: number;
+    ignored: number;
+    stale: number;
     valuesCompared: number;
     growthCompared: number;
   };
@@ -188,6 +206,9 @@ export function diffSlots(src: string): SlotDiffReport {
     ambiguous: 0,
     engineMissing: 0,
     uncovered: 0,
+    accepted: 0,
+    ignored: 0,
+    stale: 0,
     valuesCompared: 0,
     growthCompared: 0,
   };
@@ -253,12 +274,55 @@ export function diffSlots(src: string): SlotDiffReport {
       stats.valuesCompared++;
 
       const key = `${entry.id}#${mapping.label}`;
-      const st: SlotStatus = valueOk && growthOk ? 'match' : 'diff';
+      let st: SlotStatus = valueOk && growthOk ? 'match' : 'diff';
+      let verdictNote: string | undefined;
+      if (st === 'diff') {
+        // 差异逐项过一遍已裁定清单：value 与 growth 各自可能有独立结论
+        const checks: Array<{ field: DivergenceField; r: DivergenceResult }> = [];
+        if (!valueOk) {
+          checks.push({
+            field: 'value',
+            r: checkDivergence({
+              skillId: String(entry.id),
+              detailId: Number(slot.detail_id),
+              field: 'value',
+              engine: v,
+              pkg: pkgValue,
+            }),
+          });
+        }
+        if (!growthOk && engineGrowth !== undefined) {
+          checks.push({
+            field: 'growth',
+            r: checkDivergence({
+              skillId: String(entry.id),
+              detailId: Number(slot.detail_id),
+              field: 'growth',
+              engine: engineGrowth,
+              pkg: pkgGrowth,
+            }),
+          });
+        }
+        const stale = checks.find((c) => c.r.verdict === 'stale');
+        if (stale) {
+          st = 'stale';
+          verdictNote = stale.r.note;
+        } else if (checks.length > 0 && checks.every((c) => c.r.verdict !== 'none')) {
+          const accepted = checks.filter((c) => c.r.verdict === 'accepted');
+          st = accepted.length > 0 ? 'accepted' : 'ignored';
+          verdictNote = accepted
+            .map((c) => (c.r.entry as AcceptedDivergence).reason)
+            .join('；') || (checks[0].r.entry as { reason?: string } | undefined)?.reason;
+        }
+      }
       if (st === 'diff' && seen.has(key)) continue; // 同字段只报一次（522/524 共用一条减伤时常见）
       seen.add(key);
       if (st === 'match') stats.match++;
-      else stats.diff++;
-      rows.push({ ...base, engine: v, engineGrowth, status: st });
+      else if (st === 'diff') stats.diff++;
+      else if (st === 'accepted') stats.accepted++;
+      else if (st === 'ignored') stats.ignored++;
+      else if (st === 'stale') stats.stale++;
+      rows.push({ ...base, engine: v, engineGrowth, status: st, verdictNote });
     }
   }
   return { rows, stats };
@@ -284,6 +348,12 @@ function main(): void {
     `可判 ${s.covered} 条（${((s.covered / Math.max(1, s.slotsTotal)) * 100).toFixed(1)}%）｜一致 ${s.match}｜` +
       `差异 ${s.diff}｜引擎无对应 ${s.engineMissing}｜多候选 ${s.ambiguous}｜未覆盖机制码 ${s.uncovered}`
   );
+  if (s.accepted || s.ignored || s.stale) {
+    console.log(
+      `已裁定 ${s.accepted}｜结构性忽略 ${s.ignored}` +
+        (s.stale ? `｜⚠️ 例外失效 ${s.stale}（需重新裁定）` : '')
+    );
+  }
   console.log(`比较了 ${s.valuesCompared} 个值、${s.growthCompared} 个成长率`);
 
   const diffs = report.rows.filter((r) => r.status === 'diff' || r.status === 'engine-missing');
@@ -301,6 +371,20 @@ function main(): void {
         `  ${d.skillName}（${d.skillId} / 槽 ${d.detailId} / 机制 ${d.effectId} ${d.label}）包内 ${fmt(d.pkg)}`;
       console.log(head + (valueDiff ? ` ≠ 引擎 ${d.engine === null ? '（引擎无对应输出）' : fmt(d.engine)}${g}` : `｜值一致${g}`));
     }
+  }
+
+  const staleRows = report.rows.filter((r) => r.status === 'stale');
+  if (staleRows.length) {
+    console.log('');
+    console.log('⚠️ 例外失效（登记后数值已变，需重新裁定）：');
+    for (const r of staleRows) console.log(`  ${r.skillName}（${r.skillId} / 槽 ${r.detailId}）${r.verdictNote ?? ''}`);
+  }
+
+  const verdicts = describeVerdicts();
+  if (verdicts.length) {
+    console.log('');
+    console.log('已裁定 / 结构性忽略（不计入差异）：');
+    for (const v of verdicts) console.log(`  ${v}`);
   }
 }
 
