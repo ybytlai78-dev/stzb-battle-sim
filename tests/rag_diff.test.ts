@@ -2,10 +2,13 @@ import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   alignHeroes,
+  alignSkill,
   diffHero,
+  diffSkill,
   engineFingerprint,
   fingerprint,
   pkgFingerprint,
+  SKILL_TYPE_TO_ENGINE,
   type FieldDiff,
 } from '../scripts/rag/diff.mts';
 import { readFileSync } from 'node:fs';
@@ -170,5 +173,98 @@ describe('真实包内数据（解包目录不存在时跳过）', () => {
       expect(engine.some((h) => String(h.id) === id)).toBe(true);
       expect(align.get(id)).toBe(null);
     }
+  });
+});
+
+const pkgSkill = (skill_id: number, name: string, o: Partial<Row> = {}): Row => ({
+  skill_id,
+  name,
+  skill_type: 3,
+  hit_range: 5,
+  probability_init: 35,
+  probability_max: 35,
+  prepare: 0,
+  skill_quality_level: 'S',
+  ...o,
+});
+
+const engineSkill = (id: string, name: string, o: Partial<Row> = {}): Row => ({
+  id,
+  name,
+  type: 'active',
+  range: 5,
+  triggerRate: 0.35,
+  prepare: false,
+  ...o,
+});
+
+describe('alignSkill', () => {
+  const byName = (rows: Row[]): Map<string, Row[]> => {
+    const m = new Map<string, Row[]>();
+    for (const r of rows) {
+      const k = String(r.name).trim();
+      const cur = m.get(k);
+      if (cur) cur.push(r);
+      else m.set(k, [r]);
+    }
+    return m;
+  };
+
+  it('同名多条时用战法类型收敛', () => {
+    const m = byName([pkgSkill(1, '甲', { skill_type: 1 }), pkgSkill(2, '甲', { skill_type: 3 })]);
+    expect(alignSkill(engineSkill('x', '甲'), m).pkg?.skill_id).toBe(2);
+  });
+
+  it('类型分不开时再用攻击距离收敛', () => {
+    const m = byName([pkgSkill(1, '甲', { hit_range: 4 }), pkgSkill(2, '甲', { hit_range: 5 })]);
+    expect(alignSkill(engineSkill('x', '甲', { range: 5 }), m).pkg?.skill_id).toBe(2);
+  });
+
+  it('再分不开时用发动率收敛', () => {
+    const m = byName([pkgSkill(1, '甲', { probability_max: 25 }), pkgSkill(2, '甲', { probability_max: 35 })]);
+    expect(alignSkill(engineSkill('x', '甲', { triggerRate: 0.35 }), m).pkg?.skill_id).toBe(2);
+  });
+
+  it('收敛不到唯一时取 skill_id 最小并标 ambiguous', () => {
+    const r = alignSkill(engineSkill('x', '甲'), byName([pkgSkill(9, '甲'), pkgSkill(3, '甲')]));
+    expect(r.pkg?.skill_id).toBe(3);
+    expect(r.ambiguous).toBe(true);
+  });
+
+  it('包内无同名返回 null 与候选 0', () => {
+    expect(alignSkill(engineSkill('x', '不存在'), byName([pkgSkill(1, '甲')]))).toMatchObject({ pkg: null, candidates: 0 });
+  });
+});
+
+describe('diffSkill', () => {
+  it('全同则无差异', () => {
+    expect(diffSkill(engineSkill('x', '甲'), pkgSkill(1, '甲'))).toEqual([]);
+  });
+
+  it('战法类型比对方向正确：引擎位放引擎值', () => {
+    const d = diffSkill(engineSkill('x', '甲', { type: 'command' }), pkgSkill(1, '甲', { skill_type: 1 }));
+    expect(d).toHaveLength(1);
+    expect(d[0]).toMatchObject({ field: '战法类型', engine: 'command', pkg: 'passive' });
+    expect(d[0].pkgAt).toBe('@pkg:tb_cfg_skill/1/skill_type');
+  });
+
+  it('追击战法不比攻击距离（包内 hit_range 6 是哨兵，引擎用 0）', () => {
+    const d = diffSkill(engineSkill('x', '甲', { type: 'pursuit', range: 0 }), pkgSkill(1, '甲', { skill_type: 4, hit_range: 6 }));
+    expect(d).toEqual([]);
+  });
+
+  it('发动率 ≥100 归一为必定发动，120 与 100% 不算差异', () => {
+    const d = diffSkill(engineSkill('x', '甲', { triggerRate: 1 }), pkgSkill(1, '甲', { probability_max: 120 }));
+    expect(d).toEqual([]);
+  });
+
+  it('发动率差异照实报（引擎 40% vs 包内 35%）', () => {
+    const d = diffSkill(engineSkill('x', '甲', { triggerRate: 0.4 }), pkgSkill(1, '甲', { probability_max: 35 }));
+    expect(d[0]).toMatchObject({ field: '发动率%', engine: 40, pkg: 35 });
+  });
+
+  it('枚举表覆盖包内四种战法类型', () => {
+    expect(Object.keys(SKILL_TYPE_TO_ENGINE)).toEqual(['1', '2', '3', '4']);
+    expect(SKILL_TYPE_TO_ENGINE[4]).toEqual(['pursuit']);
   });
 });

@@ -160,11 +160,128 @@ export function diffHero(h: Row, pkg: Row, skillNameById: Map<number, string>): 
   return out;
 }
 
-function loadJsonRows(path: string): Record<string, Row> {
-  return (JSON.parse(readFileSync(path, 'utf8')) as { rows?: Record<string, Row> }).rows ?? {};
+/** 包内 skill_type ↔ 引擎 type（`prepared` = 准备型主动，同属包内 3） */
+export const SKILL_TYPE_TO_ENGINE: Record<number, string[]> = {
+  1: ['passive'],
+  2: ['command'],
+  3: ['active', 'prepared'],
+  4: ['pursuit'],
+};
+const ENGINE_TO_SKILL_TYPE: Record<string, number> = { passive: 1, command: 2, active: 3, prepared: 3, pursuit: 4 };
+
+/**
+ * 战法按名对齐。包内同名条目多（同一战法可有 S/A 级、不同赛季版本，如「持节镇西」7 条），
+ * 只按名字会歧义 ⇒ 依次用「战法类型 → 攻击距离 → 发动率」过滤，仍多条时取 skill_id 最小并标 ambiguous。
+ */
+export function alignSkill(
+  e: Row,
+  pkgByName: Map<string, Row[]>
+): { pkg: Row | null; ambiguous: boolean; candidates: number } {
+  const cands = pkgByName.get(String(e.name ?? '').trim()) ?? [];
+  if (!cands.length) return { pkg: null, ambiguous: false, candidates: 0 };
+  const wantType = ENGINE_TO_SKILL_TYPE[String(e.type ?? '')];
+  const steps: Array<(r: Row) => boolean> = [
+    (r) => (wantType ? Number(r.skill_type) === wantType : true),
+    (r) => Number(r.hit_range) === Number(e.range ?? 0),
+    (r) => Math.round(Number(r.probability_max ?? 0)) === Math.round(Number(e.triggerRate ?? 0) * 100),
+  ];
+  let pool = cands.slice();
+  for (const f of steps) {
+    const next = pool.filter(f);
+    if (!next.length) break;
+    pool = next;
+  }
+  pool.sort((a, b) => Number(a.skill_id) - Number(b.skill_id));
+  return { pkg: pool[0], ambiguous: pool.length > 1, candidates: pool.length };
 }
 
-function main(): void {
+/**
+ * 战法字段对拍：只比双方口径明确的「类型 / 攻击距离 / 发动率」。
+ *
+ * 两个口径归一（均有样本证据，见 `scripts/_probe_skill.mts` 的实测）：
+ * - **追击战法没有独立攻击距离**：跟随普攻，引擎用 `range: 0` 表示不适用，包内用 `hit_range: 6` 作哨兵
+ *   ⇒ pursuit 不比距离（引擎 range=0 的 24 条里 23 条是追击）。
+ * - **发动率 ≥ 100 一律视为「必定发动」**：包内给 100 表示无发动率概念（被动/指挥），
+ *   给 120 表示「必定发动」（例：巾帼战阵 200070 init=max=120、烈火焚舟 200251 = 120），
+ *   引擎对应写 `triggerRate: 1`。两侧都按 `min(100, v)` 归一后再比，避免把同义写法误报成差异。
+ */
+export function diffSkill(e: Row, pkg: Row): FieldDiff[] {
+  const out: FieldDiff[] = [];
+  const cmp = (field: string, engine: string | number | null, pkgv: string | number | null, pkgField: string): void => {
+    if (String(engine ?? '') !== String(pkgv ?? '')) {
+      out.push({
+        field,
+        engine,
+        pkg: pkgv,
+        engineAt: `src/data/skills.ts/${e.id}/${field}`,
+        pkgAt: `@pkg:tb_cfg_skill/${pkg.skill_id}/${pkgField}`,
+      });
+    }
+  };
+  const clampRate = (v: unknown): number => Math.min(100, Math.round(Number(v ?? 0)));
+
+  cmp('战法类型', e.type, SKILL_TYPE_TO_ENGINE[Number(pkg.skill_type)]?.[0] ?? `?${pkg.skill_type}`, 'skill_type');
+  if (String(e.type ?? '') !== 'pursuit') cmp('攻击距离', Number(e.range ?? 0), Number(pkg.hit_range ?? 0), 'hit_range');
+  cmp('发动率%', clampRate(Number(e.triggerRate ?? 0) * 100), clampRate(pkg.probability_max), 'probability_max');
+  return out;
+}
+
+/** 战法层对拍报告。`bj_` 前缀 = 百家争鸣玩法的变体（包内只留基型，引擎拆成多条），单独归类不混进主差异 */
+export async function reportSkills(src: string, jsonOut: string): Promise<void> {
+  const { SKILL_REGISTRY } = (await import('../../src/data/skills')) as { SKILL_REGISTRY: Record<string, Row> };
+  const pkgSkills = Object.values(loadJsonRows(`${src}/tb_cfg_skill.json`));
+  const byName = new Map<string, Row[]>();
+  for (const s of pkgSkills) {
+    const n = String(s.name ?? '').trim();
+    const cur = byName.get(n);
+    if (cur) cur.push(s);
+    else byName.set(n, [s]);
+  }
+
+  const engine = Object.entries(SKILL_REGISTRY);
+  const rows: Array<{ engineId: string; name: string; pkgId: number | null; status: Status; diffs: FieldDiff[] }> = [];
+  let ambiguousCount = 0;
+  for (const [id, e] of engine) {
+    const { pkg, ambiguous } = alignSkill(e, byName);
+    if (ambiguous) ambiguousCount++;
+    if (!pkg) {
+      rows.push({ engineId: id, name: String(e.name ?? ''), pkgId: null, status: 'engine-only', diffs: [] });
+      continue;
+    }
+    const diffs = diffSkill(e, pkg);
+    rows.push({ engineId: id, name: String(e.name ?? ''), pkgId: Number(pkg.skill_id), status: diffs.length ? 'diff' : 'match', diffs });
+  }
+
+  const isBaijia = (id: string): boolean => id.startsWith('bj_');
+  const mainDiffs = rows.filter((r) => r.status === 'diff' && !isBaijia(r.engineId));
+  const bjDiffs = rows.filter((r) => r.status === 'diff' && isBaijia(r.engineId));
+  const miss = rows.filter((r) => r.status === 'engine-only');
+
+  console.log(`引擎战法 ${engine.length} 条 | 包内 ${pkgSkills.length} 条`);
+  console.log(`对齐成功 ${rows.length - miss.length} 条（其中同名多候选按类型/距离/发动率收敛后仍歧义 ${ambiguousCount}）`);
+  console.log(`一致 ${rows.filter((r) => r.status === 'match').length} | 有差异 ${rows.filter((r) => r.status === 'diff').length}（主差异 ${mainDiffs.length} + 百家变体 ${bjDiffs.length}）| 包内无同名 ${miss.length}`);
+  console.log(`包内无同名战法：${miss.map((r) => r.name).join(' / ')}`);
+
+  const fmt = (r: { engineId: string; name: string; pkgId: number | null; diffs: FieldDiff[] }): void => {
+    console.log(`\n△ ${r.engineId} ${r.name} → 包内 ${r.pkgId}`);
+    for (const d of r.diffs) console.log(`   ${d.field}: 引擎 ${d.engine} ≠ 包内 ${d.pkg}   [${d.pkgAt}]`);
+  };
+  for (const r of mainDiffs) fmt(r);
+  if (bjDiffs.length) {
+    console.log('\n—— 百家争鸣变体（包内仅存基型，引擎按门派拆分，差异属实现差异）——');
+    for (const r of bjDiffs) fmt(r);
+  }
+
+  if (jsonOut) {
+    writeFileSync(jsonOut, JSON.stringify({ generatedAt: new Date().toISOString(), kind: 'skills', rows }, null, 2));
+    console.log(`\nJSON → ${jsonOut}`);
+  }
+}
+
+function loadJsonRows(path: string): Record<string, Row> {
+  return (JSON.parse(readFileSync(path, 'utf8')) as { rows?: Record<string, Row> }).rows ?? {};}
+
+async function main(): Promise<void> {
   const argv = process.argv.slice(2);
   const flag = (n: string, d: string): string => {
     const i = argv.indexOf(n);
@@ -174,6 +291,11 @@ function main(): void {
   const enginePath = flag('--engine', 'web/data/heroes.json');
   const jsonOut = flag('--json', '');
   const onlyDiff = argv.includes('--only-diff');
+
+  if (argv.includes('--skills')) {
+    await reportSkills(src, jsonOut);
+    return;
+  }
 
   const engineHeroes: Row[] = JSON.parse(readFileSync(enginePath, 'utf8')) as Row[];
   const pkgHeroes = Object.values(loadJsonRows(`${src}/tb_cfg_hero.json`));

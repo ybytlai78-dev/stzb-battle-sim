@@ -12,7 +12,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "golden": "vitest run tests/golden.test.ts",
-    "diagnose": "tsx scripts/diagnose.mts"
+    "diagnose": "tsx scripts/diagnose.mts",
+    "rag:build": "tsx scripts/rag/ingest.mts",
+    "rag:search": "tsx scripts/rag/search.mts",
+    "rag:eval": "tsx scripts/rag/eval.mts",
+    "rag:diff": "tsx scripts/rag/diff.mts"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.2",
