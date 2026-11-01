@@ -18,6 +18,7 @@
 import { readFileSync } from 'node:fs';
 import { SKILL_REGISTRY } from '../../src/data/skills.ts';
 import { convertDetail } from './render.mjs';
+import { HUGE_MODIFIER_RATE } from '../../src/engine/formulas.ts';
 import {
   checkDivergence,
   describeVerdicts,
@@ -52,6 +53,12 @@ interface SlotMapping {
    * 槽位数与 output 数不等时一律 ambiguous —— 拿 8.4 去比 28 会造出假差异。
    */
   attrType?: string;
+  /**
+   * 哨兵：包内 `|c + 0.4i| ≥ 1000` 的「大幅度降低 / 提高」类不走百分数换算，
+   * 统一对应引擎的 `±HUGE_MODIFIER_RATE`（磐阵善守 9000、辕门射戟 9000 等）。
+   * 设了它，命中哨兵的槽位改用本值比较，不再拿 9000 去比 10。
+   */
+  hugeValue?: number;
 }
 
 /** 属性 buff 类型 → 归属它的机制码（提高 / 降低）。不按这张表配会造出大量假配对。 */
@@ -72,6 +79,26 @@ const statGrowth = (type: string) => (o: Row): number | undefined => {
 };
 
 const status = (o: Row): Row | undefined => o.status as Row | undefined;
+
+/**
+ * 增减伤段的取值：先按 `direction`（缺省 taken）与 `damageType`（缺省两类都吃）定位，
+ * 再按符号把「提高」与「降低」分开 —— 531/533 与 532/534 共用 (caused, physical|strategy) 这一格。
+ */
+const boostPick =
+  (dir: 'caused' | 'taken', dt: 'physical' | 'strategy', sign: 1 | -1) =>
+  (o: Row): number | null => {
+    const s = status(o);
+    if (s?.type !== 'damage_boost') return null;
+    if ((s.direction ?? 'taken') !== dir) return null;
+    if (s.damageType && s.damageType !== dt) return null;
+    const rate = Number(s.rate);
+    if (sign > 0 ? rate <= 0 : rate >= 0) return null;
+    return rate;
+  };
+const boostGrowth = (o: Row): number | undefined => {
+  const s = status(o);
+  return s?.type === 'damage_boost' ? Number(s.growthRate ?? 0) : undefined;
+};
 
 export const SLOT_MAP: Record<number, SlotMapping> = {
   301: { label: '攻击伤害率', valueScale: 1,
@@ -145,6 +172,7 @@ export const SLOT_MAP: Record<number, SlotMapping> = {
     label: '受到攻击伤害降低',
     valueScale: 0.01,
     growthScale: 1,
+    hugeValue: HUGE_MODIFIER_RATE,
     pick: (o) => {
       const s = status(o);
       if (s?.type !== 'damage_reduce') return null;
@@ -156,6 +184,7 @@ export const SLOT_MAP: Record<number, SlotMapping> = {
     label: '受到策略攻击伤害降低',
     valueScale: 0.01,
     growthScale: 1,
+    hugeValue: HUGE_MODIFIER_RATE,
     pick: (o) => {
       const s = status(o);
       if (s?.type !== 'damage_reduce') return null;
@@ -163,6 +192,18 @@ export const SLOT_MAP: Record<number, SlotMapping> = {
     },
     growth: (o) => (status(o)?.type === 'damage_reduce' ? Number(status(o)!.growthRate ?? 0) : undefined),
   },
+
+  // ── 造成 / 受到的伤害增减（531-534 造成侧，521 / 523 受击侧）──
+  // 判据反向自证（引擎已实现的 25 个增减伤段逐条命中，含哨兵 1 条）：
+  //   rate = (c + 0.4i) / 100（小数）、成长 = i / 200（百分点/点，×1）—— 与 522 / 524 同口径。
+  // 方向：531/533 造成提高、532/534 造成降低（引擎为负值）、521/523 受到提高
+  //      （引擎 `damage_boost.direction` 缺省 = 'taken'，故 521/523 的段通常不带该字段）。
+  531: { label: '攻击伤害提高', valueScale: 0.01, growthScale: 1, pick: boostPick('caused', 'physical', 1), growth: boostGrowth },
+  532: { label: '攻击伤害降低', valueScale: -0.01, growthScale: 1, hugeValue: -HUGE_MODIFIER_RATE, pick: boostPick('caused', 'physical', -1), growth: boostGrowth },
+  533: { label: '策略攻击伤害提高', valueScale: 0.01, growthScale: 1, pick: boostPick('caused', 'strategy', 1), growth: boostGrowth },
+  534: { label: '策略攻击伤害降低', valueScale: -0.01, growthScale: 1, hugeValue: -HUGE_MODIFIER_RATE, pick: boostPick('caused', 'strategy', -1), growth: boostGrowth },
+  521: { label: '受到攻击伤害提高', valueScale: 0.01, growthScale: 1, pick: boostPick('taken', 'physical', 1), growth: boostGrowth },
+  523: { label: '受到策略攻击伤害提高', valueScale: 0.01, growthScale: 1, pick: boostPick('taken', 'strategy', 1), growth: boostGrowth },
 };
 
 /**
@@ -279,7 +320,8 @@ export function diffSlots(src: string): SlotDiffReport {
       }
       stats.covered++;
       const conv = convertDetail(Number(slot.constant_param ?? 0), Number(slot.intel_param ?? 0), effectId);
-      const pkgValue = conv.value * mapping.valueScale;
+      const rawPkg = Number(slot.constant_param ?? 0) + 0.4 * Number(slot.intel_param ?? 0);
+      const pkgValue = mapping.hugeValue !== undefined && Math.abs(rawPkg) >= 1000 ? mapping.hugeValue : conv.value * mapping.valueScale;
       const pkgGrowth = conv.growth * mapping.growthScale;
 
       const base: Omit<SlotDiff, 'engine' | 'engineGrowth' | 'status'> = {

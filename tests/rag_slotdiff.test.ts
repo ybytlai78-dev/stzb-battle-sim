@@ -49,6 +49,38 @@ describe('机制码 → 引擎字段', () => {
 });
 
 describe('结构展开与容差', () => {
+  it('531-534 / 521-523：按方向 + 伤害类型 + 符号三键定位，提高与降低不串格', () => {
+    const causedPhysPlus = { kind: 'inflict_status', status: { type: 'damage_boost', direction: 'caused', damageType: 'physical', rate: 0.35, growthRate: 0.11 } };
+    const causedPhysMinus = { kind: 'inflict_status', status: { type: 'damage_boost', direction: 'caused', damageType: 'physical', rate: -0.3 } };
+    // 531 只认正值、532 只认负值，同一条 (caused, physical) 靠符号分开
+    expect(SLOT_MAP[531].pick(causedPhysPlus)).toBe(0.35);
+    expect(SLOT_MAP[531].pick(causedPhysMinus)).toBeNull();
+    expect(SLOT_MAP[532].pick(causedPhysMinus)).toBe(-0.3);
+    expect(SLOT_MAP[532].pick(causedPhysPlus)).toBeNull();
+    // 531 不收策略段
+    expect(SLOT_MAP[531].pick({ kind: 'inflict_status', status: { type: 'damage_boost', direction: 'caused', damageType: 'strategy', rate: 0.35 } })).toBeNull();
+    // 521/523 是「受到…提高」，direction 缺省即 taken（引擎常态不写该字段）
+    expect(SLOT_MAP[521].pick({ kind: 'inflict_status', status: { type: 'damage_boost', rate: 0.13 } })).toBe(0.13);
+    expect(SLOT_MAP[523].pick({ kind: 'inflict_status', status: { type: 'damage_boost', damageType: 'strategy', rate: 0.12 } })).toBe(0.12);
+    expect(SLOT_MAP[523].pick({ kind: 'inflict_status', status: { type: 'damage_boost', damageType: 'physical', rate: 0.12 } })).toBeNull();
+    // 与 522/524 同口径：包内百分点 → 引擎小数；成长率两边都是「百分点/点」，不换算
+    expect(SLOT_MAP[531].valueScale).toBe(0.01);
+    expect(SLOT_MAP[532].valueScale).toBe(-0.01);
+    expect(SLOT_MAP[531].growthScale).toBe(1);
+    expect(SLOT_MAP[531].growth?.(causedPhysPlus)).toBe(0.11);
+  });
+
+  it('「大幅度」哨兵：|c + 0.4i| ≥ 1000 走 ±HUGE_MODIFIER_RATE，不拿 9000 去比 10', () => {
+    // 磐阵善守 9000 → damage_reduce 取 +10；辕门射戟 9000 → caused 负值取 −10
+    expect(SLOT_MAP[522].hugeValue).toBe(10);
+    expect(SLOT_MAP[524].hugeValue).toBe(10);
+    expect(SLOT_MAP[532].hugeValue).toBe(-10);
+    expect(SLOT_MAP[534].hugeValue).toBe(-10);
+    // 「受到伤害提高」没有「大幅度」语义，不设哨兵 —— 命中 9000 应照实报差异
+    expect(SLOT_MAP[521].hugeValue).toBeUndefined();
+    expect(SLOT_MAP[523].hugeValue).toBeUndefined();
+  });
+
   it('flattenOutputs 展开 conditional 的嵌套输出', () => {
     const out = [
       { kind: 'conditional', output: [{ kind: 'physical_damage', rate: 100 }, { kind: 'conditional', output: [{ kind: 'heal', rate: 50 }] }] },
