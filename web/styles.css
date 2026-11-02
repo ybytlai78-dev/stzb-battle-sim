@@ -151,6 +151,10 @@ header.app .pool-search input[type="text"]:focus { outline: none; border-color: 
 }
 /* 米黄实心按钮：原来是纯文字链接，与深色顶栏糊在一起、看不出可点 */
 .nav-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   background: var(--beige);
   color: var(--beige-ink);
   border: 1px solid var(--beige-line);
@@ -159,6 +163,7 @@ header.app .pool-search input[type="text"]:focus { outline: none; border-color: 
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 3px;
+  line-height: 1;
   padding: 6px 14px;
   cursor: pointer;
   transition: background .12s, border-color .12s, color .12s;
@@ -251,6 +256,7 @@ main {
 .btn.ghost.team-clear {
   width: auto;
   flex-shrink: 0;
+  min-height: 26px;
   background: var(--beige);
   color: var(--beige-ink);
   border: 1px solid var(--beige-line);
@@ -258,7 +264,8 @@ main {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 1px;
-  padding: 3px 9px;
+  line-height: 1;
+  padding: 0 9px;
 }
 .btn.ghost.team-bonus:hover,
 .btn.ghost.team-save-preset:hover,
@@ -995,36 +1002,61 @@ main {
 .control-bar input[type="number"]:focus, .control-bar select:focus { outline: none; border-color: var(--color-gold); }
 .control-bar #start { padding: 6px 34px; font-size: 14px; letter-spacing: 4px; font-family: var(--font-kai); }
 
+/**
+ * ── 按钮系统（统一几何 + 变体层级；颜色沿用现有 token，不换皮肤）──
+ * 基类 .btn：inline-flex 居中 + gap 6px + 统一 min-height 34px + 圆角 6px + 楷体 600 + 图标槽。
+ * 变体只改「底色 / 字色 / 字重」，不再各写各的 padding 造成尺寸不齐。
+ * 层级：.primary 绯红（每屏唯一主操作）＞ 默认金底（强调动作）＞ .beige 米黄（中性 / 面板动作）
+ *       ＞ .ghost 透明文字（三级动作）＞ .danger 破坏性。
+ * 尺寸：.btn-sm(28) / 默认(34) / .btn-lg(44)；.btn.icon = 34px 正方纯图标。
+ * ⚠️ 只收敛「按钮」；筛选 chip(.filter-tag) / 回合 tab(.rtab/.rbtn) / ±步进(.pt-btn/.cs-alloc-btn)
+ *    是另一类组件，不在本次范围。
+ */
 .btn {
-  background: var(--color-gold);
-  color: var(--color-bg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 18px;
   border: 1px solid var(--color-gold);
   border-radius: 6px;
-  padding: 7px 20px;
-  font-size: 13px;
-  letter-spacing: 2px;
-  cursor: pointer;
-  font-weight: 600;
+  background: var(--color-gold);
+  color: var(--color-bg);
   font-family: var(--font-kai);
-  transition: background .12s, border-color .12s, color .12s;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s, box-shadow .12s;
 }
-.btn:hover { background: var(--gold-bright); border-color: var(--gold-bright); }
+.btn:hover { background: var(--gold-bright); border-color: var(--gold-bright); color: var(--color-bg); }
+.btn:active { transform: translateY(1px); }
 .btn:disabled { opacity: .35; cursor: not-allowed; }
-.btn:focus-visible { outline: 1px solid var(--color-gold); outline-offset: 2px; }
-/* 次要操作：文字按钮，不与「开始模拟」抢主色块 */
+.btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 3px var(--gold-bright); }
+/* 按钮内图标：统一 1.6px 圆头线条（code-drawn，currentColor 继承文字色） */
+.btn svg, .nav-link svg {
+  width: 15px; height: 15px; flex-shrink: 0;
+  stroke: currentColor; fill: none; stroke-width: 1.6;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+
+/* 三级动作：透明文字（仍是 34px 目标，不再是 4px/10px 小字） */
 .btn.ghost, .btn.done {
   background: transparent;
+  border-color: transparent;
   color: var(--color-gold);
-  border: none;
   font-weight: 500;
-  padding: 4px 10px;
 }
 .btn.ghost:hover, .btn.done:hover {
-  background: transparent;
-  border: none;
+  background: var(--panel-2);
+  border-color: transparent;
   color: var(--gold-bright);
 }
-/** 主 CTA（#start / .btn.primary）：套2 绯红，非鎏金 */
+
+/* 主 CTA（#start / .btn.primary）：绯红，每屏唯一主操作 */
 .btn.primary,
 #start {
   background: var(--color-crimson);
@@ -1040,20 +1072,15 @@ main {
 }
 .btn.primary:focus-visible,
 #start:focus-visible {
-  outline: 1px solid var(--color-focus, var(--color-gold));
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 3px var(--color-crimson);
 }
 
-/**
- * 项目按键标准：米黄实心按钮（与顶栏导航 / 部队加成 / 清空本队同一套）。
- * 用户口径：「凡是我说做成按键的，都要按照项目按键标准来」——
- * 即"看得出是个按钮"：有底色、有描边、与深褐背景强区分，不要裸文字。
- * 用法：class="btn beige"（不要与 .btn.ghost / .btn.done 同时用在需要实心的地方）。
- */
+/* 项目按键标准：米黄实心（中性 / 面板动作） */
 .btn.beige {
   background: var(--beige);
   color: var(--beige-ink);
-  border: 1px solid var(--beige-line);
+  border-color: var(--beige-line);
   font-weight: 700;
 }
 .btn.beige:hover {
@@ -1062,6 +1089,28 @@ main {
   color: var(--beige-ink);
 }
 .btn.beige:disabled { background: var(--beige); color: var(--beige-ink); }
+
+/* 破坏性动作：默认透明不喧哗，hover 转绯红 tint（破坏 ≠ 高亮） */
+.btn.danger {
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--red);
+  font-weight: 600;
+}
+.btn.danger:hover {
+  background: var(--red-soft);
+  border-color: var(--red);
+  color: #e08b84;
+}
+
+/* 尺寸档 */
+.btn-sm { min-height: 28px; padding: 0 12px; font-size: 12px; letter-spacing: 1px; gap: 4px; }
+.btn-sm svg { width: 13px; height: 13px; }
+.btn-lg { min-height: 44px; padding: 0 26px; font-size: 15px; letter-spacing: 3px; }
+.btn-lg svg { width: 17px; height: 17px; }
+/* 纯图标正方按钮 */
+.btn.icon { width: 34px; padding: 0; }
+.btn.icon.btn-sm { width: 28px; }
 
 /* 页内提示（替代系统 alert） */
 .app-notice {

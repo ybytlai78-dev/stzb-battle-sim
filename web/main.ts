@@ -728,13 +728,13 @@ export function initApp(root?: HTMLElement): void {
     <img class="rate-logo" src="${asset('/rate-logo.png')}" alt="率" title="率土之滨" />
     <div class="pool-search" id="pool-search-slot"></div>
     <nav class="app-nav" aria-label="功能">
-      <button type="button" class="nav-link" data-nav="history">战报</button>
-      <button type="button" class="nav-link" data-nav="presets" title="热门预设：内置队伍一键上场，也能保存、搜索自己的预设">热门预设</button>
-      <button type="button" class="nav-link" data-nav="skills">战法</button>
-      <button type="button" class="nav-link" data-nav="lab">伤害测试</button>
-      <button type="button" class="nav-link" data-nav="advisor" title="AI配将：和配将台同一页，来回切换不会中断">AI配将</button>
-      <button type="button" class="nav-link" data-nav="tutorial">教程</button>
-      <button type="button" class="nav-link" data-nav="notice" title="更新公告：每个版本的更新改动都在这里">公告</button>
+      <button type="button" class="nav-link" data-nav="history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h12v17H6z"/><path d="M9 8.5h6M9 12.5h6M9 16.5h3"/></svg>战报</button>
+      <button type="button" class="nav-link" data-nav="presets" title="热门预设：内置队伍一键上场，也能保存、搜索自己的预设"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h10v17l-5-3.6-5 3.6z"/></svg>热门预设</button>
+      <button type="button" class="nav-link" data-nav="skills"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3L6 13.5h4.5L10.5 21 18 10.5h-4.5z"/></svg>战法</button>
+      <button type="button" class="nav-link" data-nav="lab"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>伤害测试</button>
+      <button type="button" class="nav-link" data-nav="advisor" title="AI配将：和配将台同一页，来回切换不会中断"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg>AI配将</button>
+      <button type="button" class="nav-link" data-nav="tutorial"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5c2.5-1.4 5-1.4 8 0 3-1.4 5.5-1.4 8 0v13.2c-2.5-1.4-5-1.4-8 0-3-1.4-5.5-1.4-8 0z"/><path d="M12 5.5v13.2"/></svg>教程</button>
+      <button type="button" class="nav-link" data-nav="notice" title="更新公告：每个版本的更新改动都在这里"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 9a5.5 5.5 0 0111 0c0 5 2 6 2 6h-15s2-1 2-6z"/><path d="M10 18.5a2 2 0 004 0"/></svg>公告</button>
     </nav>
     <button type="button" class="header-settings" id="header-settings" title="设置（模型 / 额度 / 数据）——API key 只在这里" aria-label="设置">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 3.5v2.2M12 18.3v2.2M4.9 7.6l1.9 1.1M17.2 15.3l1.9 1.1M4.9 16.4l1.9-1.1M17.2 8.7l1.9-1.1"/></svg>
@@ -766,7 +766,7 @@ export function initApp(root?: HTMLElement): void {
     <button type="button" class="build-tag" id="build-tag" title="主站版本（与公告同源）：点这里看更新公告。安卓打包号 versionName 见 android/app/build.gradle，两者不是同一个号">${BUILD_TAG}</button>
     <span class="spacer"></span>
     <button id="deduce" class="btn ghost deduce" title="用战演录播片逐镜推演这一局：左右立绘对垒、中间演招、头像上浮恢复与状态">推演模拟</button>
-    <button id="start" class="btn">开始模拟</button>
+    <button id="start" class="btn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 4v16"/><path d="M6 5c3.5-1.2 7 .8 11 0v7c-4 .8-7.5-1.2-11 0"/></svg>开始模拟</button>
   `;
   app.appendChild(controlBar);
 
