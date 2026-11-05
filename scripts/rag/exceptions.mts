@@ -52,6 +52,11 @@ export interface AcceptedDivergence {
   reason: string;
   /** 裁定依据出处与日期 */
   decided: string;
+  /**
+   * 退役说明：包内或引擎后来按裁定结果修正，条目不再参与判定，仅作历史记录。
+   * 退役后若同一槽位再次出现差异，会按 `none` 正常报出 —— 不会被旧裁定吞掉。
+   */
+  retired?: string;
 }
 
 export const IGNORE_RULES: IgnoreRule[] = [
@@ -77,6 +82,8 @@ export const ACCEPTED_DIVERGENCES: AcceptedDivergence[] = [
     reason:
       '官方文案为 200%，用户 2026-10-24 同批拍板 190 是旧值；tb_cfg_skill_detail 的 20009401 仍写 190，未随文案更新。以官方文案为准。',
     decided: '2026-10-24 用户拍板（见 AGENTS.md「受击触发动摇 unrest.onHurt」节）',
+    retired:
+      '2026-11-05：11-04 热更后 tb_cfg_skill_detail 的 20009401 已改为 200，与引擎一致，本条不再需要裁定。',
   },
   {
     skillId: 'jiangmen_hunv',
@@ -87,6 +94,8 @@ export const ACCEPTED_DIVERGENCES: AcceptedDivergence[] = [
     reason:
       '官方文案为「引发一次动摇效果（伤害率60.0%）」；detail 表 20009402 写 35%，且该槽位带 available_round=1。以官方文案为准。',
     decided: '2026-10-24 用户拍板（见 AGENTS.md「受击触发动摇 unrest.onHurt」节）',
+    retired:
+      '2026-11-05：11-04 热更后 tb_cfg_skill_detail 的 20009402 已改为 60，与引擎一致，本条不再需要裁定。',
   },
 ];
 
@@ -128,9 +137,16 @@ function matchesIgnore(rule: IgnoreRule, input: DivergenceInput): boolean {
  * - ignored：命中结构性不对等规则 → 不计入差异
  * - none：未命中，按真实差异处理
  */
-export function checkDivergence(input: DivergenceInput): DivergenceResult {
-  const entry = ACCEPTED_DIVERGENCES.find(
-    (d) => d.skillId === input.skillId && d.detailId === input.detailId && d.field === input.field
+export function checkDivergence(
+  input: DivergenceInput,
+  accepted: AcceptedDivergence[] = ACCEPTED_DIVERGENCES
+): DivergenceResult {
+  const entry = accepted.find(
+    (d) =>
+      !d.retired &&
+      d.skillId === input.skillId &&
+      d.detailId === input.detailId &&
+      d.field === input.field
   );
   if (entry) {
     const ok =
@@ -157,9 +173,10 @@ export function describeVerdicts(): string[] {
     out.push(`[ignored] ${key}：${r.reason}`);
   }
   for (const d of ACCEPTED_DIVERGENCES) {
+    const tag = d.retired ? '[retired]' : '[accepted]';
     out.push(
-      `[accepted] ${d.skillId} 槽 ${d.detailId} ${d.field}：引擎 ${d.engine ?? '（无）'} / 包内 ${d.pkg}` +
-        ` —— ${d.reason}（${d.decided}）`
+      `${tag} ${d.skillId} 槽 ${d.detailId} ${d.field}：引擎 ${d.engine ?? '（无）'} / 包内 ${d.pkg}` +
+        ` —— ${d.retired ?? `${d.reason}（${d.decided}）`}`
     );
   }
   return out;

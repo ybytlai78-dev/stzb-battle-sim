@@ -6,65 +6,67 @@ import {
   describeVerdicts,
   sameNumber,
 } from '../scripts/rag/exceptions.mts';
+import type { AcceptedDivergence } from '../scripts/rag/exceptions.mts';
 
-describe('已裁定差异：命中即不再计入差异', () => {
-  it('将门虎女 20009401 值 200 / 190 是已裁定的（官方文案优先于 detail 表）', () => {
-    const r = checkDivergence({
-      skillId: 'jiangmen_hunv',
-      detailId: 20009401,
-      field: 'value',
-      engine: 200,
-      pkg: 190,
-    });
+/** 注入用的活动条目：验证 accepted / stale 语义，不依赖真实清单的退役状态 */
+const ACTIVE: AcceptedDivergence[] = [
+  {
+    skillId: 'demo_skill',
+    detailId: 99900101,
+    field: 'value',
+    engine: 200,
+    pkg: 190,
+    reason: '演示条目：官方文案优先于 detail 表',
+    decided: '2026-10-24 用户拍板',
+  },
+];
+
+describe('已裁定差异：命中且两侧未变 → 不计入差异', () => {
+  it('两侧与登记值一致 → accepted', () => {
+    const r = checkDivergence(
+      { skillId: 'demo_skill', detailId: 99900101, field: 'value', engine: 200, pkg: 190 },
+      ACTIVE
+    );
     expect(r.verdict).toBe('accepted');
-    expect((r.entry as { decided: string }).decided).toContain('2026-10-24');
+    expect((r.entry as AcceptedDivergence).decided).toContain('2026-10-24');
   });
 
-  it('动摇伤害率 60 / 35 同样是已裁定条目', () => {
-    const r = checkDivergence({
-      skillId: 'jiangmen_hunv',
-      detailId: 20009402,
-      field: 'value',
-      engine: 60,
-      pkg: 35,
-    });
-    expect(r.verdict).toBe('accepted');
-  });
-});
-
-describe('例外失效检测：数值变了必须重新报警', () => {
   it('引擎侧被改动 → stale，并说明登记值与现值', () => {
-    const r = checkDivergence({
-      skillId: 'jiangmen_hunv',
-      detailId: 20009401,
-      field: 'value',
-      engine: 210,
-      pkg: 190,
-    });
+    const r = checkDivergence(
+      { skillId: 'demo_skill', detailId: 99900101, field: 'value', engine: 210, pkg: 190 },
+      ACTIVE
+    );
     expect(r.verdict).toBe('stale');
     expect(r.note).toContain('需重新裁定');
     expect(r.note).toContain('210');
   });
 
   it('包内侧被改动 → 同样 stale（不允许静默吞掉）', () => {
-    const r = checkDivergence({
-      skillId: 'jiangmen_hunv',
-      detailId: 20009402,
-      field: 'value',
-      engine: 60,
-      pkg: 40,
-    });
+    const r = checkDivergence(
+      { skillId: 'demo_skill', detailId: 99900101, field: 'value', engine: 200, pkg: 180 },
+      ACTIVE
+    );
     expect(r.verdict).toBe('stale');
+    expect(r.note).toContain('180');
   });
 
   it('字段维度不同不算命中：growth 未登记就走 none', () => {
-    const r = checkDivergence({
-      skillId: 'jiangmen_hunv',
-      detailId: 20009401,
-      field: 'growth',
-      engine: 0,
-      pkg: 0.1,
-    });
+    const r = checkDivergence(
+      { skillId: 'demo_skill', detailId: 99900101, field: 'growth', engine: 0, pkg: 0.1 },
+      ACTIVE
+    );
+    expect(r.verdict).toBe('none');
+  });
+});
+
+describe('退役条目：只留历史，不再吞掉差异', () => {
+  const retired: AcceptedDivergence[] = [{ ...ACTIVE[0], retired: '2026-11-05：包内已修正' }];
+
+  it('退役后同样的两侧值不再判 accepted', () => {
+    const r = checkDivergence(
+      { skillId: 'demo_skill', detailId: 99900101, field: 'value', engine: 200, pkg: 190 },
+      retired
+    );
     expect(r.verdict).toBe('none');
   });
 });
@@ -88,7 +90,7 @@ describe('结构性不对等：本来就不是同一实体', () => {
 });
 
 describe('清单自身的完整性', () => {
-  it('每条已裁定条目都必须给出理由与裁定依据', () => {
+  it('每条已裁定条目都必须给出理由、裁定依据与日期', () => {
     expect(ACCEPTED_DIVERGENCES.length).toBeGreaterThan(0);
     for (const d of ACCEPTED_DIVERGENCES) {
       expect(d.reason.length).toBeGreaterThan(10);
@@ -96,14 +98,30 @@ describe('清单自身的完整性', () => {
     }
   });
 
+  it('真实清单里没有仍在生效的条目时，全部必须带退役说明', () => {
+    const active = ACCEPTED_DIVERGENCES.filter((d) => !d.retired);
+    if (active.length === 0) {
+      expect(ACCEPTED_DIVERGENCES.every((d) => (d.retired ?? '').includes('2026-11-05'))).toBe(true);
+    } else {
+      expect(active.every((d) => !d.retired)).toBe(true);
+    }
+  });
+
+  it('将门虎女两条已退役：2026-11-04 热更后包内改为 200 / 60', () => {
+    for (const id of [20009401, 20009402]) {
+      const entry = ACCEPTED_DIVERGENCES.find((d) => d.detailId === id);
+      expect(entry?.retired).toContain('已改为');
+    }
+  });
+
   it('每条忽略规则都必须说明原因', () => {
     for (const r of IGNORE_RULES) expect(r.reason.length).toBeGreaterThan(10);
   });
 
-  it('describeVerdicts 同时覆盖两类条目', () => {
+  it('describeVerdicts 覆盖忽略规则与退役条目', () => {
     const lines = describeVerdicts();
-    expect(lines.some((l) => l.startsWith('[accepted]'))).toBe(true);
     expect(lines.some((l) => l.startsWith('[ignored]'))).toBe(true);
+    expect(lines.some((l) => l.startsWith('[retired]'))).toBe(true);
   });
 
   it('sameNumber 容差口径：绝对 1e-6 或相对 1e-3', () => {
