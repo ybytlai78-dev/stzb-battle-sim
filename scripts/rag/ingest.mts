@@ -23,7 +23,8 @@ import {
   type Row,
 } from './render.mjs';
 
-const SRC_DEFAULT = 'C:/Users/lai15/Desktop/rea_stzb/dec/json';
+// 建索引默认读 11-04 热更版解包（五表残差 0）；旧版 `rea_stzb/dec/json` 是 10-15 产物。
+const SRC_DEFAULT = 'C:/Users/lai15/Desktop/rea_stzb/hot_20261104/json_latest';
 const TABLES = [
   'tb_cfg_hero',
   'tb_cfg_skill',

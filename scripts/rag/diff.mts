@@ -16,7 +16,9 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { COUNTRY, TROOP, heroCost, heroStar } from './render.mjs';
 import type { Row } from './render.mjs';
 
-const SRC_DEFAULT = 'C:/Users/lai15/Desktop/rea_stzb/dec/json';
+// 11-04 热更版解包（`rea_stzb/tools/decrypt_res.py` 解出，五表残差 0）。
+// 旧版 `rea_stzb/dec/json` 是 10-15 产物，缺 108 个武将 / 63 个战法，别再用它当默认。
+const SRC_DEFAULT = 'C:/Users/lai15/Desktop/rea_stzb/hot_20261104/json_latest';
 
 export type Status = 'match' | 'diff' | 'engine-only' | 'pkg-only' | 'missing';
 

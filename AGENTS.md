@@ -93,7 +93,8 @@ npm run rag:slots                               # 槽位层对拍（tb_cfg_skill
   「谁、何时、按什么依据」，并登记裁定时的两侧值；任一侧后续变动会判 `stale` 并打印「登记时 X / 现在 Y」，看到就要重新裁定。
 - 证据优先级：P0 包内 `tb_cfg_*` ＞ P1 引擎实现（`src/data/*.ts` + `web/data/*.json`）＞ P2 `docs/` 调研推测。
   **P2 与 P0 冲突时以 P0 为准**，引用 P2 定性内容必须带警示串 `⚠️ 调研/推测定性内容——包内已给出数值时以包内为准。`
-- 建索引与向量需要解包目录（`--src`，默认 `C:/Users/lai15/Desktop/rea_stzb/dec/json`）与 `EMBED_KEY`；
+- 建索引与向量需要解包目录（`--src`，默认 **`C:/Users/lai15/Desktop/rea_stzb/hot_20261104/json_latest`** = 11-04 热更版；
+  旧的 `C:/Users/lai15/Desktop/rea_stzb/dec/json` 是 10-15 产物，缺 108 个武将 / 63 个战法，只用于对比历史）与 `EMBED_KEY`；
   `.rag/` 不入库（`NOTICE.md` §五：原始数据表不随仓库分发）。改 `scripts/rag/render.mts` 的分域口径后必须重跑
   `rag:build` 并跑 `rag:eval` 看分层命中是否退化。
 - 能力边界与评测分层命中见 `docs/包内RAG-使用说明.md`；对拍结论见 `docs/逆向对拍/引擎与包内对拍-2026-11-01.md`。

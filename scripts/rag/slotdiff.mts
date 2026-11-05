@@ -27,7 +27,8 @@ import {
   type DivergenceResult,
 } from './exceptions.mjs';
 
-const DEFAULT_SRC = 'C:/Users/lai15/Desktop/rea_stzb/dec/json';
+// 11-04 热更版解包（旧版 `rea_stzb/dec/json` 是 10-15 产物，槽位表缺 141 条、且将门虎女两槽已被热更修正）
+const DEFAULT_SRC = 'C:/Users/lai15/Desktop/rea_stzb/hot_20261104/json_latest';
 
 type Row = Record<string, unknown>;
 
