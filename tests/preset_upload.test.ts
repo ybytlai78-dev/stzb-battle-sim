@@ -163,7 +163,7 @@ describe('上传图片 · 识别队伍（确认卡）', () => {
   });
 });
 
-describe('「热门预设」面板上的入口', () => {
+describe('「预设」面板上的入口', () => {
   const openPanel = (saveScanned?: (i: PresetScanSaveInput) => { error?: string; presetId?: string }): void => {
     openPresetPanel({
       getPresets: () => [],

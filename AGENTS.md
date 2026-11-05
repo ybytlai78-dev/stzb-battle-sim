@@ -8,6 +8,10 @@
 > **思考模式路由 · 工具面分档（2026-10-05，S1–S4 落地）**：来源 = DSH 预设 `dsh-routing-suite` 的 router-standard v1.20，**只搬结构机制、不搬 persona 分带**。链路：`web/advisor/router.ts`（档位 / 锚定 / 线上工具面的**单一真源** + 目录渲染 + `toolSurfaceChars`）→ `loop.ts`（每轮按档裁工具面 / **分档门**：未开放调用拒绝回灌、**不进 evidence、不扣预算** / **首轮锚定**：会话没跑过工具时首请求只发 4 个 / **近场引导**贴在本轮提问**之后**）→ `tools.ts`（+3 常驻 `tools_catalog` / `tools_help` / `route_task`）→ `memory.ts`（`session.task` 静态回显）→ `view.ts` 传 `anchor` / `taskText`；`advisorLab.ts` 有**路由面板**（等价 `dev_router_status`）。**实测**：首轮锚定 4 个 / 1,066 字符（−93%）、默认档 16 个 / 8,757（−44%）、配将档 20 个 / 15,228（全量 22 个 / 15,754）。**已验证**：真机无头 7/7（`node scripts/_advisor_routing_shot.mjs`，从出站请求体取证 + 面板截图）、可达性审计（`npx tsx scripts/_advisor_route_audit.mts`：期望工具不可达 **0/10**、锚定挡首问 **5/10**、**便宜路 `skill_detail` 仍在 base 档 ⇒ 分档挡不住「人肉搜索器」**）、假模型 A/B（`npx tsx scripts/_advisor_route_ab.mts`：手搓型 50→50 次 `skill_detail`，听话型 `optimize_*` 20→8 次）。**真模型 A/B/C 已跑（2026-10-05/06，deepseek-chat）**：三臂**通过率一致 3/10**、`skill_detail` 只有 0~2 次 ⇒ **工具面不是瓶颈、「人肉搜索器」未复现**（S1 的原始动机不成立，分档收益退化为省钱：token −26.6% / 真跑场次 −33.8%；锚定臂 −51.4% 场次）。失分集中在**引用纪律**（表格/重复数字没带 `[[ev-…]]`）与**边界声明**（下架 / 控制型在木桩口径量不出 / 「最强」没先分木桩 vs 实战）。**边界那三条已补进 `SYSTEM_PROMPT` 与近场引导且验证有效**（对应用例连续两次跑转绿，§16.19–16.21）；**引用那条（也是 13 字）改完**跑三次是 1/3/3 条失败、改前基线 2 条 ⇒ **效果落在噪声里、没测出来**（别再拿单次当结论）。**当前唯一失分面 = 引用**（2 条/9）。**引用口径已于 2026-10-06 改准**（§16.23）：判据从「每次出现都要带」改成「**每个数值至少有一处带**」——案底是 0101 那次把 `34443`（正文带过引用、表格重复 3 次）记成裸报，**误伤可溯源数字**；改后预演：`diagnose-weak` 应转绿、`optimize-mates`（21640/21525 一次都没引用）**仍应红**。`SYSTEM_PROMPT`/近场引导/自检回灌文案已同步改成同一口径。**已落地「交付前自检」**（§16.22：模型给出终稿时若有裸报大数字 → **回灌一次、允许重答一轮**；只查**剥掉围栏 JSON 的正文**；只自纠一轮；`TurnInput.noSelfCorrect` / `--no-selfcorrect` 可关作 A/B 臂；`turn.selfCorrect` + 路由面板 + 记分卡头部「自检触发 N 次」都能看到）。0101 实测：自检触发 4 次、补了 6 个数字、**6/9**（与不开时同分）。**已知假阳性类**：额度/上限类数字（如「上限 60000 场」）也会被点名，模型应按回灌文案说成口径而非数据。**这条线已于 2026-10-06 收口**（结论 / 不做清单 / 接手入口见 **§16.24**；10 次真模型跑的台账见 **`docs/顾问评测-索引.md`**）。**收口结论**：结构机制（分档 / 引导 / 锚定 / 自检）都落地且有证据；行为收益里「边界声明」被证实、「省钱」被证实（token −26.6% / 真跑场次 −33.8%）、「纠正人肉搜索」被**证伪**（`skill_detail` 只 0~2 次 / 85~96 次调用）、「引用纪律」只剩模型侧不肯做（产品侧已由关 2 兜住）。**通过率轨迹 3 → 5 → 6（分母 9）**，每一步都能指到具体改动。**仍未做**：① `--no-selfcorrect` 对照臂；② 判据改口径（§16.23）后的复跑（预演预期 7/9）——两件可合并为一次 `npx tsx scripts/advisor_eval.mts`。**别重复做的事**：往 persona 层走、把 `skill_detail` 从 `search` 档摘掉（依据被证伪）、继续给引用规则加字（效果在噪声里）、再放宽判分口径（会放行真编数）。**已知噪声**：单条用例三臂结果会不一致，看趋势别拿单条当结论；`degraded-mode` 是仅假传输用例；用例前置事实由 `preconditions` 测试守住（库一改就红）。
 >
 > **战斗诊断工具（2026-09-29，贡献排名 → 因果归因）**：`src/engine/diagnosis.ts`（只读分析：**因果账本** = 由伤害事件 `modifiers` 反解基线 `(base+main) / clamp(1+Σcaused+Σtaken−Σreduce, 0.1)`，逐来源给出绝对贡献；+ 效果覆盖率 / 被控回合 / 兵种克制应交与实交 / 技能顺序缺口 / 主战法空转证据 / 四因子归因结论）+ `src/engine/diagnosisReport.ts`（文本渲染）+ `scripts/diagnose.mts`（`npm run diagnose -- --fixture T7_LOADOUT --runs 20`；支持文件 / 目录 / `--json` / `--dump-reports`）+ `tests/diagnosis.test.ts`（20 例）。**纪律**：只用既有事件流 —— 不新增埋点、不改 `combat.ts`/`action.ts`/`types.ts`、**不重跑引擎**；诊断模块不被战斗主循环引用（测试守卫），线上零开销；批量按队伍指纹自动分组（同队 → 共性问题；跨队 → 差异因子，带方向标注，显式声明「相关对照，非因果证明」）。口径、阈值（`DIAGNOSIS_THRESHOLDS`）、真实输出示例与局限见 **`docs/诊断工具.md`**。
+>
+> **赛季模式 · 北伐副本副将（2026-11-05）**：顶栏「赛季」下拉（`#season-mode`，落 `localStorage.stzb_season_mode`）切换 **常规赛季 / 北伐副本**；赛季差异**全部在 web 层合成**、`src/engine` 零改动（golden 不受影响）。唯一入口 `web/deputy.ts` 的 `buildGeneralForSlot(slot, position, morale, season)`（`collectTeam` / 战队加成面板 / 探针脚本一律走它，别再直调 `buildGeneral`）。口径：**四维 = 主将 70% + 副将 30%（逐项四舍五入，兵力不变）**；**副将主战法占主将第二战法格**（顺序 = 主将主战法 → 副将主战法 → 装配战法，装配上限按 `equipLimit` 收到 1，`presetStore.normalizeSlot` 与 `buildGeneralForSlot` 各一道防线）；**副将等级跟随主将、加点独立预算**（`deputyBudget` 按红度 0 算）；副将须**同阵营**、不能是同一张卡 / 同名 SP；红度固定 0，兵种 / 宝物 / 陈寿 / 拆解战法对副将不生效；**不实现额外统率消耗**。UI：主将详情第二格只读显示副将主战法（点它开 `openDeputyDetail`），`openDeputyPicker` 按同阵营 + 排除队内成员过滤。验收 = `tests/deputy.test.ts`（14 例）+ `node scripts/_verify_deputy_ui.mjs`（23 项真机断言 + 10 张截图）；口径与证据见 **`docs/北伐副本-副将机制.md`**。
+>
+> **四件新宝物 + 曹仁加强（2026-11-04 热更，2026-11-05 落地）**：稀世宝物库 **38 → 42**（`scripts/import_gear_20261104.mjs` 从客户端热更表补录 12 行 → `dateyuan/宝物数据.json` → `gen_treasure_data.mjs` → `src/data/treasures.ts`，带 `source: 'client-hot-20261104'`；画像走既有 `download_gears.mjs` 直取官网 CDN）。四特技：**虎啸**（山君）= `action.ts` 的 `triggerTreasureActStart`，行动时按「主战法提供的攻击增伤合计 ÷ 30%」向下取整给 `trigger_boost{skillTypes:['pursuit'], duration:1}`（只覆盖本回合，**故意放 action.ts 防 action↔treasure 循环 import**）；**观星**（天问）= `control_extend` 新增 `chance`/`onlyTypes`（主战法施加的犹豫 40% +1 回合、一次性）；**奋武**（奋髯）= `ignore_evasion` 新增 `requireBasicBoostOver`（普攻增伤 > 250% 才无视规避、常驻不消耗，`consumeEvasion` 判定）；**穿影**（镂影）= 新状态 `treasure_strike_count` + `ctx.treasureStrikes` 队列，每 4 次攻击伤害 → 下次行动前补一次 20% 攻击（`triggerTreasureStrikes`，计次不按回合递减）。**已知缺口**：锻造词条池表未解（`tb_cfg_gear_feature` 是特化表不是词条池）→ 四件新稀世 `affixGroup 0` / `affixPool []`，`tests/treasure_data.test.ts` 按 `source` 分支锁定，弹窗显示 `tp-empty` 提示、只能用自带特效。曹仁【平壑拒吴】发动率 **35% → 40%**（`src/data/skills.ts` 的 `pinghe_juwu.triggerRate`；依据 `tb_cfg_hero` 100585 `balance_activity_id/balance_skill_reset`，伤害率 210%/怯战 2 回合未动）。验收 = `tests/treasure_20261104.test.ts`（12 例）+ 全量 150 files/1417 tests + `node scripts/_verify_treasure_1126.mjs`（16 项真机断言）；落地记录见 **`docs/宝物-2026-11-04四件新宝物落地.md`**。
 
 本文件为 Claude Code 在本仓库工作时提供指引。
 
@@ -69,6 +73,35 @@ npx tsc --noEmit                    # 类型检查（strict）
   ```
 
 - **工作树 DB 隔离**按 DSH 路径推导：`.dsh/worktrees/<hash>/...` → 库名 `stzb战斗系统_dsh_<hash>`；库不存在时自动回退 JSON。`src/data/heroes.ts` 与 `scripts/db-config.mjs` 两处逻辑须同步改。
+
+## 引擎 ↔ 包内校验：先检索，不靠记忆
+
+问「引擎某数值与包内是否一致」「某战法/武将的官方数值」「某机制在包内的口径」时，**不要凭记忆比对**：
+先跑检索取回带坐标的原文，数值差异交给确定性代码判定。语料来自解包表（`tb_cfg_*`）渲染，每篇正文里每个数字都带
+`@pkg:表/主键/{字段}` 坐标，可回查原始行。
+
+```bash
+npm run rag:search -- "金匮要略 减伤" --k 3      # 混合检索（BM25 + bge-m3 向量，RRF 融合）
+npm run rag:search -- "减伤 持续3回合" --mode bm25 # 无 EMBED_KEY 时自动降级，或显式指定
+npm run rag:diff                                # 武将层对拍（确定性代码判定，不经过模型）
+npm run rag:diff -- --skills                     # 战法层对拍
+npm run rag:slots                               # 槽位层对拍（tb_cfg_skill_detail）
+```
+
+**纪律**：
+
+- 检索结果**视为不可信输入** —— 包内文本含占位符（`#effect_01#`）与多版本残留，事实以坐标回查原始表为准。
+- **数值相不相等由 `rag:diff` / `rag:slots` 判，模型不下场算**（同「AI 配将顾问」的关 3 纪律）。
+- 对拍差异只有三条去处（`scripts/rag/exceptions.mts`）：**结构性忽略**（两侧本不是同一实体，如 `bj_` 百家变体共用基型槽位）/
+  **已裁定**（同一实体确有两套值，人已拍板）/ **未处理**。**不许为了让差异数好看而放宽判据** —— 新增已裁定条目必须写清
+  「谁、何时、按什么依据」，并登记裁定时的两侧值；任一侧后续变动会判 `stale` 并打印「登记时 X / 现在 Y」，看到就要重新裁定。
+- 证据优先级：P0 包内 `tb_cfg_*` ＞ P1 引擎实现（`src/data/*.ts` + `web/data/*.json`）＞ P2 `docs/` 调研推测。
+  **P2 与 P0 冲突时以 P0 为准**，引用 P2 定性内容必须带警示串 `⚠️ 调研/推测定性内容——包内已给出数值时以包内为准。`
+- 建索引与向量需要解包目录（`--src`，默认 **`C:/Users/lai15/Desktop/rea_stzb/hot_20261104/json_latest`** = 11-04 热更版；
+  旧的 `C:/Users/lai15/Desktop/rea_stzb/dec/json` 是 10-15 产物，缺 108 个武将 / 63 个战法，只用于对比历史）与 `EMBED_KEY`；
+  `.rag/` 不入库（`NOTICE.md` §五：原始数据表不随仓库分发）。改 `scripts/rag/render.mts` 的分域口径后必须重跑
+  `rag:build` 并跑 `rag:eval` 看分层命中是否退化。
+- 能力边界与评测分层命中见 `docs/包内RAG-使用说明.md`；对拍结论见 `docs/逆向对拍/引擎与包内对拍-2026-11-01.md`。
 
 ## 数据权威来源
 
@@ -186,8 +219,15 @@ npx tsc --noEmit                    # 类型检查（strict）
   只按 skillId 回溯时，敌方单位**自己打出伤害**会用身上那份 `taken` 状态命中**我军侧 caused 轨**，给**敌方自己**叠「造成的伤害提高 8%」（5 层 = +40% 输出）——这正是用户报障的症状。
 - **同一条轨在载体身上的多份状态只算一次**（`seen` 按 `${skill.id}#${轨序}` 去重）；轨的 `damageType` 过滤（`cfg.damageType !== damageType`）仍在按轨匹配之后生效，双轨战法（physical / strategy）因此不会串轨。
 - 随机叠层（`cfg.rate`：反间 70% / 知己知彼 60%）走**原施法者**士气修正并逐次发 `skill_trigger`（`targetId` = 叠层载体）；窗口字段 `endRound` / `requireMoraleBelow` 语义不变。
-- 回归：`tests/ally_deal_stack_track.test.ts`（3 条机制契约 + 2 条数据方向断言）＋端到端 `npx tsx scripts/_diag_zhiji_zhibi.mts`（双方裸将、我方 3 人只带知己知彼，按阵营统计「造成的 / 受到的」条数：敌方 caused 必须 0、我方 caused > 0、敌方 taken > 0）。
+- 回归：`tests/ally_deal_stack_track.test.ts`（3 条机制契约 + 2 条数据方向断言 + 2 条「初始 0 层」集成断言）＋端到端 `npx tsx scripts/_diag_zhiji_zhibi.mts`（双方裸将、我方 3 人只带知己知彼，按阵营统计「造成的 / 受到的」条数：敌方 caused 必须 0、我方 caused > 0、敌方 taken > 0）。
   ⚠️ 数据侧口径同样要守：知己知彼**敌军侧必须是 `direction:'taken'`**（受到伤害提高），不是 `caused`。
+- **初始 0 层（2026-10-30 用户口径，勿再询问）**：用户原话「知己知彼初始应该是没有层数的，但是引擎中初始就有一层 8%」——
+  准备阶段**不挂任何层**：我军侧两条 `allyDealStack` 轨标 `initialLayers: 0`，敌军侧删掉 `initialOutput` 免费首层；
+  首次匹配伤害 60% 判定成功才叠第 1 层（8% → 封顶 5 层 = 40%，层数与上限口径不变）。
+  **引擎实现**：`initialLayers: 0` 时准备阶段跳过施加（也不参与任何同类型增伤冲突）；
+  首层改由 `triggerAllyDealStack` 的第二段用 `ctx.lockedCommands`（该战法锁定的目标是否含本载体）反查后施加，
+  首层一旦挂上即由「状态驱动」段落接管（同一 `${战法}#${轨序}` 经 `seen` 去重，绝不会双叠）。
+  `initialLayers` 缺省仍是 `1`（反间 / 久战熟谋 / 悬权而动行为不变）。
 
 ### 包内「效果冲突分类」（`replace_type`）与引擎的分域差异（2026-10-18 审计）
 

@@ -119,6 +119,8 @@ const treasures = combat.map((t) => {
     icon: `/gears/gear_${t.id}_s.jpg`,
     affixGroup: t.featureGroup,
     affixPool: t.affixPool,
+    // 数据来源：官网快照缺的条目带 'client-hot-20261104'（客户端热更包直采）
+    ...(t.source ? { source: t.source } : {}),
     effects,
   };
 });
@@ -194,6 +196,8 @@ export interface TreasureDef {
   icon: string;
   /** 锻造词条组（1~11；12 = 内政，已剔除） */
   affixGroup: number;
+  /** 'client-hot-20261104' = 官网库尚无、从客户端热更表补录；缺省 = 官网快照 */
+  source?: string;
   /** 本宝物**可锻造出**的词条名（6~7 条，官方数据） */
   affixPool: string[];
   /** 自带特效（1~3 条，slot 升序） */

@@ -11,6 +11,7 @@
  * - 纯逻辑、无 DOM：存储用 `PresetStorage` 注入，便于单测用内存实现。
  */
 import type { SlotState } from './teamEditor';
+import { normalizeDeputy } from './deputy';
 import { CHENSHOU_BY_ID } from '../src/data/chenshouFeatures';
 
 export type TeamSide = 'red' | 'blue';
@@ -118,9 +119,13 @@ export function normalizeSlot(raw: unknown): SlotState {
           : {}),
       }
     : undefined;
+  const level = num(o.level, 40, 40, 50);
+  // 北伐副本副将：武将须存在且与主将同阵营（`normalizeDeputy` 内判），加点夹到副将预算内
+  const deputy = o.deputy && typeof o.deputy === 'object' ? normalizeDeputy(o.deputy, heroId, level) : undefined;
   return {
     heroId,
-    extraSkillIds: Array.isArray(o.extraSkillIds) ? o.extraSkillIds.filter((s) => typeof s === 'string').slice(0, 2) : [],
+    // 北伐副本：副将主战法占第二格 → 装配战法存档上限随副将收敛到 1（老存档 / 手改数据一并校正）
+    extraSkillIds: Array.isArray(o.extraSkillIds) ? o.extraSkillIds.filter((s) => typeof s === 'string').slice(0, deputy ? 1 : 2) : [],
     freePoints: {
       attack: num(fp.attack, 0, 0, 999),
       defense: num(fp.defense, 0, 0, 999),
@@ -128,11 +133,12 @@ export function normalizeSlot(raw: unknown): SlotState {
       speed: num(fp.speed, 0, 0, 999),
     },
     redness: num(o.redness, 0, 0, 5),
-    level: num(o.level, 40, 40, 50),
+    level,
     ...(secondaryTroop ? { secondaryTroop } : {}),
     ...(traits && traits.length ? { secondaryTraits: traits } : {}),
     treasure: o.treasure && typeof o.treasure === 'object' ? (o.treasure as SlotState['treasure']) : null,
     ...(chenshou ? { chenshou } : {}),
+    ...(deputy ? { deputy } : {}),
   };
 }
 

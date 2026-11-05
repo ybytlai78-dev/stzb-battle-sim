@@ -604,7 +604,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['damage', 'damage_reduce'],
     output: [
       { kind: 'strategy_damage', rate: 85, strategyScaled: true, growthRate: 0.625 },
-      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.49, duration: 2 }, target: 'self' },
+      // 减伤 49% 受谋略成长 0.175/点（包内 20000712/20000713：const 35 + intel 35 ⇒ 值@80 = (35+14)/100 = 49%、成长 35/200）
+      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.49, strategyScaled: true, growthRate: 0.175, duration: 2 }, target: 'self' },
     ],
   },
   /** 血溅黄砂（马超主战法·战斗开始被动）：以无法发动主动战法为代价，使自身进行攻击时的伤害提高 120%（以全局增伤近似） */
@@ -671,7 +672,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['rampage', 'defense_buff'],
     output: [
       { kind: 'inflict_status', status: { type: 'rampage', duration: 3 } },
-      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -29, growthRate: 0.175, duration: 3 } },
+      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -29, strategyScaled: true, growthRate: 0.175, duration: 3 } },
     ],
   },
   /** 金吾飞将（吕布主战法）：对敌军单体发动一次猛攻 275%，并使其陷入混乱状态，持续 2 回合（「对混乱/暴走目标优先」条件简化） */
@@ -780,14 +781,20 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'physical_damage', rate: 140, targetMode: 'group', groupCount: [2, 3], ignoresTroopCounter: true },
     ],
   },
-  /** 平壑拒吴（曹仁主战法）：对敌军群体发动一次攻击 210%，并使敌军群体陷入怯战状态，无法进行普通攻击，持续 2 回合（「防御/兵力最低单体各一击」简化） */
+  /**
+   * 平壑拒吴（曹仁主战法）：对敌军群体发动一次攻击 210%，并使敌军群体陷入怯战状态，无法进行普通攻击，持续 2 回合
+   * （「防御/兵力最低单体各一击」简化）。
+   * 发动率 35% → **40%**：客户端 2026-11-04 热更 `tb_cfg_hero` 100585 的 `balance_activity_id 0→20318` /
+   * `balance_skill_reset 0→1` 生效方向 = 平壑拒吴 200836 本行 `probability` 35→40（伤害率 210%、怯战 2 回合未动）。
+   * 取证见 `docs/逆向对拍/宝物与曹仁加强取证-2026-11-04.md`。
+   */
   pinghe_juwu: {
     id: 'pinghe_juwu',
     name: '平壑拒吴',
     type: 'active',
     prepare: false,
     range: 4,
-    triggerRate: 0.35,
+    triggerRate: 0.4,
     targetMode: 'group',
     targetSide: 'enemy',
     tags: ['damage', 'cowardice'],
@@ -813,7 +820,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     retainAfterDeath: true,
     tags: ['damage_reduce', 'first_aid', 'heal'],
     output: [
-      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.204, duration: 3, strategyScaled: true, growthRate: 0.18 } },
+      // 减伤 20.4% 受谋略成长 0.13/点（包内 20077301/20077302：const 10 + intel 26 ⇒ 值@80 = 20.4%、成长 26/200）
+      { kind: 'inflict_status', status: { type: 'damage_reduce', rate: 0.204, duration: 3, strategyScaled: true, growthRate: 0.13 } },
       { kind: 'grant_first_aid', rate: 50, healRate: 80, healGrowthRate: 0.75, duration: 3 },
     ],
   },
@@ -845,7 +853,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     ],
   },
   /** 皇裔流离（刘备主战法·一类指挥）：开始前准备回合阶段释放一次，使我军全体（三目标）受到伤害时有 50% 几率恢复一定兵力
-   *  （恢复率 68%，受谋略属性影响，成长率 0.6/点：谋略 80 → 68%、谋略 200 → 140%）。该效果总生效次数每达到 3 次，
+   *  （恢复率 68%，受谋略属性影响，成长率 0.6/点：谋略 80 → 68%、谋略 200 → 140%；
+   *  包内 `tb_cfg_skill_detail` 20001601 constant 20 / intel 120 印证，子战法 21101601 constant 5 = 每次 +5%）。该效果总生效次数每达到 3 次，
    *  生效几率提升 5% 可叠加（50% → 55% → 60%…）。战法词条：持续型急救（受击触发恢复）——
    *  同为指挥战法的持续型急救冲突，先施加者生效（典型：刘备皇裔流离 vs 张机金匮要略）。战报统计为回复触发次数/回复兵力 */
   huangyi_liuli: {
@@ -881,7 +890,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['damage', 'debuff_speed'],
     output: [
       { kind: 'physical_damage', rate: 275 },
-      { kind: 'inflict_status', status: { type: 'speed_buff', amount: -28, duration: 2 } },
+      // 速度 −28 受谋略成长 0.1/点（包内 20004202：const 2000 + intel 2000 ⇒ 值@80 = 28 点、成长 2000/20000）
+      { kind: 'inflict_status', status: { type: 'speed_buff', amount: -28, strategyScaled: true, growthRate: 0.1, duration: 2 } },
     ],
   },
   /**
@@ -2146,7 +2156,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'inflict_status', status: { type: 'speed_buff', amount: 32, duration: 999 }, target: 'self' },
     ],
   },
-  /** 坚守兵法（C 被动·battle_start）：使自身防御属性提高 28（受谋略影响，取基值） */
+  /** 坚守兵法（C 被动·battle_start）：使自身防御属性提高 28、成长 0.35/点（受谋略；包内 20062001 const 0 + intel 7000） */
   jianshou_bingfa: {
     id: 'jianshou_bingfa',
     name: '坚守兵法',
@@ -2156,9 +2166,9 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     timing: 'battle_start',
     targetMode: 'self',
     tags: ['buff_defense'],
-    output: [{ kind: 'inflict_status', status: { type: 'defense_buff', amount: 28, growthRate: 0.35, duration: 999 }, target: 'self' }],
+    output: [{ kind: 'inflict_status', status: { type: 'defense_buff', amount: 28, strategyScaled: true, growthRate: 0.35, duration: 999 }, target: 'self' }],
   },
-  /** 强攻兵法（C 被动·battle_start）：使自身攻击属性提高 28（受谋略影响，取基值） */
+  /** 强攻兵法（C 被动·battle_start）：使自身攻击属性提高 28、成长 0.35/点（受谋略；包内 20061901 const 0 + intel 7000） */
   qianggong_bingfa: {
     id: 'qianggong_bingfa',
     name: '强攻兵法',
@@ -2168,9 +2178,9 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     timing: 'battle_start',
     targetMode: 'self',
     tags: ['buff_attack'],
-    output: [{ kind: 'inflict_status', status: { type: 'attack_buff', amount: 28, growthRate: 0.35, duration: 999 }, target: 'self' }],
+    output: [{ kind: 'inflict_status', status: { type: 'attack_buff', amount: 28, strategyScaled: true, growthRate: 0.35, duration: 999 }, target: 'self' }],
   },
-  /** 速战兵法（C 被动·battle_start）：使自身速度属性提高 28（受谋略影响，取基值） */
+  /** 速战兵法（C 被动·battle_start）：使自身速度属性提高 28、成长 0.35/点（受谋略；包内 20062101 const 0 + intel 7000） */
   suzhan_bingfa: {
     id: 'suzhan_bingfa',
     name: '速战兵法',
@@ -2180,7 +2190,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     timing: 'battle_start',
     targetMode: 'self',
     tags: ['buff_speed'],
-    output: [{ kind: 'inflict_status', status: { type: 'speed_buff', amount: 28, growthRate: 0.35, duration: 999 }, target: 'self' }],
+    output: [{ kind: 'inflict_status', status: { type: 'speed_buff', amount: 28, strategyScaled: true, growthRate: 0.35, duration: 999 }, target: 'self' }],
   },
   /** 坚守突击（D 被动·battle_start）：使自身攻击、防御属性提高 24 */
   jianshou_tuji: {
@@ -2470,8 +2480,9 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['damage', 'debuff_strategy', 'debuff_speed'],
     output: [
       { kind: 'strategy_damage', rate: 250, strategyScaled: true, growthRate: 2.5 },
-      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -25, duration: 2 } },
-      { kind: 'inflict_status', status: { type: 'speed_buff', amount: -25, duration: 2 } },
+      // 谋略 / 速度 −25 受谋略成长 0.11/点（包内 20095302/20095303：const 1620 + intel 2200 ⇒ 值@80 = 25 点、成长 2200/20000）
+      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: -25, strategyScaled: true, growthRate: 0.11, duration: 2 } },
+      { kind: 'inflict_status', status: { type: 'speed_buff', amount: -25, strategyScaled: true, growthRate: 0.11, duration: 2 } },
     ],
   },
   /** 落雷（A 主动）：对敌军单体发动策略攻击 148%，并使其陷入混乱状态，持续 1 回合 */
@@ -2945,7 +2956,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['damage', 'debuff_defense'],
     output: [
       { kind: 'strategy_damage', rate: 105, strategyScaled: true, growthRate: 1.05 },
-      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -6, duration: 2 } },
+      // 防御 −6 受谋略成长 0.075/点（包内 20012402：const 0 + intel 1500）
+      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -6, strategyScaled: true, growthRate: 0.075, duration: 2 } },
     ],
   },
   /** 落石（C 主动）：对敌军群体发动策略攻击 92.2%，并使其防御属性降低 5.2，持续 1 回合 */
@@ -2960,7 +2972,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['damage', 'debuff_defense'],
     output: [
       { kind: 'strategy_damage', rate: 92.2, strategyScaled: true, growthRate: 0.89 },
-      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -5.2, duration: 1 } },
+      // 防御 −5.2 受谋略成长 0.065/点（包内 20012302：const 0 + intel 1300）
+      { kind: 'inflict_status', status: { type: 'defense_buff', amount: -5.2, strategyScaled: true, growthRate: 0.065, duration: 1 } },
     ],
   },
   /** 规避（C 主动·发动率满级 42%）：使自身进入规避状态，免疫接下来受到的 1 次攻击的伤害 */
@@ -3214,7 +3227,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['taunt', 'debuff_attack'],
     output: [
       { kind: 'inflict_status', status: { type: 'taunt', duration: 2, targetId: '' } },
-      { kind: 'inflict_status', status: { type: 'attack_buff', amount: -39, growthRate: 0.05, duration: 2 } },
+      { kind: 'inflict_status', status: { type: 'attack_buff', amount: -39, strategyScaled: true, growthRate: 0.05, duration: 2 } },
     ],
   },
   /** 谨言（D 主动）：使友军全体受到策略攻击的伤害降低 16%（取基值），持续 2 回合 */
@@ -3309,7 +3322,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         kind: 'inflict_status',
         status: { type: 'trigger_boost', rate: 1.2, duration: 1, additive: true, mainSkillOnly: true, skillTypes: ['active'] },
       },
-      { kind: 'inflict_status', status: { type: 'jump_prep', rate: 0.6, duration: 1, mainSkillOnly: true, speedScaled: true, growthRate: 0.15 } },
+      { kind: 'inflict_status', status: { type: 'jump_prep', rate: 0.6, duration: 1, turns: 1, mainSkillOnly: true, speedScaled: true, growthRate: 0.15 } },
     ],
   },
   /** 黄天余音（张宁主战法·主动）：吸取敌军单体 26 全属性（受谋略，成长率 0.20/点）并附加于自身与友军单体，持续 1 回合。
@@ -6178,10 +6191,14 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    * ① 战斗中每当自身发动**需要准备的主战法**时，有 80% 几率跳过 1 回合准备时间；
    * ② 任意友军发动主动战法后，自身下一个主动战法造成的伤害提高 15%，此效果最多叠加 3 次。
    * 官方 id 200754（1 级 40% / 7.5%）。
-   * 引擎配套：① 准备阶段给自身挂 `jump_prep{mainSkillOnly:true}`（准备跳过；`triggerActiveSkill` 对每次发动
+   * 引擎配套：① 准备阶段给自身挂 `jump_prep{turns:1, mainSkillOnly:true}`（`triggerActiveSkill` 对每次发动
    *   的**主战法**按 rate 掷骰——`mainSkillOnly` 过滤掉装配的准备主动，与官方「需要准备的**主战法**」一致）；
+   *   **`turns:1` = 只跳过 1 个准备回合**（包内子战法 21175401 effect 581 `constant_param = 1`）——
+   *   2 回合准备的主战法（张飞【长坂之吼】`prepareTurns:2`）命中后仍需准备 1 回合，绝不直接释放
+   *   （用户 2026-11-05 报障「跳过了全部准备回合」根因即此处原先按「跳过全部」实现）；
    *   ② **新增 `BaseSkill.allyActiveCastStack`**（任意友军成功发动主动战法后给携带者自身同源叠层；
-   *   「任意友军」按仓库口径**含自己**——自己发动主动时先消耗旧层、随后本次发动又叠 1 层）。
+   *   「任意友军」按率土口径**不含自己**——只有其余 2 名队友发动主动才叠层，自己发动主动不叠
+   *   （用户 2026-10-30 口径：描述「任意友军施放主动战法」不包括其自身）。
    * ② 的「下一个主动战法」为消耗制：`charges:1` + `chargesStack:true` + `maxStacks:3`（同势无虚动的追击版）。
    */
   shengbing_qiuzhan: {
@@ -6194,7 +6211,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     targetMode: 'self',
     tags: ['damage_boost'],
     output: [
-      { kind: 'inflict_status', target: 'self', status: { type: 'jump_prep', duration: 999, rate: 0.8, mainSkillOnly: true } },
+      { kind: 'inflict_status', target: 'self', status: { type: 'jump_prep', duration: 999, rate: 0.8, turns: 1, mainSkillOnly: true } },
     ],
     allyActiveCastStack: {
       status: {
@@ -8076,9 +8093,14 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    * 「两者独立判断」= 两个效果**各自**按 45% 独立判定（同将门有将「每个效果独立判断」的仓库口径：逐段独立
    *   roll）→ 两段各用 `chance_group(chance 0.45)` 承载，各自发一条 `skill_trigger`（baseRate 45、走士气修正）；
    *   指挥自身 `triggerRate: 1`（= 每回合必然进入两段判定），未再叠 dynamicTriggerRate。
-   * 入档判断：**下架** —— 恢复 / 减伤 / 策略三段均「受谋略属性影响」而官方未给成长系数 → 按基值不缩放
-   *   （`strategyScaled` 标记在、`growthRate` 缺；heal 必填字段给 `0`）+ 登记 OFFLINE_MAIN_SKILLS，
-   *   待 `scripts/derive_growth_rate.mjs` 反解后移出。效果②代打段 100% 未标受属性影响 → 固定不缩放。
+   * 成长率来源 = 包内 `tb_cfg_skill_detail`（2026-11 复核；值@80 = const + 0.4×intel、百分比成长 = intel/200）：
+   *   恢复段 `21028601`（effect 401）const 56 / intel 160 ⇒ **120% / 0.8 每点谋略**；
+   *   减伤段 `21028602`（effect 522 受攻击伤害降低）+ `21028603`（effect 524 受策略攻击伤害降低）
+   *     const 3 / intel 30 ⇒ **15% / 0.15 每点谋略**，`available_round 1`；
+   *   策略伤害段 `21128601`（effect 302）const 56 / intel 160 ⇒ **120% / 0.8 每点谋略**；
+   *   代打段 `21128612`（派生子战法 212286，intel 0）⇒ **100% 固定、不缩放**。
+   *   包内把「受到所有伤害减少 15%」拆成 522/524 两行，引擎用单条通用 `damage_reduce` 承载（数值同源）。
+   *   已按此上架（不在 `listing.OFFLINE_MAIN_SKILLS`）。
    * 引擎配套：
    *   ① `heal.targetPick: 'lowest_troops_ally'`（我军**当前兵力最低**的存活单体，含施法者自身）；
    *   ② `heal.attachStatus`：恢复的同时对**同一目标**追加状态（「并使其受到所有伤害减少 15%」），
@@ -11770,9 +11792,10 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    *      `damageType` 分轨、`rate:0.6` 走施法者士气、`stack:true, maxStacks:5`——反间同款）；
    *   ② 敌军侧（受到侧）= `onHurt` 两条独立轨（`victim:'enemy'` + `damageKind` 物理/策略 +
    *      `applyTo:'victim'`，60% 判定后给受击者挂 `direction:'taken'` 同型 8%、`maxStacks:5`）；
-   *   ③ **推定（与反间同口径）**：准备阶段先挂 1 层「免费层」（我军侧由 `allyDealStack` 准备阶段施加、
-   *      敌军侧由 `initialOutput` 补齐），此后每次匹配伤害 60% 判定 +1 层，合计封顶 5 层（即 +8%→+40%）；
-   *      两条轨完全独立、互不影响。
+   *   ③ **初始 0 层**（用户 2026-10-30 口径：「知己知彼初始应该是没有层数的，但是引擎中初始就有一层 8%」）：
+   *      准备阶段**不挂任何层** —— 我军侧两条 `allyDealStack` 轨标 `initialLayers: 0`（首层由首次匹配伤害
+   *      60% 判定成功时施加），敌军侧不再有 `initialOutput` 免费首层（同样从 0 层起，靠 `onHurt` 判定叠层）；
+   *      此后每次匹配伤害 60% 判定 +1 层，合计封顶 5 层（即 +8%→+40%）；两条轨完全独立、互不影响。
    *   ④ `targetMode:'all'` = 「我军群体 / 敌军群体」在本仓库 3 将阵容下取全体；施法者阵亡后效果仍在
    *      （`retainAfterDeath`，一类指挥口径）。
    * 全文无「受 XX 属性影响」→ 不登记下架（**上架**）。
@@ -11793,6 +11816,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       {
         damageType: 'physical',
         rate: 0.6,
+        // 初始 0 层：准备阶段不挂状态，首层由首次匹配伤害判定成功时施加
+        initialLayers: 0,
         status: {
           type: 'damage_boost',
           rate: 0.08,
@@ -11806,6 +11831,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       {
         damageType: 'strategy',
         rate: 0.6,
+        initialLayers: 0,
         status: {
           type: 'damage_boost',
           rate: 0.08,
@@ -11817,37 +11843,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         },
       },
     ],
-    // 敌军侧免费首层（准备阶段一次性施加；之后由 onHurt 两条轨按 60% 叠层）
-    initialOutput: [
-      {
-        kind: 'inflict_status',
-        targetSide: 'enemy',
-        targetMode: 'all',
-        status: {
-          type: 'damage_boost',
-          rate: 0.08,
-          duration: 999,
-          direction: 'taken',
-          damageType: 'physical',
-          stack: true,
-          maxStacks: 5,
-        },
-      },
-      {
-        kind: 'inflict_status',
-        targetSide: 'enemy',
-        targetMode: 'all',
-        status: {
-          type: 'damage_boost',
-          rate: 0.08,
-          duration: 999,
-          direction: 'taken',
-          damageType: 'strategy',
-          stack: true,
-          maxStacks: 5,
-        },
-      },
-    ],
+    // 敌军侧：初始 0 层（无 `initialOutput` 免费首层），全靠 onHurt 两条轨按 60% 判定叠加
     onHurt: [
       {
         victim: 'enemy',

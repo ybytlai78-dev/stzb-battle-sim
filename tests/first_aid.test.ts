@@ -317,3 +317,104 @@ describe('持续型急救不得救回致死 / 不得复活阵亡单位', () => {
     expect(healEvents(ctx)[0]!.amount).toBeGreaterThan(0);
   });
 });
+
+/**
+ * 恢复上限口径（用户 2026-02 报障后钉死）：急救的恢复量 = min(恢复值公式, **总伤兵池**, 兵力缺口)。
+ * 三段伤害（银龙孤胆式多段）里，每一段的恢复**都不看本次伤害造成的伤兵数**——
+ * 只要总池够、缺口够，就按恢复值公式满额恢复；反之池/缺口不足才被截断。
+ */
+describe('持续型急救的恢复上限只看总伤兵池（不看本次伤害）', () => {
+  /** 皇裔已挂上 + 触发率锁定 100%（士气 100 → moraleTriggerRate = 1） + 伤兵机制启用（关闭回合衰减便于确定性断言） */
+  function poolField(): { ctx: CombatContext; u1: UnitState } {
+    const { ctx, liubei, u1 } = field(100);
+    triggerCommandSkills(ctx, liubei);
+    ctx.firstAidCounters!.find((c) => c.skillId === 'huangyi_liuli')!.rate = 100;
+    ctx.woundedMortality = { deathRate: 5, woundedDecayRate: 0 };
+    return { ctx, u1 };
+  }
+  const lastHeal = (ctx: CombatContext) => healEvents(ctx).slice(-1)[0]!;
+
+  it('历史伤兵池远大于本次伤害时按恢复值满额恢复（177 > 本段的伤兵 95）', () => {
+    const { ctx, u1 } = poolField();
+    // 历史伤兵：先吃 3000 → 死 150 / 入池 2850 / 缺口 3000 → 当场恢复 177
+    applyDamage(ctx, u1, 3000);
+    expect(u1.wounded).toBe(2673);
+    expect(u1.troops).toBe(7177);
+
+    // 本段仅 100 伤害（入池 95，远小于恢复值 177）：恢复仍取 177
+    applyDamage(ctx, u1, 100);
+    const heal = lastHeal(ctx);
+    expect(heal.amount).toBe(177);
+    expect(heal.amount).toBeGreaterThan(95); // 关键：不受「本次伤害造成的伤兵数」限制
+    expect(u1.wounded).toBe(2673 + 95 - 177);
+    expect(u1.troops).toBe(7177 - 100 + 177);
+  });
+
+  it('总伤兵池不足时只吃池（恢复值 177 > 池 100 → 恢复 100）', () => {
+    const { ctx, u1 } = poolField();
+    applyDamage(ctx, u1, 105); // 死 5 / 入池 100 / 缺口 105
+    const heal = lastHeal(ctx);
+    expect(heal.amount).toBe(100);
+    expect(u1.wounded).toBe(0);
+  });
+
+  it('池充足但兵力缺口不足时受缺口截断', () => {
+    const { ctx, u1 } = poolField();
+    applyDamage(ctx, u1, 3000); // 池 2673
+    u1.troops = u1.general.maxTroops - 50; // 缺口 50
+    applyDamage(ctx, u1, 30); // 缺口 80，池 2673+29
+    const heal = lastHeal(ctx);
+    expect(heal.amount).toBe(80);
+    expect(u1.troops).toBe(u1.general.maxTroops);
+  });
+});
+
+/**
+ * 一类指挥的快照口径（用户 2026-02 口径）：皇裔流离在准备阶段释放一次，
+ * **单次恢复值在挂载那一刻就固定**——恢复率按当时谋略缩放、恢复值按当时兵力换算，
+ * 之后施法者的兵力变化、谋略增减都不再影响单次恢复量；
+ * 唯一还能放大它的，是**被恢复目标身上的「受到恢复效果提升」**（heal_boost，如孙坚【勇挚刚毅】）。
+ */
+describe('一类指挥急救：单次恢复值挂载时冻结', () => {
+  function freezeField(): { ctx: CombatContext; liubei: UnitState; u1: UnitState; e1: UnitState } {
+    const { ctx, liubei, u1, e1 } = field(150); // 刘备谋略 150 → roundRate(68+0.6×70) = 110%
+    triggerCommandSkills(ctx, liubei);
+    ctx.firstAidCounters!.find((c) => c.skillId === 'huangyi_liuli')!.rate = 100;
+    ctx.woundedMortality = { deathRate: 0, woundedDecayRate: 0 };
+    u1.wounded = 9000; // 池充足，排除池截断
+    u1.troops = 3000; // 缺口 7000，排除缺口截断
+    return { ctx, liubei, u1, e1 };
+  }
+  const lastHeal = (ctx: CombatContext) => healEvents(ctx).slice(-1)[0]!;
+
+  it('挂上后施法者兵力降到 3000、谋略降到 50，单次恢复仍按挂载时快照（244，而非实时 71）', () => {
+    const { ctx, liubei, u1, e1 } = freezeField();
+    const aid = u1.statuses.find((s) => s.type === 'first_aid') as Extract<UnitState['statuses'][number], { type: 'first_aid' }>;
+    expect(aid.healRate).toBe(110); // 冻结恢复率
+    expect(aid.healTroops).toBe(10000); // 冻结兵力
+
+    liubei.troops = 3000; // 施法者残血
+    liubei.general.strategy = 50; // 谋略被削（实时算只有 71）
+    applyDamage(ctx, u1, 100, e1);
+    expect(lastHeal(ctx).amount).toBe(244);
+
+    // 再变一次仍不变
+    liubei.troops = 800;
+    liubei.general.strategy = 400;
+    applyDamage(ctx, u1, 100, e1);
+    expect(lastHeal(ctx).amount).toBe(244);
+  });
+
+  it('目标身上的「受到恢复效果提升」逐层放大单次恢复（孙坚式 5%/层，4 层 = +20%）', () => {
+    const { ctx, u1, e1 } = freezeField();
+    const amounts: number[] = [];
+    for (let layer = 0; layer <= 4; layer++) {
+      if (layer > 0) {
+        inflictStatus(ctx, u1, { type: 'heal_boost', rate: 0.05, duration: 999, stack: true }, 'passive', 'yongzhi_gangyi', 'sunjian');
+      }
+      applyDamage(ctx, u1, 100, e1);
+      amounts.push(lastHeal(ctx).amount);
+    }
+    expect(amounts).toEqual([244, 256, 268, 280, 292]); // 244 × (1 + 0.05n)
+  });
+});

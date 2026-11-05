@@ -186,7 +186,7 @@ describe('报障 ① · 宝物【筹算】对纯 DoT 谋略主战法生效', () 
       ctxB.myTeam,
       [...ctxB.myTeam, ...ctxB.enemyTeam]
     );
-    expect(triggers(ctxB).find((e) => e.skillId === 'pinghe_juwu')!.baseRate).toBe(35);
+    expect(triggers(ctxB).find((e) => e.skillId === 'pinghe_juwu')!.baseRate).toBe(40); // 2026-11-04 热更：平壑拒吴 35% → 40%
   });
 });
 

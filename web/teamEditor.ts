@@ -5,6 +5,7 @@
  * 战法判定顺序：被动 > 指挥 > 主动 > 追击；同类型内主战法先判定、装配战法按添加顺序。
  */
 import { HEROES, SLOTTED_HEROES, OFFLINE_HEROES, offlineReason, getHeroById, SKILL_TYPE_NAME, avatarSrc, portraitSrc, isFemale, freePointBudget, troopCapacity, skillGrade, gradeLabel, skillTypeIcon, gradeFrame, gradeRibbon, gradePlate, SKILL_DESCS, isMainSkill, isLearnableSkillListed, rednessStars, buildGeneral, TROOP_CHAR as TYPE_CHAR, factionIconSrc, cardFrameSrc, applyChenshouCost } from './heroes';
+import { bindScrollCollapse, isMobileUI } from './mobileUi';
 import type { HeroJson } from './heroes';
 import pinyinJson from './data/pinyin.json';
 import { SKILL_REGISTRY } from '../src/data/skills';
@@ -13,6 +14,20 @@ import { mechanismNamesOf } from '../src/data/mechanisms';
 import { TREASURES, TREASURES_BY_ID, AFFIXES } from '../src/data/treasures';
 import type { TreasureDef, AffixDef } from '../src/data/treasures';
 import type { General, Skill, TroopType, FormationBonus, TreasureLoadout } from '../src/engine/types';
+import {
+  buildGeneralForSlot,
+  deputyBudget,
+  deputyRejectReason,
+  deputySkillId,
+  deputyStatsAt,
+  emptyDeputy,
+  equipLimit,
+  mixStats,
+  zeroPoints as zeroDeputyPoints,
+  type DeputyState,
+  type DeputySlotLike,
+  type SeasonMode,
+} from './deputy';
 import type { BattleReport } from '../src/engine/types';
 import { computeTroopBonuses, ZERO_BONUS } from '../src/engine/troopBonus';
 import { applyChenshouPrepass } from '../src/engine/chenshou';
@@ -38,6 +53,16 @@ import { createBattleView } from './battleView';
 import { createBattleSummary, createStatsView } from './battleSummary';
 import { asset } from './assets';
 import { openPlayback } from './playback/playbackView';
+import {
+  PLAN_MAX,
+  PLAN_NAMES,
+  deletePlan,
+  describeLoadout,
+  listPlans,
+  loadoutOf,
+  savePlan,
+  type Loadout,
+} from './heroLoadout';
 
 /** 词条数值档位（与官方/社区口径一致）：红 = 达到上限档，粉 = 高于蓝区上限，其余为蓝 */
 export type AffixTier = 'blue' | 'pink' | 'red';
@@ -80,6 +105,11 @@ export interface SlotState {
    * 区间类数值由玩家在 [min,max] 自选（引擎禁 `Math.random`，滑杆替代官方随机 roll 值）。
    */
   chenshou?: ChenshouLoadout;
+  /**
+   * 北伐副本 · 副将（见 `web/deputy.ts`）：只在赛季模式 `beifa` 下生效，切回常规赛季时保留配置但不参与合成。
+   * 只存 heroId 与副将自己的人加点；等级跟主将、红度固定 0、兵种/宝物/陈寿不带（官方口径）。
+   */
+  deputy?: DeputyState;
 }
 
 export interface EditorState {
@@ -112,11 +142,24 @@ export interface EditorHandlers {
    * 可选：不涉及配将明细保存的入口（如肉鸽局内）可不实现。
    */
   onSetChenshou?: (team: 'red' | 'blue', slotIndex: number, loadout: ChenshouLoadout | undefined) => void;
+  /** 当前赛季模式（缺省 `classic`＝引擎现状；`beifa`＝北伐副本，启用副将机制） */
+  season?: SeasonMode;
+  /** 佩戴 / 卸下副将（undefined = 卸下） */
+  onSetDeputy?: (team: 'red' | 'blue', slotIndex: number, deputy: DeputyState | undefined) => void;
+  /** 副将加点（等级跟主将，预算独立） */
+  onSetDeputyFreePoints?: (team: 'red' | 'blue', slotIndex: number, key: keyof SlotState['freePoints'], value: number) => void;
+  /** 本队已占用的武将 id（上阵 + 副将）：副将选择器据此隐藏重复卡 */
+  takenHeroIds?: (team: 'red' | 'blue') => string[];
   /**
    * 保存本队为阵容预设（可选：未提供时不渲染「保存预设」按钮）。
    * 由上层（main.ts）打开命名弹窗并写入 localStorage 存档；见 `web/presetStore.ts`。
    */
   onSavePreset?: (team: 'red' | 'blue') => void;
+  /**
+   * 套用一份「武将配置方案」（武将详情页「方案」页签）：只换配置（战法 / 加点 / 红度 / 宝物 / 兵种 / 陈寿），
+   * 不动武将本身。可选：未提供时方案只读（套用按钮置灰），肉鸽局内等不落档的入口不必实现。
+   */
+  onApplyLoadout?: (team: 'red' | 'blue', slotIndex: number, loadout: Loadout) => void;
   onRemoveHero: (team: 'red' | 'blue', slotIndex: number) => void;
   onClearTeam: (team: 'red' | 'blue') => void;
 }
@@ -214,16 +257,29 @@ function heroMatchesFilter(hero: HeroJson, sel: HeroFilter, q: string): boolean 
 }
 
 /** 筛选栏 HTML（势力 + 兵种 多选） */
+/**
+ * 首页筛选栏在手机端是否展开（YG 2026-11-05 B1）。
+ * 「势力 / 兵种」两行在手机上比队头还高一截，默认收成一行摘要；
+ * 模块级持有是因为主站武将池每次 refresh 都会重建，状态不能挂在 DOM 上。
+ * 桌面端这个标志完全不起作用（`.hf-peek` 被 CSS 藏掉，body 恒定展开）。
+ */
+let heroFilterOpen = false;
+
 function heroFilterHtml(): string {
   const tag = (dim: 'faction' | 'type', v: string) =>
     `<span class="filter-tag" data-dim="${dim}" data-v="${v}">${v}</span>`;
   return `
-    <div class="hero-filter">
-      <span class="hf-label">势力</span>
-      ${FACTION_TAGS.map((t) => tag('faction', t)).join('')}
-      <span class="hf-label">兵种</span>
-      ${TYPE_TAGS.map((t) => tag('type', t)).join('')}
-      <button class="btn ghost hf-reset" type="button">重置</button>
+    <div class="hero-filter${heroFilterOpen ? ' is-open' : ''}">
+      <button class="hf-peek" type="button" aria-expanded="${heroFilterOpen ? 'true' : 'false'}">
+        <span class="hf-peek-text"></span><span class="hf-peek-btn">筛选 ▾</span>
+      </button>
+      <div class="hf-body">
+        <span class="hf-label">势力</span>
+        ${FACTION_TAGS.map((t) => tag('faction', t)).join('')}
+        <span class="hf-label">兵种</span>
+        ${TYPE_TAGS.map((t) => tag('type', t)).join('')}
+        <button class="btn ghost hf-reset" type="button">重置</button>
+      </div>
     </div>`;
 }
 
@@ -291,6 +347,22 @@ function bindSkillFilter(host: HTMLElement, sel: SkillFilter, redraw: () => void
  * `onReset` 供调用方在「重置」时追加清理（武将池用来一并清空搜索词）。
  */
 function bindHeroFilter(host: HTMLElement, sel: HeroFilter, redraw: () => void, onReset?: () => void): void {
+  // 手机端收起态的一行摘要（YG 2026-11-05 B1）：告诉用户「现在筛的是哪几个」，
+  // 否则收起来以后看不出还有没有筛选在生效。
+  const filterBox = host.querySelector('.hero-filter') as HTMLElement | null;
+  const peekText = host.querySelector('.hf-peek-text') as HTMLElement | null;
+  const refreshPeek = (): void => {
+    if (!peekText) return;
+    const fmt = (set: Set<string>): string => (set.size === 0 ? '全部' : [...set].join('/'));
+    peekText.textContent = `势力 ${fmt(sel.faction)} · 兵种 ${fmt(sel.type)}`;
+  };
+  refreshPeek();
+  const peek = host.querySelector('.hf-peek') as HTMLElement | null;
+  peek?.addEventListener('click', () => {
+    heroFilterOpen = !filterBox?.classList.contains('is-open');
+    filterBox?.classList.toggle('is-open', heroFilterOpen);
+    peek.setAttribute('aria-expanded', heroFilterOpen ? 'true' : 'false');
+  });
   host.querySelectorAll('.filter-tag').forEach((el) => {
     const tag = el as HTMLElement;
     const dim = tag.dataset.dim as 'faction' | 'type';
@@ -301,6 +373,7 @@ function bindHeroFilter(host: HTMLElement, sel: HeroFilter, redraw: () => void, 
       if (set.has(v)) set.delete(v);
       else set.add(v);
       tag.classList.toggle('on', set.has(v));
+      refreshPeek();
       redraw();
     };
   });
@@ -308,6 +381,7 @@ function bindHeroFilter(host: HTMLElement, sel: HeroFilter, redraw: () => void, 
     sel.faction.clear();
     sel.type.clear();
     host.querySelectorAll('.filter-tag').forEach((el) => el.classList.remove('on'));
+    refreshPeek();
     onReset?.();
     redraw();
   });
@@ -334,12 +408,22 @@ export function skillMeta(s: Skill): string {
   return parts.join(' · ');
 }
 
-/** 配将卡展示顺序：主战法在左，其后为装配战法（添加顺序）。战斗内仍按类型判定。 */
-export function slottedSkills(slot: SlotState): Array<{ id: string; main: boolean }> {
+/**
+ * 配将卡展示顺序：主战法在左，其后为装配战法（添加顺序）。战斗内仍按类型判定。
+ * 北伐副本挂副将时，副将主战法插在**第二格**（主将主战法之后、装配战法之前），与官方「副将主战法占第二战法栏」一致。
+ */
+export function slottedSkills(
+  slot: SlotState,
+  season: SeasonMode = 'classic'
+): Array<{ id: string; main: boolean; deputy?: boolean }> {
   const hero = slot.heroId ? getHeroById(slot.heroId) : undefined;
-  const list: Array<{ id: string; main: boolean }> = [];
+  const list: Array<{ id: string; main: boolean; deputy?: boolean }> = [];
   if (hero?.mainSkillId && SKILL_REGISTRY[hero.mainSkillId]) {
     list.push({ id: hero.mainSkillId, main: true });
+  }
+  if (season === 'beifa' && slot.deputy) {
+    const sid = deputySkillId(slot.deputy);
+    if (sid) list.push({ id: sid, main: false, deputy: true });
   }
   for (const id of slot.extraSkillIds) {
     if (SKILL_REGISTRY[id]) list.push({ id, main: false });
@@ -463,7 +547,7 @@ function renderTeamPanel(
   bonus.textContent = '部队加成';
   bonus.onclick = (e) => {
     e.stopPropagation();
-    openTroopBonusPanel(title, slots);
+    openTroopBonusPanel(title, slots, h.season ?? 'classic');
   };
   const clear = document.createElement('button');
   clear.className = 'btn ghost team-clear';
@@ -498,15 +582,15 @@ function renderTeamPanel(
  * 打开本队「部队加成」弹层（率土手游复刻：三栏并列卡片，无 tab、无底部按钮）：
  * 按当前槽位组装 General，只展示本队阵营/称号/兵种加成。空槽跳过；站位顺序与槽位一致（大营/中军/前锋）。
  */
-export function openTroopBonusPanel(teamLabel: string, slots: SlotState[]): void {
+export function openTroopBonusPanel(teamLabel: string, slots: SlotState[], season: SeasonMode = 'classic'): void {
   const POS: Array<General['position']> = ['大营', '中军', '前锋'];
   const generals: General[] = [];
   for (let i = 0; i < slots.length; i++) {
     const s = slots[i];
     if (!s.heroId) continue;
-    generals.push(
-      buildGeneral(s.heroId, s.extraSkillIds, s.freePoints, POS[i], s.redness, s.level, 120, s.secondaryTroop, s.secondaryTraits, s.treasure ?? null, s.chenshou)
-    );
+    // 与 `main.ts` 的 collectTeam 同一条合成路径（北伐副本带副将时含 70/30 加权）
+    const g = buildGeneralForSlot(s, POS[i], 120, season);
+    if (g) generals.push(g);
   }
   // 【陈寿·纵横 / 出师】阵营与统率改写 —— 与 `runBattle` 同口径，必须在 `computeTroopBonuses` **之前**：
   // 否则「纵横」改了阵营的武将自己会按旧阵营计数（如 XP关兴＆张苞 带「纵横·魏」却吃不到魏加成），
@@ -694,6 +778,9 @@ export function renderSlot(team: 'red' | 'blue', i: number, slot: SlotState, lab
   const metaTip = `等级 ${slot.level} · ${troopName}${troopFamily ? `（${troopFamily}）` : ''}${
     traits.length ? ` · 特性 ${traits.join('、')}` : ''
   }`;
+  /** 北伐副本：槽位卡上标出副将（常规赛季 / 未佩戴 → 不画） */
+  const season = h.season ?? 'classic';
+  const deputyHero = season === 'beifa' && slot.deputy ? getHeroById(slot.deputy.heroId) : undefined;
   const div = document.createElement('div');
   div.className = 'slot-inner';
   /* 左＝官方卡面（wujiang5 卡框：画像铺满 / 左上势力图标 + 竖排名 / 右上红度 / 底部 Lv·兵种），
@@ -723,12 +810,13 @@ export function renderSlot(team: 'red' | 'blue', i: number, slot: SlotState, lab
         <span class="sm-lv">Lv.${slot.level}</span>
         <span class="sm-sep">·</span>
         <span class="sm-troop">${troopName}${traits.length ? `<i>（${traits.join(' + ')}）</i>` : ''}</span>
+        ${deputyHero ? `<span class="sm-deputy" title="副将「${deputyHero.name}」：主将四维 = 主将 70% + 副将 30%，副将主战法占主将第二战法格">副将 ${deputyHero.name}</span>` : ''}
       </div>
       <div class="hero-skills"></div>
     </div>
   `;
   const skillBox = div.querySelector('.hero-skills')!;
-  const slotted = slottedSkills(slot);
+  const slotted = slottedSkills(slot, season);
   if (slotted.length === 0) {
     skillBox.innerHTML = `<span class="tip">无战法（主战法未实现）</span>`;
   } else {
@@ -736,8 +824,8 @@ export function renderSlot(team: 'red' | 'blue', i: number, slot: SlotState, lab
       const s = SKILL_REGISTRY[x.id];
       const grade = skillGrade(x.id).toLowerCase();
       const item = document.createElement('div');
-      item.className = `slot-skill grade-${grade}${x.main ? ' main' : ''}`;
-      item.title = s.name;
+      item.className = `slot-skill grade-${grade}${x.main ? ' main' : ''}${x.deputy ? ' deputy' : ''}`;
+      item.title = x.deputy ? `副将主战法：${s.name}` : s.name;
       const plate = gradePlate(grade);
       item.innerHTML = `${skillIconHtml(x.id, 'css')}<span class="slot-skill-name${plate ? ' has-plate' : ''}"${plate ? ` style="background-image:url('${plate}')"` : ''}>${s.name}</span>`;
       skillBox.appendChild(item);
@@ -940,7 +1028,7 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
   const h = opts.handlers;
 
   /** 详情页三个板块（按参考图骨架划分，不照抄）：详情 / 配点 / 兵种 */
-  let activeTab: 'detail' | 'points' | 'troop' = 'detail';
+  let activeTab: 'detail' | 'points' | 'troop' | 'plans' = 'detail';
 
   const redraw = () => {
     // 左右布局（按参考图）：左边「阵营 + 名字 + 画像 + 星级」三个板块共用、切换时不重建内容；
@@ -981,10 +1069,34 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
       ? skillSlotHtml(mainSkill, true, `${SKILL_REGISTRY[mainSkill].name}（主战法）`)
       : `<div class="skill-slot-row main disabled"><span class="tip">主战法未实现</span></div>`;
 
+    const season = h.season ?? 'classic';
+    const deputy = season === 'beifa' ? slot.deputy : undefined;
+    const deputyHero = deputy ? getHeroById(deputy.heroId) : undefined;
+    const deputySkill = deputy ? deputySkillId(deputy) : null;
+    const limit = equipLimit(slot, season);
+
     const equips = [0, 1].map((i) => {
+      /* 北伐副本：第二格固定显示副将主战法（只读，点击进副将详情）；
+         主将的装配战法因此只剩第一格（`limit` 见 web/deputy.ts 的 equipLimit）。 */
+      if (i === 1 && deputy) {
+        if (deputySkill) {
+          const dsk = SKILL_REGISTRY[deputySkill];
+          return `
+            <div class="skill-slot-row deputy" data-deputy-open="1" title="副将「${deputyHero?.name ?? ''}」的主战法「${dsk.name}」占此格（点击查看副将详情）">
+              ${skillIconHtml(deputySkill)}
+              <span class="sslot-name">${dsk.name}</span>
+              <span class="sslot-type">副将</span>
+            </div>`;
+        }
+        return `
+          <div class="skill-slot-row deputy disabled" data-deputy-open="1" title="副将「${deputyHero?.name ?? ''}」的主战法未实装（点击查看副将详情）">
+            <span class="sslot-name">${deputyHero?.name ?? '副将'}</span>
+            <span class="sslot-type">战法未实装</span>
+          </div>`;
+      }
       const sid = slot.extraSkillIds[i];
       if (!sid) {
-        const canAdd = slot.extraSkillIds.length < 2;
+        const canAdd = slot.extraSkillIds.length < limit;
         return `
           <div class="skill-slot-row add ${editable && canAdd ? '' : 'disabled'}" data-slot="${i}" title="${editable ? '点击装配战法' : '放入阵容后可装配'}">
             <img class="sslot-add" src="${asset('/skills/slot-add.png')}" alt="" />
@@ -1021,8 +1133,14 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
       </div>
       <div class="hd-stats">${statRows}</div>
       <div class="hd-skills">
-        <div class="skills-title">战法</div>
+        <div class="skills-title">战法${deputy ? '<span class="hd-deputy-tag">北伐副本 · 副将主战法占第二格</span>' : ''}</div>
         <div class="skills-row">${mainSkillEl}${equips}</div>
+        ${season === 'beifa' && editable
+          ? `<div class="hd-deputy-row">
+              <button type="button" class="hd-deputy-btn" data-deputy-pick="1" title="副将须与主将同阵营；副将等级跟随主将、加点独立">${deputy ? '更换副将' : '＋ 佩戴副将（北伐副本）'}</button>
+              ${deputy ? '<button type="button" class="hd-deputy-btn ghost" data-deputy-remove="1">卸下副将</button>' : ''}
+            </div>`
+          : ''}
       </div>
     `;
   };
@@ -1108,10 +1226,10 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
     </div>`;
   };
 
-  /** 板块切换条（详情 / 配点 / 兵种） */
+  /** 板块切换条（详情 / 配点 / 兵种 / 方案） */
   const hdTabsHtml = (): string => {
-    const tabs: Array<['detail' | 'points' | 'troop', string]> = [
-      ['detail', '详情'], ['points', '配点'], ['troop', '兵种'],
+    const tabs: Array<['detail' | 'points' | 'troop' | 'plans', string]> = [
+      ['detail', '详情'], ['points', '配点'], ['troop', '兵种'], ['plans', '方案'],
     ];
     return `<nav class="hd-tabs" aria-label="武将详情板块">${tabs
       .map(([id, label]) => `<button type="button" class="hd-tab${id === activeTab ? ' on' : ''}" data-tab="${id}">${label}</button>`)
@@ -1119,7 +1237,13 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
   };
 
   const hdPanelHtml = (): string =>
-    activeTab === 'detail' ? hdDetailHtml() : activeTab === 'points' ? hdPointsHtml() : hdTroopHtml();
+    activeTab === 'detail'
+      ? hdDetailHtml()
+      : activeTab === 'points'
+        ? hdPointsHtml()
+        : activeTab === 'troop'
+          ? hdTroopHtml()
+          : hdPlansHtml();
 
   /**
    * 板块 2 · 配点：每项 − / + / 最大（把剩余点数全加进该项），外加「重置」返还全部点数。
@@ -1228,6 +1352,43 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
       </div>`;
   };
 
+  /**
+   * 板块 4 · 方案：把当前配置（战法 / 加点 / 红度 / 宝物 / 兵种 / 陈寿）存成「方案一…六」，随时一键套用。
+   * 用户 2026-11-05 的例子：文鸯 方案一「击势+枭雄·全攻·元戎·满红」/ 方案二「势无虚动+枭雄·全攻·元戎·白板」。
+   */
+  const hdPlansHtml = (): string => {
+    const plans = listPlans(heroId);
+    const canApply = editable && !!h.onApplyLoadout;
+    const rows = plans.length
+      ? plans
+          .map(
+            (p, i) => `
+        <div class="hd-plan">
+          <div class="hp-head">
+            <span class="hp-name">${PLAN_NAMES[i] ?? `方案 ${i + 1}`}</span>
+            <span class="hp-time">${new Date(p.savedAt).toLocaleDateString('zh-CN')}</span>
+          </div>
+          <div class="hp-sum">${describeLoadout(p.loadout)}</div>
+          <div class="hp-acts">
+            <button type="button" class="btn primary hp-apply" data-plan-apply="${p.id}"${canApply ? '' : ' disabled'} title="${canApply ? '把这份配置套到当前武将' : '放进阵容后可套用'}">套用</button>
+            <button type="button" class="btn beige hp-del" data-plan-del="${p.id}" title="删除这套方案">删除</button>
+          </div>
+        </div>`,
+          )
+          .join('')
+      : `<div class="hd-plan-empty">还没有保存的方案<span>把战法 / 加点 / 宝物 / 红度调成想要的样子，点右上「保存当前配置」；之后在任意队伍里一键套用。</span></div>`;
+    return `
+      <div class="hd-plans">
+        <div class="hp-bar">
+          <span class="hp-title">配置方案<span class="hp-hint">套用只换配置，不动武将</span></span>
+          <span class="hp-count">${plans.length} / ${PLAN_MAX}</span>
+          ${editable ? '<button type="button" class="btn hp-save" data-plan-save="1">保存当前配置</button>' : ''}
+        </div>
+        ${editable ? `<div class="hp-cur">当前：${describeLoadout(loadoutOf(slot))}</div>` : '<div class="hp-cur tip">从武将池查看：放进阵容后可保存 / 套用方案</div>'}
+        <div class="hp-list">${rows}</div>
+      </div>`;
+  };
+
   const skillSlotHtml = (sid: string, main: boolean, tip: string): string => {
     const sk = SKILL_REGISTRY[sid];
     return `
@@ -1311,6 +1472,34 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
         redraw();
       };
     });
+    // 方案（板块 4）：保存当前配置 / 套用 / 删除 —— 只换配置，不动武将
+    body.querySelector('[data-plan-save]')?.addEventListener('click', () => {
+      if (!placed) { showNotice('放进阵容后才能保存方案'); return; }
+      const r = savePlan(heroId, loadoutOf(slot));
+      if (!r.ok) { showNotice(r.error); return; }
+      const idx = listPlans(heroId).findIndex((p) => p.id === r.plan.id);
+      showNotice(`已保存${PLAN_NAMES[idx] ?? '方案'}：${describeLoadout(r.plan.loadout)}`);
+      redraw();
+    });
+    body.querySelectorAll('[data-plan-apply]').forEach((el) => {
+      el.addEventListener('click', () => {
+        if (!placed) { showNotice('放进阵容后才能套用方案'); return; }
+        if (!h.onApplyLoadout) { showNotice('当前入口不支持套用方案'); return; }
+        const list = listPlans(heroId);
+        const idx = list.findIndex((p) => p.id === (el as HTMLElement).dataset.planApply);
+        const plan = list[idx];
+        if (!plan) return;
+        h.onApplyLoadout(placed.team, placed.idx, plan.loadout);
+        showNotice(`已套用${PLAN_NAMES[idx] ?? '方案'}：${describeLoadout(plan.loadout)}`);
+        redraw();
+      });
+    });
+    body.querySelectorAll('[data-plan-del]').forEach((el) => {
+      el.addEventListener('click', () => {
+        deletePlan(heroId, (el as HTMLElement).dataset.planDel!);
+        redraw();
+      });
+    });
     // 配点：− / ＋ / 最大（剩余点数全加进该项）/ 重置（四项归零，返还全部点数）
     const remainPoints = (): number => {
       const budget = freePointBudget(heroId, slot.redness, slot.level);
@@ -1344,6 +1533,26 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
       if (!editable) { showNotice('放入阵容后可分配属性点'); return; }
       for (const [k] of STAT_NAMES) h.onSetFreePoints(placed!.team, placed!.idx, k, 0);
       redraw();
+    });
+    // 北伐副本：第二战法格（副将主战法）→ 副将详情；佩戴 / 更换 / 卸下副将
+    body.querySelectorAll('[data-deputy-open]').forEach((el) => {
+      (el as HTMLElement).onclick = () => {
+        if (!placed) return;
+        openDeputyDetail({ team: placed.team, idx: placed.idx, slot, season: h.season ?? 'classic', handlers: h });
+      };
+    });
+    body.querySelectorAll('[data-deputy-pick]').forEach((el) => {
+      (el as HTMLElement).onclick = () => {
+        if (!placed) { showNotice('放入阵容后可佩戴副将'); return; }
+        openDeputyPicker(placed.team, placed.idx, slot, h, redraw);
+      };
+    });
+    body.querySelectorAll('[data-deputy-remove]').forEach((el) => {
+      (el as HTMLElement).onclick = () => {
+        if (!placed) return;
+        h.onSetDeputy?.(placed.team, placed.idx, undefined);
+        redraw();
+      };
     });
     // 主战法 / 已装战法 → 点击查看战法详情
     body.querySelectorAll('.skill-slot-row.main:not(.disabled), .skill-slot-row.equipped').forEach((el) => {
@@ -1449,6 +1658,243 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
   };
 
   redraw();
+}
+
+/**
+ * 北伐副本 · 副将详情（从主将详情的**第二战法格**进入）。
+ *
+ * 只有「加点」是开放的：等级跟随主将（只读）、红度固定 0（官方副将不进阶）、
+ * 兵种 / 宝物 / 陈寿一律不带（官方口径），所以这里不渲染那三块。
+ */
+export function openDeputyDetail(opts: {
+  team: 'red' | 'blue';
+  idx: number;
+  slot: SlotState;
+  season: SeasonMode;
+  handlers: EditorHandlers;
+}): void {
+  const deputy = opts.slot.deputy;
+  if (!deputy) return;
+  const hero = getHeroById(deputy.heroId);
+  if (!hero) return;
+  const h = opts.handlers;
+  const mainHero = opts.slot.heroId ? getHeroById(opts.slot.heroId) : undefined;
+  const level = opts.slot.level;
+
+  const mask = document.createElement('div');
+  mask.className = 'modal-mask page-mask';
+  const modal = document.createElement('div');
+  modal.className = 'modal page-modal hero-detail-modal deputy-detail-modal';
+  modal.innerHTML = `
+    <div class="m-head"><h3><img class="modal-avatar" src="${avatarSrc(deputy.heroId)}" alt="" onerror="this.style.display='none'" />副将详情 · ${hero.name}</h3><span class="m-close">×</span></div>
+    <div class="m-body hd-body"></div>
+    <div class="m-foot hd-foot"></div>
+  `;
+  mask.appendChild(modal);
+  document.body.appendChild(mask);
+  const close = () => mask.remove();
+  modal.querySelector('.m-close')!.addEventListener('click', close);
+  mask.addEventListener('click', (e) => { if (e.target === mask) close(); });
+
+  const body = modal.querySelector('.hd-body') as HTMLElement;
+  const foot = modal.querySelector('.hd-foot') as HTMLElement;
+
+  const mainStats = ((): { attack: number; defense: number; strategy: number; speed: number } => {
+    if (!mainHero) return { attack: 0, defense: 0, strategy: 0, speed: 0 };
+    const { base } = statsAt(mainHero, level, opts.slot.chenshou);
+    return {
+      attack: base.attack + (opts.slot.freePoints.attack ?? 0),
+      defense: base.defense + (opts.slot.freePoints.defense ?? 0),
+      strategy: base.strategy + (opts.slot.freePoints.strategy ?? 0),
+      speed: base.speed + (opts.slot.freePoints.speed ?? 0),
+    };
+  })();
+
+  const redraw = (): void => {
+    const cur = opts.slot.deputy!;
+    const budget = deputyBudget(cur, level);
+    const used = STAT_NAMES.reduce((a, [k]) => a + (cur.freePoints[k] ?? 0), 0);
+    const remain = Math.max(0, budget - used);
+    const dStats = deputyStatsAt(cur, level);
+    const mixed = mixStats(mainStats, dStats);
+    const sid = deputySkillId(cur);
+
+    const rows = STAT_NAMES.map(([k, name]) => {
+      const d = cur.freePoints[k] ?? 0;
+      return `
+        <div class="pt-row">
+          <div class="pt-head">
+            <span class="pt-k">${name}</span>
+            <span class="pt-d">+${d}</span>
+          </div>
+          <div class="pt-line">
+            <span class="pt-before">${dStats[k]}</span>
+            <span class="pt-arrow">»</span>
+            <span class="pt-after">${mixed[k]}</span>
+            <span class="pt-mix" title="主将 ${mainStats[k]} × 70% + 副将 ${dStats[k]} × 30%">合成</span>
+            <span class="pt-actions">
+              <button type="button" class="pt-btn" data-ddec="${k}" ${d > 0 ? '' : 'disabled'}>−</button>
+              <button type="button" class="pt-btn" data-dinc="${k}" ${remain > 0 ? '' : 'disabled'}>＋</button>
+              <button type="button" class="pt-btn pt-max" data-dmax="${k}" ${remain > 0 ? '' : 'disabled'}>最大</button>
+            </span>
+          </div>
+        </div>`;
+    }).join('');
+
+    body.innerHTML = `
+      <div class="hd-split">
+        <aside class="hd-side">
+          <div class="hd-side-labels">
+            <span class="faction-badge ${FACTION_CLS[hero.faction] ?? ''}">${hero.faction}</span>
+            <span class="hd-side-name">${hero.name}</span>
+            <span class="hd-deputy-badge">副将</span>
+          </div>
+          <div class="hd-side-col">
+            <div class="hd-portrait">
+              <img src="${portraitSrc(deputy.heroId)}" alt="${hero.name}" onerror="this.style.display='none'" />
+              <div class="hd-stars" title="副将红度固定 0（官方副将不进阶）">${rednessStars(0)}</div>
+            </div>
+          </div>
+        </aside>
+        <div class="hd-main">
+          <div class="hd-meta-row">
+            <span class="hd-meta"><i>兵种</i>${TYPE_NAME[hero.troopType] ?? TYPE_CHAR[hero.troopType] ?? '?'}</span>
+            <span class="hd-meta"><i>攻击距离</i>${hero.attackRange}</span>
+            <span class="hd-meta"><i>等级</i>跟随主将 Lv.${level}</span>
+          </div>
+          <div class="deputy-tip">主将${mainHero ? `「${mainHero.name}」` : ''}四维 = 主将 70% + 副将 30%；副将主战法占主将第二战法格，副将的兵种 / 宝物 / 陈寿 / 拆解战法不生效。</div>
+          <div class="hd-skills">
+            <div class="skills-title">副将主战法</div>
+            <div class="skills-row">
+              ${sid
+                ? `<div class="skill-slot-row main" data-dskill="${sid}" title="点击查看「${SKILL_REGISTRY[sid].name}」详情">
+                     ${skillIconHtml(sid)}<span class="sslot-name">${SKILL_REGISTRY[sid].name}</span><span class="sslot-type">${SKILL_TYPE_NAME[SKILL_REGISTRY[sid].type]}</span>
+                   </div>`
+                : `<div class="skill-slot-row main disabled"><span class="sslot-name">主战法未实装</span></div>`}
+            </div>
+          </div>
+          <div class="pt-wrap">
+            <div class="pt-bar">
+              <span class="pt-title">副将加点（独立预算）</span>
+              <span class="pt-remain">剩余 <b>${remain}</b> / ${budget} 点</span>
+              <button type="button" class="btn beige pt-reset" ${used > 0 ? '' : 'disabled'}>重置</button>
+            </div>
+            <div class="pt-list">${rows}</div>
+          </div>
+        </div>
+      </div>`;
+    foot.innerHTML = '';
+    const rm = document.createElement('button');
+    rm.className = 'btn beige';
+    rm.style.marginRight = '10px';
+    rm.textContent = '卸下副将';
+    rm.onclick = () => { h.onSetDeputy?.(opts.team, opts.idx, undefined); close(); };
+    foot.appendChild(rm);
+    const done = document.createElement('button');
+    done.className = 'btn done beige';
+    done.textContent = '完成';
+    done.onclick = close;
+    foot.appendChild(done);
+
+    const apply = (k: keyof SlotState['freePoints'], value: number): void => {
+      h.onSetDeputyFreePoints?.(opts.team, opts.idx, k, Math.max(0, value));
+      redraw();
+    };
+    body.querySelectorAll('.pt-btn[data-dinc]').forEach((el) => {
+      (el as HTMLElement).onclick = () => {
+        const k = (el as HTMLElement).dataset.dinc as keyof SlotState['freePoints'];
+        apply(k, (opts.slot.deputy!.freePoints[k] ?? 0) + 1);
+      };
+    });
+    body.querySelectorAll('.pt-btn[data-ddec]').forEach((el) => {
+      (el as HTMLElement).onclick = () => {
+        const k = (el as HTMLElement).dataset.ddec as keyof SlotState['freePoints'];
+        apply(k, (opts.slot.deputy!.freePoints[k] ?? 0) - 1);
+      };
+    });
+    body.querySelectorAll('.pt-btn[data-dmax]').forEach((el) => {
+      (el as HTMLElement).onclick = () => {
+        const k = (el as HTMLElement).dataset.dmax as keyof SlotState['freePoints'];
+        apply(k, (opts.slot.deputy!.freePoints[k] ?? 0) + remain);
+      };
+    });
+    body.querySelector('.pt-reset')?.addEventListener('click', () => {
+      for (const [k] of STAT_NAMES) h.onSetDeputyFreePoints?.(opts.team, opts.idx, k, 0);
+      redraw();
+    });
+    const dSkill = body.querySelector('[data-dskill]') as HTMLElement | null;
+    if (dSkill) dSkill.onclick = () => openSkillDetail(dSkill.dataset.dskill!);
+  };
+
+  redraw();
+}
+
+/**
+ * 北伐副本 · 副将选择器：只列**同阵营**武将（官方：副将须与主将同阵营），
+ * 并排除主将本人与同名/SP 互斥卡。已在队内其它槽位的武将由上层 `onSetDeputy` 兜底拒绝。
+ */
+export function openDeputyPicker(
+  team: 'red' | 'blue',
+  idx: number,
+  slot: SlotState,
+  h: EditorHandlers,
+  onDone: () => void
+): void {
+  const mainId = slot.heroId;
+  if (!mainId) { showNotice('请先放入主将'); return; }
+  const mainHero = getHeroById(mainId);
+  if (!mainHero) return;
+
+  const mask = document.createElement('div');
+  mask.className = 'modal-mask page-mask';
+  const modal = document.createElement('div');
+  modal.className = 'modal page-modal deputy-picker-modal';
+  modal.innerHTML = `
+    <div class="m-head"><h3>佩戴副将 · 主将 ${mainHero.name}（${mainHero.faction}）</h3><span class="m-close">×</span></div>
+    <div class="m-body">
+      <div class="deputy-tip">北伐副本：副将须与主将同阵营；等级跟随主将，加点独立；副将主战法占主将第二战法格。</div>
+      <input class="deputy-search" type="search" placeholder="搜索同阵营武将（名字 / 拼音）" />
+      <div class="hero-grid deputy-grid"></div>
+    </div>
+    <div class="m-foot"><button type="button" class="btn beige" data-cancel="1">取消</button></div>
+  `;
+  mask.appendChild(modal);
+  document.body.appendChild(mask);
+  const close = (): void => mask.remove();
+  modal.querySelector('.m-close')!.addEventListener('click', close);
+  (modal.querySelector('[data-cancel]') as HTMLElement).onclick = close;
+  mask.addEventListener('click', (e) => { if (e.target === mask) close(); });
+
+  const grid = modal.querySelector('.deputy-grid') as HTMLElement;
+  const input = modal.querySelector('.deputy-search') as HTMLInputElement;
+  const draw = (): void => {
+    grid.innerHTML = '';
+    const q = input.value.trim().toLowerCase();
+    // 队内已上阵 / 已当别人副将的卡不再列出（同一队伍不能重复武将）
+    const taken = new Set(h.takenHeroIds?.(team) ?? []);
+    let count = 0;
+    for (const hero of SLOTTED_HEROES) {
+      if (deputyRejectReason(mainId, hero.id)) continue;
+      if (taken.has(hero.id)) continue;
+      if (q && !(hero.name.toLowerCase().includes(q) || pinyinHit(hero.id, q))) continue;
+      count++;
+      const card = document.createElement('div');
+      card.className = 'hero-card';
+      card.innerHTML = heroCardHtml(hero, slot.level, offlineReason(hero));
+      card.title = `${heroMainSkillName(hero)}｜${hero.skillDesc || ''}`;
+      card.onclick = () => {
+        h.onSetDeputy?.(team, idx, emptyDeputy(hero.id));
+        close();
+        onDone();
+      };
+      grid.appendChild(card);
+    }
+    if (count === 0) {
+      grid.innerHTML = `<div class="deputy-empty">没有可用的同阵营武将（或搜索无命中）</div>`;
+    }
+  };
+  input.addEventListener('input', draw);
+  draw();
 }
 
 /** 可觉醒战法（觉醒后按 15 级口径倍率结算；客户端资源表口径，目前仅河内世泽）。 */
@@ -1690,8 +2136,13 @@ export function openSkillBag(): void {
   modal.innerHTML = `
     <div class="m-head"><h3>战法背包</h3><span class="m-close">×</span></div>
     <div class="m-body">
-      <div class="pick-toolbar"><input type="text" placeholder="搜索战法名…" /></div>
-      ${skillFilterHtml()}
+      <div class="bag-tools">
+        <div class="pick-toolbar"><input type="text" placeholder="搜索战法名…" /></div>
+        ${skillFilterHtml()}
+      </div>
+      <div class="bag-peek" role="button" tabindex="0" aria-label="展开筛选与搜索">
+        <span class="bag-peek-text"></span><span class="bag-peek-btn">筛选 ▾</span>
+      </div>
       <div class="bag-grid"></div>
       <div class="bag-note"></div>
     </div>
@@ -1699,12 +2150,28 @@ export function openSkillBag(): void {
   const input = modal.querySelector('input') as HTMLInputElement;
   const grid = modal.querySelector('.bag-grid') as HTMLElement;
   const note = modal.querySelector('.bag-note') as HTMLElement;
+  const tools = modal.querySelector('.bag-tools') as HTMLElement;
+  const peek = modal.querySelector('.bag-peek') as HTMLElement;
+  const peekText = modal.querySelector('.bag-peek-text') as HTMLElement;
   const sel: SkillFilter = { grade: '', type: '' };
+  let shown = 0;
+
+  /** 收起态摘要：手机端筛选栏滚走之后，靠这一行告诉用户当前筛的是哪一档（YG 2026-11-05 第 2 条） */
+  const refreshPeek = (): void => {
+    const gradeText = sel.grade === '' ? '全部' : sel.grade === 'baijia' ? '百家' : `${sel.grade} 级`;
+    const typeText = sel.type === '' ? '全部' : SKILL_TYPE_TAGS.find(([v]) => v === sel.type)?.[1] ?? sel.type;
+    const q = input.value.trim();
+    peekText.textContent = `品级 ${gradeText} · 类别 ${typeText}${q ? ` · “${q}”` : ''} ｜ 共 ${shown} 种`;
+  };
+  // 点摘要条 = 立刻展开（向上滚 / 滚回顶部也会自动展开）
+  peek.addEventListener('click', () => tools.classList.remove('is-tucked'));
+  // 搜索框聚焦期间锁住展开态：收起态点「筛选 ▾」展开后，手一滚又收起来，像点坏了（YG 2026-11-05 A1）
+  input.addEventListener('focus', () => tools.classList.remove('is-tucked'));
 
   const draw = () => {
     grid.innerHTML = '';
     const q = input.value.trim().toLowerCase();
-    let shown = 0;
+    shown = 0;
     let lastBaijiaHero = '';
     const grouped = sel.grade === 'baijia';
     // “百家”分类按武将/词条顺序排；其它分类保持注册表原顺序。
@@ -1745,10 +2212,22 @@ export function openSkillBag(): void {
     note.textContent = shown === bagSkills.length
       ? `共 ${bagSkills.length} 种可装配战法（武将主战法除外），点击查看详情`
       : `显示 ${shown} / ${bagSkills.length} 种可装配战法`;
+    refreshPeek();
   };
   input.addEventListener('input', draw);
   bindSkillFilter(modal, sel, draw);
-  const close = () => mask.remove();
+  // 手机端：向下滚收起搜索+筛选、向上滚/滚回顶展开（桌面端不绑，交互与改动前一致）
+  const unbindScroll = isMobileUI()
+    ? bindScrollCollapse({
+        root: modal,
+        target: tools,
+        canCollapse: () => document.activeElement !== input,
+      })
+    : null;
+  const close = () => {
+    unbindScroll?.();
+    mask.remove();
+  };
   modal.querySelector('.m-close')!.addEventListener('click', close);
   mask.appendChild(modal);
   mask.addEventListener('click', (e) => { if (e.target === mask) close(); });
@@ -1914,7 +2393,7 @@ export function openHistoryPanel(records: BattleRecord[], onClear?: () => void, 
 }
 
 /**
- * 宝物三步弹窗（P4）：① 选宝物（38 件稀世网格）② 选词条（该宝物词条池 6~7 条）
+ * 宝物三步弹窗（P4）：① 选宝物（40 件稀世网格）② 选词条（该宝物词条池 6~7 条）
  * ③ 选数值（官方区间内任意值，滑杆刻度用蓝/粉/红标注）。确认后写回 `SlotState.treasure`（默认 10 级）。
  */
 export function openTreasurePicker(opts: {
@@ -1953,6 +2432,15 @@ export function openTreasurePicker(opts: {
   const stepBar = (): string =>
     `<div class="tp-steps"><span class="${step === 1 ? 'on' : ''}">① 选宝物</span><span class="${step === 2 ? 'on' : ''}">② 选词条</span><span class="${step === 3 ? 'on' : ''}">③ 选数值</span></div>`;
 
+  /**
+   * 手机端详情抽屉是否展开（YG 2026-11-05 第 3 条）。
+   * 用户原话「宝物介绍占了一半的屏幕，导致只有一行可以选择宝物，将其默认收起，
+   * 只有点击选择以后才展开详情，展开后可再次收起」——默认 false，点卡片才开。
+   * 桌面端不用这个状态（详情仍是常驻块，外观与改动前一字不差）。
+   */
+  let sheetOpen = false;
+  const mobileUI = isMobileUI();
+
   const step1 = (): string => {
     const cards = TREASURES.map(
       (t) => `<button class="tp-card${t.id === treasureId ? ' on' : ''}" data-tid="${t.id}" title="${t.name}（${t.type}）">
@@ -1962,11 +2450,24 @@ export function openTreasurePicker(opts: {
     ).join('');
     const t = treasure();
     const eff = t.effects.map((e) => `<div class="tp-eff"><b>${e.name}</b>：${e.desc}</div>`).join('');
+    const hint = `<div class="tp-hint">自带特效按宝物等级计算（默认 10 级：一阶/二阶 = 官方数值 × 5，三阶固定）</div>`;
+    const detail = (showName: boolean): string =>
+      `<div class="tp-detail">${showName ? `<div class="tp-detail-name">${t.name} · ${t.type} · 稀世</div>` : ''}${eff}${hint}</div>`;
+    const foot = `<div class="tp-foot"><button class="tp-next">下一步：选词条</button></div>`;
+    if (!mobileUI) return `${stepBar()}<div class="tp-grid">${cards}</div>${detail(true)}${foot}`;
+    // 手机：详情收进贴底抽屉，收起态只留 44px 把手（名字 + 详情 ▴），网格吃掉整屏高度
     return `${stepBar()}
       <div class="tp-grid">${cards}</div>
-      <div class="tp-detail"><div class="tp-detail-name">${t.name} · ${t.type} · 稀世</div>${eff}
-        <div class="tp-hint">自带特效按宝物等级计算（默认 10 级：一阶/二阶 = 官方数值 × 5，三阶固定）</div></div>
-      <div class="tp-foot"><button class="tp-next">下一步：选词条</button></div>`;
+      <div class="tp-sheet${sheetOpen ? ' is-open' : ''}">
+        <div class="tp-sheet-handle" data-sheet-toggle="1" role="button" tabindex="0"
+          aria-expanded="${sheetOpen ? 'true' : 'false'}" aria-label="展开或收起宝物详情">
+          <span class="tp-sheet-grip"></span>
+          <span class="tp-sheet-title">${t.name} · ${t.type} · 稀世</span>
+          ${sheetOpen ? '' : '<button class="tp-sheet-next" type="button">下一步</button>'}
+          <span class="tp-sheet-toggle">${sheetOpen ? '收起 ▾' : '详情 ▴'}</span>
+        </div>
+        <div class="tp-sheet-body">${detail(false)}${foot}</div>
+      </div>`;
   };
 
   const step2 = (): string => {
@@ -1987,8 +2488,14 @@ export function openTreasurePicker(opts: {
         </button>`;
       })
       .join('');
+    // 客户端热更补录的四件新稀世（1126/1129/1132/1135）锻造词条池尚未解出 → 只能直接用自带特效
+    const emptyHint =
+      t.affixPool.length === 0
+        ? `<div class="tp-empty">该宝物由客户端热更表补录，锻造词条池尚未解出 —— 当前只能使用自带特效。</div>`
+        : '';
     return `${stepBar()}
       <div class="tp-sub">「${t.name}」可锻造出的词条（第 4 条 · ${t.affixPool.length} 条随机其一；前 3 条为宝物自带特效）</div>
+      ${emptyHint}
       <div class="tp-affixes">${rows}</div>
       <div class="tp-foot"><button class="tp-back">← 上一步</button><button class="tp-skip">不锻造（仅用自带特效）</button></div>`;
   };
@@ -2030,14 +2537,33 @@ export function openTreasurePicker(opts: {
   };
 
   const render = (): void => {
+    // 重渲染会换掉网格节点，滚动位置先存再还（手机上一屏放不下 42 件稀世）
+    const prevGrid = modal.querySelector('.tp-grid') as HTMLElement | null;
+    const keepScroll = prevGrid ? prevGrid.scrollTop : 0;
     modal.innerHTML = `<div class="tp-body">${step === 1 ? step1() : step === 2 ? step2() : step3()}</div>`;
+    const nextGrid = modal.querySelector('.tp-grid') as HTMLElement | null;
+    if (nextGrid && keepScroll > 0) nextGrid.scrollTop = keepScroll;
     modal.querySelectorAll('.tp-card').forEach((el) => {
       (el as HTMLElement).onclick = () => {
         const id = Number((el as HTMLElement).dataset.tid);
+        const switched = id !== treasureId;
         treasureId = id;
         if (affixName && !TREASURES_BY_ID[id].affixPool.includes(affixName)) affixName = null;
+        // 手机：换一件 → 直接展开详情；点同一件 → 展开/收起切换（第 3 条）
+        if (mobileUI) sheetOpen = switched ? true : !sheetOpen;
         render();
       };
+    });
+    (modal.querySelector('[data-sheet-toggle]') as HTMLElement | null)?.addEventListener('click', () => {
+      sheetOpen = !sheetOpen;
+      render();
+    });
+    // 收起态把手上直接给「下一步」：否则想继续必须先展开抽屉再点，多一次点击（YG 2026-11-05 A2）
+    // 它在 [data-sheet-toggle] 内部，必须阻止冒泡，不然会连带把抽屉开起来。
+    (modal.querySelector('.tp-sheet-next') as HTMLElement | null)?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      step = 2;
+      render();
     });
     modal.querySelectorAll('.tp-affix').forEach((el) => {
       (el as HTMLElement).onclick = () => {

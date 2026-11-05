@@ -151,6 +151,10 @@ header.app .pool-search input[type="text"]:focus { outline: none; border-color: 
 }
 /* 米黄实心按钮：原来是纯文字链接，与深色顶栏糊在一起、看不出可点 */
 .nav-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   background: var(--beige);
   color: var(--beige-ink);
   border: 1px solid var(--beige-line);
@@ -159,6 +163,7 @@ header.app .pool-search input[type="text"]:focus { outline: none; border-color: 
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 3px;
+  line-height: 1;
   padding: 6px 14px;
   cursor: pointer;
   transition: background .12s, border-color .12s, color .12s;
@@ -251,6 +256,7 @@ main {
 .btn.ghost.team-clear {
   width: auto;
   flex-shrink: 0;
+  min-height: 26px;
   background: var(--beige);
   color: var(--beige-ink);
   border: 1px solid var(--beige-line);
@@ -258,7 +264,8 @@ main {
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 1px;
-  padding: 3px 9px;
+  line-height: 1;
+  padding: 0 9px;
 }
 .btn.ghost.team-bonus:hover,
 .btn.ghost.team-save-preset:hover,
@@ -995,36 +1002,61 @@ main {
 .control-bar input[type="number"]:focus, .control-bar select:focus { outline: none; border-color: var(--color-gold); }
 .control-bar #start { padding: 6px 34px; font-size: 14px; letter-spacing: 4px; font-family: var(--font-kai); }
 
+/**
+ * ── 按钮系统（统一几何 + 变体层级；颜色沿用现有 token，不换皮肤）──
+ * 基类 .btn：inline-flex 居中 + gap 6px + 统一 min-height 34px + 圆角 6px + 楷体 600 + 图标槽。
+ * 变体只改「底色 / 字色 / 字重」，不再各写各的 padding 造成尺寸不齐。
+ * 层级：.primary 绯红（每屏唯一主操作）＞ 默认金底（强调动作）＞ .beige 米黄（中性 / 面板动作）
+ *       ＞ .ghost 透明文字（三级动作）＞ .danger 破坏性。
+ * 尺寸：.btn-sm(28) / 默认(34) / .btn-lg(44)；.btn.icon = 34px 正方纯图标。
+ * ⚠️ 只收敛「按钮」；筛选 chip(.filter-tag) / 回合 tab(.rtab/.rbtn) / ±步进(.pt-btn/.cs-alloc-btn)
+ *    是另一类组件，不在本次范围。
+ */
 .btn {
-  background: var(--color-gold);
-  color: var(--color-bg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 0 18px;
   border: 1px solid var(--color-gold);
   border-radius: 6px;
-  padding: 7px 20px;
-  font-size: 13px;
-  letter-spacing: 2px;
-  cursor: pointer;
-  font-weight: 600;
+  background: var(--color-gold);
+  color: var(--color-bg);
   font-family: var(--font-kai);
-  transition: background .12s, border-color .12s, color .12s;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background .12s, border-color .12s, color .12s, box-shadow .12s;
 }
-.btn:hover { background: var(--gold-bright); border-color: var(--gold-bright); }
+.btn:hover { background: var(--gold-bright); border-color: var(--gold-bright); color: var(--color-bg); }
+.btn:active { transform: translateY(1px); }
 .btn:disabled { opacity: .35; cursor: not-allowed; }
-.btn:focus-visible { outline: 1px solid var(--color-gold); outline-offset: 2px; }
-/* 次要操作：文字按钮，不与「开始模拟」抢主色块 */
+.btn:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 3px var(--gold-bright); }
+/* 按钮内图标：统一 1.6px 圆头线条（code-drawn，currentColor 继承文字色） */
+.btn svg, .nav-link svg {
+  width: 15px; height: 15px; flex-shrink: 0;
+  stroke: currentColor; fill: none; stroke-width: 1.6;
+  stroke-linecap: round; stroke-linejoin: round;
+}
+
+/* 三级动作：透明文字（仍是 34px 目标，不再是 4px/10px 小字） */
 .btn.ghost, .btn.done {
   background: transparent;
+  border-color: transparent;
   color: var(--color-gold);
-  border: none;
   font-weight: 500;
-  padding: 4px 10px;
 }
 .btn.ghost:hover, .btn.done:hover {
-  background: transparent;
-  border: none;
+  background: var(--panel-2);
+  border-color: transparent;
   color: var(--gold-bright);
 }
-/** 主 CTA（#start / .btn.primary）：套2 绯红，非鎏金 */
+
+/* 主 CTA（#start / .btn.primary）：绯红，每屏唯一主操作 */
 .btn.primary,
 #start {
   background: var(--color-crimson);
@@ -1040,20 +1072,15 @@ main {
 }
 .btn.primary:focus-visible,
 #start:focus-visible {
-  outline: 1px solid var(--color-focus, var(--color-gold));
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-bg), 0 0 0 3px var(--color-crimson);
 }
 
-/**
- * 项目按键标准：米黄实心按钮（与顶栏导航 / 部队加成 / 清空本队同一套）。
- * 用户口径：「凡是我说做成按键的，都要按照项目按键标准来」——
- * 即"看得出是个按钮"：有底色、有描边、与深褐背景强区分，不要裸文字。
- * 用法：class="btn beige"（不要与 .btn.ghost / .btn.done 同时用在需要实心的地方）。
- */
+/* 项目按键标准：米黄实心（中性 / 面板动作） */
 .btn.beige {
   background: var(--beige);
   color: var(--beige-ink);
-  border: 1px solid var(--beige-line);
+  border-color: var(--beige-line);
   font-weight: 700;
 }
 .btn.beige:hover {
@@ -1062,6 +1089,28 @@ main {
   color: var(--beige-ink);
 }
 .btn.beige:disabled { background: var(--beige); color: var(--beige-ink); }
+
+/* 破坏性动作：默认透明不喧哗，hover 转绯红 tint（破坏 ≠ 高亮） */
+.btn.danger {
+  background: transparent;
+  border-color: var(--line-strong);
+  color: var(--red);
+  font-weight: 600;
+}
+.btn.danger:hover {
+  background: var(--red-soft);
+  border-color: var(--red);
+  color: #e08b84;
+}
+
+/* 尺寸档 */
+.btn-sm { min-height: 28px; padding: 0 12px; font-size: 12px; letter-spacing: 1px; gap: 4px; }
+.btn-sm svg { width: 13px; height: 13px; }
+.btn-lg { min-height: 44px; padding: 0 26px; font-size: 15px; letter-spacing: 3px; }
+.btn-lg svg { width: 17px; height: 17px; }
+/* 纯图标正方按钮 */
+.btn.icon { width: 34px; padding: 0; }
+.btn.icon.btn-sm { width: 28px; }
 
 /* 页内提示（替代系统 alert） */
 .app-notice {
@@ -2755,6 +2804,57 @@ main {
 .hd-tab:hover { color: var(--gold-bright); }
 .hd-tab.on { color: var(--gold-bright); border-bottom-color: var(--gold); }
 
+/* 板块 4 · 方案：武将配置存档（用户 2026-11-05：一键切换不同队伍的战法/加点/宝物/红度） */
+.hd-plans { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.hp-bar { display: flex; align-items: center; gap: 10px; }
+.hp-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--font-kai);
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: var(--gold-bright);
+}
+.hp-hint { font-family: inherit; font-size: 11px; letter-spacing: 0; color: var(--text-weak); }
+.hp-count { font-size: 11.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.hp-bar .hp-save { margin-left: auto; padding: 4px 12px; font-size: 12px; }
+.hp-cur {
+  font-size: 12px;
+  color: var(--text-dim);
+  border-left: 2px solid var(--line);
+  padding-left: 8px;
+  line-height: 1.5;
+}
+.hp-cur.tip { color: var(--text-weak); }
+.hp-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 0; }
+.hd-plan {
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.22);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.hd-plan:hover { border-color: rgba(198, 160, 86, 0.55); }
+.hp-head { display: flex; align-items: baseline; gap: 10px; }
+.hp-name { font-family: var(--font-kai); font-size: 13px; letter-spacing: 1px; color: var(--ink); }
+.hp-time { margin-left: auto; font-size: 11px; color: var(--text-weak); font-variant-numeric: tabular-nums; }
+.hp-sum { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+.hp-acts { display: flex; gap: 8px; }
+.hp-acts .btn { padding: 3px 14px; font-size: 12px; }
+.hd-plan-empty {
+  border: 1px dashed var(--line);
+  padding: 18px 14px;
+  text-align: center;
+  color: var(--text-weak);
+  font-size: 12.5px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hd-plan-empty span { font-size: 11.5px; color: var(--text-dim); line-height: 1.6; }
+
 /* 板块 1 · 详情：兵种 / 攻击距离 */
 .hd-meta-row { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 2px 0 6px; }
 .hd-meta { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
@@ -3216,7 +3316,36 @@ main {
   gap: 12px;
   min-height: 58vh;
 }
+/* 左列 = 切换器 + 列表：一次只看一组（热门预设 / 我的预设，用户 2026-11-05 口径），
+   切换器沿用武将详情的下划线页签语言（.hd-tab），右侧小牌是各组条数。 */
+.preset-col { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.preset-tabs {
+  display: flex; gap: 2px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 6px;
+}
+.preset-tabs[hidden] { display: none; }
+.preset-tab {
+  flex: 1 1 0;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-kai); font-size: 13.5px; font-weight: 600; letter-spacing: 2px;
+  padding: 6px 8px; cursor: pointer;
+}
+.preset-tab:hover { color: var(--gold-bright); }
+.preset-tab.on { color: var(--gold-bright); border-bottom-color: var(--gold); }
+.preset-tab .pt-n {
+  font-family: var(--font-sans); font-size: 10.5px; font-weight: 400; letter-spacing: 0;
+  line-height: 16px; padding: 0 5px; color: var(--text-weak);
+  border: 1px solid var(--line); background: var(--panel);
+}
+.preset-tab.on .pt-n {
+  color: var(--gold-bright); border-color: var(--line-strong); background: rgba(196, 154, 54, .14);
+}
 .preset-list {
+  flex: 1 1 auto;
+  min-height: 0;
   border: 1px solid var(--line);
   background: var(--panel-2);
   overflow-y: auto;
@@ -3254,13 +3383,6 @@ main {
 }
 .pi-side.red { color: #d88b7e; border-color: #6c3a32; background: rgba(143, 44, 44, .18); }
 .pi-side.blue { color: #8fb2dd; border-color: #34507c; background: rgba(42, 74, 124, .22); }
-/* 左列表的两个分组标题（热门预设 / 我的预设） */
-.preset-group {
-  font-size: 11px; color: var(--text-weak); letter-spacing: 2px;
-  padding: 2px 4px 5px; margin: 2px 0 6px;
-  border-bottom: 1px solid var(--line);
-}
-.preset-group:not(:first-child) { margin-top: 14px; }
 /* 内置热门条目标签（固定层：删不掉、改不了，只能上场 / 另存为我的预设） */
 .preset-item .pi-tag,
 .preset-detail .pi-tag {
@@ -3789,4 +3911,106 @@ main {
     max-width: 100%; padding-right: 0; font-size: 12px; white-space: nowrap;
     overflow: hidden; text-overflow: ellipsis;
   }
+}
+
+/* ─── 赛季下拉 + 北伐副本副将（2026-11-05） ─── */
+header.app .season-pick {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 3px 6px 3px 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: var(--gold-bright);
+  font-family: var(--font-kai);
+  font-size: 13px;
+  letter-spacing: 1px;
+}
+header.app .season-pick .season-label { color: var(--text-dim); letter-spacing: 0; font-size: 12px; }
+header.app .season-pick select {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  padding: 3px 6px;
+  cursor: pointer;
+}
+header.app .season-pick select:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 1px; }
+
+/* 槽位卡：副将标记（主将 70% + 副将 30% 生效期间一直可见） */
+.slot-meta .sm-deputy {
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  color: var(--gold-bright);
+  font-size: 11px;
+  white-space: nowrap;
+}
+/* 槽位卡战法条：副将主战法（第二格）用虚线描边区分 */
+.slot-skill.deputy { outline: 1px dashed var(--gold); outline-offset: 1px; }
+
+/* 武将详情：副将行 / 第二战法格 */
+.hd-deputy-tag {
+  margin-left: 8px; font-size: 11px; color: var(--gold-bright);
+  font-family: var(--font-sans); letter-spacing: 0;
+}
+.skill-slot-row.deputy { border: 1px dashed var(--gold); cursor: pointer; }
+.skill-slot-row.deputy .sslot-type { color: var(--gold-bright); }
+.hd-deputy-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.hd-deputy-btn {
+  padding: 5px 12px; border-radius: 6px; cursor: pointer;
+  background: var(--beige); color: var(--beige-ink);
+  border: 1px solid var(--beige-line);
+  font-family: var(--font-kai); font-size: 13px; letter-spacing: 1px;
+}
+.hd-deputy-btn:hover { background: var(--beige-hi); border-color: var(--beige-hi); }
+.hd-deputy-btn.ghost { background: transparent; color: #d8c9a8; border-color: var(--line-strong); }
+.hd-deputy-btn.ghost:hover { color: var(--ink); border-color: var(--gold); }
+
+/* 副将详情 / 副将选择器 */
+.deputy-tip {
+  margin: 4px 0 10px;
+  padding: 6px 10px;
+  border-left: 2px solid var(--gold);
+  background: var(--panel-2);
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.hd-deputy-badge {
+  margin-left: 6px; padding: 0 5px; border-radius: 4px;
+  background: var(--gold); color: #241c0e; font-size: 11px; font-family: var(--font-sans);
+}
+.pt-mix {
+  margin-left: 6px; font-size: 11px; color: var(--gold-bright);
+  border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 4px;
+}
+.deputy-search {
+  width: 100%; margin-bottom: 10px; padding: 7px 10px;
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 6px; font-size: 13px;
+}
+.deputy-search:focus { outline: none; border-color: var(--gold); }
+.deputy-grid {
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 7px; padding: 2px; min-height: 220px; max-height: 52vh;
+  overflow-y: auto; align-content: start; grid-auto-rows: min-content;
+}
+.deputy-empty { grid-column: 1 / -1; padding: 24px; text-align: center; color: var(--text-dim); font-size: 13px; }
+
+/* 宝物弹窗：词条池未解出的补录宝物提示 */
+.tp-empty {
+  margin: 0 0 10px;
+  padding: 9px 12px;
+  border: 1px dashed rgba(201, 168, 106, 0.45);
+  border-radius: 6px;
+  color: #c9b98f;
+  font-size: 12px;
+  line-height: 1.6;
 }

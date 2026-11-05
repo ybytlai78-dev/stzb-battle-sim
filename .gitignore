@@ -29,6 +29,10 @@ verify-shots/
 # 会话自检截图目录（临时产物，不入库）
 /.resume-verify/
 
+# RAG 索引产物：由解包数据渲染而成，随包版本变化，不入库
+# （与 NOTICE.md §五「原始数据表不随仓库分发」一致；重建见 scripts/rag/ingest.mts）
+/.rag/
+
 # 生成物备份文件（*.bak-<epoch>）
 *.bak-*
 
@@ -43,3 +47,16 @@ verify-shots/
 /verify/
 /chrome.log
 /.cursor/
+
+# 会话临时目录 / 日志（`.tmp*/` 含截图与 patch 草稿，`输出/` 放真机自检截图与 json）
+/.tmp*/
+/输出/
+*.tmp.log
+/.tmp-tsc.log
+
+# Python 探针脚本的字节码缓存
+__pycache__/
+*.pyc
+
+# 主站 UI 重构的设计稿预览（html / png / jpg：设计过程产物，决策结论进 docs/）
+/design-demos/

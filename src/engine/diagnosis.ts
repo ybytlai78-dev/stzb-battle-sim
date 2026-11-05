@@ -109,6 +109,7 @@ export const STATUS_META: Record<StatusType, { name: string; kind: EffectKind }>
   heal_low_troops: { name: '低兵力恢复', kind: '增益' },
   treasure_extra_pursuit_target: { name: '追击额外目标', kind: '增益' },
   treasure_basic_sweep: { name: '普攻横扫', kind: '增益' },
+  treasure_strike_count: { name: '攻击伤害计次（穿影）', kind: '增益' },
   cowardice_immune: { name: '免疫怯战', kind: '增益' },
   siege: { name: '围困', kind: '减益' },
   sorcery: { name: '妖术', kind: '减益' },

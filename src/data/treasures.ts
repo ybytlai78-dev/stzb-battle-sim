@@ -1,5 +1,5 @@
 /**
- * 率土之滨【稀世】宝物数据（战斗类 36 件 + 锻造词条 36 条 / 11 组）
+ * 率土之滨【稀世】宝物数据（战斗类 40 件 + 锻造词条 36 条 / 11 组）
  *
  * ⚠️ 自动生成，请勿手改 —— 重新生成：`node scripts/gen_treasure_data.mjs`
  *    数据源：`dateyuan/宝物数据.json` ← `node scripts/fetch_gear_data.mjs`（网易官网宝物库服务端 JSON）
@@ -37,6 +37,8 @@ export interface TreasureDef {
   icon: string;
   /** 锻造词条组（1~11；12 = 内政，已剔除） */
   affixGroup: number;
+  /** 'client-hot-20261104' = 官网库尚无、从客户端热更表补录；缺省 = 官网快照 */
+  source?: string;
   /** 本宝物**可锻造出**的词条名（6~7 条，官方数据） */
   affixPool: string[];
   /** 自带特效（1~3 条，slot 升序） */
@@ -1807,6 +1809,179 @@ export const TREASURES: TreasureDef[] = [
           "numbers": [
             2,
             150
+          ]
+        }
+      ]
+    },
+    {
+      "id": 1126,
+      "name": "山君",
+      "type": "长兵",
+      "image": "/gears/gear_1126.jpg",
+      "icon": "/gears/gear_1126_s.jpg",
+      "affixGroup": 0,
+      "affixPool": [],
+      "source": "client-hot-20261104",
+      "effects": [
+        {
+          "slot": 1,
+          "name": "破敌",
+          "desc": "造成的攻击伤害无视目标1.5%的防御属性",
+          "value": 1.5,
+          "unit": "percent",
+          "numbers": [
+            1.5
+          ]
+        },
+        {
+          "slot": 2,
+          "name": "骁锐",
+          "desc": "攻击属性提高1.0%",
+          "value": 1,
+          "unit": "percent",
+          "numbers": [
+            1
+          ]
+        },
+        {
+          "slot": 3,
+          "name": "虎啸",
+          "desc": "行动时主战法每为自身提供30.0%的攻击伤害提升效果，本回合追击战法发动率提升1.0%",
+          "value": 1,
+          "unit": "percent",
+          "numbers": [
+            30,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": 1129,
+      "name": "天问",
+      "type": "其他",
+      "image": "/gears/gear_1129.jpg",
+      "icon": "/gears/gear_1129_s.jpg",
+      "affixGroup": 0,
+      "affixPool": [],
+      "source": "client-hot-20261104",
+      "effects": [
+        {
+          "slot": 1,
+          "name": "不移",
+          "desc": "受攻击伤害降低1.0%",
+          "value": 1,
+          "unit": "percent",
+          "numbers": [
+            1
+          ]
+        },
+        {
+          "slot": 2,
+          "name": "天资",
+          "desc": "谋略属性提高2.5",
+          "value": 2.5,
+          "unit": "point",
+          "numbers": [
+            2.5
+          ]
+        },
+        {
+          "slot": 3,
+          "name": "观星",
+          "desc": "自身首次发动主战法施加的犹豫效果有40.0%几率额外持续1回合",
+          "value": 40,
+          "unit": "percent",
+          "numbers": [
+            40,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "id": 1132,
+      "name": "镂影",
+      "type": "剑",
+      "image": "/gears/gear_1132.jpg",
+      "icon": "/gears/gear_1132_s.jpg",
+      "affixGroup": 0,
+      "affixPool": [],
+      "source": "client-hot-20261104",
+      "effects": [
+        {
+          "slot": 1,
+          "name": "坚忍",
+          "desc": "受到的主动战法伤害降低1.0%",
+          "value": 1,
+          "unit": "percent",
+          "numbers": [
+            1
+          ]
+        },
+        {
+          "slot": 2,
+          "name": "英才",
+          "desc": "攻击、谋略属性提高1.0",
+          "value": 1,
+          "unit": "point",
+          "numbers": [
+            1
+          ]
+        },
+        {
+          "slot": 3,
+          "name": "穿影",
+          "desc": "自身每对敌军造成4次攻击伤害，下次行动前对3距离内敌军单体发动1次攻击（伤害率20.0%）",
+          "value": 20,
+          "unit": "percent",
+          "numbers": [
+            4,
+            3,
+            1,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "id": 1135,
+      "name": "奋髯",
+      "type": "长兵",
+      "image": "/gears/gear_1135.jpg",
+      "icon": "/gears/gear_1135_s.jpg",
+      "affixGroup": 0,
+      "affixPool": [],
+      "source": "client-hot-20261104",
+      "effects": [
+        {
+          "slot": 1,
+          "name": "骁锐",
+          "desc": "攻击属性提高2.5",
+          "value": 2.5,
+          "unit": "point",
+          "numbers": [
+            2.5
+          ]
+        },
+        {
+          "slot": 2,
+          "name": "不移",
+          "desc": "受所有伤害降低1.0%",
+          "value": 1,
+          "unit": "percent",
+          "numbers": [
+            1
+          ]
+        },
+        {
+          "slot": 3,
+          "name": "奋武",
+          "desc": "自身的普通攻击伤害提升效果大于250.0%时，普通攻击无视规避",
+          "value": 250,
+          "unit": "percent",
+          "numbers": [
+            250
           ]
         }
       ]

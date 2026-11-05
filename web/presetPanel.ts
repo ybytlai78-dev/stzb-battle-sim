@@ -1,9 +1,10 @@
 /**
- * 热门预设面板（顶栏「热门预设」）＋ 预设命名弹窗。
+ * 预设面板（顶栏「预设」）＋ 预设命名弹窗。
  *
- * 左列表：搜索框（预设名 / 武将名 / #编号）+ **两个分组**：
+ * 左列：搜索框（预设名 / 武将名 / #编号）+ **两个来源之间的切换**（用户 2026-11-05 口径：一次只看一组）：
  *   · 热门预设（内置固定层，删不掉、改不了，只能上场 / 另存为我的预设）
  *   · 我的预设（用户自己存的，编号升序，可上场 / 重命名 / 删除）
+ * 切换器带各组条数，默认热门；搜索只作用于当前这一组。不注入内置层的老调用方隐藏切换器，只显示「我的预设」。
  * 右详情：三将配置明细（战法 / 兵种转换 + 兵系特性 / 宝物 + 词条 / 加点 / 红度 / 等级）+ 动作（按来源分档）。
  *
  * 面板只负责展示与转发：存档读写、配将区改动都由调用方（main.ts）注入，便于单测直接喂假数据。
@@ -60,6 +61,11 @@ export interface PresetPanelDeps {
 export interface PresetPanelHandle {
   close: () => void;
 }
+
+/** 左列当前看的是哪一组来源 */
+type PresetTab = 'hot' | 'mine';
+
+const TAB_LABEL: Record<PresetTab, string> = { hot: '热门预设', mine: '我的预设' };
 
 const POS_LABEL = ['大营', '中军', '前锋'];
 const FREE_LABEL: Array<[keyof SlotState['freePoints'], string]> = [
@@ -222,6 +228,8 @@ export function openPresetPanel(deps: PresetPanelDeps): PresetPanelHandle {
   let query = '';
   let selectedId: string | null = null;
   let armedDelete = false;
+  /** 当前看的那一组：默认热门；没有内置层 / 热门为空时落到「我的预设」 */
+  let tab: PresetTab = (deps.getHotPresets?.() ?? []).length ? 'hot' : 'mine';
 
   const mask = document.createElement('div');
   mask.className = 'modal-mask page-mask';
@@ -233,13 +241,16 @@ export function openPresetPanel(deps: PresetPanelDeps): PresetPanelHandle {
     : '';
   modal.innerHTML = `
     <div class="m-head">
-      <h3>热门预设</h3>
+      <h3>预设</h3>
       <input class="preset-search" type="text" placeholder="搜索预设名 / 武将名 / #编号…" />
       ${uploadBtn}
       <span class="m-close">×</span>
     </div>
     <div class="m-body preset-body">
-      <div class="preset-list"></div>
+      <div class="preset-col">
+        <div class="preset-tabs" role="tablist" aria-label="预设来源"></div>
+        <div class="preset-list"></div>
+      </div>
       <div class="preset-detail"></div>
     </div>
     <div class="m-foot preset-foot">
@@ -250,6 +261,7 @@ export function openPresetPanel(deps: PresetPanelDeps): PresetPanelHandle {
       <button class="btn beige preset-done" type="button">完成</button>
     </div>
   `;
+  const tabsBar = modal.querySelector('.preset-tabs') as HTMLElement;
   const listBox = modal.querySelector('.preset-list') as HTMLElement;
   const detailBox = modal.querySelector('.preset-detail') as HTMLElement;
   const countBox = modal.querySelector('.preset-count') as HTMLElement;
@@ -259,12 +271,6 @@ export function openPresetPanel(deps: PresetPanelDeps): PresetPanelHandle {
 
   /** 内置热门（固定层）；未注入 = 空 */
   const hots = (): TeamPreset[] => deps.getHotPresets?.() ?? [];
-
-  /** 两组各自的命中结果（搜索词对两组都生效；组内按编号升序） */
-  const visible = (): { hot: TeamPreset[]; mine: TeamPreset[] } => ({
-    hot: searchPresets(hots(), query, heroNameOf),
-    mine: searchPresets(deps.getPresets(), query, heroNameOf),
-  });
 
   /** 一条列表项：热门 = 金色「热门」标签 + 内置说明；我的 = #编号 + 更新时间 */
   const presetItem = (p: TeamPreset): HTMLElement => {
@@ -293,42 +299,84 @@ export function openPresetPanel(deps: PresetPanelDeps): PresetPanelHandle {
     return item;
   };
 
-  const renderList = (): void => {
-    const all = deps.getPresets();
-    const hotAll = hots();
-    const { hot, mine } = visible();
-    const items = [...hot, ...mine];
-    if (selectedId && !items.some((p) => p.id === selectedId)) selectedId = null;
-    if (!selectedId && items.length) selectedId = items[0].id;
-
-    countBox.textContent = query.trim()
-      ? `筛选出 ${items.length} / ${hotAll.length + all.length} 条`
-      : `热门 ${hotAll.length} 条 · 我的 ${all.length} / ${PRESET_MAX} 条`;
-    listBox.innerHTML = '';
-    if (items.length === 0) {
-      listBox.innerHTML = hotAll.length + all.length
-        ? `<div class="preset-empty">没有匹配「${query.trim()}」的预设</div>`
-        : `<div class="preset-empty">暂无预设<br /><span>配置好一边队伍后，点该队标题行的「保存预设」，或用右下角「保存红队 / 保存蓝队」</span></div>`;
+  /** 左上切换器：两组各一个页签（带各组条数）；老调用方没注入内置层 → 整条隐藏 */
+  const renderTabs = (): void => {
+    if (!deps.getHotPresets) {
+      tabsBar.hidden = true;
+      tabsBar.innerHTML = '';
       return;
     }
-    // 热门（固定层）在前、我的在后；空组不渲染标题
-    const group = (title: string, list: TeamPreset[]): void => {
-      if (!list.length) return;
-      const box = document.createElement('div');
-      box.className = 'preset-group';
-      box.textContent = title;
-      listBox.appendChild(box);
-      for (const p of list) listBox.appendChild(presetItem(p));
-    };
-    group(`热门预设 · ${hot.length}`, hot);
-    group(`我的预设 · ${mine.length}`, mine);
+    tabsBar.hidden = false;
+    const counts: Record<PresetTab, number> = { hot: hots().length, mine: deps.getPresets().length };
+    tabsBar.innerHTML = '';
+    for (const key of ['hot', 'mine'] as PresetTab[]) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = `preset-tab${tab === key ? ' on' : ''}`;
+      btn.dataset.tab = key;
+      btn.setAttribute('role', 'tab');
+      btn.setAttribute('aria-selected', String(tab === key));
+      btn.innerHTML = `${TAB_LABEL[key]}<span class="pt-n">${counts[key]}</span>`;
+      btn.addEventListener('click', () => {
+        if (tab === key) return;
+        tab = key;
+        armedDelete = false;
+        renderList();
+        renderDetail();
+      });
+      tabsBar.appendChild(btn);
+    }
+  };
+
+  /** 空态：分「搜不到」与「这一组本来就空」两种，按组给下一步 */
+  const emptyHtml = (poolSize: number, filtered: boolean): string => {
+    if (filtered && poolSize > 0) {
+      const other = tab === 'hot' ? '「我的预设」' : '「热门预设」';
+      return `<div class="preset-empty">没有匹配「${query.trim()}」的预设<br /><span>换个关键词，或切到${other}看看</span></div>`;
+    }
+    if (tab === 'hot') {
+      return `<div class="preset-empty">热门预设暂时是空的<br /><span>切到「我的预设」看看自己存的队伍</span></div>`;
+    }
+    return `<div class="preset-empty">还没有自己的预设<br /><span>配置好一边队伍后，点该队标题行的「保存预设」，或用右下角「保存红队 / 保存蓝队」；也可以从「热门预设」里「另存为我的预设」</span></div>`;
+  };
+
+  /**
+   * 只渲染当前这一组（切换器已写明组名与条数，列表里不再重复分组标题）：
+   * 选中项若不在本组 → 清空并落到本组第一条；搜索只作用于本组。
+   */
+  const renderList = (): void => {
+    const hotAll = hots();
+    const mineAll = deps.getPresets();
+    if (!deps.getHotPresets) tab = 'mine';
+    const pool = tab === 'hot' ? hotAll : mineAll;
+    const list = searchPresets(pool, query, heroNameOf);
+    if (selectedId && !list.some((p) => p.id === selectedId)) selectedId = null;
+    if (!selectedId && list.length) selectedId = list[0].id;
+
+    renderTabs();
+
+    const filtered = query.trim().length > 0;
+    countBox.textContent = filtered
+      ? `筛选出 ${list.length} / ${pool.length} 条`
+      : tab === 'hot'
+        ? `热门预设 ${hotAll.length} 条`
+        : `我的预设 ${mineAll.length} / ${PRESET_MAX} 条`;
+
+    listBox.innerHTML = '';
+    if (list.length === 0) {
+      listBox.innerHTML = emptyHtml(pool.length, filtered);
+      return;
+    }
+    for (const p of list) listBox.appendChild(presetItem(p));
   };
 
   const renderDetail = (): void => {
     const preset = [...hots(), ...deps.getPresets()].find((p) => p.id === selectedId);
     detailBox.innerHTML = '';
     if (!preset) {
-      detailBox.innerHTML = `<div class="hist-empty">从左侧选择一条预设查看详情</div>`;
+      detailBox.innerHTML = `<div class="hist-empty">${
+        tab === 'hot' ? '从左侧选一支热门队伍查看详情' : '从左侧选一条自己的预设查看详情'
+      }</div>`;
       return;
     }
     const hot = isHotId(preset.id);
@@ -397,7 +445,10 @@ export function openPresetPanel(deps: PresetPanelDeps): PresetPanelHandle {
         onSubmit: (name) => {
           const r = deps.saveAsMine!(preset, name);
           if (r.error) return r.error;
-          if (r.presetId) selectedId = r.presetId;
+          if (r.presetId) {
+            selectedId = r.presetId;
+            tab = 'mine'; // 复制出来的条目落在「我的预设」，留在热门组会看不到它
+          }
           renderList();
           renderDetail();
           return null;
@@ -448,7 +499,10 @@ export function openPresetPanel(deps: PresetPanelDeps): PresetPanelHandle {
       defaultSide: 'red',
       onSaved: (presetId) => {
         armedDelete = false;
-        if (presetId) selectedId = presetId;
+        if (presetId) {
+          selectedId = presetId;
+          tab = 'mine'; // 识图结果存进「我的预设」，直接切过去看刚认出来的那一条
+        }
         renderList();
         renderDetail();
       },
@@ -464,7 +518,10 @@ export function openPresetPanel(deps: PresetPanelDeps): PresetPanelHandle {
         onSubmit: (name) => {
           const r = deps.saveCurrent(side, name);
           if (r.error) return r.error;
-          if (r.presetId) selectedId = r.presetId;
+          if (r.presetId) {
+            selectedId = r.presetId;
+            tab = 'mine'; // 新存的预设一定在「我的预设」：切过去并选中，省得用户自己在两组间找
+          }
           renderList();
           renderDetail();
           return null;

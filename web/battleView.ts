@@ -816,10 +816,20 @@ function renderEvents(
         break;
       }
       case 'prepare_start':
-        add('status', `${nm(ev.unitId)} 开始准备「${ev.skillName}」`);
+        add(
+          'status',
+          ev.skippedTurns
+            ? `${nm(ev.unitId)} 开始准备「${ev.skillName}」（跳过 ${ev.skippedTurns} 回合准备，仍需 ${ev.remaining ?? 1} 回合）`
+            : `${nm(ev.unitId)} 开始准备「${ev.skillName}」`
+        );
         break;
       case 'prepare_skip':
-        add('good', `${nm(ev.unitId)} 跳过准备，直接发动「${ev.skillName}」`);
+        add(
+          'good',
+          ev.turns
+            ? `${nm(ev.unitId)} 跳过 ${ev.turns} 回合准备，直接发动「${ev.skillName}」`
+            : `${nm(ev.unitId)} 跳过准备，直接发动「${ev.skillName}」`
+        );
         break;
       case 'prepare_end':
         // 只标「准备完成」：紧接着的 skill_cast 才是「发动」那一次，避免同一回合两行「发动」被读成两次发动

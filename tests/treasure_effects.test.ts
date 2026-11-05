@@ -79,7 +79,8 @@ describe('宝物引擎 · 自带特效换算', () => {
     const carrier = { gender: 'female', cost: 3 } as General;
     const allies = [{ general: { id: 'back', position: '大营' } } as unknown as UnitState];
     // 走「回合开始钩子」而非准备阶段的特效（不产出常驻状态）
-    const ROUND_HOOK_ONLY = ['再战'];
+    // 虎啸（山君）：数值在**行动时**由 triggerTreasureActStart 现算（增伤合计 ÷ 30%），也不产出常驻状态
+    const ROUND_HOOK_ONLY = ['再战', '虎啸'];
     const lost: string[] = [];
     for (const t of TREASURES) {
       const labels = new Set(
