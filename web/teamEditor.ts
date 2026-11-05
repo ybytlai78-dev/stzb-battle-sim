@@ -2328,7 +2328,7 @@ export function openHistoryPanel(records: BattleRecord[], onClear?: () => void, 
 }
 
 /**
- * 宝物三步弹窗（P4）：① 选宝物（38 件稀世网格）② 选词条（该宝物词条池 6~7 条）
+ * 宝物三步弹窗（P4）：① 选宝物（40 件稀世网格）② 选词条（该宝物词条池 6~7 条）
  * ③ 选数值（官方区间内任意值，滑杆刻度用蓝/粉/红标注）。确认后写回 `SlotState.treasure`（默认 10 级）。
  */
 export function openTreasurePicker(opts: {
@@ -2401,8 +2401,14 @@ export function openTreasurePicker(opts: {
         </button>`;
       })
       .join('');
+    // 客户端热更补录的四件新稀世（1126/1129/1132/1135）锻造词条池尚未解出 → 只能直接用自带特效
+    const emptyHint =
+      t.affixPool.length === 0
+        ? `<div class="tp-empty">该宝物由客户端热更表补录，锻造词条池尚未解出 —— 当前只能使用自带特效。</div>`
+        : '';
     return `${stepBar()}
       <div class="tp-sub">「${t.name}」可锻造出的词条（第 4 条 · ${t.affixPool.length} 条随机其一；前 3 条为宝物自带特效）</div>
+      ${emptyHint}
       <div class="tp-affixes">${rows}</div>
       <div class="tp-foot"><button class="tp-back">← 上一步</button><button class="tp-skip">不锻造（仅用自带特效）</button></div>`;
   };
