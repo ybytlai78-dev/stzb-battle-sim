@@ -29,6 +29,10 @@
 .report-dock .dock-result {
   display: none;
 }
+/* 回合号包裹层：桌面 display:contents，等于没有这一层（手机端在媒体查询里改成可滚列） */
+.battle-view .dv-rail .dv-rounds {
+  display: contents;
+}
 
 /* 顶栏「更多」：桌面端平铺（外观与改动前一致），手机端才折成下拉 */
 .nav-more {
@@ -190,9 +194,27 @@
   }
 
   /* ── A3. 战报详情：右侧竖向按钮放大到 32px 触控目标 ─────────────────────────────
-     原来 22px 高、字号 11px，手机横屏下几乎点不准（实测 ≈24px）。 */
-  .battle-view .dv-rail { min-width: 34px; }
+     原来 22px 高、字号 11px，手机横屏下几乎点不准（实测 ≈24px）。
+     ⚠️ 放大后 8 回合的竖列会超出 390px 屏高（4 个控制键 + 回合号 = 12 项 × 32px），
+     所以回合号那一段自己滚（控制键固定不动），见下面的 .dv-rounds。 */
+  .battle-view .dv-rail {
+    min-width: 34px;
+    overflow: hidden;
+    padding-block: 2px;
+  }
   .battle-view .dv-rail button { min-height: 32px; font-size: 12px; }
+  .battle-view .dv-rail .dv-rounds {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    padding-block: 2px;
+  }
+  .battle-view .dv-rail .dv-rounds::-webkit-scrollbar { display: none; }
   /* 结果顶栏被隐藏后，胜负与回合数落在底栏左侧（见 main.ts 的 .dock-result） */
   .report-dock .dock-result {
     display: inline-flex;
@@ -204,6 +226,24 @@
     white-space: nowrap;
     font-size: 12px;
     color: var(--text-dim);
+  }
+
+  /* ── A4. 战报「简略」页：立绘卡按可用高度缩放 ────────────────────────────────
+     卡面基础层是 width:100% + aspect-ratio 242:350，只按列宽定尺寸：
+     三将时每列窄、高度自然够；**单将时一列独吞宽度，卡被撑到 220 宽（≈318 高）**，
+     手机横屏可用高只有 ~250 —— 卡片底部（卡内兵力条、等级）直接被裁掉。
+     这里改成「宽 = min(列宽, 高度预算换出来的宽)」，两种情形都等比、都不裁。 */
+  .report-view .sum-hero {
+    align-items: center;
+    container-type: size;
+  }
+  .report-view .sum-hero .sh-card {
+    width: min(100%, calc((100cqh - 62px) * 242 / 350));
+    height: auto;
+    max-width: 100%;
+    flex: 0 0 auto;
+    align-self: center;
+    aspect-ratio: 242 / 350;
   }
 
   /* ── B1. 首页「势力 / 兵种」折叠成一行 + 已选摘要 ───────────────────────────────

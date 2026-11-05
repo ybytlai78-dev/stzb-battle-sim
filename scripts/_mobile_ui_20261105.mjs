@@ -455,6 +455,98 @@ check('战报：底栏左侧显示胜负与回合', dockResult.display !== 'none
 });
 check('战报：右侧竖排按钮 ≥32px 触控目标', railBtnBox && railBtnBox.h >= 31, railBtnBox);
 
+// ── A5：回合号可滚（放大到 32px 后 8 回合会超出 390 屏高）────────────────────
+const railScroll = await evaluate(`(() => {
+  const box = document.querySelector('.battle-view .dv-rail .dv-rounds');
+  if (!box) return null;
+  const before = box.scrollTop;
+  box.scrollTop = box.scrollHeight;
+  const after = box.scrollTop;
+  const tabs = [...box.querySelectorAll('.rtab')].map((t) => t.textContent);
+  return { clientH: +box.clientHeight.toFixed(1), scrollH: +box.scrollHeight.toFixed(1), before, after, tabs };
+})()`);
+await shot('13-phone-rail-scroll.png');
+check(
+  '战报：回合号超出时可以滚到底',
+  railScroll && railScroll.scrollH > railScroll.clientH && railScroll.after > 0,
+  railScroll,
+);
+// 点最后一回合后，那个回合号要自动滚进可视区
+await evaluate(`(() => {
+  const box = document.querySelector('.battle-view .dv-rail .dv-rounds');
+  const tabs = [...box.querySelectorAll('.rtab')];
+  tabs[tabs.length - 1]?.click();
+})()`);
+await sleep(300);
+const lastTabVisible = await evaluate(`(() => {
+  const box = document.querySelector('.battle-view .dv-rail .dv-rounds');
+  const tabs = [...box.querySelectorAll('.rtab')];
+  const last = tabs[tabs.length - 1];
+  const b = box.getBoundingClientRect();
+  const r = last.getBoundingClientRect();
+  return { inside: r.top >= b.top - 1 && r.bottom <= b.bottom + 1, scrollTop: +box.scrollTop.toFixed(1) };
+})()`);
+check('战报：切到最后一回合时自动滚进视野', lastTabVisible.inside, lastTabVisible);
+
+// ── A4：简略页立绘卡按高度缩放（单将时不再被撑大裁掉底部）──────────────────
+await click('.report-tabs [data-mode="summary"]');
+await waitFor('.report-view .sum-roster', 8000);
+await sleep(400);
+const summaryFit = await evaluate(`(() => {
+  const card = document.querySelector('.report-view .sum-hero .sh-card');
+  const roster = document.querySelector('.report-view .sum-roster');
+  const view = document.querySelector('.report-view');
+  if (!card || !roster || !view) return null;
+  const c = card.getBoundingClientRect();
+  const v = view.getBoundingClientRect();
+  const bar = document.querySelector('.report-view .sum-hero .troopbar');
+  const barR = bar ? bar.getBoundingClientRect() : null;
+  const cards = [...document.querySelectorAll('.report-view .sum-hero .sh-card')].map((el) => {
+    const r = el.getBoundingClientRect();
+    return { w: +r.width.toFixed(0), h: +r.height.toFixed(0), bottom: +r.bottom.toFixed(0) };
+  });
+  return {
+    card: { w: +c.width.toFixed(0), h: +c.height.toFixed(0), bottom: +c.bottom.toFixed(0) },
+    viewBottom: +v.bottom.toFixed(0),
+    troopbarVisible: barR ? barR.bottom <= v.bottom + 1 && barR.height > 0 : null,
+    cards,
+  };
+})()`);
+await shot('12-phone-summary.png');
+check(
+  '简略页：单将立绘卡不超出可视区、卡内兵力条可见',
+  summaryFit &&
+    summaryFit.card.bottom <= summaryFit.viewBottom + 1 &&
+    summaryFit.troopbarVisible === true &&
+    summaryFit.card.h < 300,
+  summaryFit,
+);
+
+// 三将反证：单将的修复不能把「本来正常的三将」压变形（克隆两张卡模拟满编）
+const threeUp = await evaluate(`(() => {
+  const side = document.querySelector('.report-view .sum-red') || document.querySelector('.report-view .sum-blue');
+  if (!side) return null;
+  const first = side.querySelector('.sum-hero');
+  if (!first) return null;
+  const clones = [first.cloneNode(true), first.cloneNode(true)];
+  clones.forEach((c) => side.appendChild(c));
+  const view = document.querySelector('.report-view').getBoundingClientRect();
+  const cards = [...side.querySelectorAll('.sh-card')].map((el) => {
+    const r = el.getBoundingClientRect();
+    return { w: +r.width.toFixed(0), h: +r.height.toFixed(0), ratio: +(r.width / r.height).toFixed(3), bottom: +r.bottom.toFixed(0) };
+  });
+  clones.forEach((c) => c.remove());
+  return { cards, viewBottom: +view.bottom.toFixed(0) };
+})()`);
+await shot('14-phone-summary-three.png');
+check(
+  '简略页：三将满编时卡片仍按 242:350 等比、不溢出',
+  threeUp &&
+    threeUp.cards.length === 3 &&
+    threeUp.cards.every((c) => Math.abs(c.ratio - 242 / 350) < 0.02 && c.bottom <= threeUp.viewBottom + 1),
+  threeUp,
+);
+
 // ── 桌面 1440×900 反证：以上全部保持原样 ──────────────────────────────────
 await setViewport(1440, 900, { mobile: false, touch: false, scale: 1 });
 await goto(url);
