@@ -2804,6 +2804,57 @@ main {
 .hd-tab:hover { color: var(--gold-bright); }
 .hd-tab.on { color: var(--gold-bright); border-bottom-color: var(--gold); }
 
+/* 板块 4 · 方案：武将配置存档（用户 2026-11-05：一键切换不同队伍的战法/加点/宝物/红度） */
+.hd-plans { display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+.hp-bar { display: flex; align-items: center; gap: 10px; }
+.hp-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--font-kai);
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: var(--gold-bright);
+}
+.hp-hint { font-family: inherit; font-size: 11px; letter-spacing: 0; color: var(--text-weak); }
+.hp-count { font-size: 11.5px; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.hp-bar .hp-save { margin-left: auto; padding: 4px 12px; font-size: 12px; }
+.hp-cur {
+  font-size: 12px;
+  color: var(--text-dim);
+  border-left: 2px solid var(--line);
+  padding-left: 8px;
+  line-height: 1.5;
+}
+.hp-cur.tip { color: var(--text-weak); }
+.hp-list { display: flex; flex-direction: column; gap: 8px; overflow-y: auto; min-height: 0; }
+.hd-plan {
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.22);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.hd-plan:hover { border-color: rgba(198, 160, 86, 0.55); }
+.hp-head { display: flex; align-items: baseline; gap: 10px; }
+.hp-name { font-family: var(--font-kai); font-size: 13px; letter-spacing: 1px; color: var(--ink); }
+.hp-time { margin-left: auto; font-size: 11px; color: var(--text-weak); font-variant-numeric: tabular-nums; }
+.hp-sum { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+.hp-acts { display: flex; gap: 8px; }
+.hp-acts .btn { padding: 3px 14px; font-size: 12px; }
+.hd-plan-empty {
+  border: 1px dashed var(--line);
+  padding: 18px 14px;
+  text-align: center;
+  color: var(--text-weak);
+  font-size: 12.5px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.hd-plan-empty span { font-size: 11.5px; color: var(--text-dim); line-height: 1.6; }
+
 /* 板块 1 · 详情：兵种 / 攻击距离 */
 .hd-meta-row { display: flex; flex-wrap: wrap; gap: 4px 18px; margin: 2px 0 6px; }
 .hd-meta { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
@@ -3265,7 +3316,36 @@ main {
   gap: 12px;
   min-height: 58vh;
 }
+/* 左列 = 切换器 + 列表：一次只看一组（热门预设 / 我的预设，用户 2026-11-05 口径），
+   切换器沿用武将详情的下划线页签语言（.hd-tab），右侧小牌是各组条数。 */
+.preset-col { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.preset-tabs {
+  display: flex; gap: 2px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 6px;
+}
+.preset-tabs[hidden] { display: none; }
+.preset-tab {
+  flex: 1 1 0;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  background: none; border: none; border-bottom: 2px solid transparent;
+  color: var(--color-text-muted);
+  font-family: var(--font-kai); font-size: 13.5px; font-weight: 600; letter-spacing: 2px;
+  padding: 6px 8px; cursor: pointer;
+}
+.preset-tab:hover { color: var(--gold-bright); }
+.preset-tab.on { color: var(--gold-bright); border-bottom-color: var(--gold); }
+.preset-tab .pt-n {
+  font-family: var(--font-sans); font-size: 10.5px; font-weight: 400; letter-spacing: 0;
+  line-height: 16px; padding: 0 5px; color: var(--text-weak);
+  border: 1px solid var(--line); background: var(--panel);
+}
+.preset-tab.on .pt-n {
+  color: var(--gold-bright); border-color: var(--line-strong); background: rgba(196, 154, 54, .14);
+}
 .preset-list {
+  flex: 1 1 auto;
+  min-height: 0;
   border: 1px solid var(--line);
   background: var(--panel-2);
   overflow-y: auto;
@@ -3303,13 +3383,6 @@ main {
 }
 .pi-side.red { color: #d88b7e; border-color: #6c3a32; background: rgba(143, 44, 44, .18); }
 .pi-side.blue { color: #8fb2dd; border-color: #34507c; background: rgba(42, 74, 124, .22); }
-/* 左列表的两个分组标题（热门预设 / 我的预设） */
-.preset-group {
-  font-size: 11px; color: var(--text-weak); letter-spacing: 2px;
-  padding: 2px 4px 5px; margin: 2px 0 6px;
-  border-bottom: 1px solid var(--line);
-}
-.preset-group:not(:first-child) { margin-top: 14px; }
 /* 内置热门条目标签（固定层：删不掉、改不了，只能上场 / 另存为我的预设） */
 .preset-item .pi-tag,
 .preset-detail .pi-tag {
@@ -3839,3 +3912,94 @@ main {
     overflow: hidden; text-overflow: ellipsis;
   }
 }
+
+/* ─── 赛季下拉 + 北伐副本副将（2026-11-05） ─── */
+header.app .season-pick {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 3px 6px 3px 8px;
+  background: var(--panel-2);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  color: var(--gold-bright);
+  font-family: var(--font-kai);
+  font-size: 13px;
+  letter-spacing: 1px;
+}
+header.app .season-pick .season-label { color: var(--text-dim); letter-spacing: 0; font-size: 12px; }
+header.app .season-pick select {
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-family: var(--font-sans);
+  font-size: 12.5px;
+  padding: 3px 6px;
+  cursor: pointer;
+}
+header.app .season-pick select:focus-visible { outline: 2px solid var(--gold-bright); outline-offset: 1px; }
+
+/* 槽位卡：副将标记（主将 70% + 副将 30% 生效期间一直可见） */
+.slot-meta .sm-deputy {
+  margin-left: 6px;
+  padding: 0 5px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  color: var(--gold-bright);
+  font-size: 11px;
+  white-space: nowrap;
+}
+/* 槽位卡战法条：副将主战法（第二格）用虚线描边区分 */
+.slot-skill.deputy { outline: 1px dashed var(--gold); outline-offset: 1px; }
+
+/* 武将详情：副将行 / 第二战法格 */
+.hd-deputy-tag {
+  margin-left: 8px; font-size: 11px; color: var(--gold-bright);
+  font-family: var(--font-sans); letter-spacing: 0;
+}
+.skill-slot-row.deputy { border: 1px dashed var(--gold); cursor: pointer; }
+.skill-slot-row.deputy .sslot-type { color: var(--gold-bright); }
+.hd-deputy-row { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.hd-deputy-btn {
+  padding: 5px 12px; border-radius: 6px; cursor: pointer;
+  background: var(--beige); color: var(--beige-ink);
+  border: 1px solid var(--beige-line);
+  font-family: var(--font-kai); font-size: 13px; letter-spacing: 1px;
+}
+.hd-deputy-btn:hover { background: var(--beige-hi); border-color: var(--beige-hi); }
+.hd-deputy-btn.ghost { background: transparent; color: #d8c9a8; border-color: var(--line-strong); }
+.hd-deputy-btn.ghost:hover { color: var(--ink); border-color: var(--gold); }
+
+/* 副将详情 / 副将选择器 */
+.deputy-tip {
+  margin: 4px 0 10px;
+  padding: 6px 10px;
+  border-left: 2px solid var(--gold);
+  background: var(--panel-2);
+  color: var(--text-dim);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.hd-deputy-badge {
+  margin-left: 6px; padding: 0 5px; border-radius: 4px;
+  background: var(--gold); color: #241c0e; font-size: 11px; font-family: var(--font-sans);
+}
+.pt-mix {
+  margin-left: 6px; font-size: 11px; color: var(--gold-bright);
+  border: 1px solid var(--line-strong); border-radius: 4px; padding: 0 4px;
+}
+.deputy-search {
+  width: 100%; margin-bottom: 10px; padding: 7px 10px;
+  background: var(--panel-2); color: var(--text);
+  border: 1px solid var(--line); border-radius: 6px; font-size: 13px;
+}
+.deputy-search:focus { outline: none; border-color: var(--gold); }
+.deputy-grid {
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 7px; padding: 2px; min-height: 220px; max-height: 52vh;
+  overflow-y: auto; align-content: start; grid-auto-rows: min-content;
+}
+.deputy-empty { grid-column: 1 / -1; padding: 24px; text-align: center; color: var(--text-dim); font-size: 13px; }

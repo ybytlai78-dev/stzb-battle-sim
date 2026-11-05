@@ -12,7 +12,18 @@ import { TEAM_KEY, readTeamState, writeTeamState } from './teamStore';
 import { runBattle } from '../src/engine/combat';
 import type { General } from '../src/engine/types';
 import type { BattleReport } from '../src/engine/types';
-import { buildGeneral, freePointBudget, getHeroById, heroIdOf } from './heroes';
+import { freePointBudget, getHeroById, heroIdOf } from './heroes';
+import { SKILL_REGISTRY } from '../src/data/skills';
+import {
+  buildGeneralForSlot,
+  deputyBudget,
+  deputyRejectReason,
+  equipLimit,
+  normalizeDeputy,
+  readSeasonMode,
+  writeSeasonMode,
+  type SeasonMode,
+} from './deputy';
 import {
   emptyEditor,
   renderTeamEditor,
@@ -29,6 +40,7 @@ import {
 import { showNotice } from './notice';
 import { openPresetNameDialog, openPresetPanel, type PresetActionResult, type PresetPanelDeps } from './presetPanel';
 import { isHotId, loadHotPresets } from './hotPresets';
+import { applyLoadoutToSlot, rememberedLoadout, rememberSlot, rememberSlots } from './heroLoadout';
 import {
   PRESET_MAX,
   SIDE_LABEL,
@@ -70,6 +82,11 @@ let seed = Math.floor(Math.random() * 1000000);
 /** 双方士气（影响战法发动率，120 → 系数 1.12），默认 120 */
 let redMorale = 120;
 let blueMorale = 120;
+/**
+ * 赛季模式（顶栏下拉）：`classic` = 引擎现状；`beifa` = 北伐副本，启用副将机制。
+ * 记忆在 localStorage（`stzb_season_mode`），initApp 时读回；合成逻辑见 `web/deputy.ts`。
+ */
+let seasonMode: SeasonMode = 'classic';
 
 /**
  * 底栏版本标记 = **主站版本**（`web/changelog.ts` 的 `SITE_VERSION`，即公告最新一条的版本号）。
@@ -131,7 +148,7 @@ function recordBattle(report: BattleReport, my: General[], enemy: General[]): vo
   saveHistory();
 }
 
-// ─── 热门预设（内置固定层）＋ 我的预设（localStorage 持久化，单队快照）───
+// ─── 预设：热门预设（内置固定层）＋ 我的预设（localStorage 持久化，单队快照）───
 
 /**
  * 内置热门预设：随站发布、用户删不掉也改不了（见 `web/hotPresets.ts`），
@@ -251,7 +268,7 @@ function usePresetAsDummy(preset: TeamPreset): void {
   enterLab();
 }
 
-/** 「热门预设」面板依赖：主站顶栏与伤害测试实验室共用（内置热门层 + 我的预设层）。
+/** 「预设」面板依赖：主站顶栏与伤害测试实验室共用（内置热门层 + 我的预设层）。
  *  `dummyMode` = 从实验室里打开（主按钮变「设为木桩队伍」，上场按钮退成米黄 beige）。 */
 function presetPanelDeps(opts: { dummyMode?: boolean } = {}): PresetPanelDeps {
   return {
@@ -271,6 +288,10 @@ function presetPanelDeps(opts: { dummyMode?: boolean } = {}): PresetPanelDeps {
 // ─── 处理 ───
 
 const handlers: EditorHandlers = {
+  // 动态读：顶栏切换赛季后，已渲染的配将区下次 redraw 自动跟上
+  get season() {
+    return seasonMode;
+  },
   onPickHero(team, idx, heroId) {
     // 同队互斥校验（SP / 同名武将不能同队）
     const conflict = mutualConflict(state[team], heroId);
@@ -283,7 +304,9 @@ const handlers: EditorHandlers = {
     state[team].forEach((s, i) => {
       if (s.heroId === heroId && i !== idx) state[team][i] = emptySlot();
     });
-    state[team][idx] = { ...emptySlot(), heroId };
+    // 回池再上阵不再清空配置（用户 2026-11-05）：有档案就把上次的战法 / 加点 / 红度 / 宝物 / 兵种 / 陈寿带回来。
+    const remembered = rememberedLoadout(heroId);
+    state[team][idx] = remembered ? applyLoadoutToSlot(heroId, remembered) : { ...emptySlot(), heroId };
     refresh();
   },
   onMoveSlot(fromTeam, fromIdx, toTeam, toIdx) {
@@ -323,8 +346,13 @@ const handlers: EditorHandlers = {
   },
   onAddSkill(team, idx, skillId) {
     const slot = state[team][idx];
-    if (slot.extraSkillIds.length >= 2) {
-      showNotice('每名武将最多携带 2 个装配战法（主战法不占位，共最多 3 个）');
+    const limit = equipLimit(slot, seasonMode);
+    if (slot.extraSkillIds.length >= limit) {
+      showNotice(
+        limit === 1
+          ? '北伐副本佩戴副将后，副将主战法占主将第二战法格，主将只能再带 1 个装配战法'
+          : '每名武将最多携带 2 个装配战法（主战法不占位，共最多 3 个）'
+      );
       return;
     }
     if (slot.extraSkillIds.includes(skillId)) return;
@@ -402,6 +430,56 @@ const handlers: EditorHandlers = {
       slot.freePoints[k] -= cut;
       used -= cut;
     }
+    // 副将等级跟随主将 → 等级下调时副将加点预算同步收缩
+    if (slot.deputy) {
+      const next = normalizeDeputy(slot.deputy, slot.heroId, slot.level);
+      if (next) slot.deputy = next;
+    }
+    refresh();
+  },
+  onSetDeputy(team, idx, deputy) {
+    const slot = state[team][idx];
+    if (!slot.heroId) return;
+    if (!deputy) {
+      delete slot.deputy;
+      refresh();
+      return;
+    }
+    const reason = deputyRejectReason(slot.heroId, deputy.heroId);
+    if (reason) {
+      showNotice(reason);
+      return;
+    }
+    // 队内唯一：同一张卡不能既上阵 / 既当别人的副将
+    const dup = state[team].find(
+      (s, i) => i !== idx && (s.heroId === deputy.heroId || s.deputy?.heroId === deputy.heroId)
+    );
+    if (dup) {
+      showNotice(`「${getHeroById(deputy.heroId)?.name ?? deputy.heroId}」已在${SIDE_LABEL[team]}（同一队伍不能重复武将）`);
+      return;
+    }
+    slot.deputy = deputy;
+    // 第二格被副将主战法占用 → 主将装配战法保留到上限（1 个）
+    const limit = equipLimit(slot, seasonMode);
+    const dropped = slot.extraSkillIds.slice(limit);
+    slot.extraSkillIds = slot.extraSkillIds.slice(0, limit);
+    if (dropped.length) {
+      const names = dropped.map((id) => SKILL_REGISTRY[id]?.name ?? id).join('、');
+      showNotice(`副将主战法占用第二战法格，已卸下「${names}」`);
+    }
+    refresh();
+  },
+  takenHeroIds(team) {
+    return state[team].flatMap((s) => [s.heroId, s.deputy?.heroId].filter((id): id is string => !!id));
+  },
+  onSetDeputyFreePoints(team, idx, key, value) {
+    const slot = state[team][idx];
+    if (!slot.heroId || !slot.deputy) return;
+    const budget = deputyBudget(slot.deputy, slot.level);
+    const others = (Object.keys(slot.deputy.freePoints) as Array<keyof SlotState['freePoints']>)
+      .filter((k) => k !== key)
+      .reduce((a, k) => a + slot.deputy!.freePoints[k], 0);
+    slot.deputy.freePoints[key] = Math.max(0, Math.min(budget - others, Math.floor(value) || 0));
     refresh();
   },
   onSavePreset(team) {
@@ -418,7 +496,15 @@ const handlers: EditorHandlers = {
     });
   },
   onRemoveHero(team, idx) {
+    rememberSlot(state[team][idx]); // 走之前先记档：下次从武将池拖回来按这份配置恢复
     state[team][idx] = emptySlot();
+    refresh();
+  },
+  onApplyLoadout(team, idx, loadout) {
+    const slot = state[team][idx];
+    if (!slot.heroId) return;
+    // 就地改：武将详情页持有这个槽位的引用，换成新对象会让详情页与 state 脱钩
+    Object.assign(slot, applyLoadoutToSlot(slot.heroId, loadout));
     refresh();
   },
   onClearTeam(team) {
@@ -446,6 +532,8 @@ setupBackButton({
 // ─── 渲染 ───
 
 function refresh(): void {
+  // 每次编辑后把在场武将的配置记档（内容未变不写盘）——回池再上阵按档恢复，用户 2026-11-05
+  rememberSlots([...state.red, ...state.blue]);
   renderTeamEditor(editorRoot, state, handlers);
   persistTeam();
 }
@@ -484,11 +572,7 @@ function collectTeam(team: 'red' | 'blue'): General[] {
   const positions = team === 'red' ? RED_POSITIONS : BLUE_POSITIONS;
   const morale = team === 'red' ? redMorale : blueMorale;
   return state[team]
-    .map((s, i) =>
-      s.heroId
-        ? buildGeneral(s.heroId!, s.extraSkillIds, s.freePoints, positions[i], s.redness, s.level, morale, s.secondaryTroop, s.secondaryTraits, s.treasure, s.chenshou)
-        : null
-    )
+    .map((s, i) => buildGeneralForSlot(s, positions[i], morale, seasonMode))
     .filter((g): g is General => g !== null);
 }
 
@@ -705,6 +789,7 @@ export function initApp(root?: HTMLElement): void {
   presetFile = readPresetFile();
   redMorale = 120;
   blueMorale = 120;
+  seasonMode = readSeasonMode();
   seed = Math.floor(Math.random() * 1000000);
   // 重复初始化时旧的 #app 已被丢弃 → 实验室根节点引用必须一起作废，
   // 否则下次 enterLab 会往已脱离文档的旧节点上挂载（界面空白、DOM 查不到）
@@ -727,9 +812,16 @@ export function initApp(root?: HTMLElement): void {
   header.innerHTML = `
     <img class="rate-logo" src="${asset('/rate-logo.png')}" alt="率" title="率土之滨" />
     <div class="pool-search" id="pool-search-slot"></div>
+    <label class="season-pick" title="赛季模式：常规赛季＝引擎现状；北伐副本＝开启副将机制（主将四维 = 主将 70% + 副将 30%，副将主战法占主将第二战法格）">
+      <span class="season-label">赛季</span>
+      <select id="season-mode" aria-label="赛季模式">
+        <option value="classic">常规赛季</option>
+        <option value="beifa">北伐副本</option>
+      </select>
+    </label>
     <nav class="app-nav" aria-label="功能">
       <button type="button" class="nav-link" data-nav="history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h12v17H6z"/><path d="M9 8.5h6M9 12.5h6M9 16.5h3"/></svg>战报</button>
-      <button type="button" class="nav-link" data-nav="presets" title="热门预设：内置队伍一键上场，也能保存、搜索自己的预设"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h10v17l-5-3.6-5 3.6z"/></svg>热门预设</button>
+      <button type="button" class="nav-link" data-nav="presets" title="预设：热门队伍一键上场，也能保存、搜索自己的预设"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h10v17l-5-3.6-5 3.6z"/></svg>预设</button>
       <button type="button" class="nav-link" data-nav="skills"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3L6 13.5h4.5L10.5 21 18 10.5h-4.5z"/></svg>战法</button>
       <button type="button" class="nav-link" data-nav="lab"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>伤害测试</button>
       <button type="button" class="nav-link" data-nav="advisor" title="AI配将：和配将台同一页，来回切换不会中断"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg>AI配将</button>
@@ -798,6 +890,21 @@ export function initApp(root?: HTMLElement): void {
   header.querySelector('[data-nav="tutorial"]')!.addEventListener('click', () => openTutorialPanel());
   // 更新公告（公告栏）：版本 → 更新改动，数据在 web/changelog.ts
   header.querySelector('[data-nav="notice"]')!.addEventListener('click', () => openAnnouncementPanel());
+  // 顶栏「赛季」下拉：常规赛季 ⇄ 北伐副本（副将机制）；选择记忆在 localStorage
+  const seasonSel = header.querySelector('#season-mode') as HTMLSelectElement | null;
+  if (seasonSel) {
+    seasonSel.value = seasonMode;
+    seasonSel.addEventListener('change', () => {
+      seasonMode = seasonSel.value === 'beifa' ? 'beifa' : 'classic';
+      writeSeasonMode(seasonMode);
+      refresh();
+      showNotice(
+        seasonMode === 'beifa'
+          ? '已切到「北伐副本」：可在武将详情里佩戴副将（主将四维 = 主将 70% + 副将 30%）'
+          : '已切回「常规赛季」：副将配置保留，但不参与战斗合成'
+      );
+    });
+  }
   // 底栏版本标记也点得开（它就是「当前版本号」，点进去看这个版本改了什么）
   (controlBar.querySelector('#build-tag') as HTMLButtonElement).addEventListener('click', () => openAnnouncementPanel());
   // 底栏「声明」：非官方身份 / 素材版权 / 使用限制（口径与 NOTICE.md、README 顶部声明同步）

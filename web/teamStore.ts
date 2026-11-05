@@ -71,7 +71,8 @@ export function applyPlanToTeam(
       next[i] = { ...emptySlot(), heroId: slot.heroId };
     }
     if (slot.level && next[i].level !== slot.level) next[i].level = slot.level;
-    next[i].extraSkillIds = [...new Set(slot.skillIds)].slice(0, 2);
+    // 北伐副本挂副将时，第二战法格被副将主战法占用 → 装配战法只留 1 个
+    next[i].extraSkillIds = [...new Set(slot.skillIds)].slice(0, next[i].deputy ? 1 : 2);
   });
 
   if (problems.length) return { ok: false, message: `部分未应用：${problems.join('；')}`, slots: next };
