@@ -781,14 +781,20 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'physical_damage', rate: 140, targetMode: 'group', groupCount: [2, 3], ignoresTroopCounter: true },
     ],
   },
-  /** 平壑拒吴（曹仁主战法）：对敌军群体发动一次攻击 210%，并使敌军群体陷入怯战状态，无法进行普通攻击，持续 2 回合（「防御/兵力最低单体各一击」简化） */
+  /**
+   * 平壑拒吴（曹仁主战法）：对敌军群体发动一次攻击 210%，并使敌军群体陷入怯战状态，无法进行普通攻击，持续 2 回合
+   * （「防御/兵力最低单体各一击」简化）。
+   * 发动率 35% → **40%**：客户端 2026-11-04 热更 `tb_cfg_hero` 100585 的 `balance_activity_id 0→20318` /
+   * `balance_skill_reset 0→1` 生效方向 = 平壑拒吴 200836 本行 `probability` 35→40（伤害率 210%、怯战 2 回合未动）。
+   * 取证见 `docs/逆向对拍/宝物与曹仁加强取证-2026-11-04.md`。
+   */
   pinghe_juwu: {
     id: 'pinghe_juwu',
     name: '平壑拒吴',
     type: 'active',
     prepare: false,
     range: 4,
-    triggerRate: 0.35,
+    triggerRate: 0.4,
     targetMode: 'group',
     targetSide: 'enemy',
     tags: ['damage', 'cowardice'],

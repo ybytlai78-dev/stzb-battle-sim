@@ -26,22 +26,31 @@ const RAW = JSON.parse(
 const gearsDir = fileURLToPath(new URL('../public/gears/', import.meta.url));
 
 describe('宝物数据（稀世）', () => {
-  it('数量口径：官方 38 件稀世 = 战斗类 36（入库）+ 内政类 2（大吉/天禄，按口径剔除）', () => {
+  it('数量口径：官网 38 件稀世（战斗类 36 入库 + 内政类 2 剔除）+ 客户端热更 4 件 = 40 件', () => {
     const rawXishi = RAW.treasures.filter((t) => t.quality === '稀世');
-    expect(rawXishi).toHaveLength(38);
-    expect(TREASURES).toHaveLength(36);
+    // 官网页脚快照 38 件 + `scripts/import_gear_20261104.mjs` 从客户端热更包补的 4 件（1126/1129/1132/1135）
+    expect(rawXishi).toHaveLength(42);
+    expect(TREASURES).toHaveLength(40);
     const ids = new Set(TREASURES.map((t) => t.id));
     const dropped = rawXishi.filter((t) => !ids.has(t.id)).map((t) => t.name);
     expect(dropped.sort()).toEqual(['大吉', '天禄']);
+    const hot = TREASURES.filter((t) => t.id >= 1124).map((t) => t.name);
+    expect(hot).toEqual(['山君', '天问', '镂影', '奋髯']);
   });
 
-  it('id / 名称唯一，类型合法，词条组在 1~11', () => {
+  it('id / 名称唯一，类型合法，词条组在 1~11（热更 4 件待解 = 0）', () => {
     expect(new Set(TREASURES.map((t) => t.id)).size).toBe(TREASURES.length);
     expect(new Set(TREASURES.map((t) => t.name)).size).toBe(TREASURES.length);
     for (const t of TREASURES) {
       expect(['刀', '剑', '长兵', '弓', '扇', '其他']).toContain(t.type);
-      expect(t.affixGroup).toBeGreaterThanOrEqual(1);
-      expect(t.affixGroup).toBeLessThanOrEqual(11); // 12 = 内政，已剔除
+      if ((t as { source?: string }).source === 'client-hot-20261104') {
+        // 锻造词条池来自客户端池表，本轮未解析 —— 明确锁「未知」而不是编一个组
+        expect(t.affixGroup).toBe(0);
+        expect(t.affixPool).toEqual([]);
+      } else {
+        expect(t.affixGroup).toBeGreaterThanOrEqual(1);
+        expect(t.affixGroup).toBeLessThanOrEqual(11); // 12 = 内政，已剔除
+      }
       expect(TREASURES_BY_ID[t.id]).toBe(t);
     }
   });
@@ -72,8 +81,12 @@ describe('宝物数据（稀世）', () => {
     }
   });
 
-  it('锻造词条池：每件 6~7 条且与所属组一致，池内词条都在词条表里', () => {
+  it('锻造词条池：官网 36 件每件 6~7 条且与所属组一致；热更 4 件为空池（待解）', () => {
     for (const t of TREASURES) {
+      if ((t as { source?: string }).source === 'client-hot-20261104') {
+        expect(t.affixPool).toEqual([]);
+        continue;
+      }
       expect([6, 7]).toContain(t.affixPool.length);
       expect(AFFIX_GROUPS[t.affixGroup]).toEqual(t.affixPool);
       for (const name of t.affixPool) expect(AFFIXES[name], `缺词条 ${name}`).toBeTruthy();
