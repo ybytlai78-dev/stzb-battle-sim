@@ -328,7 +328,13 @@ export function createBattleView(report: BattleReport, opts: BattleViewOpts = {}
   }
   const btnNext = railBtn('下');
   const btnPlay = railBtn('播');
-  rail.append(btnDetail, btnSimple, railSep(), btnPrev, ...tabBtns, btnNext, railSep(), btnPlay);
+  // 回合号单独包一层：手机横屏高度只够放三四个，必须只让这一段滚，
+  // 「详 / 简 / 上 / 下 / 播」这些控制键始终留在原位（桌面 display:contents，视觉零变化）。
+  const roundsBox = document.createElement('div');
+  roundsBox.className = 'dv-rounds';
+  roundsBox.append(...tabBtns);
+  // 「上 / 下」留在滚动区外：手机滚到第 8 回合时还得能往回翻，不能被一起滚走
+  rail.append(btnDetail, btnSimple, railSep(), btnPrev, roundsBox, btnNext, railSep(), btnPlay);
 
   dv.append(turns, mid, rail);
   root.appendChild(dv);
@@ -427,6 +433,10 @@ export function createBattleView(report: BattleReport, opts: BattleViewOpts = {}
       t.classList.toggle('on', i === current);
       t.classList.toggle('is-on', i === current);
     });
+    // 回合号超出可视高时把这一个滚进来（容器不可滚时是空操作，桌面不受影响）
+    if (roundsBox.scrollHeight > roundsBox.clientHeight + 1) {
+      tabBtns[current]?.scrollIntoView({ block: 'nearest' });
+    }
     renderRound();
   }
 
