@@ -4,6 +4,7 @@
  */
 import './styles.css';
 import './mobile.css';
+import './mobile-ui.css';
 import './lab.css';
 import './tutorial.css';
 import './advisor.css';
@@ -699,6 +700,16 @@ function renderBattleView(report: BattleReport, mode: 'summary' | 'stats' | 'det
   back.onclick = () => closeReportView();
   dock.appendChild(back);
 
+  // 手机端结果顶栏被 CSS 隐藏（YG 2026-11-05 第 4 条），胜负与回合数改落在底栏左侧，
+  // 这样「去掉顶栏」不等于「丢掉结果」；桌面端这条 `display:none`，底栏与改动前一致。
+  const dockResult = document.createElement('span');
+  dockResult.className = 'dock-result';
+  const resWord = report.result === 'win' ? '红队胜' : report.result === 'loss' ? '蓝队胜' : '平局';
+  const sum = (a: number[]): string => a.reduce((x, y) => x + y, 0).toLocaleString();
+  dockResult.textContent = `${resWord} · ${report.rounds} 回合`;
+  dockResult.title = `种子 ${report.seed} · 红队剩余 ${sum(report.finalMyTroops)} ｜ 蓝队剩余 ${sum(report.finalEnemyTroops)}`;
+  dock.appendChild(dockResult);
+
   const tabs = document.createElement('nav');
   tabs.className = 'report-tabs';
   tabs.setAttribute('aria-label', '战报视图');
@@ -823,10 +834,15 @@ export function initApp(root?: HTMLElement): void {
       <button type="button" class="nav-link" data-nav="history"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 3.5h12v17H6z"/><path d="M9 8.5h6M9 12.5h6M9 16.5h3"/></svg>战报</button>
       <button type="button" class="nav-link" data-nav="presets" title="预设：热门队伍一键上场，也能保存、搜索自己的预设"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3.5h10v17l-5-3.6-5 3.6z"/></svg>预设</button>
       <button type="button" class="nav-link" data-nav="skills"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 3L6 13.5h4.5L10.5 21 18 10.5h-4.5z"/></svg>战法</button>
-      <button type="button" class="nav-link" data-nav="lab"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>伤害测试</button>
       <button type="button" class="nav-link" data-nav="advisor" title="AI配将：和配将台同一页，来回切换不会中断"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/></svg>AI配将</button>
-      <button type="button" class="nav-link" data-nav="tutorial"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5c2.5-1.4 5-1.4 8 0 3-1.4 5.5-1.4 8 0v13.2c-2.5-1.4-5-1.4-8 0-3-1.4-5.5-1.4-8 0z"/><path d="M12 5.5v13.2"/></svg>教程</button>
-      <button type="button" class="nav-link" data-nav="notice" title="更新公告：每个版本的更新改动都在这里"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 9a5.5 5.5 0 0111 0c0 5 2 6 2 6h-15s2-1 2-6z"/><path d="M10 18.5a2 2 0 004 0"/></svg>公告</button>
+      <div class="nav-more">
+        <button type="button" class="nav-link nav-more-btn" aria-expanded="false" aria-haspopup="true" title="更多：伤害测试 / 教程 / 公告"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>更多</button>
+        <div class="nav-more-menu">
+          <button type="button" class="nav-link" data-nav="lab"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6.5"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3"/></svg>伤害测试</button>
+          <button type="button" class="nav-link" data-nav="tutorial"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5.5c2.5-1.4 5-1.4 8 0 3-1.4 5.5-1.4 8 0v13.2c-2.5-1.4-5-1.4-8 0-3-1.4-5.5-1.4-8 0z"/><path d="M12 5.5v13.2"/></svg>教程</button>
+          <button type="button" class="nav-link" data-nav="notice" title="更新公告：每个版本的更新改动都在这里"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 9a5.5 5.5 0 0111 0c0 5 2 6 2 6h-15s2-1 2-6z"/><path d="M10 18.5a2 2 0 004 0"/></svg>公告</button>
+        </div>
+      </div>
     </nav>
     <button type="button" class="header-settings" id="header-settings" title="设置（模型 / 额度 / 数据）——API key 只在这里" aria-label="设置">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.2"/><path d="M12 3.5v2.2M12 18.3v2.2M4.9 7.6l1.9 1.1M17.2 15.3l1.9 1.1M4.9 16.4l1.9-1.1M17.2 8.7l1.9-1.1"/></svg>
@@ -890,6 +906,28 @@ export function initApp(root?: HTMLElement): void {
   header.querySelector('[data-nav="tutorial"]')!.addEventListener('click', () => openTutorialPanel());
   // 更新公告（公告栏）：版本 → 更新改动，数据在 web/changelog.ts
   header.querySelector('[data-nav="notice"]')!.addEventListener('click', () => openAnnouncementPanel());
+
+  // 「更多」折叠（YG 2026-11-05 B2）：手机端把 伤害测试 / 教程 / 公告 收进下拉，其余按钮才能舒展。
+  // 桌面端 .nav-more-menu 是平铺的，外观与改动前一致；这里的开关只对手机端有意义。
+  const navMore = header.querySelector('.nav-more') as HTMLElement | null;
+  const navMoreBtn = header.querySelector('.nav-more-btn') as HTMLElement | null;
+  if (navMore && navMoreBtn) {
+    const setMore = (open: boolean): void => {
+      navMore.classList.toggle('is-open', open);
+      navMoreBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    };
+    navMoreBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setMore(!navMore.classList.contains('is-open'));
+    });
+    // 选中菜单里任一项就收起（不然浮层会盖在打开的面板上）
+    navMore.querySelectorAll('.nav-more-menu [data-nav]').forEach((b) => {
+      b.addEventListener('click', () => setMore(false));
+    });
+    document.addEventListener('click', (e) => {
+      if (!navMore.contains(e.target as Node)) setMore(false);
+    });
+  }
   // 顶栏「赛季」下拉：常规赛季 ⇄ 北伐副本（副将机制）；选择记忆在 localStorage
   const seasonSel = header.querySelector('#season-mode') as HTMLSelectElement | null;
   if (seasonSel) {

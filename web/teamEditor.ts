@@ -5,6 +5,7 @@
  * 战法判定顺序：被动 > 指挥 > 主动 > 追击；同类型内主战法先判定、装配战法按添加顺序。
  */
 import { HEROES, SLOTTED_HEROES, OFFLINE_HEROES, offlineReason, getHeroById, SKILL_TYPE_NAME, avatarSrc, portraitSrc, isFemale, freePointBudget, troopCapacity, skillGrade, gradeLabel, skillTypeIcon, gradeFrame, gradeRibbon, gradePlate, SKILL_DESCS, isMainSkill, isLearnableSkillListed, rednessStars, buildGeneral, TROOP_CHAR as TYPE_CHAR, factionIconSrc, cardFrameSrc, applyChenshouCost } from './heroes';
+import { bindScrollCollapse, isMobileUI } from './mobileUi';
 import type { HeroJson } from './heroes';
 import pinyinJson from './data/pinyin.json';
 import { SKILL_REGISTRY } from '../src/data/skills';
@@ -256,16 +257,29 @@ function heroMatchesFilter(hero: HeroJson, sel: HeroFilter, q: string): boolean 
 }
 
 /** 筛选栏 HTML（势力 + 兵种 多选） */
+/**
+ * 首页筛选栏在手机端是否展开（YG 2026-11-05 B1）。
+ * 「势力 / 兵种」两行在手机上比队头还高一截，默认收成一行摘要；
+ * 模块级持有是因为主站武将池每次 refresh 都会重建，状态不能挂在 DOM 上。
+ * 桌面端这个标志完全不起作用（`.hf-peek` 被 CSS 藏掉，body 恒定展开）。
+ */
+let heroFilterOpen = false;
+
 function heroFilterHtml(): string {
   const tag = (dim: 'faction' | 'type', v: string) =>
     `<span class="filter-tag" data-dim="${dim}" data-v="${v}">${v}</span>`;
   return `
-    <div class="hero-filter">
-      <span class="hf-label">势力</span>
-      ${FACTION_TAGS.map((t) => tag('faction', t)).join('')}
-      <span class="hf-label">兵种</span>
-      ${TYPE_TAGS.map((t) => tag('type', t)).join('')}
-      <button class="btn ghost hf-reset" type="button">重置</button>
+    <div class="hero-filter${heroFilterOpen ? ' is-open' : ''}">
+      <button class="hf-peek" type="button" aria-expanded="${heroFilterOpen ? 'true' : 'false'}">
+        <span class="hf-peek-text"></span><span class="hf-peek-btn">筛选 ▾</span>
+      </button>
+      <div class="hf-body">
+        <span class="hf-label">势力</span>
+        ${FACTION_TAGS.map((t) => tag('faction', t)).join('')}
+        <span class="hf-label">兵种</span>
+        ${TYPE_TAGS.map((t) => tag('type', t)).join('')}
+        <button class="btn ghost hf-reset" type="button">重置</button>
+      </div>
     </div>`;
 }
 
@@ -333,6 +347,22 @@ function bindSkillFilter(host: HTMLElement, sel: SkillFilter, redraw: () => void
  * `onReset` 供调用方在「重置」时追加清理（武将池用来一并清空搜索词）。
  */
 function bindHeroFilter(host: HTMLElement, sel: HeroFilter, redraw: () => void, onReset?: () => void): void {
+  // 手机端收起态的一行摘要（YG 2026-11-05 B1）：告诉用户「现在筛的是哪几个」，
+  // 否则收起来以后看不出还有没有筛选在生效。
+  const filterBox = host.querySelector('.hero-filter') as HTMLElement | null;
+  const peekText = host.querySelector('.hf-peek-text') as HTMLElement | null;
+  const refreshPeek = (): void => {
+    if (!peekText) return;
+    const fmt = (set: Set<string>): string => (set.size === 0 ? '全部' : [...set].join('/'));
+    peekText.textContent = `势力 ${fmt(sel.faction)} · 兵种 ${fmt(sel.type)}`;
+  };
+  refreshPeek();
+  const peek = host.querySelector('.hf-peek') as HTMLElement | null;
+  peek?.addEventListener('click', () => {
+    heroFilterOpen = !filterBox?.classList.contains('is-open');
+    filterBox?.classList.toggle('is-open', heroFilterOpen);
+    peek.setAttribute('aria-expanded', heroFilterOpen ? 'true' : 'false');
+  });
   host.querySelectorAll('.filter-tag').forEach((el) => {
     const tag = el as HTMLElement;
     const dim = tag.dataset.dim as 'faction' | 'type';
@@ -343,6 +373,7 @@ function bindHeroFilter(host: HTMLElement, sel: HeroFilter, redraw: () => void, 
       if (set.has(v)) set.delete(v);
       else set.add(v);
       tag.classList.toggle('on', set.has(v));
+      refreshPeek();
       redraw();
     };
   });
@@ -350,6 +381,7 @@ function bindHeroFilter(host: HTMLElement, sel: HeroFilter, redraw: () => void, 
     sel.faction.clear();
     sel.type.clear();
     host.querySelectorAll('.filter-tag').forEach((el) => el.classList.remove('on'));
+    refreshPeek();
     onReset?.();
     redraw();
   });
@@ -2104,8 +2136,13 @@ export function openSkillBag(): void {
   modal.innerHTML = `
     <div class="m-head"><h3>战法背包</h3><span class="m-close">×</span></div>
     <div class="m-body">
-      <div class="pick-toolbar"><input type="text" placeholder="搜索战法名…" /></div>
-      ${skillFilterHtml()}
+      <div class="bag-tools">
+        <div class="pick-toolbar"><input type="text" placeholder="搜索战法名…" /></div>
+        ${skillFilterHtml()}
+      </div>
+      <div class="bag-peek" role="button" tabindex="0" aria-label="展开筛选与搜索">
+        <span class="bag-peek-text"></span><span class="bag-peek-btn">筛选 ▾</span>
+      </div>
       <div class="bag-grid"></div>
       <div class="bag-note"></div>
     </div>
@@ -2113,12 +2150,28 @@ export function openSkillBag(): void {
   const input = modal.querySelector('input') as HTMLInputElement;
   const grid = modal.querySelector('.bag-grid') as HTMLElement;
   const note = modal.querySelector('.bag-note') as HTMLElement;
+  const tools = modal.querySelector('.bag-tools') as HTMLElement;
+  const peek = modal.querySelector('.bag-peek') as HTMLElement;
+  const peekText = modal.querySelector('.bag-peek-text') as HTMLElement;
   const sel: SkillFilter = { grade: '', type: '' };
+  let shown = 0;
+
+  /** 收起态摘要：手机端筛选栏滚走之后，靠这一行告诉用户当前筛的是哪一档（YG 2026-11-05 第 2 条） */
+  const refreshPeek = (): void => {
+    const gradeText = sel.grade === '' ? '全部' : sel.grade === 'baijia' ? '百家' : `${sel.grade} 级`;
+    const typeText = sel.type === '' ? '全部' : SKILL_TYPE_TAGS.find(([v]) => v === sel.type)?.[1] ?? sel.type;
+    const q = input.value.trim();
+    peekText.textContent = `品级 ${gradeText} · 类别 ${typeText}${q ? ` · “${q}”` : ''} ｜ 共 ${shown} 种`;
+  };
+  // 点摘要条 = 立刻展开（向上滚 / 滚回顶部也会自动展开）
+  peek.addEventListener('click', () => tools.classList.remove('is-tucked'));
+  // 搜索框聚焦期间锁住展开态：收起态点「筛选 ▾」展开后，手一滚又收起来，像点坏了（YG 2026-11-05 A1）
+  input.addEventListener('focus', () => tools.classList.remove('is-tucked'));
 
   const draw = () => {
     grid.innerHTML = '';
     const q = input.value.trim().toLowerCase();
-    let shown = 0;
+    shown = 0;
     let lastBaijiaHero = '';
     const grouped = sel.grade === 'baijia';
     // “百家”分类按武将/词条顺序排；其它分类保持注册表原顺序。
@@ -2159,10 +2212,22 @@ export function openSkillBag(): void {
     note.textContent = shown === bagSkills.length
       ? `共 ${bagSkills.length} 种可装配战法（武将主战法除外），点击查看详情`
       : `显示 ${shown} / ${bagSkills.length} 种可装配战法`;
+    refreshPeek();
   };
   input.addEventListener('input', draw);
   bindSkillFilter(modal, sel, draw);
-  const close = () => mask.remove();
+  // 手机端：向下滚收起搜索+筛选、向上滚/滚回顶展开（桌面端不绑，交互与改动前一致）
+  const unbindScroll = isMobileUI()
+    ? bindScrollCollapse({
+        root: modal,
+        target: tools,
+        canCollapse: () => document.activeElement !== input,
+      })
+    : null;
+  const close = () => {
+    unbindScroll?.();
+    mask.remove();
+  };
   modal.querySelector('.m-close')!.addEventListener('click', close);
   mask.appendChild(modal);
   mask.addEventListener('click', (e) => { if (e.target === mask) close(); });
@@ -2367,6 +2432,15 @@ export function openTreasurePicker(opts: {
   const stepBar = (): string =>
     `<div class="tp-steps"><span class="${step === 1 ? 'on' : ''}">① 选宝物</span><span class="${step === 2 ? 'on' : ''}">② 选词条</span><span class="${step === 3 ? 'on' : ''}">③ 选数值</span></div>`;
 
+  /**
+   * 手机端详情抽屉是否展开（YG 2026-11-05 第 3 条）。
+   * 用户原话「宝物介绍占了一半的屏幕，导致只有一行可以选择宝物，将其默认收起，
+   * 只有点击选择以后才展开详情，展开后可再次收起」——默认 false，点卡片才开。
+   * 桌面端不用这个状态（详情仍是常驻块，外观与改动前一字不差）。
+   */
+  let sheetOpen = false;
+  const mobileUI = isMobileUI();
+
   const step1 = (): string => {
     const cards = TREASURES.map(
       (t) => `<button class="tp-card${t.id === treasureId ? ' on' : ''}" data-tid="${t.id}" title="${t.name}（${t.type}）">
@@ -2376,11 +2450,24 @@ export function openTreasurePicker(opts: {
     ).join('');
     const t = treasure();
     const eff = t.effects.map((e) => `<div class="tp-eff"><b>${e.name}</b>：${e.desc}</div>`).join('');
+    const hint = `<div class="tp-hint">自带特效按宝物等级计算（默认 10 级：一阶/二阶 = 官方数值 × 5，三阶固定）</div>`;
+    const detail = (showName: boolean): string =>
+      `<div class="tp-detail">${showName ? `<div class="tp-detail-name">${t.name} · ${t.type} · 稀世</div>` : ''}${eff}${hint}</div>`;
+    const foot = `<div class="tp-foot"><button class="tp-next">下一步：选词条</button></div>`;
+    if (!mobileUI) return `${stepBar()}<div class="tp-grid">${cards}</div>${detail(true)}${foot}`;
+    // 手机：详情收进贴底抽屉，收起态只留 44px 把手（名字 + 详情 ▴），网格吃掉整屏高度
     return `${stepBar()}
       <div class="tp-grid">${cards}</div>
-      <div class="tp-detail"><div class="tp-detail-name">${t.name} · ${t.type} · 稀世</div>${eff}
-        <div class="tp-hint">自带特效按宝物等级计算（默认 10 级：一阶/二阶 = 官方数值 × 5，三阶固定）</div></div>
-      <div class="tp-foot"><button class="tp-next">下一步：选词条</button></div>`;
+      <div class="tp-sheet${sheetOpen ? ' is-open' : ''}">
+        <div class="tp-sheet-handle" data-sheet-toggle="1" role="button" tabindex="0"
+          aria-expanded="${sheetOpen ? 'true' : 'false'}" aria-label="展开或收起宝物详情">
+          <span class="tp-sheet-grip"></span>
+          <span class="tp-sheet-title">${t.name} · ${t.type} · 稀世</span>
+          ${sheetOpen ? '' : '<button class="tp-sheet-next" type="button">下一步</button>'}
+          <span class="tp-sheet-toggle">${sheetOpen ? '收起 ▾' : '详情 ▴'}</span>
+        </div>
+        <div class="tp-sheet-body">${detail(false)}${foot}</div>
+      </div>`;
   };
 
   const step2 = (): string => {
@@ -2450,14 +2537,33 @@ export function openTreasurePicker(opts: {
   };
 
   const render = (): void => {
+    // 重渲染会换掉网格节点，滚动位置先存再还（手机上一屏放不下 42 件稀世）
+    const prevGrid = modal.querySelector('.tp-grid') as HTMLElement | null;
+    const keepScroll = prevGrid ? prevGrid.scrollTop : 0;
     modal.innerHTML = `<div class="tp-body">${step === 1 ? step1() : step === 2 ? step2() : step3()}</div>`;
+    const nextGrid = modal.querySelector('.tp-grid') as HTMLElement | null;
+    if (nextGrid && keepScroll > 0) nextGrid.scrollTop = keepScroll;
     modal.querySelectorAll('.tp-card').forEach((el) => {
       (el as HTMLElement).onclick = () => {
         const id = Number((el as HTMLElement).dataset.tid);
+        const switched = id !== treasureId;
         treasureId = id;
         if (affixName && !TREASURES_BY_ID[id].affixPool.includes(affixName)) affixName = null;
+        // 手机：换一件 → 直接展开详情；点同一件 → 展开/收起切换（第 3 条）
+        if (mobileUI) sheetOpen = switched ? true : !sheetOpen;
         render();
       };
+    });
+    (modal.querySelector('[data-sheet-toggle]') as HTMLElement | null)?.addEventListener('click', () => {
+      sheetOpen = !sheetOpen;
+      render();
+    });
+    // 收起态把手上直接给「下一步」：否则想继续必须先展开抽屉再点，多一次点击（YG 2026-11-05 A2）
+    // 它在 [data-sheet-toggle] 内部，必须阻止冒泡，不然会连带把抽屉开起来。
+    (modal.querySelector('.tp-sheet-next') as HTMLElement | null)?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      step = 2;
+      render();
     });
     modal.querySelectorAll('.tp-affix').forEach((el) => {
       (el as HTMLElement).onclick = () => {
