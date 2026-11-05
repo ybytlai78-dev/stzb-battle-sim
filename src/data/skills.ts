@@ -3316,7 +3316,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         kind: 'inflict_status',
         status: { type: 'trigger_boost', rate: 1.2, duration: 1, additive: true, mainSkillOnly: true, skillTypes: ['active'] },
       },
-      { kind: 'inflict_status', status: { type: 'jump_prep', rate: 0.6, duration: 1, mainSkillOnly: true, speedScaled: true, growthRate: 0.15 } },
+      { kind: 'inflict_status', status: { type: 'jump_prep', rate: 0.6, duration: 1, turns: 1, mainSkillOnly: true, speedScaled: true, growthRate: 0.15 } },
     ],
   },
   /** 黄天余音（张宁主战法·主动）：吸取敌军单体 26 全属性（受谋略，成长率 0.20/点）并附加于自身与友军单体，持续 1 回合。
@@ -6185,10 +6185,14 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    * ① 战斗中每当自身发动**需要准备的主战法**时，有 80% 几率跳过 1 回合准备时间；
    * ② 任意友军发动主动战法后，自身下一个主动战法造成的伤害提高 15%，此效果最多叠加 3 次。
    * 官方 id 200754（1 级 40% / 7.5%）。
-   * 引擎配套：① 准备阶段给自身挂 `jump_prep{mainSkillOnly:true}`（准备跳过；`triggerActiveSkill` 对每次发动
+   * 引擎配套：① 准备阶段给自身挂 `jump_prep{turns:1, mainSkillOnly:true}`（`triggerActiveSkill` 对每次发动
    *   的**主战法**按 rate 掷骰——`mainSkillOnly` 过滤掉装配的准备主动，与官方「需要准备的**主战法**」一致）；
+   *   **`turns:1` = 只跳过 1 个准备回合**（包内子战法 21175401 effect 581 `constant_param = 1`）——
+   *   2 回合准备的主战法（张飞【长坂之吼】`prepareTurns:2`）命中后仍需准备 1 回合，绝不直接释放
+   *   （用户 2026-11-05 报障「跳过了全部准备回合」根因即此处原先按「跳过全部」实现）；
    *   ② **新增 `BaseSkill.allyActiveCastStack`**（任意友军成功发动主动战法后给携带者自身同源叠层；
-   *   「任意友军」按仓库口径**含自己**——自己发动主动时先消耗旧层、随后本次发动又叠 1 层）。
+   *   「任意友军」按率土口径**不含自己**——只有其余 2 名队友发动主动才叠层，自己发动主动不叠
+   *   （用户 2026-10-30 口径：描述「任意友军施放主动战法」不包括其自身）。
    * ② 的「下一个主动战法」为消耗制：`charges:1` + `chargesStack:true` + `maxStacks:3`（同势无虚动的追击版）。
    */
   shengbing_qiuzhan: {
@@ -6201,7 +6205,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     targetMode: 'self',
     tags: ['damage_boost'],
     output: [
-      { kind: 'inflict_status', target: 'self', status: { type: 'jump_prep', duration: 999, rate: 0.8, mainSkillOnly: true } },
+      { kind: 'inflict_status', target: 'self', status: { type: 'jump_prep', duration: 999, rate: 0.8, turns: 1, mainSkillOnly: true } },
     ],
     allyActiveCastStack: {
       status: {
@@ -8083,9 +8087,14 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    * 「两者独立判断」= 两个效果**各自**按 45% 独立判定（同将门有将「每个效果独立判断」的仓库口径：逐段独立
    *   roll）→ 两段各用 `chance_group(chance 0.45)` 承载，各自发一条 `skill_trigger`（baseRate 45、走士气修正）；
    *   指挥自身 `triggerRate: 1`（= 每回合必然进入两段判定），未再叠 dynamicTriggerRate。
-   * 入档判断：**下架** —— 恢复 / 减伤 / 策略三段均「受谋略属性影响」而官方未给成长系数 → 按基值不缩放
-   *   （`strategyScaled` 标记在、`growthRate` 缺；heal 必填字段给 `0`）+ 登记 OFFLINE_MAIN_SKILLS，
-   *   待 `scripts/derive_growth_rate.mjs` 反解后移出。效果②代打段 100% 未标受属性影响 → 固定不缩放。
+   * 成长率来源 = 包内 `tb_cfg_skill_detail`（2026-11 复核；值@80 = const + 0.4×intel、百分比成长 = intel/200）：
+   *   恢复段 `21028601`（effect 401）const 56 / intel 160 ⇒ **120% / 0.8 每点谋略**；
+   *   减伤段 `21028602`（effect 522 受攻击伤害降低）+ `21028603`（effect 524 受策略攻击伤害降低）
+   *     const 3 / intel 30 ⇒ **15% / 0.15 每点谋略**，`available_round 1`；
+   *   策略伤害段 `21128601`（effect 302）const 56 / intel 160 ⇒ **120% / 0.8 每点谋略**；
+   *   代打段 `21128612`（派生子战法 212286，intel 0）⇒ **100% 固定、不缩放**。
+   *   包内把「受到所有伤害减少 15%」拆成 522/524 两行，引擎用单条通用 `damage_reduce` 承载（数值同源）。
+   *   已按此上架（不在 `listing.OFFLINE_MAIN_SKILLS`）。
    * 引擎配套：
    *   ① `heal.targetPick: 'lowest_troops_ally'`（我军**当前兵力最低**的存活单体，含施法者自身）；
    *   ② `heal.attachStatus`：恢复的同时对**同一目标**追加状态（「并使其受到所有伤害减少 15%」），
@@ -11777,9 +11786,10 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    *      `damageType` 分轨、`rate:0.6` 走施法者士气、`stack:true, maxStacks:5`——反间同款）；
    *   ② 敌军侧（受到侧）= `onHurt` 两条独立轨（`victim:'enemy'` + `damageKind` 物理/策略 +
    *      `applyTo:'victim'`，60% 判定后给受击者挂 `direction:'taken'` 同型 8%、`maxStacks:5`）；
-   *   ③ **推定（与反间同口径）**：准备阶段先挂 1 层「免费层」（我军侧由 `allyDealStack` 准备阶段施加、
-   *      敌军侧由 `initialOutput` 补齐），此后每次匹配伤害 60% 判定 +1 层，合计封顶 5 层（即 +8%→+40%）；
-   *      两条轨完全独立、互不影响。
+   *   ③ **初始 0 层**（用户 2026-10-30 口径：「知己知彼初始应该是没有层数的，但是引擎中初始就有一层 8%」）：
+   *      准备阶段**不挂任何层** —— 我军侧两条 `allyDealStack` 轨标 `initialLayers: 0`（首层由首次匹配伤害
+   *      60% 判定成功时施加），敌军侧不再有 `initialOutput` 免费首层（同样从 0 层起，靠 `onHurt` 判定叠层）；
+   *      此后每次匹配伤害 60% 判定 +1 层，合计封顶 5 层（即 +8%→+40%）；两条轨完全独立、互不影响。
    *   ④ `targetMode:'all'` = 「我军群体 / 敌军群体」在本仓库 3 将阵容下取全体；施法者阵亡后效果仍在
    *      （`retainAfterDeath`，一类指挥口径）。
    * 全文无「受 XX 属性影响」→ 不登记下架（**上架**）。
@@ -11800,6 +11810,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       {
         damageType: 'physical',
         rate: 0.6,
+        // 初始 0 层：准备阶段不挂状态，首层由首次匹配伤害判定成功时施加
+        initialLayers: 0,
         status: {
           type: 'damage_boost',
           rate: 0.08,
@@ -11813,6 +11825,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       {
         damageType: 'strategy',
         rate: 0.6,
+        initialLayers: 0,
         status: {
           type: 'damage_boost',
           rate: 0.08,
@@ -11824,37 +11837,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         },
       },
     ],
-    // 敌军侧免费首层（准备阶段一次性施加；之后由 onHurt 两条轨按 60% 叠层）
-    initialOutput: [
-      {
-        kind: 'inflict_status',
-        targetSide: 'enemy',
-        targetMode: 'all',
-        status: {
-          type: 'damage_boost',
-          rate: 0.08,
-          duration: 999,
-          direction: 'taken',
-          damageType: 'physical',
-          stack: true,
-          maxStacks: 5,
-        },
-      },
-      {
-        kind: 'inflict_status',
-        targetSide: 'enemy',
-        targetMode: 'all',
-        status: {
-          type: 'damage_boost',
-          rate: 0.08,
-          duration: 999,
-          direction: 'taken',
-          damageType: 'strategy',
-          stack: true,
-          maxStacks: 5,
-        },
-      },
-    ],
+    // 敌军侧：初始 0 层（无 `initialOutput` 免费首层），全靠 onHurt 两条轨按 60% 判定叠加
     onHurt: [
       {
         victim: 'enemy',

@@ -13,9 +13,10 @@
  */
 import { describe, it, expect } from 'vitest';
 import { actUnit, inflictStatus, type CombatContext } from '../src/engine/action';
-import type { CreateStatus, General, Position, Skill, Status, UnitState } from '../src/engine/types';
+import type { BattleEvent, CreateStatus, General, Position, Skill, Status, UnitState } from '../src/engine/types';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import { Rng } from '../src/engine/rng';
+import { runBattle } from '../src/engine/combat';
 
 const SKILL_ID = 'test_both_side_stack';
 
@@ -174,24 +175,66 @@ describe('allyDealStack 只认本轨跟踪状态', () => {
   });
 });
 
-describe('知己知彼数据口径：我军侧 caused、敌军侧 taken', () => {
+describe('知己知彼数据口径：我军侧 caused、敌军侧 taken、两侧初始 0 层', () => {
   const zzb = SKILL_REGISTRY['zhiji_zhibi'] as unknown as {
-    allyDealStack: Array<{ status: { direction?: string } }>;
-    initialOutput: Array<{ status: { direction?: string } }>;
+    allyDealStack: Array<{ status: { direction?: string }; initialLayers?: number }>;
+    initialOutput?: Array<{ status: { direction?: string } }>;
     onHurt: Array<{ output: Array<{ status: { direction?: string } }> }>;
   };
 
-  it('我军侧两条轨都是 caused', () => {
+  it('我军侧两条轨都是 caused，且都是初始 0 层（准备阶段不预挂）', () => {
     expect(zzb.allyDealStack).toHaveLength(2);
     expect(zzb.allyDealStack.every((t) => t.status.direction === 'caused')).toBe(true);
+    expect(zzb.allyDealStack.every((t) => t.initialLayers === 0)).toBe(true);
   });
 
-  it('敌军侧四条状态（免费首层 2 + 受击 2）全部是 taken', () => {
-    const enemySide = [
-      ...zzb.initialOutput.map((o) => o.status),
-      ...zzb.onHurt.flatMap((h) => h.output.map((o) => o.status)),
-    ];
-    expect(enemySide).toHaveLength(4);
+  it('敌军侧不再有 initialOutput 免费首层，两条受击轨全部是 taken', () => {
+    expect(zzb.initialOutput).toBeUndefined();
+    const enemySide = zzb.onHurt.flatMap((h) => h.output.map((o) => o.status));
+    expect(enemySide).toHaveLength(2);
     expect(enemySide.every((s) => s.direction === 'taken')).toBe(true);
+  });
+});
+
+describe('知己知彼：初始 0 层（2026-10-30 用户口径）', () => {
+  function gen(id: string, position: Position, commandSkillIds: string[] = []): General {
+    return {
+      id, name: id, rarity: '5星', cost: 3, faction: '汉', tags: [],
+      mutualExclusionGroup: null, troopType: 'infantry', position,
+      attack: 120, defense: 100, strategy: 100, speed: 60, attackRange: 2, maxTroops: 9000,
+      mainSkillName: '', skillDesc: '', activeSkillIds: [], passiveSkillIds: [],
+      commandSkillIds, pursuitSkillIds: [], morale: 100,
+    };
+  }
+
+  const isBoostInflict = (
+    e: BattleEvent
+  ): e is Extract<BattleEvent, { type: 'status_inflicted' }> =>
+    e.type === 'status_inflicted' && e.statusType === 'damage_boost';
+
+  /** 双方裸将、只有我方前锋带知己知彼：本局出现的增伤层只可能来自它 */
+  function run(): BattleEvent[] {
+    return runBattle({
+      myTeam: [gen('my-front', '前锋', ['zhiji_zhibi']), gen('my-mid', '中军'), gen('my-back', '大营')],
+      enemyTeam: [gen('enemy-front', '前锋'), gen('enemy-mid', '中军'), gen('enemy-back', '大营')],
+      seed: 20261030,
+      maxRounds: 8,
+    }).events;
+  }
+
+  it('准备阶段与首次扣兵之前没有任何增伤层（不再有免费首层 8%）', () => {
+    const events = run();
+    const firstDamage = events.findIndex((e) => e.type === 'damage' || e.type === 'attack_hit');
+    expect(firstDamage).toBeGreaterThan(-1);
+    expect(events.slice(0, firstDamage).filter(isBoostInflict)).toHaveLength(0);
+  });
+
+  it('首次叠层就是第 1 层 8%（不是「免费首层 + 首击」的 16%）', () => {
+    const events = run();
+    const idx = events.findIndex(isBoostInflict);
+    expect(idx).toBeGreaterThan(-1);
+    const detail = (events[idx] as Extract<BattleEvent, { type: 'status_inflicted' }>).detail;
+    expect(detail).toMatch(/(造成的|受到的)(攻击|策略攻击)伤害提高 8%/);
+    expect(detail).not.toContain('16%');
   });
 });

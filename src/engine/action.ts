@@ -1220,6 +1220,10 @@ export function triggerCommandSkills(ctx: CombatContext, unit: UnitState): void 
       for (const t of targets) {
         if (!t.alive) continue;
         for (const cfg of stacks) {
+          // `initialLayers: 0`（知己知彼，用户 2026-10-30 口径「初始应该是没有层数的」）：
+          // 准备阶段**不挂任何状态**——既不白给 1 层 8%，也不让这条轨白白参与同类型增伤冲突。
+          // 首层改由 `triggerAllyDealStack` 在首次匹配伤害判定命中时施加（载体由 `ctx.lockedCommands` 反查）。
+          if ((cfg.initialLayers ?? 1) === 0) continue;
           // 注：`endRound` / `requireMoraleBelow` 只在**触发时**过滤（窗口内首次造成伤害才叠层），
           // 准备阶段仍挂"跟踪状态"——否则士气后续降回门槛内时无状态可回溯、整段失效。
           // `initialStatus`（缺省 = status）：跟踪状态本身不该有效果时用（悬权而动挂 amount 0）。
@@ -5379,6 +5383,7 @@ function pushStatus(
       sourceSkillType,
       sourceSkillId,
       mainSkillOnly: create.mainSkillOnly,
+      turns: create.turns,
     } as Status);
     ctx.events.push({
       type: 'status_inflicted',
@@ -7692,7 +7697,7 @@ function triggerPrepareStartHooks(ctx: CombatContext, unit: UnitState, castSkill
  * - `afterMainActiveStacks`：携带者**主动主战法**发动后同源叠层，满层触发一次 `triggerOutput` 并清空状态；
  *   ⚠️ 层数计数走 `ctx.mainActiveCastCounters`（独立于增伤状态，冲突被拒也照样叠层 / 出伤）；
  * - `dapingCastBuff`：**大营**发动主动/追击后，给指定站位友军（前锋/中军）同源叠层；
- * - `allyActiveCastStack`：任意友军（含自己）成功发动**主动**战法后，给携带者自身同源叠层。
+ * - `allyActiveCastStack`：任意**友军**（率土口径：不含自己）成功发动**主动**战法后，给携带者自身同源叠层。
  * `castSkill` 为本次实际发动（释放）的战法（准备战法在释放时算发动）。
  */
 function triggerCastKindHooks(
@@ -7755,7 +7760,10 @@ function triggerCastKindHooks(
           inflictStatus(ctx, t, cfg.status, skill.type, skill.id, holder.general.id);
         }
       }
-      if (kind === 'active' && skill.allyActiveCastStack) {
+      // 「任意友军发动主动战法后」= **不含自己**（率土口径，用户 2026-10-30 原话：
+      // 「目标为两个队友，我军群体才是我方三选二，友军是不包括自己的」）。
+      // `holder === actor` 是携带者自己发动主动战法 —— 不叠层（旧实现「含自己」让自身每次主动都白吃 1 层）。
+      if (kind === 'active' && skill.allyActiveCastStack && holder !== actor) {
         inflictStatus(ctx, holder, skill.allyActiveCastStack.status, skill.type, skill.id, holder.general.id);
       }
       const allyCast = skill.type === 'command' ? skill.afterAllyCast : undefined;
@@ -7952,6 +7960,12 @@ function scaleDirectStatus(create: CreateStatus, caster: UnitState): CreateStatu
   return create;
 }
 
+/** 数组取元素、非数组取自身（须走类型参数才分发，直接对联合别名做条件类型不会分发） */
+type DealStackElem<T> = T extends Array<infer E> ? E : T;
+
+/** `allyDealStack` 单条轨的配置（数组元素；单条写法时即本身） */
+type DealStackTrack = DealStackElem<NonNullable<Skill['allyDealStack']>>;
+
 /**
  * 载体身上的这条状态是否就是某条 `allyDealStack` 轨的「跟踪状态」：
  * 同 `type` + 同 `direction`（缺省按 `caused`）+ 同 `damageType`（都缺省视为相同）。
@@ -7969,18 +7983,27 @@ function isDealStackTrack(s: Status, track: CreateStatus): boolean {
 }
 
 /**
- * 友军「造成匹配伤害后叠层」（久战熟谋）：持有者每次造成匹配伤害（实际扣兵 > 0）后，
+ * 友军「造成匹配伤害后叠层」（久战熟谋 / 反间 / 知己知彼）：持有者每次造成匹配伤害（实际扣兵 > 0）后，
  * 把「挂在其身上、来源战法带 `allyDealStack`」的状态**同源再施加一次**（叠层与上限由状态自身 `maxStacks` 控制）。
  * 注意：状态挂在**友军**身上，而战法由指挥携带者持有——故按「持有者身上的状态 → 来源战法」回溯，
  * 而不是查持有者自己的 commandSkillIds。归属沿用原施法者（`sourceUnitId`）。
  * ⚠️ 但只认「**该条轨的跟踪状态**」本身（`isDealStackTrack`）：同一战法可能同时在两侧挂状态
  * （知己知彼：我军侧 caused 增伤跟踪 + 敌军侧 taken 增伤），只按 `sourceSkillId` 回溯会让敌军的
  * taken 状态触发**我军侧 caused 轨**——敌方自己打出伤害后白叠「造成伤害提高」（2026-10-18 用户报障）。
+ *
+ * 载体（轨作用在谁身上）有两条来源，按 `${战法}#${轨序}` 统一去重、同一轨每次伤害只结算一次：
+ *   ① **已挂跟踪状态**（`initialLayers` 缺省 1）：准备阶段就挂在载体身上，按状态回溯来源战法（反间 / 久战熟谋 / 悬权而动）；
+ *   ② **初始 0 层轨**（`initialLayers: 0`，知己知彼 2026-10-30 口径）：准备阶段不挂任何状态，
+ *      按 `ctx.lockedCommands` 反查「该战法锁定的目标是否含本载体」，判定命中才叠**第 1 层**。
+ *      一旦首层挂上，后续每次伤害都由 ① 接管（`seen` 让 ② 自动让位），不会双叠。
  */
 function triggerAllyDealStack(ctx: CombatContext, source: UnitState, damageType?: DamageType): void {
   if (!source.alive) return;
   // 键 = `战法:轨序`：同一战法的多条轨各自独立判定，但同一条轨在载体身上的多份状态只算一次
   const seen = new Set<string>();
+  const tracks: Array<{ skill: Skill; cfg: DealStackTrack; casterId?: string }> = [];
+
+  // ① 状态驱动：载体身上已有的跟踪状态 → 来源战法
   for (const s of [...source.statuses]) {
     const skill = resolveSkill(ctx, s.sourceSkillId);
     const raw = skill?.allyDealStack;
@@ -7993,34 +8016,55 @@ function triggerAllyDealStack(ctx: CombatContext, source: UnitState, damageType?
       const key = `${skill.id}#${idx}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      if (cfg.damageType && cfg.damageType !== damageType) continue;
-      // 窗口 / 士气门槛（悬权而动「战斗前 2 回合」「士气低于 160 时」）
-      if (cfg.endRound != null && ctx.currentRound > cfg.endRound) continue;
-      if (cfg.requireMoraleBelow != null && effectiveMorale(source) >= cfg.requireMoraleBelow) continue;
-      if (cfg.rate != null) {
-        // 按几率叠层（反间 / 知己知彼）：走**原施法者**士气修正，逐次发 skill_trigger
-        const caster = casterId ? castUnit(ctx, casterId) : undefined;
-        const morale = caster ? effectiveMorale(caster) : 100;
-        const rate = moraleTriggerRate(morale, cfg.rate);
-        const success = ctx.rng.chance(rate);
-        ctx.events.push({
-          type: 'skill_trigger',
-          unitId: casterId ?? source.general.id,
-          targetId: source.general.id,
-          skillId: skill.id,
-          skillName: skill.name,
-          success,
-          rate: Math.round(rate * 100),
-          baseRate: Math.round(cfg.rate * 100),
-          morale,
-        });
-        if (!success) continue;
-      }
-      // 直调路径补缩放：施法者取原施加者（sourceUnitId），取不到时退回携带者
-      const scaleOwner = casterId ? castUnit(ctx, casterId) : undefined;
-      inflictStatus(ctx, source, scaleDirectStatus(cfg.status, scaleOwner ?? source), skill.type, skill.id, casterId);
-      if (!source.alive) return;
+      tracks.push({ skill, cfg, casterId });
     }
+  }
+
+  // ② 初始 0 层轨：准备阶段没挂状态（`initialLayers: 0`），按一类指挥的锁定目标反查载体
+  for (const l of ctx.lockedCommands) {
+    const skill = l.skill;
+    const raw = skill.allyDealStack;
+    if (!raw) continue;
+    if (!l.targets.includes(source)) continue;
+    const cfgs = Array.isArray(raw) ? raw : [raw];
+    for (const [idx, cfg] of cfgs.entries()) {
+      if ((cfg.initialLayers ?? 1) !== 0) continue;
+      const key = `${skill.id}#${idx}`;
+      // 首层已叠过 → 载体身上已有跟踪状态、已由 ① 认领，这里让位（否则每击双叠）
+      if (seen.has(key)) continue;
+      seen.add(key);
+      tracks.push({ skill, cfg, casterId: l.casterId });
+    }
+  }
+
+  for (const { skill, cfg, casterId } of tracks) {
+    if (!source.alive) return;
+    if (cfg.damageType && cfg.damageType !== damageType) continue;
+    // 窗口 / 士气门槛（悬权而动「战斗前 2 回合」「士气低于 160 时」）
+    if (cfg.endRound != null && ctx.currentRound > cfg.endRound) continue;
+    if (cfg.requireMoraleBelow != null && effectiveMorale(source) >= cfg.requireMoraleBelow) continue;
+    if (cfg.rate != null) {
+      // 按几率叠层（反间 / 知己知彼）：走**原施法者**士气修正，逐次发 skill_trigger
+      const caster = casterId ? castUnit(ctx, casterId) : undefined;
+      const morale = caster ? effectiveMorale(caster) : 100;
+      const rate = moraleTriggerRate(morale, cfg.rate);
+      const success = ctx.rng.chance(rate);
+      ctx.events.push({
+        type: 'skill_trigger',
+        unitId: casterId ?? source.general.id,
+        targetId: source.general.id,
+        skillId: skill.id,
+        skillName: skill.name,
+        success,
+        rate: Math.round(rate * 100),
+        baseRate: Math.round(cfg.rate * 100),
+        morale,
+      });
+      if (!success) continue;
+    }
+    // 直调路径补缩放：施法者取原施加者（sourceUnitId），取不到时退回携带者
+    const scaleOwner = casterId ? castUnit(ctx, casterId) : undefined;
+    inflictStatus(ctx, source, scaleDirectStatus(cfg.status, scaleOwner ?? source), skill.type, skill.id, casterId);
   }
 }
 
@@ -10227,34 +10271,42 @@ export function triggerActiveSkill(
   });
   if (!success) return;
 
-  // 1 回合准备：本回合只登记准备，不释放。
-  // 难知如阴跳过准备：施法者被施加 jump_prep 状态（rate=0~1 概率）时，发动即按概率直接释放（无准备回合）
+  // 准备主动：本回合登记准备槽，准备回合数满足后再释放。
   if (skill.type === 'active' && skill.prepare) {
     // 宝物「谋断」：第 N 次发动需要准备的（主）主动战法时，跳过 1 个准备回合
     applyTreasurePrepareSkip(ctx, unit, skill);
+    // 「跳过准备回合」（难知如阴 / 胜兵求战 / 宝物谋断）：逐条状态按 rate 掷骰，累计**本次跳过几个准备回合**。
+    // ⚠️ 语义 = 减少 N 个准备回合（N 缺省 1；包内 effect 581 子战法 21175401 / 21382801 的 constant_param 皆为 1），
+    //    **不是**「跳过全部准备」：张飞【长坂之吼】prepareTurns=2 命中后仍需准备 1 回合
+    //    （用户 2026-11-05 报障：原实现直接释放，等价跳过了全部 2 个准备回合）。
     // 主战法限定（难知如阴 / 胜兵求战「需要准备的**主战法**」）：非主战法不吃跳过准备
-    const jump = unit.statuses.find(
-      (s): s is Extract<Status, { type: 'jump_prep' }> =>
-        s.type === 'jump_prep' && (!s.mainSkillOnly || skill.id === unit.general.mainSkillId)
-    );
-    if (jump && ctx.rng.chance(jump.rate)) {
+    const prepareTotal = skill.prepareTurns ?? 1;
+    let skippedTurns = 0;
+    for (const s of unit.statuses) {
+      if (s.type !== 'jump_prep') continue;
+      if (s.mainSkillOnly && skill.id !== unit.general.mainSkillId) continue;
+      if (!ctx.rng.chance(s.rate)) continue;
+      skippedTurns += s.turns ?? 1;
+    }
+    const leftTurns = prepareTotal - skippedTurns;
+    if (leftTurns <= 0) {
       ctx.events.push({
         type: 'prepare_skip',
         unitId: unit.general.id,
         skillId: skill.id,
         skillName: skill.name,
+        // 报「实际省下的准备回合数」：多条来源累计超出总回合数时（1 回合准备 + 两条跳过）不算多跳
+        ...(skippedTurns > 0 ? { turns: Math.min(skippedTurns, prepareTotal) } : {}),
       });
     } else {
       // 登记本战法自己的准备槽（多准备槽：其他准备战法可同时各自准备）
-      unit.preparations.push({
-        skillId: skill.id,
-        left: skill.type === 'active' && skill.prepare ? (skill.prepareTurns ?? 1) : 1,
-      });
+      unit.preparations.push({ skillId: skill.id, left: leftTurns });
       ctx.events.push({
         type: 'prepare_start',
         unitId: unit.general.id,
         skillId: skill.id,
         skillName: skill.name,
+        ...(skippedTurns > 0 ? { skippedTurns, remaining: leftTurns } : {}),
       });
       // 「发动需要准备的主战法时」钩子（谋定后动）：进入准备时判定/生效（用户确认时点）
       triggerPrepareStartHooks(ctx, unit, skill);
@@ -10688,7 +10740,8 @@ export function triggerPassiveAfterAct(ctx: CombatContext, unit: UnitState): voi
 
 /**
  * 宝物「谋断」（掩日）：**第 N 次**发动需要准备的（主）主动战法时，跳过 1 个准备回合。
- * 时点：在 `jump_prep` 判定之前挂 `jump_prep(rate=1)`，本次发动即直接释放、不进准备。
+ * 时点：在 `jump_prep` 判定之前挂 `jump_prep{turns:1, rate:1}`（与胜兵求战同为「减少 1 个准备回合」，
+ * 不是跳过全部：`prepareTurns: 2` 的战法命中后仍需准备 1 回合）。
  */
 function applyTreasurePrepareSkip(ctx: CombatContext, unit: UnitState, skill: Skill): void {
   for (const s of unit.statuses) {
@@ -10699,7 +10752,7 @@ function applyTreasurePrepareSkip(ctx: CombatContext, unit: UnitState, skill: Sk
     const n = (ctx.treasurePrepareCounters.get(key) ?? 0) + 1;
     ctx.treasurePrepareCounters.set(key, n);
     if (n !== s.atCast) continue;
-    inflictStatus(ctx, unit, { type: 'jump_prep', rate: 1, duration: 1 }, s.sourceSkillType, s.sourceSkillId, unit.general.id);
+    inflictStatus(ctx, unit, { type: 'jump_prep', rate: 1, duration: 1, turns: 1 }, s.sourceSkillType, s.sourceSkillId, unit.general.id);
   }
 }
 

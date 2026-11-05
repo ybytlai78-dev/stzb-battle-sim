@@ -219,13 +219,21 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
       lines.push(`  ⇄ ${ev.unitId} 为 ${ev.targetId} 分摊伤害 ${fmt(ev.amount)}（${SKILL_REGISTRY[ev.skillId]?.name ?? ev.skillId}）${afterSuffix(ev.afterTroops)}`);
       break;
     case 'prepare_start':
-      lines.push(`  ⏳ ${ev.unitId} 开始准备「${ev.skillName}」`);
+      lines.push(
+        ev.skippedTurns
+          ? `  ⏳ ${ev.unitId} 开始准备「${ev.skillName}」（跳过 ${ev.skippedTurns} 回合准备，仍需 ${ev.remaining ?? 1} 回合）`
+          : `  ⏳ ${ev.unitId} 开始准备「${ev.skillName}」`
+      );
       break;
     case 'prepare_end':
       lines.push(`  ⏳ ${ev.unitId} 准备完成「${ev.skillName}」`);
       break;
     case 'prepare_skip':
-      lines.push(`  ✦ ${ev.unitId} 跳过准备，直接发动「${ev.skillName}」`);
+      lines.push(
+        ev.turns
+          ? `  ✦ ${ev.unitId} 跳过 ${ev.turns} 回合准备，直接发动「${ev.skillName}」`
+          : `  ✦ ${ev.unitId} 跳过准备，直接发动「${ev.skillName}」`
+      );
       break;
     case 'skill_exec':
       // 战法效果执行行（疮痍累身）：detail 本身已是「【周泰】执行来自【周泰】的【疮痍累身】效果！」

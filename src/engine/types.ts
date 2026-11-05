@@ -966,8 +966,11 @@ export type CreateStatus =
   | { type: 'ignite'; duration: number; rate: number; growthRate: number; sourceStrategy?: number }
   | { type: 'split'; duration: number; rate: number; /** 次数型分兵（鱼鳞）：有值时按攻击输出次数消耗，不按回合递减；无 charges 走第 2 组（duration 1 = 只覆盖本次行动） */ charges?: number; /** 受谋略缩放（鹤翼） */ strategyScaled?: boolean; /** 受速度缩放（令明负榇分兵伤害率） */ speedScaled?: boolean; /** 分兵伤害率成长/点；施加时按对应属性冻结进 rate */ growthRate?: number }
   /** 跳过准备：只对 `mainSkillOnly` 指定时携带者的**主战法**生效（难知如阴 / 胜兵求战「需要准备的**主战法**」）；
-   *  缺省 = 所有准备主动战法都吃（历史行为） */
-  | { type: 'jump_prep'; duration: number; rate: number; mainSkillOnly?: boolean; /** 受速度缩放（难知如阴「跳过准备几率 60%（受速度属性影响）」） */ speedScaled?: boolean; /** 跳过准备几率的成长率（百分点/点）；施加时按施法者速度冻结进 rate */ growthRate?: number }
+   *  缺省 = 所有准备主动战法都吃（历史行为）。
+   *  ⚠️ `turns`（缺省 1）= 每次判定成功**跳过几个准备回合**，**不是**跳过全部准备回合：
+   *  张飞【长坂之吼】`prepareTurns: 2` 带胜兵求战，命中后仍需准备 1 回合（包内子战法 21175401 effect 581
+   *  `constant_param = 1`；官方文案「有 80.0% 的几率跳过 **1** 回合的准备时间」）。 */
+  | { type: 'jump_prep'; duration: number; rate: number; mainSkillOnly?: boolean; /** 每次成功跳过几个准备回合（缺省 1） */ turns?: number; /** 受速度缩放（难知如阴「跳过准备几率 60%（受速度属性影响）」） */ speedScaled?: boolean; /** 跳过准备几率的成长率（百分点/点）；施加时按施法者速度冻结进 rate */ growthRate?: number }
   /** 下一次造成伤害无视规避（缚父临危）：无 duration——消耗制，不按回合递减 */
   /** 下一次造成伤害无视规避（缚父临危）：duration 仅占位——消耗制，不按回合递减（两个 tick 函数显式跳过） */
   | { type: 'ignore_evasion'; duration: number; /** 宝物「识破」：只在前 N 回合有效（不消耗，到回合即失效）；缺省 = 消耗制（缚父临危） */ throughRound?: number }
@@ -1175,8 +1178,8 @@ interface BaseSkill {
    * 数组形式用于「攻击 / 策略两条独立轨」（反间、知己知彼）。
    */
   allyDealStack?:
-    | { damageType?: DamageType; skillTypes?: SkillType[]; status: CreateStatus; /** 准备阶段挂的「跟踪状态」；缺省 = `status`。用于跟踪状态本身不该有效果的场景（悬权而动：挂 amount 0 占位，触发时才用 status 的 +3 同源累加） */ initialStatus?: CreateStatus; rate?: number; /** 只在当前回合 ≤ 此值内叠层（悬权而动「战斗前 2 回合」）；缺省不限 */ endRound?: number; /** 只在持有者当前生效士气 < 此值时才叠层（悬权而动「士气低于 160 时」）；缺省不限 */ requireMoraleBelow?: number }
-    | Array<{ damageType?: DamageType; skillTypes?: SkillType[]; status: CreateStatus; initialStatus?: CreateStatus; rate?: number; endRound?: number; requireMoraleBelow?: number }>;
+    | { damageType?: DamageType; skillTypes?: SkillType[]; status: CreateStatus; /** 准备阶段挂的「跟踪状态」；缺省 = `status`。用于跟踪状态本身不该有效果的场景（悬权而动：挂 amount 0 占位，触发时才用 status 的 +3 同源累加） */ initialStatus?: CreateStatus; /** 准备阶段**预挂**的层数（缺省 1 = 现行为）。`0` = 战法初始 0 层：准备阶段不挂任何状态、也不进任何冲突判定，首次匹配伤害按 `rate` 判定成功才叠第 1 层（知己知彼，用户 2026-10-30 口径：「初始应该是没有层数的」） */ initialLayers?: number; rate?: number; /** 只在当前回合 ≤ 此值内叠层（悬权而动「战斗前 2 回合」）；缺省不限 */ endRound?: number; /** 只在持有者当前生效士气 < 此值时才叠层（悬权而动「士气低于 160 时」）；缺省不限 */ requireMoraleBelow?: number }
+    | Array<{ damageType?: DamageType; skillTypes?: SkillType[]; status: CreateStatus; initialStatus?: CreateStatus; initialLayers?: number; rate?: number; endRound?: number; requireMoraleBelow?: number }>;
   /**
    * 「每试图发动 N 次主动或追击战法后」钩子（兵者诡道）：携带者每次**试图发动**主动或追击战法
    * （进入发动率判定前，无论结果）累计 1 次，达到 `every` 次后结算 `output` 并把计数归零。
@@ -1211,7 +1214,8 @@ interface BaseSkill {
   onPrepareStart?: { mainSkillOnly?: boolean; rate?: number; output: SkillOutput[] };
   /**
    * 「任意友军成功发动主动战法后」给携带者自身叠层（胜兵求战「任意友军发动主动战法后，自身下一个主动战法
-   * 造成的伤害提高 15%，此效果最多叠加 3 次」）：每次任意友军（含自己）成功发动主动战法后，
+   * 造成的伤害提高 15%，此效果最多叠加 3 次」）：每次任意**友军**（率土口径：不含自己，
+   * 用户 2026-10-30 口径「目标为两个队友……友军是不包括自己的」）成功发动主动战法后，
    * 把 `status` 同源施加到携带者自身一次（叠层与消耗由状态自身 `maxStacks` / `charges` 控制）。
    */
   allyActiveCastStack?: { status: CreateStatus };
@@ -2582,7 +2586,7 @@ export type Status =
    *  `sourceSkillId` = 授予本次分兵的战法；`sourceUnitId` = 该战法的施法者（自施 buff 时 = 携带者）
    *  —— 分兵伤害统计归属**来源战法**（战法级）与**施法者**（武将级），而非打出普攻的友军。 */
   | { type: 'split'; remaining: number; rate: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string; /** 次数型分兵（鱼鳞）：有值时按攻击输出次数消耗，不按回合递减 */ charges?: number; /** 受谋略缩放（鱼鳞） */ strategyScaled?: boolean }
-  | { type: 'jump_prep'; remaining: number; rate: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; /** 只对携带者主战法生效（难知如阴 / 胜兵求战） */ mainSkillOnly?: boolean }
+  | { type: 'jump_prep'; remaining: number; rate: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; /** 只对携带者主战法生效（难知如阴 / 胜兵求战） */ mainSkillOnly?: boolean; /** 每次判定成功**跳过几个准备回合**（缺省 1，包内 effect 581 的 constant_param=1）；不是「跳过全部准备」 */ turns?: number }
   | { type: 'taunt'; remaining: number; targetId: string; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string }
   | { type: 'counter'; remaining: number; rate: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; sourceUnitId?: string }
   | { type: 'cover'; remaining: number; appliedRound: number; sourceSkillType: SkillType; sourceSkillId: string; /** 只保护该友军（援护单体）；缺省 = 援护友军全体 */ protectId?: string }
@@ -2873,12 +2877,18 @@ export type BattleEvent =
       unitId: string;
       skillId: string;
       skillName: string;
+      /** 因「跳过准备回合」效果而少要的准备回合数（胜兵求战 / 难知如阴 / 宝物谋断）；缺省 = 没有跳过 */
+      skippedTurns?: number;
+      /** 本次进入准备槽后仍需准备的回合数（= prepareTurns − skippedTurns） */
+      remaining?: number;
     }
   | {
       type: 'prepare_skip';
       unitId: string;
       skillId: string;
       skillName: string;
+      /** 本次一共跳过了几个准备回合（准备回合数被减到 0 → 直接释放）；缺省 = 旧行为（整段准备被跳过） */
+      turns?: number;
     }
   | {
       type: 'prepare_end';
