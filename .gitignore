@@ -47,3 +47,16 @@ verify-shots/
 /verify/
 /chrome.log
 /.cursor/
+
+# 会话临时目录 / 日志（`.tmp*/` 含截图与 patch 草稿，`输出/` 放真机自检截图与 json）
+/.tmp*/
+/输出/
+*.tmp.log
+/.tmp-tsc.log
+
+# Python 探针脚本的字节码缓存
+__pycache__/
+*.pyc
+
+# 主站 UI 重构的设计稿预览（html / png / jpg：设计过程产物，决策结论进 docs/）
+/design-demos/
