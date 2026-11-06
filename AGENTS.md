@@ -391,12 +391,14 @@ base 76/88/72/78 · grow 1.48/2.32/1.38/1.16）** 全量纠正（id 仍为 `h42`
   ① **伤兵率固定 5%**：每受到 100 兵力伤害 → **5 直接死亡**（永久损失，不可恢复）+ **95 伤兵入池**（可恢复）；该拆分比例**固定不随回合变化**。
   ② **伤兵死亡率固定 14%**：**每回合开始时**，累计伤兵池按 14% 阵亡（`伤兵池 × 0.14` 转入永久死亡，不改变当前兵力）。
   例：第 1 回合受伤 1000 → 死 50 / 伤 950；第 2 回合开始 → 950×(1−0.14) = 817（再阵亡 133）。
+  ③ **阵亡瞬时损失 40%、剩余 60% 冻结**：兵力归零那一刻，伤兵池按 `Math.round(wounded × 0.4)` 转入 `totalDead`；剩余 60% **留在池内不再衰减**（`decayWoundedPool` 跳过 `!alive` 单位，每回合 14% 只作用于存活者）。取整用 `Math.round`；恒等式 `troops + wounded + totalDead = maxTroops` 阵亡前后均成立。实现：`src/engine/action.ts:12596-12613`（阵亡判定内）与 `:11496`（跳过阵亡单位）。
 - **恢复**：有伤兵才能恢复，恢复量从伤兵池中减（`recoverTroops` 仍为唯一入口，请求量 = `min(请求量, 伤兵池, 兵力缺口)`）；死亡兵力（totalDead）不可恢复、治疗不冲减死亡；恒等式 `troops + wounded + totalDead = maxTroops` 恒成立。
 - **实现**：`src/engine/action.ts` `applyDamage` 内按 `deathRate`（默认 5）即时拆分（`Math.round`）；新增导出 `decayWoundedPool(ctx)` 在 `combat.ts` 每回合 `ctx.currentRound = round` 之后、任何行动/恢复之前调用一次（`Math.round` 取整，含第 1 回合；池为空/率为 0 时 no-op）。
 - **配置**：`BattleConfig.woundedMortality?: { deathRate, woundedDecayRate }` 缺省 `{ deathRate: 5, woundedDecayRate: 14 }`（runBattle 默认启用；`{0,0}` = 无死亡、损失全部入池且池不阵亡）。`CombatContext.woundedMortality` 可选：**直接构造 ctx 的单元测试缺省不启用**（旧行为、恢复不受池限制）。
-- **数据出口**：`UnitState` 的 `wounded`（伤兵池）/ `totalDead`（累计死亡）；`round_end` 事件 `myWounded/enemyWounded/myDead/enemyDead`（与 troops 同序，供 Web 兵力条三段渲染）；`BattleReport` 的 `finalMyWounded/finalEnemyWounded/finalMyDead/finalEnemyDead`；`report.ts` 回合末文本行「伤兵 X 阵亡 Y」。
-- 关键文件：`src/engine/types.ts`（`WoundedMortalityConfig`/UnitState/round_end）、`src/engine/action.ts`（`clampPercent`/`decayWoundedPool`/`recoverTroops`/`applyDamage`）、`src/engine/combat.ts`（默认注入 + 回合开始调用 + 输出）；测试 `tests/wounded.test.ts`（15 个：固定 5% 拆分/固定 14% 池阵亡/取整/池累计/恢复限制/恒等式/配置）。
+- **数据出口**：`UnitState` 的 `wounded`（伤兵池）/ `totalDead`（累计死亡）；`round_end` 事件 `myWounded/enemyWounded/myDead/enemyDead`（与 troops 同序，供 Web 兵力条三段渲染）；`BattleReport` 的 `finalMyWounded/finalEnemyWounded/finalMyDead/finalEnemyDead`；`report.ts` 回合末文本行「伤兵 X 阵亡 Y」。**Web 端**（`web/battleSummary.ts`）：兵力条三段渲染（剩余实色 / 伤兵浅色 / 阵亡暗灰）+ 武将卡「兵力 / 伤兵」双块，伤兵块**恒显示**（含 0，与官方样本 `0 | 2,739` 一致）。
+- 关键文件：`src/engine/types.ts`（`WoundedMortalityConfig`/UnitState/round_end）、`src/engine/action.ts`（`clampPercent`/`decayWoundedPool`/`recoverTroops`/`applyDamage`）、`src/engine/combat.ts`（默认注入 + 回合开始调用 + 输出）；测试 `tests/wounded.test.ts`（20 个：固定 5% 拆分/固定 14% 池阵亡/取整/池累计/恢复限制/恒等式/配置 + 阵亡瞬时 40% 扣减（含恒等式）/ 冻结后同队 fallen 三轮不衰减而 survivor 照常衰减）。
 - **golden 已重新生成**（用户 2026-09-22 变更）：全部固定测试集仅 `events[].{my,enemy}{Wounded,Dead}` 变化，`finalMyTroops/finalEnemyTroops`、事件数、胜负均不变（已用逐字段 diff 脚本核对：532 处叶子差异全部为伤/亡数组）。
+  2026-11-06 阵亡瞬时 40% 规则再生成一次：`git diff --stat` = `1 file changed, 14 insertions(+), 14 deletions(-)`（全部裸数字行）；差异全为 `events[].enemyWounded[]` / `enemyDead[]`，涉及 T2 / T3 / T9 三局；对局数 10、事件总数 2407、每局 `finalMyTroops/finalEnemyTroops/result/rounds` 全等，无结构差异。
 
 ### 本会话新增机制（S2 三将战法 + 新 hook，v0.13，用户确认）
 
@@ -1456,27 +1458,40 @@ const targetTeam = primaryTarget.side === unit.side ? allies : enemies; // ✓
   `web/smoke.test.ts` 新增/改写 4 处（池子跨队、同将互换、同队重复拦截、镜像对局简略/统计/详情/复用队伍）；
   `tests/battle_sim.test.ts` 新增镜像 id 交换场地归属 1 个。全量 203 files / 2113 passed，golden 未变。
 
-## 会话交接（统计胜率口径调整 · 2026-09-27）
+## 会话交接（统计胜率：四档判定 + 战损比 · 2026-11-06；前身为 2026-09-27 的三档）
 
-### 用户口径（勿再询问）
+### 用户口径（2026-11-06 变更，勿再按旧口径实现）
 
-- **胜场 = 胜利场数（斩首胜）+ 优势平局；平局场 = 劣势平（+ 完全平）；败场 = 失败场数（斩首负）**。
-- **优势平** = 打满回合时我方剩余兵力占优；**劣势平** = 兵力劣势；**完全平** = 兵力完全相同。
-- 即打满回合不再按「高者胜」直接拆进胜 / 负：**只有大营阵亡才算负**；优势平计入胜场，劣势平 / 完全平计入平局场。
+- **四档互斥**：**胜利** = 斩首胜；**优势平** = 打满回合我方剩余兵力占优 **+ 完全平**（完全平并入优势平，用户明确选择）；
+  **劣势平** = 打满回合我方兵力劣势；**失败** = 斩首负。
+  四档场次之和恒等于总场次（缺省 200），百分比之和恒等于 100%；斩首胜 / 负与打满场次仍作细分脚注保留。
+- **战损比**（新增）：单场 = 我方阵亡 ÷ 敌方阵亡，**只算 `totalDead`**（`finalMyDead` / `finalEnemyDead`），
+  伤兵（wounded）与残兵（troops）都不计；N 场取**每场比值的算术平均**（用户明确：不是总量比）；
+  分母为 0 的场次跳过、不参与均值并记 `deathRatioSkipped`；全部跳过时 `deathRatio = null`（展示 —，不出 NaN / Infinity）。
+- **`swap` 场**：`final*Dead` 是「左 / 右」视角，必须像 `leftTroops/rightTroops` 那样还原成我方视角（`mapDeaths`），否则一半场次算反。
+- **硬约束**：`PlayedBattle.bucket` 保持三值 `win | draw | loss`（`poolMatchup` / `templateSearch` / `advisor/*` 共用），
+  四档只在 `winRate.ts` 的统计与展示层做，避免连带改动对手池 / 顾问口径。
 
-### 实现（`web/winRate.ts` + `web/main.ts`）
+### 实现（`web/winRate.ts` + `web/main.ts` + `web/styles.css` + `web/mobile-ui.css`）
 
-- `WinRateStats.troopWin / troopLoss` → `advDraw / disadvDraw`（`evenDraw` 不变）：
-  `win = decapWin + advDraw`、`loss = decapLoss`、`draw = disadvDraw + evenDraw`；`capped = advDraw + disadvDraw + evenDraw`。
-- `countOne`：斩首场按引擎 win / loss 计；打满回合（引擎原生 draw）用 `judgeOutcome` 比较兵力后按上述口径归并。
-- 面板文案：新增「统计口径」行；拆分行由「兵力判定胜 / 负 / 完全平」改为「优势平 / 劣势平 / 完全平」；底栏 tooltip 同步。
-  注意：优势平计入胜场后，**红蓝对调两次的胜率仍互补**（每场非完全平有且只有一方计胜）；劣势平在对方视角就是优势平。
+- `WinRateStats` 新增 `victory / edgeDraw / deficitDraw / defeat`（+ 各自 `*Rate`）与
+  `deathRatio / deathRatioSkipped / deathRatioSamples / meanMyDead / meanEnemyDead`；
+  `simulateWinRate` / `simulateWinRateSample` / `simulateWinRateAsync` 共用 `absorbPlay` + `finalize`，数值必然一致。
+- 归并：`victory = decapWin`、`edgeDraw = advDraw + evenDraw`、`deficitDraw = disadvDraw`、`defeat = decapLoss`；
+  旧三桶不变：`win = decapWin + advDraw`、`draw = disadvDraw + evenDraw`、`loss = decapLoss`、`capped = advDraw + disadvDraw + evenDraw`。
+- 卡片：四行（名称 + 百分比 + 横条 + 场次）+ 战损比块（主数字两位小数 + 场均阵亡旁注）；
+  配色 胜利 / 优势平 = 暖金系（亮金 / 暗金）、劣势平 / 失败 = 暗红系（斜纹 / 实心）；
+  口径长文案收进 `<details>`（桌面默认展开、移动端折叠），底栏按钮 title 同步四档。
+- 历史（已废止，勿再实现）：2026-09-27 ~ 2026-11-06 展示的是三档「胜场 = 斩首胜 + 优势平；平局场 = 劣势平 + 完全平；败场 = 斩首负」，
+  且没有战损比指标。
 
 ### 测试（`web/winRate.test.ts`）
 
+- 手工样例：一胜（斩首）+ 一优势平 + 一完全平 + 一劣势平 + 一负 → 四档 **1 / 2 / 1 / 1**、和 = 5（完全平并入优势平）。
 - 守恒式：`decapWin + advDraw = win`、`decapLoss = loss`、`disadvDraw + evenDraw = draw`、`advDraw + disadvDraw + evenDraw = capped`。
-- 打满回合逐场断言：优势平 → win；劣势平 → draw 且 `loss = 0`；完全平 → draw。
-- 镜像互补改用 `evenDraw`：`ab.win + ba.win + (ab.evenDraw + ba.evenDraw) / 2 = 场次`。
+- 战损比：(20, 80) → 0.25；分母 0 跳过；`(1,2) + (1,10)` → 0.3 ≠ 总量比 2/12（证明是逐场均值）；全跳过 → null 且文案 —。
+- swap：`mapDeaths` 对称性 + `playOne` 与同参数 `runBattle` 的 `final*Dead` 逐侧对齐（swap / 非 swap 各一次）。
+- 200 场：`simulateWinRate` 与 `simulateWinRateSample` 四档 / 战损比全等；同种子可复现。
 
 ### ⚠️ L4 批量模拟页未改
 
