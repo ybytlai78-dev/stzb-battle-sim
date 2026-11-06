@@ -2265,8 +2265,9 @@ export interface General {
    */
   mutualExclusionGroup: string | null;
   /**
-   * 佩戴的宝物（缺省不佩戴）。引擎在准备阶段最先结算（`prep_phase: 'treasure'`，
-   * 早于 battle_start 被动与一类指挥，保证属性类特效被后续结算读到）。
+   * 佩戴的宝物（缺省不佩戴）。引擎在准备阶段结算（`prep_phase: 'treasure'`，
+   * 早于 battle_start 被动与一类指挥）；状态挂载后**重算出手顺序**，故 +速类特效
+   * （含锻造词条「灵动」）同样决定准备阶段一类指挥的先后（2026-11-06 报障后钉死）。
    */
   treasure?: TreasureLoadout;
   /**

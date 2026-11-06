@@ -112,13 +112,26 @@ export function runBattle(config: BattleConfig): BattleReport {
   const enemyBonus = applyTeamBonus(enemyTeam);
 
   const turnOrderTieBreaks = buildTurnOrderTieBreaks([...myTeam, ...enemyTeam], config.seed);
-  const turnOrder = buildTurnOrder([...myTeam, ...enemyTeam], turnOrderTieBreaks);
+  // 准备阶段的「施加顺序」：此刻宝物 / 陈寿状态尚未挂载，与历史行为逐字节一致。
+  // 冲突判定「先施加者生效」依赖这条遍历顺序，故它只用于施加，不用于战法结算。
+  const applyOrder = buildTurnOrder([...myTeam, ...enemyTeam], turnOrderTieBreaks);
+  // 准备阶段战法结算用的出手顺序：宝物 / 陈寿状态挂载后按**生效速度**重排（见 `prep_phase: 'skill'` 之前）
+  let turnOrder = applyOrder;
   const battleStartEv: Extract<BattleEvent, { type: 'battle_start' }> = {
     type: 'battle_start',
     turnOrder: turnOrder.map((u) => u.general.id),
     seed: config.seed,
   };
   events.push(battleStartEv);
+  /**
+   * 按**当前生效速度**重算准备阶段的出手顺序。
+   * 必须在每一个「准备阶段会改速度」的环节之后调用（宝物 / 陈寿状态 → 战法阶段前；battle_start 被动 → 一类指挥前），
+   * 否则会出现「战报里战斗开始前慢将先手、正式回合却是快将先手」的两套顺序（用户 2026-11-06 报障）。
+   */
+  const refreshTurnOrder = (): void => {
+    turnOrder = buildTurnOrder([...myTeam, ...enemyTeam], turnOrderTieBreaks);
+    battleStartEv.turnOrder = turnOrder.map((u) => u.general.id);
+  };
 
   events.push({ type: 'prep_phase', phase: 'formation' });
   const POS = { 大营: 0, 中军: 1, 前锋: 2 };
@@ -147,9 +160,9 @@ export function runBattle(config: BattleConfig): BattleReport {
   events.push({ type: 'prep_phase', phase: 'troop' });
   // 二级兵种专属/通用特性的**状态类**效果：重骑兵「重骑冲阵」（前 2 回合反击 75%）、
   // 通用特性「散射」（首次普攻附带分兵 40%）——准备阶段一次性授予，走状态冲突闸门
-  for (const unit of turnOrder) grantSecondaryTroopStatuses(ctx, unit);
+  for (const unit of applyOrder) grantSecondaryTroopStatuses(ctx, unit);
   // 【宝物】佩戴宝物的单位先在宝物阶段结算（纯提升、与其他来源不冲突），再走 battle_start 被动 / 一类指挥
-  const treasureUnits = turnOrder.filter((u) => u.general.treasure);
+  const treasureUnits = applyOrder.filter((u) => u.general.treasure);
   if (treasureUnits.length > 0) {
     events.push({ type: 'prep_phase', phase: 'treasure' });
     for (const unit of treasureUnits) applyTreasureEffects(ctx, unit);
@@ -157,11 +170,13 @@ export function runBattle(config: BattleConfig): BattleReport {
   // 【陈寿特性】状态类效果（精进 / 昂扬 / 审慎 / 砥砺）：与宝物同口径，在战法之前挂载，
   // 保证 battle_start 被动与一类指挥读到的是已加成的属性。
   // （阵营 / 统率类不在这里 —— 它们已在部队加成之前由 `applyChenshouPrepass` 改写。）
-  const chenshouUnits = turnOrder.filter((u) => u.general.chenshou);
+  const chenshouUnits = applyOrder.filter((u) => u.general.chenshou);
   if (chenshouUnits.length > 0) {
     events.push({ type: 'prep_phase', phase: 'chenshou' });
     for (const unit of chenshouUnits) applyChenshouEffects(ctx, unit);
   }
+  // 【重排一】宝物 / 陈寿状态已挂载 → 战法阶段按生效速度结算（锻造词条「灵动」等 +速由此进入排序）
+  refreshTurnOrder();
   events.push({ type: 'prep_phase', phase: 'skill' });
   // 【战法】先判定全部 battle_start 被动（百战精兵等加属性），再判定一类指挥（持节镇西等读生效属性）
   // 木桩（inertSides）不参与这两步：不还手就不该在准备阶段打出指挥伤害
@@ -169,9 +184,21 @@ export function runBattle(config: BattleConfig): BattleReport {
     if (unit.inert) continue;
     triggerPassiveSkills(ctx, unit, 'battle_start');
   }
-  for (const unit of turnOrder) {
+  // 【重排二】battle_start 被动同样会改速度（百战精兵 +32、速战兵法 / 疾风突击 / 运筹帷幄 / 速战坚守 +24~28）
+  // → 一类指挥的出手顺序必须读到这批被动，否则同一个 bug 换个来源又出现。
+  refreshTurnOrder();
+  // 【重排三·逐个】一类指挥自己也会改速度：其疾如风 +41（我军全体）、魏武之世 −15%（敌军全体）。
+  // 它们的速度写入发生在命令循环内部，循环外再重排已经晚了（顺序早已走完），所以每执行完一个就
+  // 按最新速度重排「尚未执行」的尾部——已执行的顺序不回头（那是既成事实，不能倒带）。
+  // 没有速度变化的战法重排后结果完全相同，因此这一步对它们零副作用。
+  for (let index = 0; index < turnOrder.length; index += 1) {
+    const unit = turnOrder[index];
     if (unit.inert) continue;
     triggerCommandSkills(ctx, unit);
+    if (index + 1 >= turnOrder.length) break;
+    const tailIds = new Set(turnOrder.slice(index + 1).map((u) => u.general.id));
+    const fresh = buildTurnOrder([...myTeam, ...enemyTeam], turnOrderTieBreaks);
+    turnOrder.splice(index + 1, Number.MAX_SAFE_INTEGER, ...fresh.filter((u) => tailIds.has(u.general.id)));
   }
   events.push({ type: 'preparation_end' });
 
