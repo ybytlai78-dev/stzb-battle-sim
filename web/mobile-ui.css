@@ -246,6 +246,14 @@
     aspect-ratio: 242 / 350;
   }
 
+  /* ── A4.1 简略页两块数值区（兵力 / 伤兵）窄屏收紧 ───────────────────────────────
+     竖屏三将时每列仅 ~45px，styles.css 的 1px 5px 内边距会让 5 位数（10,000）顶出卡宽。
+     这里把左右内边距收到 3px；换行仍由 flex-wrap 负责（宁可两行，也不裁字/压扁列）。
+     颜色不在这里改 —— 调色只动 styles.css 的 --tb-card-* 变量。 */
+  .report-view .sum-hero .sh-troop {
+    padding: 1px 3px;
+  }
+
   /* ── B1. 首页「势力 / 兵种」折叠成一行 + 已选摘要 ───────────────────────────────
      两行筛选在手机上比刚删掉的队头还高。现在默认只留一行摘要，点「筛选 ▾」展开，
      选完标签不自动收起（连选两个维度是常见操作），展开态在 refresh 之间保持。 */
@@ -339,6 +347,44 @@
     line-height: 1.3;
   }
   .bag-modal .bag-item { align-items: flex-start; }
+}
+
+/* ── 统计胜率弹窗（2026-11-06 四档改版）：竖屏 390×844 / 横屏 844×390 都要一屏放下
+   「四行 + 战损比块」。压的是标题栏 / 说明 / 间距，不压一档一行的节奏（挤成两行就分不清）；
+   长口径文案收进 <details>，移动端默认折叠（见 winRate.ts 的 resultHtml）。 */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 620px),
+  (max-width: 720px) and (orientation: portrait) {
+  .wr-modal { width: min(480px, 96vw); max-height: 94dvh; }
+  .wr-modal .m-head { padding: 8px 12px; }
+  .wr-modal .m-head h3 { font-size: 14px; }
+  .wr-modal .m-body { padding: 8px 12px; }
+  .wr-modal .m-foot { padding: 6px 12px; }
+  /* 副标题（阵容 / 正反场说明）在移动端让位：同一句话在折叠的口径区里仍有 */
+  .wr-sub { display: none; }
+  .wr-rows { gap: 7px; margin: 0 0 8px; }
+  .wr-row { grid-template-columns: 56px 52px minmax(0, 1fr) 50px; gap: 7px; }
+  .wr-label { font-size: 12px; letter-spacing: 0; }
+  .wr-pct { font-size: 15px; }
+  .wr-n { font-size: 11px; }
+  .wr-rule { font-size: 11px; line-height: 1.55; margin-bottom: 7px; }
+  .wr-ratio { padding: 7px 10px; margin-bottom: 7px; }
+  .wr-ratio-value { font-size: 21px; }
+  .wr-ratio-note { font-size: 10.5px; line-height: 1.55; }
+  .wr-notes > summary { font-size: 11.5px; }
+  .wr-note { font-size: 11px; line-height: 1.7; }
+}
+
+/* 横屏手机（844×390 一类）再挤一档：竖屏放得下，横屏只差最后 10px ——
+   把「口径说明」的折叠标题也顶进首屏，避免它被滚动条切掉半行。 */
+@media (pointer: coarse) and (orientation: landscape) and (max-height: 620px) {
+  .wr-modal .m-head { padding: 6px 12px; }
+  .wr-modal .m-foot { padding: 4px 12px; }
+  .wr-modal .m-body { padding: 7px 12px; }
+  .wr-rows { gap: 6px; }
+  .wr-rule { margin-bottom: 6px; }
+  .wr-ratio { padding: 6px 10px; margin-bottom: 6px; }
+  .wr-ratio-note { line-height: 1.45; }
+  .wr-notes > summary { padding: 2px 0; }
 }
 
 /* 动效降级：这两处是纯装饰的收放过渡，关掉不影响任何状态

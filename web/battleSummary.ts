@@ -43,13 +43,18 @@ function fmtPct(n: number): string {
   return Number.isInteger(n) ? `${n}%` : `${n.toFixed(1)}%`;
 }
 
-/** 兵力条：实色=剩余，浅色=损失 */
-function troopBar(pct: number, cls: string): string {
-  const p = Math.max(0, Math.min(100, pct));
+/** 兵力条三段：实色=剩余兵力、浅色=伤兵池、暗灰=已阵亡（永久损失）。
+ *  按 maxTroops 归一，三段铺满 100%；恒等式 troops+wounded+dead === maxTroops 保证不重叠不留空。 */
+function troopBar(troops: number, wounded: number, dead: number, maxTroops: number, cls: string): string {
+  const total = maxTroops > 0 ? maxTroops : 1;
+  const left = Math.max(0, Math.min(100, (troops / total) * 100));
+  const mid = Math.max(0, Math.min(100, (wounded / total) * 100));
+  const right = Math.max(0, Math.min(100 - left - mid, 100)); // 用余量补齐，避免浮点留缝/溢出
   return `
     <div class="troopbar ${cls}">
-      <div class="tb-left" style="width:${p}%"></div>
-      <div class="tb-lost" style="width:${100 - p}%"></div>
+      <div class="tb-left" style="width:${left}%"></div>
+      <div class="tb-wounded" style="width:${mid}%"></div>
+      <div class="tb-dead" style="width:${right}%"></div>
     </div>`;
 }
 
@@ -86,10 +91,10 @@ function resultStamp(result: BattleReport['result'], opts: SummaryOpts): string 
 }
 
 /** 单个武将卡：上＝官方卡面（画像铺满 + 卡框 + 左上势力字 / 竖排名 / 右上红度 / 底部 Lv·兵种），
- *  下＝该将兵力条与剩余兵力（战报核心数据，放在卡面外）。兵力 0 → 整卡灰暗阵亡。
+ *  下＝该将兵力条 + **两块数值**（兵力实色底 / 伤兵同色相浅一档底，与官方战报口径一致）。
+ *  兵力 0 → 整卡灰暗阵亡，但**伤兵数照常显示、绝不清零**。
  *  卡面结构/类名与武将池卡、配将槽位卡一致（.frame / .plate / .fac / .card-bar）。 */
-function heroCard(g: General, troops: number, color: 'red' | 'blue'): string {
-  const pct = g.maxTroops > 0 ? (troops / g.maxTroops) * 100 : 0;
+function heroCard(g: General, troops: number, wounded: number, deadTroops: number, color: 'red' | 'blue'): string {
   const dead = troops <= 0;
   const r = g.redness ?? 0;
   const lv = g.level ?? 40;
@@ -112,8 +117,13 @@ function heroCard(g: General, troops: number, color: 'red' | 'blue'): string {
         </div>
       </div>
       <div class="sh-meta">${g.position}</div>
-      ${troopBar(pct, dead ? 'bar-dead' : color === 'red' ? 'bar-red' : 'bar-blue')}
-      <div class="sh-troops">${troops.toLocaleString()}${dead ? ' · 阵亡' : ''}</div>
+      ${troopBar(troops, wounded, deadTroops, g.maxTroops, color === 'red' ? 'bar-red' : 'bar-blue')}
+      <div class="sh-troops ${color === 'red' ? 'tb-red' : 'tb-blue'}">
+        <span class="sh-troop sh-troop-main" title="兵力">${troops.toLocaleString()}</span>
+        <!-- 伤兵块恒显示（含 0）：官方战报里兵力为 0 的阵亡卡也照样显示伤兵数（样本 0 | 2,739），且双块恒定显示可避免数字出现/消失带来的布局跳动。 -->
+        <span class="sh-troop sh-troop-wounded" title="伤兵">${wounded.toLocaleString()}</span>
+        ${dead ? '<span class="sh-troop-dead">· 阵亡</span>' : ''}
+      </div>
     </div>`;
 }
 
@@ -129,6 +139,10 @@ export function createBattleSummary(report: BattleReport, opts: SummaryOpts = {}
   const enInitial = report.enemyTeam.reduce((a, g) => a + g.maxTroops, 0);
   const myLeft2 = report.finalMyTroops.reduce((a, b) => a + b, 0);
   const enLeft = report.finalEnemyTroops.reduce((a, b) => a + b, 0);
+  const myWounded = report.finalMyWounded.reduce((a, b) => a + b, 0);
+  const enWounded = report.finalEnemyWounded.reduce((a, b) => a + b, 0);
+  const myDead = report.finalMyDead.reduce((a, b) => a + b, 0);
+  const enDead = report.finalEnemyDead.reduce((a, b) => a + b, 0);
 
   // 我方 / 敌方；默认敌方在左（myLeft=false）；myLeft=true 时我方在左
   const leftTeam = myLeft ? report.myTeam : report.enemyTeam;
@@ -138,6 +152,10 @@ export function createBattleSummary(report: BattleReport, opts: SummaryOpts = {}
   const rightOrder: General[] = (['前锋', '中军', '大营'] as const).map((p) => rightTeam.find((g) => g.position === p)!);
   const leftTroops = (['大营', '中军', '前锋'] as const).map((p) => (myLeft ? report.finalMyTroops : report.finalEnemyTroops)[leftTeam.findIndex((g) => g.position === p)]);
   const rightTroops = (['前锋', '中军', '大营'] as const).map((p) => (myLeft ? report.finalEnemyTroops : report.finalMyTroops)[rightTeam.findIndex((g) => g.position === p)]);
+  const leftWounded = (['大营', '中军', '前锋'] as const).map((p) => (myLeft ? report.finalMyWounded : report.finalEnemyWounded)[leftTeam.findIndex((g) => g.position === p)]);
+  const rightWounded = (['前锋', '中军', '大营'] as const).map((p) => (myLeft ? report.finalEnemyWounded : report.finalMyWounded)[rightTeam.findIndex((g) => g.position === p)]);
+  const leftDead = (['大营', '中军', '前锋'] as const).map((p) => (myLeft ? report.finalMyDead : report.finalEnemyDead)[leftTeam.findIndex((g) => g.position === p)]);
+  const rightDead = (['前锋', '中军', '大营'] as const).map((p) => (myLeft ? report.finalEnemyDead : report.finalMyDead)[rightTeam.findIndex((g) => g.position === p)]);
   const leftColor: 'red' | 'blue' = myLeft ? 'red' : 'blue';
   const rightColor: 'red' | 'blue' = myLeft ? 'blue' : 'red';
   const leftBarCls = myLeft ? 'bar-red' : 'bar-blue';
@@ -147,26 +165,26 @@ export function createBattleSummary(report: BattleReport, opts: SummaryOpts = {}
     <div class="sum-result">
       <div class="sum-side">
         <div class="ss-title">${myLeft ? myLabel : enemyLabel}</div>
-        ${troopBar((myLeft ? myInitial : enInitial) > 0 ? (myLeft ? myLeft2 : enLeft) / (myLeft ? myInitial : enInitial) * 100 : 0, leftBarCls)}
+        ${troopBar(myLeft ? myLeft2 : enLeft, myLeft ? myWounded : enWounded, myLeft ? myDead : enDead, myLeft ? myInitial : enInitial, leftBarCls)}
         <div class="ss-nums">剩余 <b>${(myLeft ? myLeft2 : enLeft).toLocaleString()}</b> / ${(myLeft ? myInitial : enInitial).toLocaleString()}</div>
       </div>
       ${resultStamp(report.result, opts)}
       <div class="sum-side">
         <div class="ss-title">${myLeft ? enemyLabel : myLabel}</div>
-        ${troopBar((myLeft ? enInitial : myInitial) > 0 ? (myLeft ? enLeft : myLeft2) / (myLeft ? enInitial : myInitial) * 100 : 0, rightBarCls)}
+        ${troopBar(myLeft ? enLeft : myLeft2, myLeft ? enWounded : myWounded, myLeft ? enDead : myDead, myLeft ? enInitial : myInitial, rightBarCls)}
         <div class="ss-nums">剩余 <b>${(myLeft ? enLeft : myLeft2).toLocaleString()}</b> / ${(myLeft ? enInitial : myInitial).toLocaleString()}</div>
       </div>
     </div>
     <div class="sum-roster">
       <div class="sum-blue">
-        ${leftOrder.map((g, i) => (g ? heroCard(g, leftTroops[i] ?? 0, leftColor) : '')).join('')}
+        ${leftOrder.map((g, i) => (g ? heroCard(g, leftTroops[i] ?? 0, leftWounded[i] ?? 0, leftDead[i] ?? 0, leftColor) : '')).join('')}
       </div>
       <div class="vs-badge">
         <span>VS</span>
         <span class="sum-rounds">共 ${report.rounds} 回合<br>种子 ${report.seed}</span>
       </div>
       <div class="sum-red">
-        ${rightOrder.map((g, i) => (g ? heroCard(g, rightTroops[i] ?? 0, rightColor) : '')).join('')}
+        ${rightOrder.map((g, i) => (g ? heroCard(g, rightTroops[i] ?? 0, rightWounded[i] ?? 0, rightDead[i] ?? 0, rightColor) : '')).join('')}
       </div>
     </div>
   `;
