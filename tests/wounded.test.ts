@@ -134,10 +134,13 @@ describe('伤兵机制（单元：受击损失按固定直接死亡率拆分）'
   it('DoT/溢出伤害同样结算：cap 后伤害按固定 5% 拆分（调用方先 cap，applyDamage 收到即为实际扣减量）', () => {
     const ctx = makeCtx({ deathRate: 5, woundedDecayRate: 14 });
     const u = makeUnit('u1', 100); // 兵力 100
-    applyDamage(ctx, u, 100); // cap 后实际扣减 100（溢出部分不结算）
+    applyDamage(ctx, u, 100); // cap 后实际扣减 100（溢出部分不结算）→ 兵力归零阵亡
     expect(u.troops).toBe(0);
-    expect(u.totalDead).toBe(5); // 100 × 5%
-    expect(u.wounded).toBe(95);
+    expect(u.alive).toBe(false);
+    // 直接死 5 + 阵亡瞬间池损失 round(95×40%)=38 → 累计死 43、伤 57
+    expect(u.totalDead).toBe(43);
+    expect(u.wounded).toBe(57);
+    expect(u.troops + u.wounded + u.totalDead).toBe(100); // 恒等式
   });
 
   it('未配置机制（直接构造 ctx）：无死亡/伤兵入池，decayWoundedPool 也是 no-op', () => {
@@ -335,6 +338,96 @@ describe('伤兵机制（runBattle 集成）', () => {
     expect(report.finalMyDead.every((d) => d === 0)).toBe(true);
     expect(report.finalMyWounded.some((w) => w > 0)).toBe(true); // 损失全部为伤兵
     expectConservation(report);
+  });
+});
+
+describe('伤兵机制（阵亡瞬间 40% 池损失 + 剩余 60% 冻结）', () => {
+  it('阵亡瞬间：伤兵池立即损失 40%（Math.round 取整）转入 totalDead，取整方式写明', () => {
+    const ctx = makeCtx({ deathRate: 5, woundedDecayRate: 14 });
+    const u = makeUnit('u1'); // maxTroops 10000
+    applyDamage(ctx, u, 10000); // 兵力归零 → 阵亡；直接死 round(10000×5%)=500、伤 9500
+    expect(u.troops).toBe(0);
+    expect(u.alive).toBe(false);
+    // 阵亡瞬间 40%：round(9500×0.4)=3800 → wounded 5700、totalDead 500+3800=4300
+    expect(u.wounded).toBe(5700);
+    expect(u.totalDead).toBe(4300);
+    expect(u.troops + u.wounded + u.totalDead).toBe(10000); // 恒等式
+  });
+
+  it('阵亡后伤兵池冻结：推进若干回合不再按 14% 衰减', () => {
+    const ctx = makeCtx({ deathRate: 5, woundedDecayRate: 14 });
+    const u = makeUnit('u1');
+    ctx.myTeam.push(u);
+    applyDamage(ctx, u, 10000); // 阵亡：wounded 5700、totalDead 4300
+    expect(u.wounded).toBe(5700);
+    for (let i = 0; i < 5; i++) {
+      expect(decayWoundedPool(ctx)).toBe(0); // 已阵亡单位被跳过
+      expect(u.wounded).toBe(5700); // 冻结不再衰减
+      expect(u.totalDead).toBe(4300);
+    }
+  });
+
+  it('阵亡瞬间 40% 走 Math.round：wounded 减多少、totalDead 就加多少（非整示例钉死取整）', () => {
+    // deathRate=0 便于精确摆位：先手动造「兵力 1 / 池 948 / 死 51」的阵亡前状态，
+    // 再用 1 点致命伤害走完整链路 —— 这 1 点全部入池（deathRate=0），池变 949，
+    // 阵亡瞬间 round(949×0.4)=380 转入永久死亡。
+    const ctx = makeCtx({ deathRate: 0, woundedDecayRate: 14 });
+    const u = makeUnit('u1', 1000);
+    u.troops = 1;
+    u.wounded = 948;
+    u.totalDead = 51;
+    expect(u.troops + u.wounded + u.totalDead).toBe(1000); // 摆位时恒等式先成立
+
+    applyDamage(ctx, u, 1);
+    expect(u.troops).toBe(0);
+    expect(u.alive).toBe(false);
+    expect(u.wounded).toBe(569); // 949 − round(949×0.4)=380
+    expect(u.totalDead).toBe(431); // 51 + 380（伤兵池减少量原封不动进永久死亡）
+    expect(u.troops + u.wounded + u.totalDead).toBe(1000); // 恒等式仍成立
+  });
+
+  it('同队混合回归：阵亡单位池冻结、存活单位照常 14% 衰减（互不串扰）', () => {
+    const ctx = makeCtx({ deathRate: 5, woundedDecayRate: 14 });
+    const fallen = makeUnit('fallen');
+    const survivor = makeUnit('survivor');
+    ctx.myTeam.push(fallen, survivor);
+    applyDamage(ctx, fallen, 10000); // 阵亡：死 500 + 池损失 3800 → 池 5700、累计死 4300
+    applyDamage(ctx, survivor, 1000); // 存活：死 50、池 950
+    expect(fallen.alive).toBe(false);
+    expect(fallen.wounded).toBe(5700);
+    expect(survivor.wounded).toBe(950);
+
+    // 第 2 回合开始：只有存活单位参与衰减（round(950×14%)=133），阵亡单位纹丝不动
+    expect(decayWoundedPool(ctx)).toBe(133);
+    expect(fallen.wounded).toBe(5700);
+    expect(fallen.totalDead).toBe(4300);
+    expect(survivor.wounded).toBe(817);
+    expect(survivor.totalDead).toBe(183); // 50 + 133
+
+    // 再推进 2 个回合：存活单位继续衰减、阵亡单位始终冻结，两边恒等式都成立
+    for (let round = 0; round < 2; round++) {
+      decayWoundedPool(ctx);
+      expect(fallen.wounded).toBe(5700);
+      expect(fallen.totalDead).toBe(4300);
+      expect(fallen.troops + fallen.wounded + fallen.totalDead).toBe(10000);
+      expect(survivor.troops + survivor.wounded + survivor.totalDead).toBe(10000);
+    }
+    expect(survivor.wounded).toBeLessThan(817); // 存活单位确实还在衰减（回归保护的正面断言）
+  });
+
+  it('恒等式 troops+wounded+totalDead === maxTroops 在阵亡前后与多回合后均成立', () => {
+    const ctx = makeCtx({ deathRate: 5, woundedDecayRate: 14 });
+    const u = makeUnit('u1');
+    ctx.myTeam.push(u);
+    applyDamage(ctx, u, 4000); // 未阵亡：死 200、伤 3800、兵 6000
+    expect(u.troops + u.wounded + u.totalDead).toBe(10000);
+    applyDamage(ctx, u, 6000); // 阵亡：死 300 伤 5700，阵亡瞬间再损 40% 池
+    expect(u.alive).toBe(false);
+    expect(u.troops + u.wounded + u.totalDead).toBe(10000);
+    for (let i = 0; i < 4; i++) decayWoundedPool(ctx);
+    expect(u.troops + u.wounded + u.totalDead).toBe(10000);
+    expect(u.wounded).toBe(5700); // 冻结：不再衰减
+    expect(u.totalDead).toBe(4300);
   });
 });
 
