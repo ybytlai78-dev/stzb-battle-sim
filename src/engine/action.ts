@@ -11493,6 +11493,7 @@ export function decayWoundedPool(ctx: CombatContext): number {
   if (rate <= 0) return 0;
   let total = 0;
   for (const u of [...ctx.myTeam, ...ctx.enemyTeam]) {
+    if (!u.alive) continue; // 阵亡单位伤兵池冻结：阵亡瞬间已结清 40%，剩余 60% 不再参与每回合衰减
     if (u.wounded <= 0) continue;
     const dead = Math.round((u.wounded * rate) / 100);
     if (dead <= 0) continue;
@@ -12593,6 +12594,15 @@ export function applyDamage(
     }
   }
   if (target.troops <= 0 && target.alive) {
+    // 阵亡瞬间：伤兵池立即损失 40%（Math.round 取整）转入永久死亡，剩余 60% 冻结
+    // （decayWoundedPool 跳过已阵亡单位，此后不再参与每回合 14% 池阵亡）；只对 wounded > 0 执行。
+    if (target.wounded > 0) {
+      const deadFromWounded = Math.round(target.wounded * 0.4);
+      if (deadFromWounded > 0) {
+        target.wounded -= deadFromWounded;
+        target.totalDead += deadFromWounded;
+      }
+    }
     target.alive = false;
     ctx.events.push({
       type: 'unit_dead',

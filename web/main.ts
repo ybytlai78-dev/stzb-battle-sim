@@ -729,12 +729,12 @@ function renderBattleView(report: BattleReport, mode: 'summary' | 'stats' | 'det
   }
   dock.appendChild(tabs);
 
-  // 「统计胜率」：用当前双方队伍快速跑 200 场，给出 胜 / 平 / 负 概率（口径见 web/winRate.ts）
+  // 「统计胜率」：用当前双方队伍快速跑 200 场，给出四档占比 + 战损比（口径见 web/winRate.ts）
   const winRate = document.createElement('button');
   winRate.type = 'button';
   winRate.className = 'btn ghost';
   winRate.textContent = '统计胜率';
-  winRate.title = `以当前双方队伍快速模拟 ${WIN_RATE_RUNS} 场：大营阵亡即斩首定胜负；打满回合判平局（兵力占优计入胜场，兵力劣势 / 相同计入平局场）`;
+  winRate.title = `以当前双方队伍快速模拟 ${WIN_RATE_RUNS} 场：胜利 = 斩首胜；优势平 = 打满回合兵力占优或完全平；劣势平 = 打满回合兵力劣势；失败 = 斩首负；另出战损比（我方阵亡 ÷ 敌方阵亡，逐场求平均）`;
   winRate.onclick = () =>
     openWinRatePanel({
       myTeam: report.myTeam,

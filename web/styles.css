@@ -18,6 +18,25 @@
   --red-soft: #3a221e;
   --blue: #2a4a7c;
   --blue-soft: #1e2a3a;
+  /* ── 三段兵力条（伤兵可视化）统一调色：实色=剩余 / 浅色=伤兵池 / 暗灰=已阵亡 ──
+   *   后续按参考截图校色只改这一组变量，不动结构。 */
+  --tb-red-solid: #8f3328;
+  --tb-red-wounded-a: #6e4a44;
+  --tb-red-wounded-b: #8a5f58;
+  --tb-blue-solid: #33507c;
+  --tb-blue-wounded-a: #44546c;
+  --tb-blue-wounded-b: #5a6c88;
+  --tb-dead: #4a4a44;
+  --tb-wounded-opacity: .35;
+  --tb-dead-opacity: .55;
+  /* 武将卡数值块（兵力=实色底 / 伤兵=同色相浅一档底）：这里只做上游别名，
+   * 真正的色值仍由上面那一组 --tb-* 决定 —— 换色改上面，这里一行都不用动。 */
+  --tb-card-red-main: var(--tb-red-solid);
+  --tb-card-red-wounded: var(--tb-red-wounded-b);
+  --tb-card-blue-main: var(--tb-blue-solid);
+  --tb-card-blue-wounded: var(--tb-blue-wounded-b);
+  /* 数值块字色：实色/浅色底上都用暖白（阵亡卡降到 --text-dim，配合整卡灰化） */
+  --tb-card-text: var(--ink);
   --green: #3a6b4a;
   /* 战报详情里的武将名分色：红方（我方）偏珊瑚红，蓝方（敌方）偏薄荷绿（用户口径） */
   --hero-red: #e08b84;
@@ -1642,7 +1661,7 @@ main {
 .sum-side .ss-nums { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
 .sum-side .ss-nums b { color: var(--ink); font-size: 13.5px; }
 
-/* 总兵力条：实色剩余 + 浅色损失 */
+/* 总兵力条三段：实色剩余 + 浅色伤兵 + 暗灰已阵亡（颜色见 :root 的 --tb-* 变量，一处调色） */
 .troopbar {
   display: flex;
   height: 22px;
@@ -1650,12 +1669,14 @@ main {
   overflow: hidden;
 }
 .troopbar .tb-left { transition: width .3s; }
-.troopbar .tb-lost { opacity: .45; }
-.troopbar.bar-red .tb-left { background: linear-gradient(90deg, #8f3328, var(--red)); }
-.troopbar.bar-red .tb-lost { background: linear-gradient(90deg, #6e4a44, #8a5f58); }
-.troopbar.bar-blue .tb-left { background: linear-gradient(90deg, #33507c, var(--blue)); }
-.troopbar.bar-blue .tb-lost { background: linear-gradient(90deg, #44546c, #5a6c88); }
-.troopbar.bar-dead .tb-left { background: #4a4a44; }
+.troopbar .tb-wounded { transition: width .3s; opacity: var(--tb-wounded-opacity); }
+.troopbar .tb-dead { transition: width .3s; background: var(--tb-dead); opacity: var(--tb-dead-opacity); }
+.troopbar.bar-red .tb-left { background: linear-gradient(90deg, var(--tb-red-solid), var(--red)); }
+.troopbar.bar-red .tb-wounded { background: linear-gradient(90deg, var(--tb-red-wounded-a), var(--tb-red-wounded-b)); }
+.troopbar.bar-blue .tb-left { background: linear-gradient(90deg, var(--tb-blue-solid), var(--blue)); }
+.troopbar.bar-blue .tb-wounded { background: linear-gradient(90deg, var(--tb-blue-wounded-a), var(--tb-blue-wounded-b)); }
+/* 保留 .bar-dead（历史兼容：整条灰色底） */
+.troopbar.bar-dead .tb-left { background: var(--tb-dead); }
 
 /* 结果印章：金属书法字（胜金 / 败铜 / 平银），黑底 PNG 用 screen 抠黑 */
 .stamp {
@@ -1796,9 +1817,42 @@ main {
   margin: 4px 0 3px;
   flex-shrink: 0;
 }
-.sum-hero .sh-troops { font-size: 12px; color: var(--text-dim); margin-top: 3px; flex-shrink: 0; }
+/* 数值区：两块并排 —— 兵力（实色底）+ 伤兵（同色相浅一档底），对齐官方战报口径。
+ * 阵亡只做整卡灰化（.sum-hero.dead），伤兵数照常显示、不参与任何清零逻辑。
+ * 换色只改 :root 的 --tb-card-* 四行（它们指回 --tb-red-* / --tb-blue-* 兵力条调色组）。
+ * 卡窄时允许折行（flex-wrap），两块各自 nowrap —— 宁可两行，也不把数字压出列宽。 */
+.sum-hero .sh-troops {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 2px 3px;
+  min-width: 0;
+  margin-top: 3px;
+  font-size: 12px;
+  color: var(--text-dim);
+  flex-shrink: 0;
+}
+.sum-hero .sh-troop {
+  min-width: 0;
+  max-width: 100%;
+  padding: 1px 5px;
+  border-radius: 2px;
+  line-height: 1.2;
+  font-weight: 600;
+  color: var(--tb-card-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-shadow: 0 1px 1px rgba(0, 0, 0, .55);
+}
+.sum-hero .sh-troops.tb-red .sh-troop-main { background: var(--tb-card-red-main); }
+.sum-hero .sh-troops.tb-red .sh-troop-wounded { background: var(--tb-card-red-wounded); }
+.sum-hero .sh-troops.tb-blue .sh-troop-main { background: var(--tb-card-blue-main); }
+.sum-hero .sh-troops.tb-blue .sh-troop-wounded { background: var(--tb-card-blue-wounded); }
+.sum-hero .sh-troop-dead { white-space: nowrap; }
 .sum-hero .troopbar { height: 12px; flex-shrink: 0; }
 .sum-hero.dead {
+  --tb-card-text: var(--text-dim);
   filter: grayscale(1) brightness(.72);
 }
 .sum-hero.dead .sh-name, .sum-hero.dead .sh-troops, .sum-hero.dead .sh-meta { color: #8a8a80; }
@@ -1882,20 +1936,39 @@ main {
 }
 .report-dock .btn-back:hover { color: var(--gold-bright); }
 
-/* ── 战报「统计胜率」弹窗：200 场快速模拟 → 胜 / 平 / 负 概率 ── */
-.wr-modal { width: min(460px, 92vw); }
+/* ── 战报「统计胜率」弹窗：200 场快速模拟 → 四档判定 + 战损比 ──
+ * 四档配色（用户 2026-11-06 口径）：胜利 / 优势平 = 暖金系（亮金 → 暗金），
+ * 劣势平 / 失败 = 暗红系（斜纹暗红 → 实心红）。四档各配一个左侧色块，扫一眼就能分辨。 */
+.wr-modal { width: min(480px, 92vw); }
 .wr-sub { font-size: 12px; color: var(--color-text-muted); line-height: 1.7; margin-bottom: 12px; }
 .wr-live { padding: 2px 0 4px; }
 .wr-live .wr-track { height: 10px; margin-bottom: 9px; }
 .wr-live .wr-track i { background: linear-gradient(90deg, var(--gold), var(--gold-bright)); }
-.wr-rows { display: flex; flex-direction: column; gap: 11px; margin: 2px 0 14px; }
+.wr-rows { display: flex; flex-direction: column; gap: 10px; margin: 2px 0 10px; }
 .wr-row {
   display: grid;
-  grid-template-columns: 34px 58px minmax(0, 1fr) 56px;
+  grid-template-columns: minmax(54px, auto) 58px minmax(0, 1fr) 56px;
   align-items: center;
   gap: 9px;
 }
-.wr-label { font-size: 13px; letter-spacing: 1px; color: var(--color-text-muted); }
+.wr-label {
+  font-size: 13px;
+  letter-spacing: 1px;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+/* 档位色块：颜色取 label 的 currentColor，四档各一条 */
+.wr-label::before {
+  content: '';
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  flex: 0 0 auto;
+  background: currentColor;
+}
 .wr-pct {
   font-family: var(--font-kai);
   font-size: 17px;
@@ -1903,6 +1976,7 @@ main {
   color: var(--color-text);
   font-variant-numeric: tabular-nums;
 }
+.wr-n { font-size: 12px; color: var(--color-text-muted); text-align: right; font-variant-numeric: tabular-nums; }
 .wr-track {
   height: 8px;
   background: var(--panel-2);
@@ -1911,14 +1985,57 @@ main {
   overflow: hidden;
 }
 .wr-track i { display: block; height: 100%; width: 0; transition: width .25s ease; }
-.wr-row.win .wr-label,
-.wr-row.win .wr-pct { color: var(--gold-bright); }
-.wr-row.win .wr-track i { background: linear-gradient(90deg, var(--gold), var(--gold-bright)); }
-.wr-row.draw .wr-track i { background: var(--text-weak); }
-.wr-row.loss .wr-label,
-.wr-row.loss .wr-pct { color: color-mix(in srgb, var(--red) 55%, var(--color-text)); }
-.wr-row.loss .wr-track i { background: var(--red); }
-.wr-n { font-size: 12px; color: var(--color-text-muted); text-align: right; font-variant-numeric: tabular-nums; }
+/* 胜利：亮暖金（最高亮度） */
+.wr-row.wr-victory .wr-label { color: var(--gold-bright); }
+.wr-row.wr-victory .wr-pct { color: var(--gold-bright); }
+.wr-row.wr-victory .wr-track i { background: linear-gradient(90deg, #8a6620, var(--gold-bright)); }
+/* 优势平：暗暖金（与胜利同色相、低一档亮度） */
+.wr-row.wr-edge .wr-label { color: #c9a45c; }
+.wr-row.wr-edge .wr-pct { color: #e3c894; }
+.wr-row.wr-edge .wr-track i { background: linear-gradient(90deg, #6b5122, #a9853f); }
+/* 劣势平：斜纹暗红（暗红系里最暗的一个，纹理也是暗的） */
+.wr-row.wr-deficit .wr-label { color: #b0706a; }
+.wr-row.wr-deficit .wr-pct { color: #d5a09a; }
+.wr-row.wr-deficit .wr-track i {
+  background: repeating-linear-gradient(135deg, #4d1f1c 0 6px, #6b2b26 6px 12px);
+}
+/* 失败：实心暗红（暗红系里最实、最亮的一个） */
+.wr-row.wr-defeat .wr-label { color: #d98b82; }
+.wr-row.wr-defeat .wr-pct { color: #efb2a9; }
+.wr-row.wr-defeat .wr-track i { background: linear-gradient(90deg, #5e1d1c, #b8423a); }
+.wr-rule { font-size: 12px; line-height: 1.7; color: var(--text-dim); margin: 0 0 9px; }
+/* 战损比块：主数字独立成块，避免和四行百分比混淆 */
+.wr-ratio {
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  border-radius: 8px;
+  padding: 9px 12px;
+  margin: 0 0 10px;
+}
+.wr-ratio-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.wr-ratio-label { font-size: 13px; letter-spacing: 1px; color: var(--color-text-muted); }
+.wr-ratio-value {
+  font-family: var(--font-kai);
+  font-size: 26px;
+  line-height: 1.1;
+  color: var(--gold-bright);
+  font-variant-numeric: tabular-nums;
+}
+.wr-ratio-hint { font-size: 11px; color: var(--text-weak); }
+.wr-ratio-note { font-size: 11px; color: var(--color-text-muted); line-height: 1.65; margin-top: 4px; }
+/* 口径说明折叠：桌面默认展开（见 resultHtml 的 open），手机端折起来给四行让位 */
+.wr-notes { border-top: 1px dashed var(--line); padding-top: 4px; }
+.wr-notes > summary {
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--gold);
+  letter-spacing: .5px;
+  padding: 3px 0;
+  list-style: none;
+}
+.wr-notes > summary::-webkit-details-marker { display: none; }
+.wr-notes > summary::before { content: '▸ '; }
+.wr-notes[open] > summary::before { content: '▾ '; }
 .wr-note { font-size: 12px; color: var(--color-text-muted); line-height: 1.8; }
 .wr-meta { font-size: 12px; color: var(--text-weak); line-height: 1.8; margin-top: 6px; }
 
