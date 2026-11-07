@@ -10,6 +10,7 @@
  * 相对位次查距离矩阵。例：双方只剩大营 → 双方大营都压到己方 0 位 → 距离 1。
  */
 import type { UnitState } from './types';
+import type { Rng } from './rng';
 import { rangeModOf, skillRangeModOf } from './secondaryTroop';
 import type { CombatContext } from './action';
 
@@ -131,7 +132,14 @@ function skillDistance(ctx: CombatContext, caster: UnitState, target: UnitState)
 
 /**
  * 战法目标选择：按战法有效距离（实时）+ 目标模式。
- * groupCount：仅 group 模式有效——目标数（缺省 2）；`[2,3]` = 50% 概率 2 目标 / 50% 概率 3 目标（辕门射戟 / 动如雷震）。
+ * groupCount：仅 group 模式有效——目标数（缺省 2）。数组 `[下限, 上限]` = 包内 `select_type` 编码的目标数区间
+ *   （`tb_cfg_skill_detail.select_type = 32 + 下限`（33→1、34→2）、`attack_max` = 上限，与官方
+ *   `target_description`「有效距离内1-2 / 1-3 / 2-3个目标」逐条吻合；炬石「1-3」在距离 4 下几何上不可能
+ *   只覆盖 1 人 ⇒ 计数在区间内取值，而非「有效距离内有几个打几个」）。
+ *   **区间内的权重包内没有字段承载**（`prob_*` 是效果生效几率、`prob_series` 是伤害率序列且 33/34 组全空），
+ *   现实取值按 `GROUP_COUNT_WEIGHTS`：`[2,3]`（select_type=34）= **2 目标 2/3、3 目标 1/3**（实测口径）；
+ *   未登记的区间（`[1,2]` 十面埋伏减伤段 / 翕处还张次段 / 休整、`[1,3]` 炬石）仍按闭区间均匀取。
+ *   取证与待证事项见 `docs/逆向对拍/目标数语义-取证-2026-11-06.md`。
  * 单体模式：`random_single` = 距离内均匀随机（率土「敌军/友军单体」默认口径）、
  *   `nearest` = 距离内**最近**（近攻）、`farthest` = 距离内**最远**（远射 / 连环段1）；
  *   `single` = 旧「最近优先」模式，已退役（等价 nearest，登记表不得再出现）。
@@ -168,8 +176,65 @@ export function skillTargets(
   if (mode === 'farthest') return [inRange[inRange.length - 1]];
 
   // group：有效距离内不放回均匀抽取 want 个（大赏三军「我军群体 2 目标」= 三选二，含自身但不强制选自己）
-  const want = Array.isArray(groupCount) ? (ctx.rng.chance(0.5) ? groupCount[0] : groupCount[1]) : groupCount;
+  // 数组形式 = 包内 select_type 目标数区间；区间内权重见 GROUP_COUNT_WEIGHTS（`[2,3]` = 2:1）
+  const want = Array.isArray(groupCount)
+    ? rollGroupCount(ctx.rng, groupCount[0], groupCount[1])
+    : groupCount;
   return pickRandom(ctx, inRange, want);
+}
+
+/**
+ * `groupCount` 区间内取值的相对权重表（键 = `下限,上限`，值按整数由低到高排列）。
+ *
+ * 包内只给**区间**（`select_type = 32 + 下限` / `attack_max` = 上限），不给权重 —— 5 张表里没有任何字段
+ * 承载它（逐字段排除见 `docs/逆向对拍/目标数语义-取证-2026-11-06.md` §五）。
+ * 因此这里的数字全部是**实测口径，不是包内字段**：
+ * - `2,3`（select_type=34「有效距离内 2-3 个目标」，89 个战法：辕门射戟 / 人中吕布 / 绝水遏敌 / 楚歌四起…）
+ *   = 2 目标 **2/3**、3 目标 **1/3**（用户 2026-11-06 转达的实测结论）。
+ * 未登记的区间（`1,2` / `1,3`）退回闭区间均匀取值（最大熵假设，未被实测修正）。
+ */
+export const GROUP_COUNT_WEIGHTS: Readonly<Record<string, readonly number[]>> = {
+  '2,3': [2, 1],
+};
+
+/** 取区间权重表；未登记、长度不匹配或有非正值时返回 null（= 均匀） */
+export function groupCountWeights(min: number, max: number): readonly number[] | null {
+  const w = GROUP_COUNT_WEIGHTS[`${min},${max}`];
+  if (!w || w.length !== max - min + 1 || w.some((x) => !(x > 0))) return null;
+  return w;
+}
+
+/** 区间内按权重抽一个整数（恰好消耗一次 rng.next()，保证可复现序列稳定） */
+export function rollGroupCount(rng: Rng, min: number, max: number): number {
+  if (max <= min) return min;
+  const w = groupCountWeights(min, max);
+  if (!w) return min + rng.int(max - min + 1);
+  const total = w.reduce((a, b) => a + b, 0);
+  const roll = rng.next() * total;
+  let acc = 0;
+  for (let i = 0; i < w.length; i++) {
+    acc += w[i];
+    if (roll < acc) return min + i;
+  }
+  return max;
+}
+
+/**
+ * 区间目标数的期望（供 `web/roundModel` 一类**期望值模型**复用）：
+ * 有权重表按权重求期望，否则取闭区间中点（均匀）。
+ */
+export function expectedGroupCount(
+  groupCount: number | [number, number] | undefined,
+  fallback = 2
+): number {
+  if (groupCount === undefined) return fallback;
+  if (!Array.isArray(groupCount)) return groupCount;
+  const [min, max] = groupCount;
+  if (max <= min) return min;
+  const w = groupCountWeights(min, max);
+  if (!w) return (min + max) / 2;
+  const total = w.reduce((a, b) => a + b, 0);
+  return w.reduce((acc, x, i) => acc + x * (min + i), 0) / total;
 }
 
 /**

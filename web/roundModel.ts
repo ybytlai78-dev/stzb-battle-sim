@@ -25,6 +25,7 @@
  * 单次伤害一律回到 L1 模型（web/damageModel.ts → 引擎 calcDamage），口径与战报同源。
  */
 import { moraleRate, roundRate, scaledValue } from '../src/engine/formulas';
+import { expectedGroupCount } from '../src/engine/target';
 import { SKILL_REGISTRY } from '../src/data/skills';
 import type { CreateStatus, Skill, SkillOutput, SkillType, TroopType } from '../src/engine/types';
 import { statsOf, type ModelParams } from './damageModel';
@@ -312,10 +313,10 @@ function extraKeys(obj: Record<string, unknown>, allowed: Set<string>): string[]
   return Object.keys(obj).filter((k) => !allowed.has(k) && obj[k] !== undefined);
 }
 
-/** targetMode / groupCount → 目标数（'all' = 敌军 3 目标；'group' = groupCount 缺省 2） */
+/** targetMode / groupCount → 目标数（'all' = 敌军 3 目标；'group' = groupCount 缺省 2，区间按 `GROUP_COUNT_WEIGHTS` 求期望） */
 function targetCount(mode: string | undefined, groupCount: number | [number, number] | undefined): number {
   if (mode === 'all') return 3;
-  if (mode === 'group') return mid(groupCount, 2);
+  if (mode === 'group') return expectedGroupCount(groupCount, 2);
   return 1;
 }
 

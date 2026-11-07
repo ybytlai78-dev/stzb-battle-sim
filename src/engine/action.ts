@@ -1407,6 +1407,8 @@ function noteTeamDamage(ctx: CombatContext, source: UnitState): void {
     if (!cfg) continue;
     const caster = castUnit(ctx, l.casterId);
     if (!caster || caster.side !== source.side) continue;
+    // 「友军全体共计造成」不含施法者自身：自身打出的伤害不计入门槛（用户 2026-11-06 口径）。
+    if (source.general.id === caster.general.id) continue;
     const key = `${l.casterId}:${l.skill.id}`;
     if (ctx.teamThresholdActive?.has(key)) continue;
     ctx.teamDamageCounters ??= new Map();
@@ -4045,7 +4047,7 @@ function inflictStatusCore(
           type: 'status_inflicted',
           unitId: target.general.id,
           statusType: 'morale_boost',
-          detail: `${sameSource.amount < 0 ? '士气降低' : '士气提高'} ${Math.abs(sameSource.amount)} ${durText}`,
+          detail: moraleChangeDetail(target, sameSource.amount, durText),
         });
       }
       if (sameSource.type === 'damage_boost' && create.type === 'damage_boost' && create.chargesStack && 'rate' in sameSource) {
@@ -5235,8 +5237,8 @@ function pushStatus(
       const pct = Math.round(Math.abs(create.rate) * 100);
       detail = `受到恢复效果${create.rate >= 0 ? '提升' : '降低'} ${pct}% ${durText}`;
     } else if (type === 'morale_boost' && 'amount' in create) {
-      // amount 为负 = 士气降低（心战为上）
-      detail = `${create.amount < 0 ? '士气降低' : '士气提高'} ${Math.abs(create.amount)} ${durText}`;
+      // amount 为负 = 士气降低（心战为上）；括号内为结算后的生效士气
+      detail = moraleChangeDetail(target, create.amount, durText);
     } else {
       detail = `${statusName(type)} ${amount}${'amount' in create && 'percent' in create && create.percent ? '%' : ''} ${durText}`;
     }
@@ -6119,6 +6121,15 @@ export function effectiveMorale(unit: UnitState): number {
     .filter((s): s is Extract<Status, { type: 'morale_boost' }> => s.type === 'morale_boost')
     .reduce((sum, s) => sum + s.amount, 0);
   return base + bonus;
+}
+
+/**
+ * 士气变化战报：`士气 +16（116）` / `士气 −10（90）`。
+ * 括号内 = 本次结算后的生效士气（面板士气 + 全部 morale_boost 点数之和）。
+ */
+function moraleChangeDetail(target: UnitState, amount: number, durText: string): string {
+  const sign = amount >= 0 ? '+' : '−';
+  return `士气 ${sign}${Math.abs(amount)}（${effectiveMorale(target)}） ${durText}`;
 }
 
 /**
@@ -9036,7 +9047,10 @@ function executeSkillOutputs(
       (out.kind === 'physical_damage' || out.kind === 'strategy_damage') &&
       out.attacker === 'recipient'
     ) {
-      pool = targets;
+      // 徽言龙凤「友军全体」不含施法者自身：代打池按段级 excludeSelf 过滤。
+      pool = out.excludeSelf
+        ? targets.filter((u) => u.general.id !== caster.general.id)
+        : targets;
     }
     // 施法者站位条件（疮痍累身：仅「位于前锋及中军时」才援护友军全体）：
     // 与该段是否结算绑定，不满足则整段跳过（减伤段无此字段，故不受限）
@@ -9181,7 +9195,11 @@ function executeSkillOutputs(
               const reduce = sumReduce(ctx, t, hit, rider) + counterReduce;
               const rate = byHigher
                 ? useStrategy
-                  ? byHigher.strategyRate
+                  ? byHigher.strategyGrowthRate !== undefined
+                    ? roundRate(
+                        scaledValue(byHigher.strategyRate, byHigher.strategyGrowthRate, effectiveStat(rider, 'strategy'))
+                      )
+                    : byHigher.strategyRate
                   : byHigher.attackRate
                 : Array.isArray(out.rate)
                   ? ctx.rng.intInclusive(out.rate[0], out.rate[1])
@@ -9823,6 +9841,15 @@ function executeSkillOutputs(
               high: round1(scaledValue(s.high, s.highGrowthRate ?? 0, fluxStrategy)),
             }));
             inflictStatus(ctx, t, { ...create, steps }, skill.type, skill.id, caster.general.id);
+          } else if (create.type === 'morale_boost' && create.strategyScaled && create.growthRate !== undefined) {
+            /**
+             * 士气提升受谋略影响（徽言龙凤）：包内 21229401 effect 113，intel 10 / const 6 / init 50
+             * ⇒ 值@80 = 6+0.4×10 = 10、成长率 = 10/200 = 0.05/点。与属性点数同口径：
+             * 按绝对值缩放后恢复符号，施加时冻结进 Status.amount；缺省不缩放（谋议宏图 +8 固定）。
+             */
+            const scaled = scaledValue(Math.abs(create.amount), create.growthRate, effectiveStat(caster, 'strategy'));
+            const amount = Math.round(scaled) * Math.sign(create.amount);
+            inflictStatus(ctx, t, { ...create, amount }, skill.type, skill.id, caster.general.id);
           } else if (
             (create.type === 'attack_buff' || create.type === 'defense_buff' || create.type === 'strategy_buff' || create.type === 'speed_buff') &&
             ((create.strategyScaled && create.growthRate !== undefined) ||
@@ -10580,11 +10607,16 @@ function scaleDamageHealOutputs(outputs: SkillOutput[], factor: number): SkillOu
     switch (out.kind) {
       case 'physical_damage': {
         if (out.rate != null) out.rate = scaleRateOrRange(out.rate as number | [number, number]);
-        const byHigher = out.recipientDamageByHigherStat as { attackRate: number; strategyRate: number } | undefined;
+        const byHigher = out.recipientDamageByHigherStat as
+          | { attackRate: number; strategyRate: number; strategyGrowthRate?: number }
+          | undefined;
         if (byHigher) {
           out.recipientDamageByHigherStat = {
             attackRate: scaleRate(byHigher.attackRate),
             strategyRate: scaleRate(byHigher.strategyRate),
+            ...(byHigher.strategyGrowthRate !== undefined
+              ? { strategyGrowthRate: Number((byHigher.strategyGrowthRate * factor).toFixed(4)) }
+              : {}),
           };
         }
         break;
