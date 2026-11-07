@@ -27,7 +27,7 @@
 | 范围 | 内容（示例） | 许可 |
 |------|--------------|------|
 | ✅ 本项目自编代码 | `src/`、`web/`、`tests/`、`scripts/`、构建与部署脚本 | [MIT](LICENSE)：可自由使用、修改、分发 |
-| ❌ 游戏素材 | 武将立绘与小头像（`public/portraits/`）、官方标识（`public/rate-logo.png`）、武将 / 战法 / 宝物的名称、文案与数值（`web/data/*.json`、`scripts/*_extra.json` 等） | 版权归权利方所有，**不适用 MIT、不随本仓库授权**，仅为本项目演示目的随仓库附带 |
+| ❌ 游戏素材 | 武将立绘与小头像（`public/portraits/`）、武将全身大图（`public/portraits_big/`）、带战场背景的场景大卡（`public/portraits_scene/`）、官方标识（`public/rate-logo.png`）、武将 / 战法 / 宝物的名称、文案与数值（`web/data/*.json`、`scripts/*_extra.json` 等） | 版权归权利方所有，**不适用 MIT、不随本仓库授权**，仅为本项目演示目的随仓库附带 |
 | ➖ 项目文档 | `README.md`、`docs/`、`dateyuan/` 中作者自撰的部分随 MIT；其中**引用的官方文案、数值与截图**仍归权利方 | 引用部分不适用 MIT |
 | ➖ 第三方开源组件 | `package.json` 中的依赖与其产物（TypeScript / Vite / Vitest / Capacitor 等） | 各自的许可证 |
 
@@ -56,7 +56,9 @@
 
 | 路径 | 内容 | 来源 |
 |------|------|------|
-| `public/portraits/`（319 个文件，其中 317 个已进入 git 历史） | 武将立绘与小头像 | 网易官方 CDN（`stzb.res.netease.com` 的 `watermark/card_*`、`g0.gph.netease.com` 的 `cards/cut/*`），下载脚本 `scripts/download_portraits.mjs` |
+| `public/portraits/`（333 个文件：立绘 172 + 小头像 161；其中 158 张立绘于 2026-11-07 换成无水印版） | 武将立绘与小头像 | 立绘：**9.2.2 客户端包 `assets/card_c.npk` 内 ASTC 贴图的离线解码**（`rea_stzb/tools/decode_ui_astc.py` + astcenc，只读分析，未修改原包、未绕过任何校验；脚本参见 `docs/逆向对拍/武将画像与外观-取证-2026-11-07.md`）；小头像：网易官方 CDN（`g0.gph.netease.com` 的 `cards/cut/card_small_*`），下载脚本 `scripts/download_portraits.mjs` |
+| `public/portraits_big/`（137 张 WebP，透明底全身像） | 武将全身大图（招募宣发图） | 9.2.2 客户端包 `assets/card_c.npk` 的 `res/replace/card/card_summon` 族 ASTC 解码，q80 转 WebP（只读分析）；索引 `web/data/big_art.json`，取证见 `docs/逆向对拍/武将大图-取证-2026-11-07.md` |
+| `public/portraits_scene/`（159 张 WebP，带战场背景的全身大卡） | 武将场景大卡（详情页背景） | MuMu 模拟器已下载资源 `mini_client_res/card/card_big/big_card_*.jpg` 离线提取：8 字节重复 XOR 解密（`rea_stzb/tools/decrypt_res.py`）→ q80 转 WebP；索引 `web/data/scene_art.json`，取证见 `docs/武将详情页-全屏改版-2026-11-07.md` §六 |
 | `public/rate-logo.png` | 《率土之滨》标识（顶栏图标） | 官方标识素材，标识权归权利方 |
 | `web/data/*.json`、`scripts/skill_extra.json`、`scripts/hero_extra.json`、`scripts/_official_hero.json`、`dateyuan/宝物数据.json` | 武将 / 战法 / 宝物的名称、满级与 1 级文案、品级、数值 | 官方武将库 / 战法库 / 宝物库的公开页面与其服务端 JSON（`stzb.163.com`） |
 | `dateyuan/*.md` | 机制调研与数值推导文档 | 作者撰写；官方原文摘录归权利方，成长值等参考公开社区资料交叉验证 |

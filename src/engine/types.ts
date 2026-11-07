@@ -221,6 +221,8 @@ export type SkillOutput =
       attacker?: 'lowest_strategy_ally' | 'recipient' | 'highest_attack_ally';
       /** 代打「友军攻击最高」时排除施法者自身（蛮王御众）。缺省含自身。 */
       attackerExcludeSelf?: boolean;
+      /** 代打目标池排除施法者自身（徽言龙凤「友军全体」不含自身）。缺省含自身。 */
+      excludeSelf?: boolean;
       /**
        * 代打者结算后按**代打者自身当前兵力**恢复（西陵克晋「并各自恢复一定兵力」）：
        * 立即型急救（非状态，与恢复类战法不冲突），恢复量 = calcHealAmount(代打者当前兵力, rate)。
@@ -249,7 +251,16 @@ export type SkillOutput =
        * 设置后**忽略 `rate`**，逐代打者判断其生效攻击 > 生效谋略 → 用 attackRate（攻击伤害），
        * 否则用 strategyRate（策略伤害）；配合 `attacker:'recipient'` + `chance`（逐代打者各判一次）。
        */
-      recipientDamageByHigherStat?: { attackRate: number; strategyRate: number };
+      recipientDamageByHigherStat?: {
+        attackRate: number;
+        strategyRate: number;
+        /**
+         * 策略轨成长率（点/谋略）：仅 `strategyRate` 生效，按代打者生效谋略缩放
+         * （`scaledValue(strategyRate, strategyGrowthRate, 谋略)`）；缺省不缩放。
+         * 攻击轨 `attackRate` 当前无成长（徽言龙凤包内 21329401 intel 0）。
+         */
+        strategyGrowthRate?: number;
+      };
       /** 代打选敌距离（疏数骑兵 3）；缺省 skill.range */
       range?: number;
       /** 只对这些兵种的当前目标池结算 */
@@ -382,6 +393,8 @@ export type SkillOutput =
        * 一次策略伤害」，每名武将按**自身**属性/增减伤结算、目标逐人独立重选；不耗行动、不受混乱）。
        */
       attacker?: 'highest_strategy_ally' | 'recipient';
+      /** 代打目标池排除施法者自身（徽言龙凤「友军全体」不含自身）。缺省含自身。 */
+      excludeSelf?: boolean;
       /** 代打者结算后按**代打者自身当前兵力**恢复（西陵克晋「并各自恢复一定兵力」），同 physical_damage.healSource */
       healSource?: { rate: number };
     }
@@ -1029,8 +1042,20 @@ export type CreateStatus =
   | { type: 'rest'; rate: number; growthRate: number; duration: number; startRound?: number; strategyScaled?: boolean; troopRatio?: TroopRatioCond }
   /** 士气提高（谋议宏图）：amount 为士气点数；同战法累加，不同指挥战法冲突取较高。
    *  **amount 为负 = 士气降低**（心战为上：每次伤害使目标 −5，整场常驻、同战法累加）；
-   *  正负相反（士气提高 vs 士气降低）不冲突、各自共存，由 `effectiveMorale` 相加得净士气 */
-  | { type: 'morale_boost'; amount: number; duration: number; /** 显式「可叠加」（谋议宏图 每回合 +8 / 心战为上 每次 −5）：同源重复施加累加；缺省刷新 */ stack?: true }
+   *  正负相反（士气提高 vs 士气降低）不冲突、各自共存，由 `effectiveMorale` 相加得净士气。
+   *  受谋略缩放（徽言龙凤：包内 21229401 effect 113，intel 10 / const 6 / init 50
+   *  ⇒ 值@80 = 6+0.4×10 = 10、成长率 = 10/200 = 0.05/点）：施加时按施法者生效谋略冻结进 amount。 */
+  | {
+      type: 'morale_boost';
+      amount: number;
+      duration: number;
+      /** 受谋略缩放（缺省 false = 固定点数，谋议宏图 +8 / 心战为上 −5） */
+      strategyScaled?: boolean;
+      /** 士气点数成长率（点/谋略点）；仅在 strategyScaled 为真时生效 */
+      growthRate?: number;
+      /** 显式「可叠加」（谋议宏图 每回合 +8 / 心战为上 每次 −5）：同源重复施加累加；缺省刷新 */
+      stack?: true;
+    }
   /** 无视防御比例（0.6 = 60%），自身攻击时目标防御 × (1 − rate) */
   /**
    * 无视目标属性比例（0.6 = 60%）：`damageType:'physical'`（缺省）= 攻击伤害时目标防御 × (1 − rate)；

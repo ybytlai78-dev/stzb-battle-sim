@@ -128,7 +128,7 @@ describe('谋议宏图（司马炎，一类指挥：全军减伤 8/8 衰减 + �
     expect(r1Reduces).toHaveLength(3);
     expect(r1Morale).toHaveLength(3);
     expect(r1Reduces.every((e) => e.detail.includes('剩余 8/8'))).toBe(true);
-    expect(r1Morale.every((e) => e.detail.includes('士气提高 8'))).toBe(true);
+    expect(r1Morale.every((e) => e.detail.includes('士气 +8（108）'))).toBe(true);
 
     const r2Reduces = report.events.filter(
       (e, i): e is Extract<BattleEvent, { type: 'status_inflicted' }> =>
@@ -136,7 +136,7 @@ describe('谋议宏图（司马炎，一类指挥：全军减伤 8/8 衰减 + �
     );
     const r2Morale = report.events.filter(
       (e, i): e is Extract<BattleEvent, { type: 'status_inflicted' }> =>
-        i > r2 && e.type === 'status_inflicted' && e.statusType === 'morale_boost' && e.detail.includes('16')
+        i > r2 && e.type === 'status_inflicted' && e.statusType === 'morale_boost' && e.detail.includes('士气 +16（116）')
     );
     expect(r2Reduces).toHaveLength(3);
     expect(r2Morale).toHaveLength(3);
@@ -151,7 +151,7 @@ describe('谋议宏图（司马炎，一类指挥：全军减伤 8/8 衰减 + �
     );
     const r3Morale = report.events.filter(
       (e, i): e is Extract<BattleEvent, { type: 'status_inflicted' }> =>
-        i > r3 && e.type === 'status_inflicted' && e.statusType === 'morale_boost' && e.detail.includes('24')
+        i > r3 && e.type === 'status_inflicted' && e.statusType === 'morale_boost' && e.detail.includes('士气 +24（124）')
     );
     expect(r3Reduces).toHaveLength(3);
     expect(r3Morale).toHaveLength(3);

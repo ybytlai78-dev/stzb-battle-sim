@@ -178,10 +178,10 @@ describe('烈火焚舟（黄盖·追击：燃烧 + 引爆剩余燃烧）', () =>
     expect(moraleOf(e2).map((s) => s.amount)).toEqual([-10]);
     expect(moraleOf(e3)).toEqual([]);
     expect(moraleOf(e1)[0].remaining).toBe(999);
-    // 战报可见：「士气降低 10 持续至战斗结束」
+    // 战报可见：「士气 −10（90） 持续至战斗结束」
     const lines = ctx.events.filter((e) => e.type === 'status_inflicted' && e.statusType === 'morale_boost');
     expect(lines.length).toBe(2);
-    expect(lines.every((e) => (e as { detail?: string }).detail?.includes('士气降低 10'))).toBe(true);
+    expect(lines.every((e) => (e as { detail?: string }).detail?.includes('士气 −10（90）'))).toBe(true);
   });
 
   it('重复引爆按仓库口径刷新士气降低（官方未写可叠加 → 不累加）', () => {

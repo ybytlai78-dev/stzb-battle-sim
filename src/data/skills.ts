@@ -959,7 +959,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
   // ─── 批量3（v0.6.3）───
 
   /**
-   * 动如雷震（公孙瓒主战法）：主动战法，35%，我军群体（有效距离内 2–3 个目标，各 50%）
+   * 动如雷震（公孙瓒主战法）：主动战法，35%，我军群体（有效距离内 2–3 个目标，2:1 —— 2 目标 2/3、3 目标 1/3，见 `GROUP_COUNT_WEIGHTS`）
    * 追击战法发动率 +100 个百分点（上限 100%）、追击战法伤害提升 40%（受速度属性影响），持续 1 回合。
    * 官方有效距离 3（网易技能库 200955）。
    * 受速度成长率 = **0.2532 / 点**（2026-09-16 三点实测反解，用户提供）：
@@ -997,7 +997,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
   },
   /**
    * 虎豹督军（曹纯主战法·一类指挥）：官方口径「战斗开始后**首回合**」。
-   * 准备阶段只释放并锁定我军群体（有效距离内 2–3 目标，各 50%，不结算）；
+   * 准备阶段只释放并锁定我军群体（有效距离内 2–3 目标，2:1，不结算）；
    * 效果在第 1 回合 `round_start` 后结算：进行攻击的伤害提高 50%，该效果每回合开始时减少 1/8。
    * 8 份衰减时点（用户口径 2026-09-18）：**第 1 回合开始才挂上并计数 8/8** → 第 2 回合 7/8 → … → 第 8 回合 1/8。
    * 官方：指挥 A，有效距离 3（网易技能库 200739；来源 dateyuan/七将主战法调研.md §3.1）。
@@ -1128,8 +1128,9 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    * 使自身攻击距离 +1、进入分兵状态（伤害率 50%，受谋略属性影响），同时令敌军群体陷入恐慌
    * （每回合损失兵力，伤害率 69%，受谋略属性影响），持续直到战斗结束；恐慌伤害无视规避。
    * 官方：指挥 A，有效距离 5，目标「自己」（来源 scripts/skill_extra.json）。
-   * 「受谋略属性影响」的分兵 50% / 恐慌 69% 成长率未确认 → 留空（分兵不给缩放字段、
-   * 恐慌 growthRate: 0 = 不缩放按基值）。恐慌为 DoT（行动时跳伤，不经规避判定，与官方「无视规避」一致）。
+   * 「受谋略属性影响」的分兵 50% / 恐慌 69% 已按包内接线：
+   * 分兵 20060703 intel 75 → 成长 0.375/点；恐慌 20060715 intel 110 → 成长 0.55/点。
+   * 恐慌为 DoT（行动时跳伤，不经规避判定，与官方「无视规避」一致）。
    * 引擎配套：新增「攻击距离提高」机制（range_buff 状态 + target.ts attackRangeOf，只放大普攻可达距离，
    * 不影响战法有效距离）。
    */
@@ -1150,14 +1151,14 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         { kind: 'inflict_status', target: 'self', status: { type: 'siege', duration: 999 } },
         // ② 攻击距离 +1
         { kind: 'inflict_status', target: 'self', status: { type: 'range_buff', amount: 1, duration: 999 } },
-        // ③ 分兵 50%（受谋略，成长率未确认 → 留空）
-        { kind: 'inflict_status', target: 'self', status: { type: 'split', duration: 999, rate: 50 } },
-        // ④ 敌军群体恐慌 69%（受谋略，成长率未确认 → 留空）
+        // ③ 分兵 50%（受谋略，包内 20060703 intel 75 → 成长 0.375/点）
+        { kind: 'inflict_status', target: 'self', status: { type: 'split', duration: 999, rate: 50, strategyScaled: true, growthRate: 0.375 } },
+        // ④ 敌军群体恐慌 69%（受谋略，包内 20060715 intel 110 → 成长 0.55/点）
         {
           kind: 'inflict_status',
           targetSide: 'enemy',
           targetMode: 'all',
-          status: { type: 'panic', duration: 999, rate: 69, growthRate: 0 },
+          status: { type: 'panic', duration: 999, rate: 69, growthRate: 0.55 },
         },
       ],
     },
@@ -1228,8 +1229,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    * 每回合开始时，自身造成所有伤害提升 5%（受谋略属性影响），可叠加，持续至战斗结束。
    * 官方：被动 A，有效距离 5，目标「敌军群体」，可用兵种弓/步/骑（scripts/skill_extra.json id 200290）。
    * 挂槽依据 dateyuan/hero_growth_verified.json「XP姜维（蜀·骑，hero_id 100806）→ 九伐中原」。
-   * 「受谋略属性影响」的策略伤害 90% 与每回合增伤 5% 成长率未确认 → 留空
-   * （strategyScaled 标记在、不给 growthRate → 引擎按基值不缩放）。
+   * 「受谋略属性影响」的策略伤害 90% 与每回合增伤 5% 已按包内接线：
+   * 策略伤害成长 0.95/点（21029002 intel 190），每回合增伤成长 0.025/点。
    * 引擎配套：新增被动 `afterActive` 钩子（每次主动战法成功后触发 + maxTriggers 整场次数上限，
    * 计数走 ctx.afterActiveCounters），与二类指挥 after_first_active（仅本回合首次）区分。
    * ⚠️ 「敌军群体」官方未写目标数 → 按惯例取 2 目标（groupCount: 2）。
@@ -1247,11 +1248,11 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       maxTriggers: 9,
       output: [
         { kind: 'physical_damage', rate: 90, targetMode: 'group', groupCount: 2 },
-        { kind: 'strategy_damage', rate: 90, strategyScaled: true, targetMode: 'group', groupCount: 2 },
+        { kind: 'strategy_damage', rate: 90, strategyScaled: true, growthRate: 0.95, targetMode: 'group', groupCount: 2 },
       ],
     },
     output: [
-      // 每回合开始：自身造成所有伤害 +5%（受谋略，成长率未确认 → 留空），可叠加、持续至战斗结束
+      // 每回合开始：自身造成所有伤害 +5%（受谋略，成长 0.025/点），可叠加、持续至战斗结束
       {
         kind: 'inflict_status',
         target: 'self',
@@ -1273,8 +1274,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    * 持续 1 回合；同时使我军群体恢复一定兵力（恢复率 161%，受谋略属性影响），并使其进入休整状态——
    * 当目标兵力低于初始兵力 50% 时恢复一定兵力（恢复率 82%，受谋略属性影响），持续 1 回合。
    * 官方：主动 S，有效距离 5，发动率 35%，目标「敌军群体（有效距离内 2 个目标）」，可用兵种步
-   * （scripts/skill_extra.json）。「受谋略属性影响」各项成长率未确认 → 留空
-   * （strategyScaled 标记在、不给 growthRate → 引擎按基值不缩放）。
+   * （scripts/skill_extra.json）。「受谋略属性影响」四项已按包内接线：
+   * 策略 176% 成长 1.95、燃烧 86% 成长 0.825、恢复 161% 成长 1.325、休整 82% 成长 0.65。
    * 引擎配套：兵力阈值条件 troopRatio —— 段级（`heal.troopRatio`）与状态级（`burning` / `rest` 的 troopRatio，
    * 在 tickDots / tickRests 跳结算时按携带者当前兵力判定）。
    */
@@ -1290,24 +1291,24 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     targetSide: 'enemy',
     tags: ['damage', 'burning', 'heal', 'rest'],
     output: [
-      // ① 敌军群体策略攻击 176%（受谋略，成长率未确认 → 留空）
+      // ① 敌军群体策略攻击 176%（受谋略，成长 1.95/点）
       { kind: 'strategy_damage', rate: 176, strategyScaled: true, growthRate: 1.95 },
-      // ② 燃烧状态（1 回合）：兵力高于初始 50% 时才跳伤 86%（受谋略，成长率留空）
+      // ② 燃烧状态（1 回合）：兵力高于初始 50% 时才跳伤 86%（受谋略，成长 0.825/点）
       {
         kind: 'inflict_status',
         status: { type: 'burning', duration: 1, rate: 86, growthRate: 0.825, troopRatio: { above: 50 } },
       },
-      // ③ 我军群体恢复 161%（受谋略，成长率留空）
+      // ③ 我军群体恢复 161%（受谋略，成长 1.325/点）
       {
         kind: 'heal',
         rate: 161,
         strategyScaled: true,
-        growthRate: 0,
+        growthRate: 1.325,
         targetSide: 'ally',
         targetMode: 'group',
         groupCount: 2,
       },
-      // ④ 休整状态（1 回合）：兵力低于初始 50% 时才跳恢复 82%（受谋略，成长率留空）
+      // ④ 休整状态（1 回合）：兵力低于初始 50% 时才跳恢复 82%（受谋略，成长 0.65/点）
       {
         kind: 'inflict_status',
         targetSide: 'ally',
@@ -1619,7 +1620,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'inflict_status', status: { type: 'strategy_buff', amount: 35, duration: 999 } },
     ],
     tags: ['strategy_buff', 'damage_reduce'],
-    output: [{ kind: 'grant_damage_boost', rate: -22, growthRate: 0.1, duration: 1 }],
+    output: [{ kind: 'grant_damage_boost', rate: -22, growthRate: 0.125, duration: 1 }],
   },
   /** 未笄难言（董白主战法·主动）：使敌军群体陷入妖术诅咒，每回合损失兵力 108%（受谋略），持续 2 回合；并使敌军群体攻击和策略攻击伤害降低 18%，可叠加至战斗结束 */
   weiji_nanyan: {
@@ -3475,6 +3476,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         repeats: [4, 6],
         targetMode: 'random_single',
         strategyScaled: true,
+        growthRate: 1.25,
       },
     ],
   },
@@ -5589,7 +5591,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       startRound: 3,
       oncePerRound: true,
       applyTo: 'source',
-      output: [{ kind: 'strategy_damage', rate: 136, strategyScaled: true }],
+      output: [{ kind: 'strategy_damage', rate: 136, strategyScaled: true, growthRate: 1.0 }],
     },
   },
 
@@ -6238,7 +6240,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    * 引擎配套：① 主动侧复用既有 `roundTrigger:'before_active'`（每次试图发动主动战法前逐段按 `chance`
    *   判定，运筹决胜同链路）；② 追击侧复用 p10 新增的 `BaseSkill.onPursuitAttempt`，段内用
    *   `chance_group{chance:0.4}` 承载「40% 几率」（before_active 走独立链路、不走通用 chance 闸门）。
-   * 受谋略缩放但成长率未确认 → `growthRate` 留空（基值 194%），登记《成长率待补名单》§三。
+   * 受谋略缩放，成长 1.925/点（21180001 intel 385）；主动与追击两段共用 194%。
    */
   zhongmou_buxie: {
     id: 'zhongmou_buxie',
@@ -6252,14 +6254,14 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     targetSide: 'enemy',
     tags: ['damage'],
     output: [
-      { kind: 'strategy_damage', rate: 194, strategyScaled: true, chance: 0.4, targetMode: 'random_single' },
+      { kind: 'strategy_damage', rate: 194, strategyScaled: true, growthRate: 1.925, chance: 0.4, targetMode: 'random_single' },
     ],
     onPursuitAttempt: {
       output: [
         {
           kind: 'chance_group',
           chance: 0.4,
-          outputs: [{ kind: 'strategy_damage', rate: 194, strategyScaled: true, targetMode: 'random_single' }],
+          outputs: [{ kind: 'strategy_damage', rate: 194, strategyScaled: true, growthRate: 1.925, targetMode: 'random_single' }],
         },
       ],
     },
@@ -6567,8 +6569,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    * ③ 使自身和友军单体恢复一定兵力（恢复率 98%，受谋略属性影响）。
    * 官方：主动 B、发动率 40%、距离 4、目标「敌军群体（有效距离内 2 个目标）」、可用兵种弓
    * （scripts/skill_extra.json id 200762；满级 / 1 级描述：恐慌 134%/67%、恢复 98%/49%）。
-   * 「受谋略属性影响」的恐慌 134% 与恢复 98% 成长率未确认 → 留空
-   *   （strategyScaled 标记在；DoT / heal 的 growthRate 是**必填字段**，给 0 = 不缩放、用基值）。
+   * 「受谋略属性影响」的恐慌 134% 与恢复 98% 已按包内接线：
+   *   恐慌成长 1.5/点、恢复成长 1.15/点（DoT / heal 的 growthRate 为必填字段）。
    * 目标口径：「自身和友军单体」= 自身 + 1 名友军单体（不含自身），与奇佐鬼谋 / 合流同口径
    *   （self 段 + targetSide:'ally' + random_single + excludeSelf）。
    * 引擎配套：**无需新机制** —— ② 走既有 `morale_branch`（by:'target'、threshold 100：
@@ -6604,7 +6606,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         kind: 'heal',
         rate: 98,
         strategyScaled: true,
-        growthRate: 0,
+        growthRate: 1.15,
         targetSide: 'ally',
         targetMode: 'random_single',
         excludeSelf: true,
@@ -6781,19 +6783,19 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['heal', 'damage'],
     output: [],
     onAttrChange: [
-      // 我军全体被施加属性提升（攻/防/谋/速各判一次）→ 40% 恢复 60%（受谋略，成长率留空）
+      // 我军全体被施加属性提升（攻/防/谋/速各判一次）→ 40% 恢复 60%（受谋略，成长 0.6/点）
       {
         victim: 'ally',
         sign: 'up',
         rate: 0.4,
         output: [{ kind: 'heal', rate: 60, strategyScaled: true, growthRate: 0.6 }],
       },
-      // 敌军全体被施加属性下降 → 40% 一次策略伤害 100%（受谋略，成长率留空）
+      // 敌军全体被施加属性下降 → 40% 一次策略伤害 100%（受谋略，成长 1.0/点）
       {
         victim: 'enemy',
         sign: 'down',
         rate: 0.4,
-        output: [{ kind: 'strategy_damage', rate: 100, strategyScaled: true }],
+        output: [{ kind: 'strategy_damage', rate: 100, strategyScaled: true, growthRate: 1.0 }],
       },
     ],
   },
@@ -7003,8 +7005,11 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    * （伤害率 120%，受谋略属性影响），由攻击或谋略属性中较高的属性决定。
    * 官方：scripts/skill_extra.json id 200294（指挥 S / 距离 5 / 友军全体 / 弓步骑；
    * 1 级 士气 5 / 增伤 3.5% / 攻击 100% / 策略 60%）。
-   * 成长率：士气、增伤、策略伤害三处「受谋略属性影响」均未确认 → 留空（增伤 strategyScaled 在、
-   * 不给 growthRate = 基值；策略伤害率按下表基值直接用）→ 登记 OFFLINE_MAIN_SKILLS（司马徽下架）。
+   * 成长率（包内 tb_cfg_skill_detail 自证）：
+   *  · 士气 21229401 effect 113：intel 10 / const 6 / init 50 → 值@80 = 10、成长率 0.05/点（已接线）；
+   *  · 增伤 21229402 effect 531：intel 10 / const 3 → 值@80 = 7%、成长率 0.05/点（已接线）；
+   *  · 策略伤害 21329402 effect 302：intel 100 / const 80 → 值@80 = 120%、成长率 0.5/点（已接线，
+   *    走 `recipientDamageByHigherStat.strategyGrowthRate`，按代打者自身谋略缩放；攻击轨 150% 无成长）。
    * 引擎配套：
    *  ① **新增 `CommandSkill.teamDamageThreshold`（全队累计伤害门槛）** —— 本侧累计造成 N 次伤害后激活，
    *     立即结算激活段 output，并**启用**该战法的 roundStartRepeat（激活前不执行）；
@@ -7026,14 +7031,23 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     output: [],
     teamDamageThreshold: {
       count: 6,
-      // 激活瞬间：友军全体士气 +10（受谋略未确认 → 基值 10）
-      output: [{ kind: 'inflict_status', status: { type: 'morale_boost', amount: 10, duration: 999 } }],
+      // 激活瞬间：友军全体士气 +10（受谋略，包内 intel 10 → 成长 0.05/点）
+      output: [{
+        kind: 'inflict_status',
+        targetSide: 'ally',
+        targetMode: 'all',
+        excludeSelf: true,
+        status: { type: 'morale_boost', amount: 10, duration: 999, strategyScaled: true, growthRate: 0.05 },
+      }],
     },
     roundStartRepeat: {
       output: [
         // 每回合行动时：造成所有伤害 +7%（受谋略，成长率留空），可叠加
         {
           kind: 'inflict_status',
+          targetSide: 'ally',
+          targetMode: 'all',
+          excludeSelf: true,
           status: {
             type: 'damage_boost',
             rate: 0.07, growthRate: 0.05,
@@ -7048,7 +7062,12 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
           kind: 'physical_damage',
           rate: 0,
           attacker: 'recipient',
-          recipientDamageByHigherStat: { attackRate: 150, strategyRate: 120 },
+          excludeSelf: true,
+          recipientDamageByHigherStat: {
+            attackRate: 150,
+            strategyRate: 120,
+            strategyGrowthRate: 0.5,
+          },
           chance: 0.6,
           targetMode: 'random_single',
           range: 5,
@@ -7452,8 +7471,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    * 若目标为敌军，则使其随机陷入犹豫、混乱、暴走、怯战状态中的一种，持续 1 回合。
    * 官方：scripts/skill_extra.json id 200273（主动 A / 距离 5 / 敌我群体3 / 兵种弓步骑 / 发动率 40%；
    *   1 级 10% / 增伤 11% / 90%）。
-   * 入档判断：**下架** —— 22% 增伤与 180% 策略段均「受谋略属性影响」而官方未给成长系数，
-   *   按本批口径留空 `growthRate`（按基值不缩放）+ 登记 OFFLINE_MAIN_SKILLS，待反解确认后移出。
+   * 入档判断：22% 增伤与 180% 策略段均「受谋略属性影响」，已按包内接线：
+   *   增伤成长 0.075/点、策略段成长 1.1/点（21127301 intel 220）。
    * 引擎配套：
    *   ① `BaseSkill.targetPool:'mixed'`（敌我同池随机 N，排除施法者自身）；
    *   ② `SkillOutput.lockedSide`（段级按阵营过滤**锁定目标**，不重选池）——同一批 3 个目标里，
@@ -7475,7 +7494,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     output: [
       // ① 对自身以外随机 3 名武将（敌我同池）各造成一次攻击伤害 10%
       { kind: 'physical_damage', rate: 10 },
-      // ② 友军：造成的所有伤害 +22%（受谋略）1 回合（成长率未确认 → 按基值 22% 不缩放）
+      // ② 友军：造成的所有伤害 +22%（受谋略，成长 0.075/点）1 回合
       {
         kind: 'inflict_status',
         lockedSide: 'ally',
@@ -7494,7 +7513,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         rate: 0, // 由 recipientDamageByHigherStat 定轨（攻击 180% / 策略 180%），本字段忽略
         attacker: 'recipient',
         lockedSide: 'ally',
-        recipientDamageByHigherStat: { attackRate: 180, strategyRate: 180 },
+        recipientDamageByHigherStat: { attackRate: 180, strategyRate: 180, strategyGrowthRate: 1.1 },
         targetMode: 'group',
         groupCount: 2,
       },
@@ -7868,7 +7887,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
             targetSide: 'ally',
             targetMode: 'all',
             requireGender: 'female',
-            status: { type: 'defense_buff', amount: 40, duration: 999, strategyScaled: true, growthRate: 0 },
+            status: { type: 'defense_buff', amount: 40, duration: 999, strategyScaled: true, growthRate: 0.225 },
           },
         ],
       },
@@ -8568,7 +8587,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    *   ③ 「下 2 次造成的策略伤害提高 30%」的 2 次按**每个目标各自 2 次**（`charges: 2`）——**推定**。
    *   ④ 「持续 2 回合」作用于减伤段 → `duration: 2`；策略增伤段按次数计（`duration: 999` + `charges: 2`）。
    *   ⑤ 「我军群体（有效距离内 2-3 个目标）」= `targetMode:'group'` + `groupCount: [2,3]`
-   *      （辕门射戟先例：每次随机 2~3 目标）。
+   *      （select_type=34：2 目标 2/3、3 目标 1/3，权重表见 `src/engine/target.ts` 的 `GROUP_COUNT_WEIGHTS`）。
    *   ⑥ 减伤 20% / 增伤 30% 均「受谋略属性影响」而官方未给成长系数 → `strategyScaled: true` + `growthRate` 缺
    *      （按基值不缩放）→ 登记 `src/data/listing.ts` 的 `OFFLINE_MAIN_SKILLS` → **武将下架**（上架池保持 80）。
    *   ⑦ 「怯战(预备)」= 官方 effect 标签即为**预备型** → 用 `pendingNextAct`（引擎件②）。
@@ -8749,7 +8768,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       {
         atRound: 8,
         output: [
-          { kind: 'strategy_damage', rate: 100, strategyScaled: true, attacker: 'recipient', targetMode: 'random_single' },
+          { kind: 'strategy_damage', rate: 100, growthRate: 0.7, strategyScaled: true, attacker: 'recipient', targetMode: 'random_single' },
         ],
       },
     ],
@@ -8827,7 +8846,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'inflict_status', sameTargetsAsLastDamage: true, status: { type: 'panic', duration: 2, rate: 156, growthRate: 1.45 } },
       { kind: 'inflict_status', sameTargetsAsLastDamage: true, status: { type: 'burning', duration: 2, rate: 156, growthRate: 0 } },
       // ② 第 2 次策略攻击（独立重选目标）→ 同样恐慌 + 燃烧
-      { kind: 'strategy_damage', rate: 140, strategyScaled: true, targetMode: 'random_single' },
+      { kind: 'strategy_damage', rate: 140, strategyScaled: true, growthRate: 1.3, targetMode: 'random_single' },
       { kind: 'inflict_status', sameTargetsAsLastDamage: true, status: { type: 'panic', duration: 2, rate: 156, growthRate: 0 } },
       { kind: 'inflict_status', sameTargetsAsLastDamage: true, status: { type: 'burning', duration: 2, rate: 156, growthRate: 0 } },
     ],
@@ -9796,8 +9815,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    *      按「本回合内」取 `duration: 1`（**推定**）；
    *   ⑤ 「以上效果触发后，回合结束时额外恢复我军兵力最低单体」→ 回合末 `heal` + `targetPick:'lowest_troops_ally'`
    *      （佐命晋武既有件），恢复率 150% 受谋略；
-   *   ⑥ 两处「受谋略属性影响」官方均未给成长系数 → 基值不缩放（`strategyScaled` 标记在、`growthRate` 留空 /
-   *      恢复段给 0）→ 登记 OFFLINE_MAIN_SKILLS → **武将下架**。
+   *   ⑥ 两处「受谋略属性影响」已按包内接线：发动几率成长 0.125/点（20029502 intel 25）、
+   *      回合末恢复成长 0.125/点。
    */
   jinche_chijie: {
     id: 'jinche_chijie',
@@ -9811,8 +9830,9 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['damage_boost', 'rampage', 'range_buff', 'skill_range_buff', 'heal'],
     output: [],
     roundStartChance: {
-      chance: 50, // 50%（1 级 25%；受谋略未确认 → 基值不缩放）
+      chance: 50, // 50%（1 级 25%；包内 20029502 intel 25 → 成长 0.125/点）
       strategyScaled: true,
+      growthRate: 0.125,
       output: [
         {
           kind: 'random_pick',
@@ -9844,7 +9864,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
           ],
         },
       ],
-      // 以上效果触发后：回合结束时额外恢复我军兵力最低单体 150%（受谋略未确认 → 基值）
+      // 以上效果触发后：回合结束时额外恢复我军兵力最低单体 150%（受谋略，成长 0.125/点）
       roundEndOutput: [
         { kind: 'heal', rate: 150, strategyScaled: true, growthRate: 0.125, targetPick: 'lowest_troops_ally' },
       ],
@@ -10334,7 +10354,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    *   弓兵攻击距离 -2，骑兵发动主动战法造成的伤害降低 50.0%，步兵无法恢复兵力，效果持续 1 回合。
    *   【追加】吕布发动此战法造成的伤害无视兵种相克。
    *   来源 https://stzb.163.com/m/skilllist/200834.html（id 200834；1 级 100%）。
-   * 口径：① 目标数 `groupCount: [2,3]`（50/50，辕门射戟先例）；
+   * 口径：① 目标数 `groupCount: [2,3]`（select_type=34：2 目标 2/3、3 目标 1/3，见 `GROUP_COUNT_WEIGHTS`）；
    *   ② 三条减益按**目标兵种**过滤（`inflict_status.troopTypes`）：弓兵攻击距离 −2 / 骑兵主动战法伤害 −50% /
    *   步兵围困，均持续 1 回合；
    *   ③ 追加（吕布，同名多张卡都算）→ `conditional` 二选一的 `ignoresTroopCounter`。
@@ -11470,7 +11490,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
    * 绝水遏敌（A 准备主动·距离 4·发动率 50%·目标「敌军群体（有效距离内 2-3 个目标）」）：
    * 1 回合准备，对敌军群体发动强力策略攻击（伤害率 230.0%，受谋略属性影响），并使其无法恢复兵力，持续 1 回合。
    * 官方 https://stzb.163.com/m/skilllist/200826.html（id 200826；1 级 115%）。
-   * 口径：① `prepare: true`（1 回合准备）+ `groupCount: [2,3]`（官方「2-3 个目标」→ 每次随机抽 2~3，仓库先例）；
+   * 口径：① `prepare: true`（1 回合准备）+ `groupCount: [2,3]`（select_type=34：2 目标 2/3、3 目标 1/3，见 `GROUP_COUNT_WEIGHTS`）；
    *   ②「无法恢复兵力」= `siege`（围困）状态 1 回合（仓库既有口径：围困拦截一切恢复）；
    *   ③ 策略 230% 受谋略、官方未给系数 → `strategyScaled` + `growthRate` 留空（按基值）
    *   → 登记 `OFFLINE_LEARNABLE_SKILLS`（下架）。
