@@ -4131,3 +4131,170 @@ header.app .season-pick select:focus-visible { outline: 2px solid var(--gold-bri
   font-size: 12px;
   line-height: 1.6;
 }
+
+/* ══ 武将详情页·全屏仿游戏版式（2026-11-07 二次改版） ══
+   全屏覆盖：左侧全身大图 cover 铺满，右栏浮动面板；标题栏取消，
+   详情/配点/兵种/方案 页签落在右栏顶部；左缘竖排 势力 / 名字 / 星级；
+   宝物卡并入战法栏第 4 格。无大图的武将用 470×592 卡面 cover 铺满（不再小图居中）。 */
+.hero-detail-full.modal-mask { padding: 0; background: #080706; align-items: stretch; justify-content: stretch; }
+.hero-detail-full .hero-detail-modal {
+  width: 100vw; height: 100dvh; max-width: none; max-height: none;
+  border: 0; border-radius: 0; background: #080706; box-shadow: none;
+  display: block; position: relative; overflow: hidden;
+}
+
+/* 顶栏：只留页签 + 关闭，绝对浮在右栏上方 */
+.hero-detail-full .hero-detail-modal .m-head {
+  position: absolute; top: 0; right: 0; z-index: 7;
+  width: min(46vw, 680px); margin: 0;
+  display: flex; align-items: center; justify-content: flex-end; gap: 12px;
+  padding: 14px 20px 0; background: transparent; border: 0;
+}
+.hero-detail-full .hero-detail-modal .m-head h3 { display: none; }
+.hero-detail-full .hero-detail-modal .m-head .hd-tabs-slot { margin: 0; }
+
+/* 右栏改为浅灰底（用户 2026-11-08 口径）：「右边背景不要纯黑色，用浅灰色」。
+   作用域内重定义主题变量，文字 / 卡片 / 分割线整体翻转为深色系，暗色区域只保留左侧大图。 */
+.hero-detail-full .hero-detail-modal {
+  --panel: #1e1f24;
+  --panel-2: #26272d;
+  --panel-3: #17181c;
+  --line: rgba(255, 255, 255, .10);
+  --line-strong: rgba(255, 255, 255, .20);
+  --ink: #efe9dc;
+  --text: #e8e2d5;
+  --text-dim: #a9a49a;
+  --text-weak: #9a948a;
+  --gold: #cbbd90;
+  --gold-bright: #e2d3a4;
+  --red: #d99a92;
+  --red-soft: #45302c;
+  --blue-soft: #2a3644;
+  --green: #9fbf86;
+}
+
+.hero-detail-full .hero-detail-modal .hd-body { position: absolute; inset: 0; padding: 0; overflow: hidden; }
+.hero-detail-full .hero-detail-modal .hd-split { display: block; position: relative; height: 100%; min-height: 0; }
+
+/* 左侧：铺满的大图层 */
+.hero-detail-full .hd-side { position: absolute; inset: 0; display: block; }
+.hero-detail-full .hd-stage {
+  position: absolute; inset: 0; border: 0; min-height: 0; overflow: hidden;
+  background: radial-gradient(120% 80% at 28% 8%, #2a231b 0%, #14110e 52%, #080706 100%);
+  box-shadow: none;
+}
+.hero-detail-full .hd-bigfill {
+  position: absolute; inset: -4%; z-index: 0;
+  background-repeat: no-repeat; background-position: center; background-size: cover;
+  filter: blur(36px) brightness(.30) saturate(1.15);
+}
+.hero-detail-full .hd-bigart {
+  position: absolute; inset: 0; z-index: 1;
+  background-repeat: no-repeat; background-position: 18% bottom; background-size: auto 100%;
+  filter: saturate(1.06) brightness(1.07) drop-shadow(0 12px 40px rgba(0,0,0,.7));
+}
+
+.hero-detail-full .hd-veil {
+  position: absolute; inset: 0; z-index: 2; pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(12,12,16,0) 38%, rgba(12,12,16,.28) 50%, rgba(14,14,18,.55) 62%, rgba(14,14,18,.66) 100%);
+}
+/* 场景大卡（带战场背景的全身图）：整块铺满，有它就不用透明大图 */
+.hero-detail-full .hd-scene-fill {
+  position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background-repeat: no-repeat; background-position: center 28%; background-size: cover;
+  filter: blur(56px) brightness(.32) saturate(.85);
+  transform: scale(1.14);
+}
+/* 主图不做裁切：整张显示（contain），不足的空白由上面的模糊底填 */
+.hero-detail-full .hd-scene {
+  position: absolute; inset: 0; z-index: 1;
+  background-repeat: no-repeat; background-position: left center; background-size: contain;
+  /* 图的右缘按「contain 后实际边界」渐隐：边界 = min(100vw,100vh)，提前 320px 开始化开 */
+  -webkit-mask-image: linear-gradient(90deg, #000 0, #000 calc(min(100vw, 100vh) - 320px), transparent calc(min(100vw, 100vh)));
+  mask-image: linear-gradient(90deg, #000 0, #000 calc(min(100vw, 100vh) - 320px), transparent calc(min(100vw, 100vh)));
+}
+/* 左缘竖排标签的底部渐隐，保证亮背景上可读 */
+.hero-detail-full .hd-stage .hd-side-labels::before {
+  content: ''; position: absolute; inset: -24px -78px -24px -28px; z-index: -1;
+  background: linear-gradient(90deg, rgba(8,7,6,.90) 0%, rgba(8,7,6,.72) 52%, rgba(8,7,6,0) 100%);
+}
+.hero-detail-full .hd-stage.has-scene .hd-bigfill,
+.hero-detail-full .hd-stage.has-scene .hd-bigart { display: none; }
+
+/* 左缘竖排：势力 / 名字 / 星级 */
+.hero-detail-full .hd-stage .hd-side-labels {
+  position: absolute; left: 24px; top: 20px; bottom: 20px; z-index: 5;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 10px;
+}
+.hero-detail-full .hd-stage .hd-side-name {
+  writing-mode: vertical-rl; text-orientation: upright;
+  font-size: 27px; line-height: 1.15; letter-spacing: 7px; color: #fff6e2;
+  text-shadow: 0 2px 18px rgba(0,0,0,.95);
+}
+.hero-detail-full .hd-stage .hd-stars {
+  position: static; writing-mode: vertical-rl;
+  font-size: 15px; letter-spacing: 5px; padding: 0; background: none; text-align: center;
+  color: #f0c860; text-shadow: 0 2px 12px rgba(0,0,0,.9);
+}
+
+/* 右栏面板：淡入黑底，内容可滚 */
+.hero-detail-full .hero-detail-modal .hd-main {
+  position: absolute; top: 0; right: 0; bottom: 0; z-index: 4;
+  width: min(46vw, 680px);
+  padding: 62px 28px 78px;
+  overflow-y: auto; overflow-x: hidden;
+  display: flex; flex-direction: column; justify-content: center;
+  background: linear-gradient(90deg, rgba(18,18,22,0) 0%, rgba(18,18,22,.34) 5%, rgba(18,18,22,.80) 13%, rgba(18,18,22,.92) 22%, rgba(18,18,22,.94) 100%);
+}
+.hero-detail-full .hero-detail-modal .m-foot {
+  position: absolute; right: 0; bottom: 0; z-index: 6;
+  width: min(46vw, 680px); margin: 0;
+  display: flex; align-items: center; justify-content: flex-end; gap: 10px;
+  padding: 12px 20px 15px; border: 0;
+  background: linear-gradient(0deg, rgba(18,18,22,.92) 34%, rgba(18,18,22,0) 100%);
+}
+
+/* 浅灰右栏下仍写死暗底的局部元素，逐个翻亮 */
+.hero-detail-full .hd-treasure { background: rgba(38,39,45,.88); }
+.hero-detail-full .hd-treasure .ts-img { background: #14151a; }
+.hero-detail-full .hd-treasure .ts-rarity { color: #eddb9c; }
+.hero-detail-full .hd-treasure .ts-rarity i { color: #a8c2da; }
+.hero-detail-full .hd-cs { background: rgba(255, 255, 255, .07); }
+.hero-detail-full .hd-cs.filled { background: linear-gradient(180deg, rgba(216, 186, 118, .18), rgba(255, 255, 255, .06)); }
+.hero-detail-full .hd-cs .cs-flag { color: #b9d6a8; border-color: #7d9a70; }
+
+/* 顶行（等级 / 携带兵力 / 陈寿）不许掉行，「等级」不被折成两行 */
+.hero-detail-full .hd-level-row { flex-wrap: nowrap; gap: 8px; }
+.hero-detail-full .hd-level-row .lbl { white-space: nowrap; flex: 0 0 auto; }
+.hero-detail-full .hd-level-row input[type="number"] { width: 62px; flex: 0 0 auto; }
+.hero-detail-full .hd-level-row .hd-troops { white-space: nowrap; }
+@media (max-width: 1280px) {
+  .hero-detail-full .hd-level-row .tip { display: none; }
+}
+
+/* 战法栏：3 格战法 + 宝物第 4 格等宽 */
+.hero-detail-full .skills-row { display: flex; gap: 8px; align-items: stretch; }
+.hero-detail-full .skills-row > * { flex: 1 1 0; min-width: 0; }
+.hero-detail-full .skills-row .hd-treasure-wrap {
+  position: relative; flex: 1 1 0; min-width: 0; height: auto; min-height: 96px; align-self: stretch;
+}
+.hero-detail-full .skills-row .hd-treasure {
+  position: absolute; inset: 0; width: 100%; height: 100%; max-height: none;
+}
+.hero-detail-full .hd-side-col { display: none; }
+
+/* 窄屏：上大图 + 下满宽面板 */
+@media (max-width: 980px) {
+  .hero-detail-full .hero-detail-modal .hd-main { width: 100%; top: 44%; bottom: 0; height: auto; padding: 14px 14px 68px; justify-content: flex-start; background: rgba(18,18,22,.90); }
+  .hero-detail-full .hero-detail-modal .hd-main::before { content: ''; position: absolute; left: 0; right: 0; top: -26px; height: 26px; background: linear-gradient(180deg, rgba(18,18,22,0), rgba(18,18,22,.92)); pointer-events: none; }
+  .hero-detail-full .hero-detail-modal .m-head { width: 100%; }
+  .hero-detail-full .hero-detail-modal .m-foot { width: 100%; }
+  .hero-detail-full .hd-bigart { background-size: cover; background-position: center 18%; }
+  .hero-detail-full .hd-scene { background-position: center top; background-size: contain;
+    -webkit-mask-image: linear-gradient(180deg, #000 0, #000 62%, transparent 96%);
+    mask-image: linear-gradient(180deg, #000 0, #000 62%, transparent 96%); }
+  .hero-detail-full .hd-veil { background: linear-gradient(180deg, rgba(12,12,16,0) 58%, rgba(12,12,16,.55) 82%, rgba(14,14,18,.62) 96%); }
+  .hero-detail-full .hd-stage .hd-side-labels { left: 14px; top: 12px; bottom: auto; }
+  .hero-detail-full .hd-stage .hd-side-name { font-size: 19px; letter-spacing: 4px; }
+}

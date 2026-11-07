@@ -52,7 +52,7 @@ npx tsc --noEmit                    # 类型检查（strict）
 - **许可边界**：自编代码（`src/` `web/` `tests/` `scripts/`）走 **MIT**（`LICENSE`）；**《率土之滨》的名称 / 武将 / 立绘 / 标识 / 战法文案 / 数值不适用 MIT**，版权归网易公司及其关联方 —— 这条是本声明的核心，别写成「素材也随 MIT 开源」。
 - **新增任何官方素材（立绘 / 标识 / 文案 / 数值 / 数据表）→ 先登记进 `NOTICE.md` §五**；未登记的素材不进仓库。
 - **不得新增任何商业化入口**（广告 / 打赏 / 会员 / 付费下载等）；权利人通过 Issue 提出异议时按 `NOTICE.md` §六 立即下架。
-- 现状如实披露：仓库**确实包含**官方素材（`public/portraits/` 319 个文件来自官方 CDN、`public/rate-logo.png`、`web/data/*.json`），不适用「源码不含素材」那套写法。
+- 现状如实披露：仓库**确实包含**官方素材（`public/portraits/` 333 个文件——武将立绘是客户端包 `card_c.npk` 内 ASTC 的离线解码产物、小头像来自官方 CDN；另有 `public/rate-logo.png`、`web/data/*.json`），不适用「源码不含素材」那套写法。
 
 ## 工作树与提交（DSH，2026-09-18 起）
 
@@ -413,7 +413,7 @@ base 76/88/72/78 · grow 1.48/2.32/1.38/1.16）** 全量纠正（id 仍为 `h42`
 ### 本会话新增机制（辕门射戟，v0.13，用户确认）
 
 - **辕门射戟**（h479 群弓 SP 吕布·主动 S·距离5·35%）：对敌军群体发动二次攻击（140%，每次攻击目标独立选择），第一次攻击命中后对目标施加「造成攻击伤害大幅降低」debuff（哨兵 `-HUGE_MODIFIER_RATE`，持续 1 回合），第二次攻击独立选目标不受影响。
-  - **新机制 1：`groupCount?: number | [number, number]`**（BaseSkill + physical/strategy_damage 输出）：`[2,3]` = 50% 概率 2 目标 / 50% 概率 3 目标（`skillTargets` 第 6 参）。
+  - **新机制 1：`groupCount?: number | [number, number]`**（BaseSkill + physical/strategy_damage 输出）：数组 = 包内 `select_type` 目标数区间（`select_type = 32 + 下限`、`attack_max` = 上限），区间内权重由 `src/engine/target.ts` 的 `GROUP_COUNT_WEIGHTS` 决定 —— **`[2,3]`（select_type=34）= 2 目标 2/3、3 目标 1/3（2026-11-06 实测口径）**，未登记的 `[1,2]` / `[1,3]` 仍均匀；期望值统一走 `expectedGroupCount()`（`[2,3]` → 2.333，`web/roundModel.ts` 已接）。
   - **新机制 2：`markCausedReduce?: { rate, duration }`**（physical_damage 输出）：伤害结算后对本次攻击每个目标施加 `damage_boost` caused 负值（`-HUGE_MODIFIER_RATE` = −1000%；2026-10-24 前的 `-99.99` 已统一）；`buffMult` 既有 `MIN_DAMAGE_FACTOR = 0.1`（v0.14 单一总和模型，增减伤总和 < -90% 最低保留 10%）→ 强制目标造成伤害 min 10%。**注意**：`calcDamage` 的 `troopBase`（兵力基础）不乘 mult，故实际伤害 = 兵力基础 + 其余 ×10%。
   - **debuff 持续时间语义**：`damage_boost` 属第 2 组 → 行动中施加（appliedRound>0）按「下次行动前递减」结算，
     「持续 1 回合」= duration **1**（目标未出手 → 生效本次行动；已出手 → 生效下一次行动；2026-09-20 口径）。

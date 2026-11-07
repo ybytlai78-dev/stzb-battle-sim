@@ -4,7 +4,7 @@
  * 点击武将 → 率土风武将详情页（左画像右数据：四维+成长 / 加点 / 红度 / 兵种转换占位 / 三战法栏）
  * 战法判定顺序：被动 > 指挥 > 主动 > 追击；同类型内主战法先判定、装配战法按添加顺序。
  */
-import { HEROES, SLOTTED_HEROES, OFFLINE_HEROES, offlineReason, getHeroById, SKILL_TYPE_NAME, avatarSrc, portraitSrc, isFemale, freePointBudget, troopCapacity, skillGrade, gradeLabel, skillTypeIcon, gradeFrame, gradeRibbon, gradePlate, SKILL_DESCS, isMainSkill, isLearnableSkillListed, rednessStars, buildGeneral, TROOP_CHAR as TYPE_CHAR, factionIconSrc, cardFrameSrc, applyChenshouCost } from './heroes';
+import { HEROES, SLOTTED_HEROES, OFFLINE_HEROES, offlineReason, getHeroById, SKILL_TYPE_NAME, avatarSrc, portraitSrc, bigArtSrc, sceneArtSrc, isFemale, freePointBudget, troopCapacity, skillGrade, gradeLabel, skillTypeIcon, gradeFrame, gradeRibbon, gradePlate, SKILL_DESCS, isMainSkill, isLearnableSkillListed, rednessStars, buildGeneral, TROOP_CHAR as TYPE_CHAR, factionIconSrc, cardFrameSrc, applyChenshouCost } from './heroes';
 import { bindScrollCollapse, isMobileUI } from './mobileUi';
 import type { HeroJson } from './heroes';
 import pinyinJson from './data/pinyin.json';
@@ -1005,7 +1005,7 @@ const STAT_NAMES: Array<[keyof SlotState['freePoints'], string]> = [
 export function openHeroDetail(heroId: string, opts: DetailOpts): void {
   const hero = getHeroById(heroId)!;
   const mask = document.createElement('div');
-  mask.className = 'modal-mask page-mask';
+  mask.className = 'modal-mask page-mask hero-detail-full';
   const modal = document.createElement('div');
   modal.className = 'modal page-modal hero-detail-modal';
   modal.innerHTML = `
@@ -1134,7 +1134,7 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
       <div class="hd-stats">${statRows}</div>
       <div class="hd-skills">
         <div class="skills-title">战法${deputy ? '<span class="hd-deputy-tag">北伐副本 · 副将主战法占第二格</span>' : ''}</div>
-        <div class="skills-row">${mainSkillEl}${equips}</div>
+        <div class="skills-row">${mainSkillEl}${equips}${hdTreasureSlotHtml()}</div>
         ${season === 'beifa' && editable
           ? `<div class="hd-deputy-row">
               <button type="button" class="hd-deputy-btn" data-deputy-pick="1" title="副将须与主将同阵营；副将等级跟随主将、加点独立">${deputy ? '更换副将' : '＋ 佩戴副将（北伐副本）'}</button>
@@ -1149,17 +1149,22 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
   /** 左侧固定栏：阵营 + 名字（竖排，仿参考图）+ 画像 + 星级 —— 三个板块共用 */
   const hdSideHtml = (): string => {
     const sp = hero.tags.includes('sp');
+    /* 全屏大图（2026-11-07 改版）：左半屏到整屏铺满，势力 / 名字 / 星级竖排在左缘。
+       有 card_summon 大图用大图；没有则用 470×592 卡面立绘 cover 铺满（不再出现小图居中）。 */
+    const scene = sceneArtSrc(heroId);
+    const big = bigArtSrc(heroId);
+    const src = big || portraitSrc(heroId);
     return `
-      <div class="hd-side-labels">
-        <span class="faction-badge ${FACTION_CLS[hero.faction] ?? ''}">${hero.faction}</span>
-        <span class="hd-side-name">${hero.name}${sp ? '<span class="sp-tag">SP</span>' : ''}${isFemale(heroId) ? '<span class="hd-female">女</span>' : ''}</span>
-      </div>
-      <div class="hd-side-col">
-        <div class="hd-portrait">
-          <img src="${portraitSrc(heroId)}" alt="${hero.name}" onerror="this.style.display='none'" />
-          <div class="hd-stars" title="红度 ${slot.redness}/5（每红 +10 自由属性点）">${rednessStars(slot.redness)}</div>
+      <div class="hd-stage ${scene ? 'has-scene' : big ? 'has-big' : 'no-big'}">
+        ${scene ? `<div class="hd-scene-fill" style="background-image:url('${scene}')"></div><div class="hd-scene" style="background-image:url('${scene}')"></div>` : ''}
+        <div class="hd-bigfill" style="background-image:url('${src}')"></div>
+        <div class="hd-bigart" style="background-image:url('${src}')"></div>
+        <div class="hd-veil"></div>
+        <div class="hd-side-labels">
+          <span class="faction-badge ${FACTION_CLS[hero.faction] ?? ''}">${hero.faction}</span>
+          <span class="hd-side-name">${hero.name}${sp ? '<span class="sp-tag">SP</span>' : ''}${isFemale(heroId) ? '<span class="hd-female">女</span>' : ''}</span>
+          <span class="hd-stars" title="红度 ${slot.redness}/5（每红 +10 自由属性点）">${rednessStars(slot.redness)}</span>
         </div>
-        ${hdTreasureSlotHtml()}
       </div>`;
   };
 

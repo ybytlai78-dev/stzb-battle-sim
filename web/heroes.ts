@@ -14,6 +14,8 @@ import portraitsJson from './data/portraits.json';
 import heroMetaJson from './data/hero_meta.json';
 import skillGradesJson from './data/skill_grades.json';
 import skillDescJson from './data/skill_desc.json';
+import bigArtJson from './data/big_art.json';
+import sceneArtJson from './data/scene_art.json';
 
 /**
  * 武将 JSON 记录类型。
@@ -68,6 +70,30 @@ export interface PortraitEntry {
   avatar: string | null;
 }
 export const PORTRAITS: Record<string, PortraitEntry> = portraitsJson as Record<string, PortraitEntry>;
+
+/**
+ * 武将全身大图清单（客户端 `card_c.npk` 的 `card_summon` 族解码，1123×1024 透明背景）：
+ * ourId → heroId。键不存在 = 该武将包里没有大图，详情页回退到卡面立绘。
+ * 生成口径见 `docs/逆向对拍/武将大图-取证-2026-11-07.md`。
+ */
+export const BIG_ART: Record<string, number> = bigArtJson as Record<string, number>;
+
+/** 全身大图 src（WebP，透明底）；无大图返回空串 */
+/**
+ * 场景大卡（2026-11-07 加）：客户端 `card_big/big_card_<heroid>.jpg`（1008×1008，带战场背景的全身图，
+ * 来自 MuMu 已下载资源 + 8 字节重复 XOR 解密；仓库内为 WebP）。
+ * ourId → heroId。键不存在 = 该武将包里没有场景大卡，详情页回退到全身大图 / 卡面立绘。
+ */
+export const SCENE_ART: Record<string, number> = sceneArtJson as Record<string, number>;
+
+/** 场景大卡 src（WebP，带背景）；无则返回空串 */
+export function sceneArtSrc(heroId: string): string {
+  return SCENE_ART[heroId] ? asset(`/portraits_scene/${heroId}.webp`) : '';
+}
+
+export function bigArtSrc(heroId: string): string {
+  return BIG_ART[heroId] ? asset(`/portraits_big/${heroId}.webp`) : '';
+}
 
 /** 武将性别（网易官方数据）：heroId → 男/女 */
 export const HERO_META: Record<string, '男' | '女'> = heroMetaJson as Record<string, '男' | '女'>;
