@@ -11,6 +11,7 @@ import type { ChenshouLoadout } from '../src/data/chenshouFeatures';
 import { asset } from './assets';
 import heroesJson from './data/heroes.json';
 import portraitsJson from './data/portraits.json';
+import assetVerJson from './data/asset_ver.json';
 import heroMetaJson from './data/hero_meta.json';
 import skillGradesJson from './data/skill_grades.json';
 import skillDescJson from './data/skill_desc.json';
@@ -88,12 +89,20 @@ export const SCENE_ART: Record<string, number> = sceneArtJson as Record<string, 
 
 /** 场景大卡 src（WebP，带背景）；无则返回空串 */
 export function sceneArtSrc(heroId: string): string {
-  return SCENE_ART[heroId] ? asset(`/portraits_scene/${heroId}.webp`) : '';
+  return SCENE_ART[heroId] ? withVer(asset(`/portraits_scene/${heroId}.webp`), ASSET_VER.portraitsScene) : '';
 }
 
 export function bigArtSrc(heroId: string): string {
-  return BIG_ART[heroId] ? asset(`/portraits_big/${heroId}.webp`) : '';
+  return BIG_ART[heroId] ? withVer(asset(`/portraits_big/${heroId}.webp`), ASSET_VER.portraitsBig) : '';
 }
+/** 素材指纹（scripts/gen_asset_ver.mjs 生成，vite buildStart 每次重算）。
+ *  立绘/大图文件名不带 hash，必须拼 `?v=` 才能让换图后缓存失效。 */
+const ASSET_VER: Record<string, string> = assetVerJson as Record<string, string>;
+function withVer(url: string, ver: string | undefined): string {
+  if (!url || !ver) return url;
+  return url + (url.includes('?') ? '&' : '?') + 'v=' + encodeURIComponent(ver);
+}
+
 
 /** 武将性别（网易官方数据）：heroId → 男/女 */
 export const HERO_META: Record<string, '男' | '女'> = heroMetaJson as Record<string, '男' | '女'>;
@@ -288,13 +297,13 @@ function isGuardId(heroId: string): boolean {
 export function avatarSrc(heroId: string): string {
   if (isGuardId(heroId)) return GUARD_AVATAR;
   const p = PORTRAITS[heroId];
-  return asset(p?.avatar ?? p?.portrait ?? '');
+  return withVer(asset(p?.avatar ?? p?.portrait ?? ''), ASSET_VER.portraits);
 }
 
 /** 画像 src（竖版卡面） */
 export function portraitSrc(heroId: string): string {
   if (isGuardId(heroId)) return GUARD_PORTRAIT;
-  return asset(PORTRAITS[heroId]?.portrait ?? '');
+  return withVer(asset(PORTRAITS[heroId]?.portrait ?? ''), ASSET_VER.portraits);
 }
 
 /**

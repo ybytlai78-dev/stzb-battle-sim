@@ -17,7 +17,8 @@
     "rag:search": "tsx scripts/rag/search.mts",
     "rag:eval": "tsx scripts/rag/eval.mts",
     "rag:diff": "tsx scripts/rag/diff.mts",
-    "rag:slots": "tsx scripts/rag/slotdiff.mts"
+    "rag:slots": "tsx scripts/rag/slotdiff.mts",
+    "asset:ver": "node scripts/gen_asset_ver.mjs"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.2",
