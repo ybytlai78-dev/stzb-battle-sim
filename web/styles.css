@@ -4297,9 +4297,12 @@ header.app .season-pick select:focus-visible { outline: 2px solid var(--gold-bri
    旧版是「全屏大图 + 右栏 min(46vw,680px) 浮动面板」，1320 宽时左侧只露出约 22%（其余被面板的横向渐变吃掉）。
    现改成左列 50% / 右列 50% 两栏硬分：左半屏只放立绘（模糊铺底仍铺满左半屏、立绘 contain 完整不裁、垂直居中），
    右半屏从 50% 起铺到屏右，页签贴顶、按钮贴底。
-   ⚠️ 下限 min-height:481px —— 与下面既有的矮视口档（max-height:480px）对齐：
-   844×390 这类手机横屏虽然宽度 >760，但属于「矮横屏」版式，必须保持原样，不并进五五开。 */
-@media (min-width: 761px) and (min-height: 481px) {
+   ⚠️ 只按宽度命中（2026-11-09 用户报障后改）：旧版带 and (min-height: 481px) 下限（为保住 844×390 基线而加）。
+   但矮横屏正是真机横屏的常态（CSS 视口高度普遍 360~414，如 dpr=3 的 2640×1216 → 880×405）：
+   加高度门槛会让真机横屏全部落回 22% 窄条（用户 2026-11-09 报障现场），故只按宽度命中 ——
+   844×390 这类矮横屏从此也是五五开，这是预期行为；右列高度不够就靠下面 max-height 档压字号 / 内距解决，
+   不要再把高度门槛加回来。 */
+@media (min-width: 761px) {
   /* 左列收到半屏；舞台（含模糊铺底）跟着只铺左半屏 */
   .hero-detail-full .hd-side { right: auto; width: 50%; }
   .hero-detail-full .hd-stage { border-right: 1px solid rgba(255, 255, 255, .06); }
