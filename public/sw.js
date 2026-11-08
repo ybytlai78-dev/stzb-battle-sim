@@ -6,7 +6,9 @@
  * 缓存累积控制：带 hash 的 assets 每次部署新增几 KB~几百 KB，可接受；
  * 若想全量清缓存，把 CACHE_NAME 版本号 +1 再部署即可（activate 自动清旧）。
  */
-const CACHE_NAME = 'stzb-battle-sim-v1';
+// v2（2026-11-08）：立绘换成无水印版后必预 +1 —— portraits/* 文件名不带 hash，
+// 旧 v1 缓存是 cache-first 命中同一 URL，不换版本号老用户永远看到带水印的旧图。
+const CACHE_NAME = 'stzb-battle-sim-v2';
 const SHELL_KEY = './index.html';
 
 self.addEventListener('install', () => {
