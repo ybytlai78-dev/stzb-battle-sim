@@ -4292,6 +4292,44 @@ header.app .season-pick select:focus-visible { outline: 2px solid var(--gold-bri
 /* 面板内容不许被纵向挤扁：一律按自身高度排，超出就走滚动 */
 .hero-detail-full .hero-detail-modal .hd-main > * { flex: 0 0 auto; }
 
+/* ══ 宽屏五五开分屏（用户 2026-11-08 口径） ══
+   用户原话：「左右分屏正确了，但是应该是 55 开比例，左边大图的」。
+   旧版是「全屏大图 + 右栏 min(46vw,680px) 浮动面板」，1320 宽时左侧只露出约 22%（其余被面板的横向渐变吃掉）。
+   现改成左列 50% / 右列 50% 两栏硬分：左半屏只放立绘（模糊铺底仍铺满左半屏、立绘 contain 完整不裁、垂直居中），
+   右半屏从 50% 起铺到屏右，页签贴顶、按钮贴底。
+   ⚠️ 下限 min-height:481px —— 与下面既有的矮视口档（max-height:480px）对齐：
+   844×390 这类手机横屏虽然宽度 >760，但属于「矮横屏」版式，必须保持原样，不并进五五开。 */
+@media (min-width: 761px) and (min-height: 481px) {
+  /* 左列收到半屏；舞台（含模糊铺底）跟着只铺左半屏 */
+  .hero-detail-full .hd-side { right: auto; width: 50%; }
+  .hero-detail-full .hd-stage { border-right: 1px solid rgba(255, 255, 255, .06); }
+  /* 立绘：contain 撑满左半屏高度、水平居中，整张可见（旧版按整屏 contain + 右缘遮罩，等于被面板切掉一半） */
+  .hero-detail-full .hd-bigart,
+  .hero-detail-full .hd-scene {
+    background-size: contain;
+    background-position: center center;
+    -webkit-mask-image: none;
+    mask-image: none;
+  }
+  /* 左半屏内的压暗只在右缘一窄条，别把人物压黑 */
+  .hero-detail-full .hd-veil {
+    background: linear-gradient(90deg, rgba(12,12,16,0) 64%, rgba(14,14,18,.30) 88%, rgba(14,14,18,.58) 100%);
+  }
+  /* contain 后上下（或左右）会留白，模糊铺底稍微提亮，让留白读作氛围而不是空黑 */
+  .hero-detail-full .hd-scene-fill { filter: blur(56px) brightness(.46) saturate(.95); }
+  .hero-detail-full .hd-bigfill { filter: blur(36px) brightness(.42) saturate(1.15); }
+  /* 右列：页签 / 面板 / 底栏统一从 50% 起铺到屏右 */
+  .hero-detail-full .hero-detail-modal .m-head,
+  .hero-detail-full .hero-detail-modal .hd-main,
+  .hero-detail-full .hero-detail-modal .m-foot {
+    left: 50%; right: 0; width: auto;
+  }
+  /* 面板左缘只留一小段过渡（原本要化开压在图上的一整条，现在两栏已分开） */
+  .hero-detail-full .hero-detail-modal .hd-main {
+    background: linear-gradient(90deg, rgba(18,18,22,.72) 0%, rgba(18,18,22,.92) 5%, rgba(18,18,22,.95) 100%);
+  }
+}
+
 /* 矮视口（安卓横屏 / 小窗口）：收紧间距与字号，让一屏装得下 */
 @media (max-height: 700px) {
   .hero-detail-full .hero-detail-modal .hd-main { padding: 52px 22px 22px; }
