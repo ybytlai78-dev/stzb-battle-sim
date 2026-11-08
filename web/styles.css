@@ -4240,11 +4240,15 @@ header.app .season-pick select:focus-visible { outline: 2px solid var(--gold-bri
 
 /* 右栏面板：淡入黑底，内容可滚 */
 .hero-detail-full .hero-detail-modal .hd-main {
-  position: absolute; top: 0; right: 0; bottom: 0; z-index: 4;
+  position: absolute; top: 0; right: 0; bottom: 64px; z-index: 4;
   width: min(46vw, 680px);
-  padding: 62px 28px 78px;
+  padding: 62px 28px 24px;
   overflow-y: auto; overflow-x: hidden;
-  display: flex; flex-direction: column; justify-content: center;
+  display: flex; flex-direction: column;
+  /* 内容不超高时居中；一旦超高就退回顶部（safe center），否则两侧同时被裁、还能看到内容叠到画像上
+     （2026-11-08 安卓横屏报障：矮视口 + 系统大字号 ⇒ 内容溢出，居中后顶部行被切、叠在大图上） */
+  justify-content: center;
+  justify-content: safe center;
   background: linear-gradient(90deg, rgba(18,18,22,0) 0%, rgba(18,18,22,.34) 5%, rgba(18,18,22,.80) 13%, rgba(18,18,22,.92) 22%, rgba(18,18,22,.94) 100%);
 }
 .hero-detail-full .hero-detail-modal .m-foot {
@@ -4252,7 +4256,8 @@ header.app .season-pick select:focus-visible { outline: 2px solid var(--gold-bri
   width: min(46vw, 680px); margin: 0;
   display: flex; align-items: center; justify-content: flex-end; gap: 10px;
   padding: 12px 20px 15px; border: 0;
-  background: linear-gradient(0deg, rgba(18,18,22,.92) 34%, rgba(18,18,22,0) 100%);
+  background: linear-gradient(0deg, rgba(18,18,22,.98) 62%, rgba(18,18,22,.90) 100%);
+  border-top: 1px solid rgba(255,255,255,.06);
 }
 
 /* 浅灰右栏下仍写死暗底的局部元素，逐个翻亮 */
@@ -4284,11 +4289,46 @@ header.app .season-pick select:focus-visible { outline: 2px solid var(--gold-bri
 }
 .hero-detail-full .hd-side-col { display: none; }
 
+/* 面板内容不许被纵向挤扁：一律按自身高度排，超出就走滚动 */
+.hero-detail-full .hero-detail-modal .hd-main > * { flex: 0 0 auto; }
+
+/* 矮视口（安卓横屏 / 小窗口）：收紧间距与字号，让一屏装得下 */
+@media (max-height: 700px) {
+  .hero-detail-full .hero-detail-modal .hd-main { padding: 52px 22px 22px; }
+  .hero-detail-full .hd-stage .hd-side-name { font-size: 22px; letter-spacing: 5px; }
+  .hero-detail-full .hd-attr-grid { gap: 6px; }
+  .hero-detail-full .skills-row .hd-treasure-wrap { min-height: 84px; }
+}
+/* 极端矮视口（手机横屏 + 浏览器地址栏）：先让位非关键元素，剩下交给滚动 */
+/* 矮视口可滚动提示：底部内阴影（不随内容滚） */
+@media (max-height: 640px) {
+  .hero-detail-full .hero-detail-modal .hd-main { box-shadow: inset 0 -18px 18px -18px rgba(0,0,0,.85); }
+}
+
+@media (max-height: 480px) {
+  .hero-detail-full .hd-cs { display: none; }
+  .hero-detail-full .hd-main { padding-top: 42px; }
+  /* 矮屏幕把战法/宝物格压扁，尽量一屏装完 */
+  .hero-detail-full .skills-row .hd-treasure-wrap { min-height: 62px; }
+  .hero-detail-full .skill-slot-row { min-height: 62px; padding: 6px 8px; gap: 6px; }
+  .hero-detail-full .skill-slot-row .sk-icon { width: 34px; height: 34px; }
+  .hero-detail-full .hd-stats { gap: 5px; }
+  .hero-detail-full .hd-stats > * { padding: 5px 8px; }
+}
+@media (max-height: 560px) {
+  .hero-detail-full .hero-detail-modal .hd-main { padding: 46px 18px 20px; }
+  .hero-detail-full .hd-stage .hd-side-name { font-size: 19px; letter-spacing: 3px; }
+  .hero-detail-full .hd-stage .hd-stars { font-size: 12px; letter-spacing: 3px; }
+  .hero-detail-full .hd-level-row { gap: 6px; }
+}
+
 /* 窄屏：上大图 + 下满宽面板 */
-@media (max-width: 980px) {
-  .hero-detail-full .hero-detail-modal .hd-main { width: 100%; top: 44%; bottom: 0; height: auto; padding: 14px 14px 68px; justify-content: flex-start; background: rgba(18,18,22,.90); }
+@media (max-width: 760px) {
+  .hero-detail-full .hero-detail-modal .hd-main { width: 100%; top: 44%; bottom: 64px; height: auto; padding: 14px 14px 18px; justify-content: flex-start; background: rgba(18,18,22,.90); }
   .hero-detail-full .hero-detail-modal .hd-main::before { content: ''; position: absolute; left: 0; right: 0; top: -26px; height: 26px; background: linear-gradient(180deg, rgba(18,18,22,0), rgba(18,18,22,.92)); pointer-events: none; }
-  .hero-detail-full .hero-detail-modal .m-head { width: 100%; }
+  .hero-detail-full .hero-detail-modal .m-head { width: 100%; padding-top: 6px;
+    /* 竖屏时页签压在大图上，加一层顶幕保证可读 */
+    background: linear-gradient(180deg, rgba(12,12,16,.74) 0%, rgba(12,12,16,.34) 62%, rgba(12,12,16,0) 100%); }
   .hero-detail-full .hero-detail-modal .m-foot { width: 100%; }
   .hero-detail-full .hd-bigart { background-size: cover; background-position: center 18%; }
   .hero-detail-full .hd-scene { background-position: center top; background-size: contain;
