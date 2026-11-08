@@ -68,7 +68,7 @@
 | 方式 | 说明 |
 |------|------|
 | **网页版（推荐）** | <https://ybytlai78-dev.github.io/stzb-battle-sim/> —— 免安装、免注册；手机浏览器打开后可「添加到主屏幕」，装过一次即可离线打开 |
-| **安卓安装包** | [Releases](https://github.com/ybytlai78-dev/stzb-battle-sim/releases/latest) 下载 APK（当前版本 **v2.11**，正式签名）。首次安装需在系统里允许「安装未知来源应用」；装好后桌面上显示为「战斗模拟器」 |
+| **安卓安装包** | [Releases](https://github.com/ybytlai78-dev/stzb-battle-sim/releases/latest) 下载 APK（当前安卓包 **2.14** / 主站版本 **1.28**，正式签名）。首次安装需在系统里允许「安装未知来源应用」；装好后桌面上显示为「战斗模拟器」 |
 
 ---
 
