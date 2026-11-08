@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 /**
  * Vite 配置：dev / preview 均监听 0.0.0.0，
@@ -7,7 +8,17 @@ import { resolve } from 'node:path';
  *
  * 多页入口：`index.html`（主站配将台） + `advisor.html` + `rogue.html`。
  */
+/** 每次构建前重算素材指纹（web/data/asset_ver.json）——
+ *  立绘等文件名不带 hash，换图后靠 `?v=<指纹>` 让 URL 变化，避免 Service Worker 长缓存给旧图。 */
+const genAssetVer = {
+  name: 'gen-asset-ver',
+  buildStart() {
+    execFileSync(process.execPath, ['scripts/gen_asset_ver.mjs'], { stdio: 'inherit' });
+  },
+};
+
 export default defineConfig({
+  plugins: [genAssetVer],
   build: {
     rollupOptions: {
       input: {
