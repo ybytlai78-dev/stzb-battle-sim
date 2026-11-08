@@ -253,7 +253,7 @@ describe('持节镇西：攻击/谋略/防御叠层', () => {
     expect(buffLayers(e1, 'defense_buff')).toBe(0);
   });
 
-  it('燃烧跳伤前 → 友军施法者叠谋略、不叠防御', () => {
+  it('燃烧施加时 → 友军施法者叠谋略、不叠防御（用户 2026-11-08 口径：挂状态即造成伤害）', () => {
     const ctx = makeCtx();
     const wg = makeUnit('weiguan', { position: '中军', strategy: 146 });
     wg.general.commandSkillIds = ['chijie_zhenxi'];
@@ -272,18 +272,31 @@ describe('持节镇西：攻击/谋略/防御叠层', () => {
       'liehuo_fenzhou',
       'ally'
     );
-    expect(buffLayers(ally, 'strategy_buff')).toBe(0);
-
-    actUnit(ctx, e1);
+    // 施加那一刻就叠（旧口径「跳伤时才叠」已被用户 2026-11-08 否决：持续伤害挂状态即造成伤害）
     expect(buffLayers(ally, 'strategy_buff')).toBe(1);
     expect(buffLayers(ally, 'defense_buff')).toBe(0);
     expect(buffLayers(ally, 'attack_buff')).toBe(0);
+
+    // 事件顺序与战报截图一致：先叠层，再「燃烧效果已施加」
+    const stgIdx = ctx.events.findIndex(
+      (e) => e.type === 'status_inflicted' && e.statusType === 'strategy_buff'
+    );
+    const dotIdx = ctx.events.findIndex(
+      (e) => e.type === 'status_inflicted' && e.statusType === 'burning'
+    );
+    expect(stgIdx).toBeGreaterThanOrEqual(0);
+    expect(dotIdx).toBeGreaterThan(stgIdx);
+
     const stgEv = ctx.events.find(
       (e): e is Extract<(typeof ctx.events)[number], { type: 'status_inflicted' }> =>
         e.type === 'status_inflicted' && e.statusType === 'strategy_buff'
     );
     expect(stgEv?.detail).toContain('谋略属性提高了');
     expect(stgEv?.detail).not.toContain('防御属性');
+
+    // 跳伤是同一笔伤害的延迟兑现 → 不再叠第二层
+    actUnit(ctx, e1);
+    expect(buffLayers(ally, 'strategy_buff')).toBe(1);
   });
 
   it('友军被燃烧跳伤前 → 受击者叠防御、不叠攻击', () => {

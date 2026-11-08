@@ -36,6 +36,7 @@ import { calcDamage, applyTroopCap, scaledValue, roundRate, sumRates, buffMult, 
 import { troopCounterReduceOf as secondaryCounterReduceOf, traitCombatModifiers, traitStatBonus, statModOf, effectiveTroopLine, SECONDARY_TROOPS, type TraitCombatContext } from './secondaryTroop';
 import { TREASURE_SOURCE_PREFIX, isTreasureSource, treasureLabel } from './treasure-source';
 import { isChenshouSource, chenshouLabel } from './chenshou-source';
+import { isFacilitySource } from './facility-source';
 import { asSubSkillOf, labelSubSkillEvents } from './subSkill';
 import { TREASURES_BY_ID, TREASURE_LEVEL_DEFAULT, treasureEffectValue } from '../data/treasures';
 import type { TreasureType } from '../data/treasures';
@@ -385,7 +386,16 @@ function pickStatUnit(
  *  - 其余高级兵种 → 沿用基础兵系相克。
  * 负数 = 该次伤害提高（负减伤），由 buffMult 单一总和模型自动抵消。
  */
-function troopCounterReduceOf(source: UnitState, target: UnitState): number {
+function troopCounterReduceOf(
+  source: UnitState,
+  target: UnitState,
+  damageType: 'physical' | 'strategy' = 'physical',
+): number {
+  // 尚武营（设施）：该单位的下一次**物理**伤害无视兵种相克。
+  // 策略伤害（如其徐如林〈诛杀〉相邻溅射）不吃这个标记；标记只在这里归零，
+  // 真正的消耗在 applyDamage 实际扣兵后（避免一次伤害被 collectDamageModifiers /
+  // 预览路径多次读取时提前把标记吃掉）。
+  if (damageType === 'physical' && source.facilityIgnoreTroopCounter) return 0;
   return secondaryCounterReduceOf({
     attackerTroop: source.general.troopType,
     attackerSecondary: source.general.secondaryTroop,
@@ -774,8 +784,24 @@ export interface LockedCommand {
   repeatTargets?: UnitState[];
   /** 二类指挥动态发动率当前值（未生效 +increment，生效重置为 base） */
   currentRate: number;
-  /** 一类指挥 delayedOutput：准备阶段已结算伤害（按准备时兵力/属性），条件符合直接打出 */
-  storedDamage?: Array<{ targetId: string; damage: number; breakdown: DamageBreakdown }>;
+  /**
+   * 一类指挥 delayedOutput：准备阶段按当时兵力/属性**预算**的伤害基值，到 atRound 打出。
+   *
+   * ⚠️ 口径变更（用户 2026-11-08 明确否决旧「延迟结算不吃战法增减伤状态」口径）：
+   * `breakdown` 是**乘区 = 1 的基值**（base / main 都没有乘过增减伤），乘区在**打出那一刻**
+   * 用当时 statuses 现算 —— 战报证据：曹操【大赏三军】【神兵天降】在准备阶段挂上，
+   * 而【守城精兵】30% 减伤是第 3 回合才施加的，却也参与了该次白衣渡江结算
+   * ⇒ 实时口径，与西乡武功 delayedOutput 实时路径（tests/xixiang_wugong.test.ts:179-182）一致。
+   * 属性 / 兵力 / 伤害率仍按准备阶段快照冻结（effectiveStat + 持节镇西叠层顺序不变）。
+   */
+  storedDamage?: Array<{
+    targetId: string;
+    damageType: 'physical' | 'strategy';
+    /** 已按施法者生效谋略缩放取整的伤害率（%），战报「伤害率」直接用这个值 */
+    rate: number;
+    /** 乘区 = 1 的三段基值：最终 = troopBase + round(base×mult) + round(main×mult) */
+    breakdown: DamageBreakdown;
+  }>;
 }
 
 export interface CombatContext {
@@ -1470,7 +1496,7 @@ function triggerStrategyAdjacentBonus(
       triggerStackBuff(ctx, source, raw, 'strategy');
       const hit: DamageHitContext = { damageSource: 'skill', damageType: 'strategy', skillType: l.skill.type };
       const { causedMult, takenMult } = damageBoosts(ctx, source, raw, hit);
-      const reduce = sumReduce(ctx, raw, hit, source) + troopCounterReduceOf(source, raw);
+      const reduce = sumReduce(ctx, raw, hit, source) + troopCounterReduceOf(source, raw, 'strategy');
       const { damage, breakdown } = calcDamage(
         {
           damageType: 'strategy',
@@ -1585,30 +1611,51 @@ export function triggerDelayedOutputs(ctx: CombatContext, round: number): void {
 
     if (skill.delayedOutput && round === skill.delayedOutput.atRound) {
       if (l.storedDamage && l.storedDamage.length > 0) {
-        // 用预先结算的伤害直接打出（不重新计算）。
+        // 用准备阶段冻结的基值打出，但**乘区在打出这一刻现算**（用户 2026-11-08 口径）。
+        // 战报证据：曹操【大赏三军】【神兵天降】在准备阶段挂上，而【守城精兵】30% 减伤是第 3 回合
+        // 才施加的，却也参与了该次白衣渡江结算 ⇒ 增减伤必须是实时口径，与西乡武功 delayedOutput
+        // 实时路径（tests/xixiang_wugong.test.ts:179-182）一致。属性 / 兵力 / 伤害率仍按准备阶段冻结。
         // 注：持节镇西叠层已在准备阶段结算时触发一次（白衣=友军策略伤害），此处不重复叠层
-        const damageType: DamageType = skill.delayedOutput.output.some((o) => o.kind === 'strategy_damage')
-          ? 'strategy'
-          : 'physical';
         for (const d of l.storedDamage) {
           const target = ctx.myTeam.concat(ctx.enemyTeam).find((u) => u.general.id === d.targetId);
           if (!target || !target.alive) continue;
           // 指挥免疫（象兵野性 / 藤甲突击）：一类指挥预存的伤害同样不生效 —— 可以选中、不打伤害，
           // 只留「效果消失」那一行（用户 2026-10-27 口径：凡是指挥类型的效果都对免疫目标无效）。
           const immune = isCommandImmuneTarget(ctx, target, skill.type, caster);
+          const hit: DamageHitContext = { damageSource: 'skill', damageType: d.damageType, skillType: skill.type };
+          // 施法者阵亡且非 retainAfterDeath 时上面已 continue；retainAfterDeath 的施法者仍可解析
+          // （其增伤状态随之失效，等价乘区 1）。真的找不到施法者时退化为乘区 1、不写归因。
+          let mult = 1;
+          let mods: DamageModifiers | undefined;
+          if (caster) {
+            const { causedMult, takenMult } = damageBoosts(ctx, caster, target, hit);
+            const reduce = sumReduce(ctx, target, hit, caster) + troopCounterReduceOf(caster, target);
+            mult = buffMult(causedMult, takenMult, reduce);
+            mods = collectDamageModifiers(ctx, caster, target, true, hit);
+          }
+          // 基段（base / main）乘乘区取整；troopBase 是兵力段，不吃增减伤
+          const breakdown: DamageBreakdown = {
+            troopBase: d.breakdown.troopBase,
+            base: Math.round(d.breakdown.base * mult),
+            main: Math.round(d.breakdown.main * mult),
+          };
+          const damage = breakdown.troopBase + breakdown.base + breakdown.main;
           if (immune) {
             reportCommandImmune(ctx, target, skill);
           } else {
-            const actual = Math.min(Math.max(0, d.damage), target.troops);
+            const actual = Math.min(Math.max(0, damage), target.troops);
             ctx.events.push({
               type: 'damage',
               sourceId: l.casterId,
               targetId: target.general.id,
               skillId: skill.id,
               skillName: skill.name,
-              damageType,
-              damage: d.damage,
-              breakdown: d.breakdown,
+              damageType: d.damageType,
+              damage,
+              breakdown,
+              // 伤害率在准备阶段已冻结（含谋略缩放取整），物理段的基础系数随机也已进 breakdown.base
+              damageRate: d.rate,
+              modifiers: mods,
               delayedEffect: true,
               afterTroops: target.troops - actual,
             });
@@ -1619,9 +1666,10 @@ export function triggerDelayedOutputs(ctx: CombatContext, round: number): void {
             sourceId: l.casterId,
             skillId: skill.id,
             skillName: skill.name,
-            damageType,
+            damageType: d.damageType,
           });
-          if (!immune) applyDamage(ctx, target, d.damage, caster, damageType, 'skill');
+          // 传 mods：避锐 / 每回合首次减伤的消耗与归因必须和这次结算一致（否则 applyDamage 会二次乘算）
+          if (!immune) applyDamage(ctx, target, damage, caster, d.damageType, 'skill', mods, hit);
         }
       } else if (caster) {
         // 非伤害类延迟输出（令明负榇：第 4 回合起进入分兵状态）→ 对锁定目标执行 output
@@ -2288,15 +2336,19 @@ function executeRoundCommand(ctx: CombatContext, unit: UnitState, skill: Command
   }
 }
 
-/** 一类指挥 delayedOutput 预先结算：按准备时兵力/属性计算伤害（无视规避）。
- *  生效属性走 effectiveStat（含准备阶段已叠的谋略增益层，如卫瓘持节镇西对吕蒙的叠加） */
+/** 一类指挥 delayedOutput 预先结算：按准备时兵力/属性算**乘区 = 1 的伤害基值**（无视规避）。
+ *  生效属性走 effectiveStat（含准备阶段已叠的谋略增益层，如卫瓘持节镇西对吕蒙的叠加）。
+ *
+ *  ⚠️ 乘区不在这一步算（用户 2026-11-08 口径，旧注释「延迟结算不吃战法增减伤状态」已否决）：
+ *  只冻结兵力 / 属性 / 伤害率 / 攻击基础系数随机，增减伤（含兵种克制）留到 atRound 打出那一刻现算，
+ *  见 `triggerDelayedOutputs` 的 `storedDamage` 分支。 */
 function computeStoredDamage(
   ctx: CombatContext,
   caster: UnitState,
   skill: CommandSkill,
   target: UnitState,
   outputs: SkillOutput[]
-): { damage: number; breakdown: DamageBreakdown } | null {
+): { damageType: 'physical' | 'strategy'; rate: number; breakdown: DamageBreakdown } | null {
   for (const out of outputs) {
     if (out.kind !== 'strategy_damage' && out.kind !== 'physical_damage') continue;
     const damageType = out.kind === 'strategy_damage' ? 'strategy' : 'physical';
@@ -2305,7 +2357,7 @@ function computeStoredDamage(
     if (out.kind === 'strategy_damage' && out.strategyScaled && out.growthRate !== undefined) {
       rate = roundRate(scaledValue(out.rate, out.growthRate, effStrategy));
     }
-    const { damage, breakdown } = calcDamage(
+    const { breakdown } = calcDamage(
       {
         damageType,
         rate,
@@ -2314,12 +2366,12 @@ function computeStoredDamage(
         attackerTroops: caster.troops,
         targetDefense: damageType === 'physical' ? physicalTargetDefense(caster, target) : target.general.defense,
         targetStrategy: target.general.strategy,
-        // 延迟结算不吃战法增减伤状态，但兵种克制仍加算
-        mult: buffMult(1, 1, troopCounterReduceOf(caster, target)),
+        // 乘区 = 1：增减伤与兵种克制都在打出那一刻（triggerDelayedOutputs）现算
+        mult: 1,
       },
       ctx.rng
     );
-    return { damage: Math.max(1, Math.round(damage)), breakdown };
+    return { damageType, rate, breakdown };
   }
   return null;
 }
@@ -2612,7 +2664,7 @@ const ATTR_STAT_LABEL = {
  *  - 百分比：【目标】的攻击属性降低了22%(30)(170) → 比率(变化点数)(变化后)
  *  - 点数：【目标】的谋略属性提高了32(182) → 增幅(变化后)
  */
-function formatAttrChangeDetail(
+export function formatAttrChangeDetail(
   target: UnitState,
   type: keyof typeof ATTR_STAT_LABEL,
   opts: { amount: number; percent?: boolean; before: number; after: number; srcPrefix?: string }
@@ -2704,6 +2756,8 @@ function computeDotTickDamage(
   // 避锐（疲兵沮意）是**逐次受击消耗**的层数减伤：DoT 在挂上时把增减伤冻结成每次跳伤，
   // 若在这里并入避锐，会把「1 层」烘成「每一跳都减一次」。⇒ 冻结时排除避锐，
   // 跳伤时由 applyDamage 按旧口径单独结算（与本次改动前一致）。
+  // ⚠️ 待战报验证（用户 2026-11-08）：若「挂状态即造成伤害」也包含消耗制减伤（避锐/疲兵沮意）的动支时点，
+  // 此处应改为在施加时消耗一层；现无战报证据，保持现状不推断。
   const reduce =
     sumReduce(ctx, target, hit, caster, { excludeAvoidCharge: true }) + troopCounterReduceOf(caster, target);
   const { damage, breakdown } = calcDamage(
@@ -2781,7 +2835,10 @@ export function dealDotDamage(
     ...(dot.sourceSkillId ? { skillId: dot.sourceSkillId } : {}),
   };
   // 策略 DoT：友军施法者叠谋略；物理 DoT（动摇）：友军施法者叠攻击；受击者两类都叠防御（持节镇西）
-  if (src) {
+  // ⚠️ 只在**没有 stored** 的回退路径叠：有 stored 时这笔伤害已在施加那一刻叠过并冻结
+  // （用户 2026-11-08 口径「挂状态即造成伤害」，见 inflictStatusCore 的 DoT 分支）。
+  // 这里再叠一次就是每跳白叠一层 —— 既错位又会双叠。
+  if (src && !dot.stored) {
     triggerStackBuff(ctx, src, unit, damageType);
   }
   if (dot.stored) {
@@ -3630,7 +3687,10 @@ function inflictStatusCore(
   // 追加），而写「可叠加」的机制该字段为 1~99。官方文案为「免疫接下来受到的 N 次伤害」= 次数，非层数。
   if (type === 'evasion') {
     const existing = getStatus(target, 'evasion');
-    if (existing) {
+    // 设施规避（铁壁营）是准备阶段白给的一次性效果，不能反向锁死后续战法规避：
+    // 若把设施状态当作「先施加者」，雪奋短兵等战法的规避会被整段拒绝。
+    // 反过来设施状态也不会走 inflictStatus（facility.ts 直接 push），所以只需排除既有方。
+    if (existing && !isFacilitySource(existing.sourceSkillId)) {
       ctx.events.push({
         type: 'status_conflict',
         unitId: target.general.id,
@@ -3851,6 +3911,12 @@ function inflictStatusCore(
     let appliedCreate: CreateStatus = create;
     if (caster) {
       const dotCreate = create as Extract<CreateStatus, { type: 'sorcery' | 'burning' | 'panic' | 'unrest' | 'curse' | 'ignite' }>;
+      // 持节镇西叠层：**挂状态即造成伤害**（用户 2026-11-08 口径）—— 持续伤害只是等条件触发兑现，
+      // 所以施加这一刻就该先结算「造成伤害前」的叠层，再用叠层后的属性/增减伤冻结本次伤害。
+      // 战报证据（黄盖【烈火焚舟】触发燃烧）：【持节镇西】使【黄盖】谋略提高 31.6 → 该次造成伤害共计提升 114%
+      // → 最后才是「【曹操】的燃烧效果已施加」。旧实现在这里漏了叠层，冻结用的是叠层前谋略。
+      // 动摇（unrest）是物理 DoT → 叠攻击；其余 DoT 一律谋略。
+      triggerStackBuff(ctx, caster, target, dotCreate.type === 'unrest' ? 'physical' : 'strategy');
       // 谋略类 DoT 同样吃「策略伤害浮动」（用户 2026-10-24 报障：燃烧伤害率不随刘徽变化）；
       // 动摇是物理 DoT，不参与。DoT 在挂上时冻结，所以系数取施加当回合的档位。
       let dotRate = dotCreate.rate;
@@ -3950,6 +4016,9 @@ function inflictStatusCore(
       // 鲁肃 济世 5% 减伤 → 同仇敌忾每层被判「减伤冲突，数值取较高 0.05」，层数永远叠不上去）。
       !isTreasureSource(s.sourceSkillId) &&
       !isChenshouSource(s.sourceSkillId) &&
+      // 设施（四大营）与宝物/陈寿同口径：作为既有状态时不参与同类冲突。
+      // 尤其是铁壁营 1 层规避、疾风营 +10 速度不能被后续战法判成「先施加者」。
+      !isFacilitySource(s.sourceSkillId) &&
       (incomingClass === undefined || statusClassKey(s) === incomingClass) &&
       (boostDir === undefined || !('direction' in s) || s.direction === boostDir) &&
       (incomingSign === undefined || conflictSign(statusValue(s)) === incomingSign)
@@ -6555,7 +6624,7 @@ function collectDamageModifiers(
       direction: 'reduce',
     });
   }
-  const cr = troopCounterReduceOf(source, target);
+  const cr = troopCounterReduceOf(source, target, hit?.damageType ?? 'physical');
   if (cr !== 0 && !opts?.ignoresTroopCounter) {
     reduce.push({
       unitId: target.general.id,
@@ -12500,6 +12569,17 @@ export function applyDamage(
     target.totalDead += dead;
   }
   if (actual > 0) {
+    // 尚武营（设施）：首次物理伤害实际扣兵后消耗一次性「无视兵种相克」标记。
+    // 放在 actual>0 之内：被规避 / 完全减伤 / 玉玺转移为 0 的那次不算「伤害结算」，
+    // 标记留给下一次真正打到兵的物理伤害（与用户口径「首次攻击无视相克」一致）。
+    if (
+      source &&
+      (hitCtx.damageType ?? 'physical') === 'physical' &&
+      !hit?.dotType &&
+      source.facilityIgnoreTroopCounter
+    ) {
+      source.facilityIgnoreTroopCounter = false;
+    }
     // 「上次行动阶段造成伤害的目标」记账（持刀从武）：只记录**当前正在行动的单位本人**打出的伤害，
     // 且以实际扣兵（actual>0）为准；DoT 跳伤 / 反击 / 玉玺结转等非其行动阶段者不计入。
     if (source && ctx.actingUnitId === source.general.id) {

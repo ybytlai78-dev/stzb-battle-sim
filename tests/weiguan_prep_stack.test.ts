@@ -133,7 +133,8 @@ describe('卫瓘 × 延迟结算型一类指挥：预结算叠层', () => {
     expect(layers(core, 'strategy_buff')).toBe(3);
     const lock = ctx.lockedCommands.find((l) => l.skill.id === 'baiyi_dujiang');
     expect(lock?.storedDamage?.length).toBe(3);
-    const dmgs = (lock?.storedDamage ?? []).map((d) => d.damage);
+    // 预存的是「乘区 = 1 的基值」，三段和即基值（乘区在打出那一刻现算）
+    const dmgs = (lock?.storedDamage ?? []).map((d) => d.breakdown.troopBase + d.breakdown.base + d.breakdown.main);
     expect(new Set(dmgs).size).toBe(1); // 先叠满 3 层、再逐目标预存 ⇒ 三目标同值
     expect(dmgs[0]).toBeGreaterThan(0);
   });

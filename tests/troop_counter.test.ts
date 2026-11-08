@@ -51,7 +51,8 @@ function makeGeneral(id: string, troopType: TroopType, attack = 220, defense = 6
 
 /** 跑 1v1（双方大营，距离 1，打满 8 回合 draw），返回事件 */
 function runDuel(my: General, enemy: General, seed = 12345) {
-  return runBattle({ myTeam: [my], enemyTeam: [enemy], seed, maxRounds: 8 });
+  // 显式关设施：尚武营会给随机单体一次「无视相克」，会让本文件的 troop_counter 条目消失。
+  return runBattle({ myTeam: [my], enemyTeam: [enemy], seed, maxRounds: 8, facilities: false });
 }
 
 describe('兵种相克规则（单元：troopCounterFactor 全组合）', () => {

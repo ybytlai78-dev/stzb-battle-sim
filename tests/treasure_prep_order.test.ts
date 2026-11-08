@@ -133,13 +133,13 @@ describe('准备阶段改速度的来源进入出手排序', () => {
     expect(prepCommandOrder(report.events)).toEqual(['lvmeng', 'weiguan']);
   });
 
-  it('prep_phase 顺序不变：formation → troop → treasure → skill（宝物仍在战法阶段之前）', () => {
+  it('prep_phase 顺序：facility → formation → troop → treasure → skill（设施最前、宝物仍在战法阶段之前）', () => {
     const { myTeam, enemyTeam } = buildTeams((w) => {
       w.treasure = { treasureId: 1057, level: 10, affix: { name: '灵动', value: 30 } };
       return w;
     });
     const report = runBattle({ seed: 7, maxRounds: 1, myTeam, enemyTeam });
-    expect(prepPhases(report.events)).toEqual(['formation', 'troop', 'treasure', 'skill']);
+    expect(prepPhases(report.events)).toEqual(['facility', 'formation', 'troop', 'treasure', 'skill']);
   });
 
   it('一类指挥自身改速度（其疾如风 +41 我军全体）：执行完立即重排剩余，不再与第 1 回合分叉', () => {

@@ -86,8 +86,29 @@ function standardField(withLvmeng: boolean): { ctx: CombatContext; huanggai: Uni
   return { ctx, huanggai };
 }
 
-type HitEvent = Extract<BattleEvent, { type: 'attack_hit' }>;
-type DmgEvent = Extract<BattleEvent, { type: 'damage' }>;
+/** 吕蒙（大营·谋略 120，只有白衣渡江）+ 敌方 3 人：targetMode 'all' ⇒ 三个目标各存一份基值 */
+function baiyiField(): { ctx: CombatContext; lvmeng: UnitState } {
+  const ctx = makeCtx();
+  const lvmeng = makeUnit('lvmeng', { position: '大营', strategy: 120 });
+  lvmeng.general.commandSkillIds = ['baiyi_dujiang'];
+  ctx.myTeam = [lvmeng];
+  const e1 = makeUnit('e1', { position: '前锋', defense: 80 });
+  const e2 = makeUnit('e2', { position: '中军' });
+  const e3 = makeUnit('e3', { position: '大营' });
+  for (const e of [e1, e2, e3]) e.side = 'enemy';
+  ctx.enemyTeam = [e1, e2, e3];
+  return { ctx, lvmeng };
+}
+
+function baiyiHits(ctx: CombatContext): DmgEvent[] {
+  return ctx.events.filter((e): e is DmgEvent => e.type === 'damage' && e.skillId === 'baiyi_dujiang');
+}
+
+function totalDamage(hits: DmgEvent[]): number {
+  return hits.reduce((acc, h) => acc + h.damage, 0);
+}
+
+type HitEvent = Extract<BattleEvent, { type: 'attack_hit' }>;type DmgEvent = Extract<BattleEvent, { type: 'damage' }>;
 type DotEvent = Extract<BattleEvent, { type: 'dot_tick' }>;
 
 describe('增减伤归因（伤害事件 modifiers）', () => {
@@ -196,22 +217,83 @@ describe('增减伤归因（伤害事件 modifiers）', () => {
     });
   });
 
-  it('一类指挥延迟结算（白衣渡江）：预先结算伤害不携带增减伤归因', () => {
-    const ctx = makeCtx();
-    const lvmeng = makeUnit('lvmeng', { position: '大营', strategy: 120 });
-    lvmeng.general.commandSkillIds = ['baiyi_dujiang'];
-    ctx.myTeam = [lvmeng];
-    const e1 = makeUnit('e1', { position: '前锋', defense: 80 });
-    const e2 = makeUnit('e2', { position: '中军' });
-    const e3 = makeUnit('e3', { position: '大营' });
-    for (const e of [e1, e2, e3]) e.side = 'enemy';
-    ctx.enemyTeam = [e1, e2, e3];
+  it('一类指挥延迟结算（白衣渡江）：伤害带增减伤归因，46%+46% 增伤显著提高伤害', () => {
+    // 口径（用户 2026-11-08）：预存的是「乘区 = 1 的基值」，乘区在打出那一刻用当时 statuses 现算
+    const plain = baiyiField();
+    triggerCommandSkills(plain.ctx, plain.lvmeng);
+    triggerDelayedOutputs(plain.ctx, 3);
+    const plainHits = baiyiHits(plain.ctx);
+    expect(plainHits, '白衣渡江 targetMode=all → 三个目标各一份').toHaveLength(3);
+    for (const h of plainHits) {
+      // 无任何增减伤时也必须有 modifiers：诊断账本靠这个字段把伤害纳入因果归因
+      expect(h.modifiers).toEqual({ caused: [], taken: [], reduce: [] });
+      expect(h.damageRate, '伤害率在准备阶段冻结：215 + 2.25 × (120 − 80)').toBe(305);
+    }
 
-    triggerCommandSkills(ctx, lvmeng);
-    triggerDelayedOutputs(ctx, 3);
+    const boosted = baiyiField();
+    triggerCommandSkills(boosted.ctx, boosted.lvmeng);
+    // 曹操【大赏三军】→ 吕蒙造成伤害 +46%；【神兵天降】→ e1 受到伤害 +46%
+    inflictStatus(
+      boosted.ctx,
+      boosted.lvmeng,
+      { type: 'damage_boost', direction: 'caused', rate: 0.46, duration: 3 },
+      'command',
+      'dashang_sanjun',
+      'caocao'
+    );
+    inflictStatus(
+      boosted.ctx,
+      boosted.ctx.enemyTeam[0],
+      { type: 'damage_boost', direction: 'taken', rate: 0.46, duration: 3 },
+      'command',
+      'shenbing_tianjiang',
+      'caocao'
+    );
+    triggerDelayedOutputs(boosted.ctx, 3);
+    const boostedHits = baiyiHits(boosted.ctx);
+    expect(boostedHits).toHaveLength(3);
 
-    const dmg = ctx.events.find((e): e is DmgEvent => e.type === 'damage' && e.skillId === 'baiyi_dujiang');
-    expect(dmg, '第 3 回合应打出白衣渡江延迟伤害').toBeTruthy();
-    expect(dmg!.modifiers).toBeUndefined();
+    const plainFirst = plainHits.find((h) => h.targetId === 'e1')!;
+    const first = boostedHits.find((h) => h.targetId === 'e1')!;
+    expect(first.modifiers!.caused).toEqual([
+      { unitId: 'caocao', skillId: 'dashang_sanjun', skillName: '大赏三军', rate: 0.46, direction: 'caused' },
+    ]);
+    expect(first.modifiers!.taken).toEqual([
+      { unitId: 'caocao', skillId: 'shenbing_tianjiang', skillName: '神兵天降', rate: 0.46, direction: 'taken' },
+    ]);
+    // 兵力段是 base 段之外的部分，不吃增减伤；base / main 各乘 1 + 0.46 + 0.46 = 1.92
+    expect(first.breakdown.troopBase).toBe(plainFirst.breakdown.troopBase);
+    expect(first.damage).toBeGreaterThan(plainFirst.damage);
+    expect(totalDamage(boostedHits)).toBeGreaterThan(totalDamage(plainHits) * 1.5);
+  });
+
+  it('一类指挥延迟结算（白衣渡江）：打出那一刻才施加的减伤同样参与结算', () => {
+    const plain = baiyiField();
+    triggerCommandSkills(plain.ctx, plain.lvmeng);
+    triggerDelayedOutputs(plain.ctx, 3);
+    const plainFirst = baiyiHits(plain.ctx).find((h) => h.targetId === 'e1')!;
+
+    const reduced = baiyiField();
+    triggerCommandSkills(reduced.ctx, reduced.lvmeng);
+    // 【守城精兵】式减伤：第 3 回合才施加（准备阶段存的是乘区 = 1 的基值 ⇒ 现算才吃得到）
+    inflictStatus(
+      reduced.ctx,
+      reduced.ctx.enemyTeam[0],
+      { type: 'damage_reduce', rate: 0.3, duration: 3 },
+      'command',
+      'shoucheng_jingbing',
+      'weiguan'
+    );
+    triggerDelayedOutputs(reduced.ctx, 3);
+    const reducedFirst = baiyiHits(reduced.ctx).find((h) => h.targetId === 'e1')!;
+
+    expect(reducedFirst.modifiers!.reduce).toHaveLength(1);
+    expect(reducedFirst.modifiers!.reduce[0]).toMatchObject({
+      unitId: 'weiguan',
+      skillId: 'shoucheng_jingbing',
+      rate: 0.3,
+      direction: 'reduce',
+    });
+    expect(reducedFirst.damage).toBeLessThan(plainFirst.damage);
   });
 });
