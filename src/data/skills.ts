@@ -703,8 +703,8 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     targetSide: 'enemy',
     tags: ['strategy_buff', 'confusion', 'rampage', 'cowardice', 'hesitation'],
     output: [
-      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: 22, duration: 2 }, targetSide: 'self' },
-      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: 22, duration: 2 }, targetSide: 'ally', targetMode: 'random_single', excludeSelf: true },
+      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: 22, percent: true, duration: 2 }, targetSide: 'self' },
+      { kind: 'inflict_status', status: { type: 'strategy_buff', amount: 22, percent: true, duration: 2 }, targetSide: 'ally', targetMode: 'random_single', excludeSelf: true },
       { kind: 'inflict_status', status: [
         { type: 'confusion', duration: 2 },
         { type: 'rampage', duration: 2 },
@@ -2435,7 +2435,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['damage', 'debuff_attack'],
     output: [
       { kind: 'physical_damage', rate: 225 },
-      { kind: 'inflict_status', status: { type: 'attack_buff', amount: -50, duration: 1 }, target: 'self' },
+      { kind: 'inflict_status', status: { type: 'attack_buff', amount: -50, percent: true, duration: 1 }, target: 'self' },
     ],
   },
   /** 掎角之势（A 主动）：对敌军单体发动一次攻击 180% 和一次策略攻击 143%，每次攻击目标独立判定 */
@@ -2677,7 +2677,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
     tags: ['damage', 'debuff_attack'],
     output: [
       { kind: 'physical_damage', rate: 214 },
-      { kind: 'inflict_status', status: { type: 'attack_buff', amount: -30, duration: 2 } },
+      { kind: 'inflict_status', status: { type: 'attack_buff', amount: -30, percent: true, duration: 2 } },
     ],
   },
   /** 破魂（B 主动）：对敌军单体发动一次攻击 180%，并使其陷入暴走状态，持续 1 回合 */
@@ -3447,7 +3447,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
       { kind: 'physical_damage', repeats: [1, 2], rate: 70, targetPick: 'highest_attack' },
       {
         kind: 'inflict_status',
-        status: { type: 'attack_buff', amount: -15, duration: 999, stack: true },
+        status: { type: 'attack_buff', amount: -15, percent: true, duration: 999, stack: true },
         targetPick: 'highest_attack_enemy',
       },
     ],
@@ -10935,7 +10935,7 @@ export const SKILL_REGISTRY: Record<string, Skill> = {
         {
           kind: 'conditional',
           require: { casterFactions: ['蜀'] },
-          outputs: [{ kind: 'inflict_status', status: { type: 'defense_buff', amount: -10, duration: 1 } }],
+          outputs: [{ kind: 'inflict_status', status: { type: 'defense_buff', amount: -10, percent: true, duration: 1 } }],
         },
       ],
     },

@@ -87,7 +87,8 @@ describe('援护选敌契约', () => {
     ];
     let checked = 0;
     for (let seed = 1; seed <= 20; seed++) {
-      const { events } = runBattle({ myTeam: red, enemyTeam: blue, seed, maxRounds: 4 });
+      // 本文件只验援护改判/追击跟随：关设施，避免随机规避把首次普攻吞掉、改判目标偏移。
+      const { events } = runBattle({ myTeam: red, enemyTeam: blue, seed, maxRounds: 4, facilities: false });
       for (const h of hits(events)) {
         checked++;
         expect(sideOf(h.sourceId)).not.toBe(sideOf(h.targetId));
@@ -237,7 +238,8 @@ describe('援护选敌契约', () => {
     const PURSUIT = ['fangzhen_tuji', 'shengqi_hengling', 'shichou'];
     let pursuitHits = 0;
     for (let seed = 1; seed <= 30; seed++) {
-      const { events } = runBattle({ myTeam: red, enemyTeam: blue, seed, maxRounds: 4 });
+      // 本文件只验援护改判/追击跟随：关设施，避免随机规避把首次普攻吞掉、改判目标偏移。
+      const { events } = runBattle({ myTeam: red, enemyTeam: blue, seed, maxRounds: 4, facilities: false });
       let lastBasic: string | null = null;
       for (const ev of events) {
         if (ev.type === 'attack_hit' && ev.sourceId === 'red-front') {

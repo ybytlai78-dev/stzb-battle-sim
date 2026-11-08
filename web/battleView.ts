@@ -20,8 +20,9 @@ interface RenderEvCtx {
   iconOf?: (unitId: string) => string;
 }
 
-/** 准备阶段标题：阵容（内含四段加成）/ 宝物 / 陈寿特性 / 战法 */
-const PHASE_LABEL: Record<'formation' | 'treasure' | 'chenshou' | 'skill', string> = {
+/** 准备阶段标题：设施（四大营）/ 阵容（内含四段加成）/ 宝物 / 陈寿特性 / 战法 */
+const PHASE_LABEL: Record<'facility' | 'formation' | 'treasure' | 'chenshou' | 'skill', string> = {
+  facility: '设施加成',
   formation: '阵容',
   treasure: '宝物',
   chenshou: '陈寿特性',
@@ -527,14 +528,15 @@ function renderPrepEvents(
   heroApi: { nameHtml: (id: string) => string; myTeam: General[]; enemyTeam: General[] },
   ctx?: RenderEvCtx
 ): void {
-  const sections: Record<'formation' | 'troop' | 'treasure' | 'chenshou' | 'skill', BattleEvent[]> = {
+  const sections: Record<'facility' | 'formation' | 'troop' | 'treasure' | 'chenshou' | 'skill', BattleEvent[]> = {
+    facility: [],
     formation: [],
     troop: [],
     treasure: [],
     chenshou: [],
     skill: [],
   };
-  let cur: 'formation' | 'troop' | 'treasure' | 'chenshou' | 'skill' | null = null;
+  let cur: 'facility' | 'formation' | 'troop' | 'treasure' | 'chenshou' | 'skill' | null = null;
   for (const ev of evs) {
     if (ev.type === 'prep_phase') {
       cur = ev.phase;
@@ -542,6 +544,27 @@ function renderPrepEvents(
     }
     if (ev.type === 'battle_start' || ev.type === 'preparation_end') continue;
     if (cur) sections[cur].push(ev);
+  }
+
+  // 设施加成（四大营）：写在阵容之前，只展示特殊效果（四维 +20 不进战报）。
+  // 同一营同一侧连续多条（疾风营全体速度）只打一次营名标题。
+  if (sections.facility.length > 0) {
+    appendPhaseHead(container, PHASE_LABEL.facility);
+    let lastKey = '';
+    for (const ev of sections.facility) {
+      if (ev.type !== 'facility_bonus') continue;
+      const key = `${ev.side}|${ev.facilityId}`;
+      if (key !== lastKey) {
+        if (!lastKey || lastKey.split('|')[0] !== ev.side) {
+          appendPhaseLine(container, 'dim', ev.side === 'my' ? '我方' : '敌方');
+        }
+        appendPhaseLine(container, 'good', `${escapeHtml(ev.facilityName)}满级使部队获得强化`);
+        lastKey = key;
+      }
+      const name = heroApi.nameHtml(ev.unitId);
+      const detail = escapeHtml(ev.detail).replace(`【${escapeHtml(ev.unitName)}】`, `【${name}】`);
+      appendPhaseLine(container, 'good', detail);
+    }
   }
 
   appendPhaseHead(container, PHASE_LABEL.formation);
@@ -690,9 +713,15 @@ function renderEvents(
       }
       case 'damage': {
         if (ev.delayedEffect && ev.afterTroops !== undefined) {
+          // 延迟结算（白衣渡江 / 西乡武功）同样要看见增减伤与伤害率：乘区在打出那一刻现算，
+          // 与普通伤害同口径渲染（用户 2026-11-08 报障：吕蒙看不见具体倍率与增减伤）
+          appendDamageModifierLine(group, ev.modifiers, popupApi);
           const cls = ev.damageType === 'physical' ? 'dmg-phy' : 'dmg-stg';
+          const rateText = ev.damageRate === undefined
+            ? ''
+            : `<span class="dmg-rate">（伤害率 ${ev.damageRate.toFixed(1)}%）</span>`;
           add(cls,
-            `【${nm(ev.sourceId)}】【${ev.skillName}】的效果使【${nm(ev.targetId)}】损失了<b>${ev.damage.toLocaleString()}</b>兵力${afterSuffix(ev.afterTroops)}`);
+            `【${nm(ev.sourceId)}】【${ev.skillName}】的效果使【${nm(ev.targetId)}】损失了<b>${ev.damage.toLocaleString()}</b>兵力${afterSuffix(ev.afterTroops)}` + rateText);
           break;
         }
         appendDamageModifierLine(group, ev.modifiers, popupApi);
@@ -850,6 +879,7 @@ function renderEvents(
         break;
       case 'unit_act_end':
       case 'prep_phase':
+      case 'facility_bonus':
       case 'formation_bonus':
       case 'battle_start':
       case 'preparation_end':

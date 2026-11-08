@@ -2416,6 +2416,12 @@ export interface BattleConfig {
   /** 是否野地作战（蛮兵：野地造成伤害 +18% / 城池 −8%）；缺省 undefined = 城池作战 */
   fieldBattle?: boolean;
   /**
+   * 设施加成（四大营）开关：缺省 **true** = 双方均按四级满级生效
+   * （每名武将四维 +20 + 四营特殊效果）。既有「与设施无关」的数值测试若被打乱，
+   * 请在夹具显式传 `facilities: false` 保住原断言，不要改设施逻辑迁就测试。
+   */
+  facilities?: boolean;
+  /**
    * 木桩方（可多侧）：该侧单位**不还手**——行动阶段不普攻、不发动主动战法、不追击，
    * 也不参与准备阶段的 battle_start 被动 / 一类指挥；被动之外的 DoT 与「目标下次行动前」延迟伤害照常结算。
    * 缺省 undefined = 双方都正常行动（既有战报逐字节不变）。L2 伤害期望测评用它做纯输出靶子。
@@ -2733,13 +2739,32 @@ export interface UnitState {
    * 缺省视为四维 0；不走状态冲突。
    */
   formationBonus?: FormationBonus;
+  /**
+   * 尚武营（设施）：下一次**物理伤害**无视兵种相克，结算一次后清除。
+   * 不占状态栏、不进战报；由 `action.ts` 的 `troopCounterReduceOf` 读、`applyDamage` 实际扣兵后清。
+   */
+  facilityIgnoreTroopCounter?: boolean;
 }
 
 // ─── 战报事件类型 ───
 
 export type BattleEvent =
   | { type: 'battle_start'; turnOrder: string[]; seed: number }
-  | { type: 'prep_phase'; phase: 'formation' | 'troop' | 'treasure' | 'chenshou' | 'skill' }
+  | { type: 'prep_phase'; phase: 'facility' | 'formation' | 'troop' | 'treasure' | 'chenshou' | 'skill' }
+  /**
+   * 设施加成（四大营）：战报只描述特殊效果，四维 +20 不在这里出现。
+   * 同一营的同一侧会连续推多条（疾风营全体速度 = 每人一条）；渲染时按 `side + facilityId` 分组。
+   */
+  | {
+      type: 'facility_bonus';
+      side: Side;
+      facilityId: string;
+      facilityName: string;
+      unitId: string;
+      unitName: string;
+      /** 效果行正文（不含缩进），如 `【张春华】进入洞察状态中` */
+      detail: string;
+    }
   | {
       type: 'formation_bonus';
       unitId: string;

@@ -275,6 +275,8 @@ describe('兵种克制：双方克制关系与实际生效情况', () => {
       enemyTeam: [foe],
       seed: 7,
       maxRounds: 8,
+      // 本用例只验兵种克制账本：关设施，避免四维 +20 与随机「无视相克/规避」改写克制条目。
+      facilities: false,
     } satisfies BattleConfig);
     const d = diagnoseBattle(report);
     expect(d.my.counters.expectedHits).toBeGreaterThan(0);

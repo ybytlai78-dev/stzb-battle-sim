@@ -42,9 +42,15 @@ export interface TreasureBuildCtx {
 /** 单个词条 → 状态模板（value 已按等级/自选数值算好） */
 type Mechanic = (value: number, effect: TreasureEffectDef, ctx: TreasureBuildCtx) => CreateStatus[];
 
-/** 攻击/防御/谋略/速度：数值型属性提升 */
-const attr = (type: 'attack_buff' | 'defense_buff' | 'strategy_buff' | 'speed_buff', percent = false) =>
-  (v: number): CreateStatus[] => [{ type, amount: v, ...(percent ? { percent: true } : {}), duration: FOREVER } as CreateStatus];
+/** 攻击/防御/谋略/速度：属性提升。
+ *  「是不是百分比」只能取自数据 `effect.unit` —— 同一个词条名在不同宝物上量纲不同
+ *  （天资：仁风三阶 = 谋略 8.0%；天问二阶 = 谋略 2.5 点），一律按百分比会把点数条目放大成百分比。
+ *  显式传参优先，供 OVERRIDES 保留已有明确意图的写法。 */
+const attr = (type: 'attack_buff' | 'defense_buff' | 'strategy_buff' | 'speed_buff', percent?: boolean) =>
+  (v: number, effect?: TreasureEffectDef): CreateStatus[] => {
+    const asPercent = percent ?? (effect?.unit === 'percent');
+    return [{ type, amount: v, ...(asPercent ? { percent: true } : {}), duration: FOREVER } as CreateStatus];
+  };
 
 /** 造成伤害提高（可按 来源/战法类型/伤害类型/DoT 类型 限定） */
 const boost = (

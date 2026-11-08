@@ -1,4 +1,4 @@
-﻿/**
+/**
  * 二级兵种（兵种转换）战斗期测试
  *
  * 覆盖用户 2026-09-20 审定的口径：
@@ -71,7 +71,9 @@ function makeGeneral(
 }
 
 function runDuel(my: General, enemy: General, seed = 12345) {
-  return runBattle({ myTeam: [my], enemyTeam: [enemy], seed, maxRounds: 8 });
+  // 本文件全部断言二级兵种/特性的原始数值：显式关设施，避免四维 +20、
+  // 随机洞察/规避/无视相克改变事件与伤害（设施本身另有 facility_bonus.test.ts）。
+  return runBattle({ myTeam: [my], enemyTeam: [enemy], seed, maxRounds: 8, facilities: false });
 }
 
 const hitsOf = (rep: Rep, id: string): HitEvent[] =>
@@ -354,7 +356,7 @@ describe('二级兵种专属特性：状态类（反击 / 分兵）', () => {
     const plainG = makeGeneral('u', 'archer', { speed: 200, secondaryTroop: '弩兵' });
     // 敌军 2 人（大营 + 中军）→ 普攻主目标身边有相邻目标，分兵才有落点
     const enemies = () => [makeGeneral('e1', 'archer', { speed: 1 }), makeGeneral('e2', 'archer', { speed: 1, position: '中军' })];
-    const rep = runBattle({ myTeam: [g], enemyTeam: enemies(), seed: 555, maxRounds: 4 });
+    const rep = runBattle({ myTeam: [g], enemyTeam: enemies(), seed: 555, maxRounds: 4, facilities: false });
     const splitEv = rep.events.find(
       (e) => e.type === 'status_inflicted' && (e as { statusType?: string }).statusType === 'split'
     );
@@ -362,7 +364,7 @@ describe('二级兵种专属特性：状态类（反击 / 分兵）', () => {
     expect((splitEv as { detail: string }).detail).toContain('40');
     expect(rep.events.filter((e) => e.type === 'split_damage').length).toBeGreaterThan(0);
 
-    const plain = runBattle({ myTeam: [plainG], enemyTeam: enemies(), seed: 555, maxRounds: 4 });
+    const plain = runBattle({ myTeam: [plainG], enemyTeam: enemies(), seed: 555, maxRounds: 4, facilities: false });
     expect(plain.events.filter((e) => e.type === 'split_damage').length).toBe(0);
   });
 });

@@ -49,7 +49,8 @@ describe('指挥/被动管线（T7）', () => {
   });
 
   it('连击使每回普攻次数翻倍（仅前 3 回合）', () => {
-    const report = runBattle(T7());
+    // 只验连击次数：关设施，避免随机规避/洞察改变实际普攻次数。
+    const report = runBattle({ ...T7(), facilities: false });
     const taishici = report.stats.find((s) => s.unitId === 'taishici');
     // 前 3 回合连击 2 次普攻，后 5 回合 1 次：3×2 + 5×1 = 11
     expect(taishici!.attackCount).toBe(11);
@@ -212,6 +213,8 @@ describe('准备阶段【战法】：先全部被动再全部指挥', () => {
     const report = runBattle({
       seed: 1,
       maxRounds: 1,
+      // 只验「百战精兵 +32 谋略」的缩放：关设施，避免四维 +20 把 112 改成 132。
+      facilities: false,
       myTeam: [
         carrier,
         dummy('ally-mid', '中军', { speed: 20, faction: '蜀', troopType: 'archer' }),

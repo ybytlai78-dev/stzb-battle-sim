@@ -69,7 +69,7 @@ function sideSection(s: SideDiagnosis, side: 'my' | 'enemy'): string[] {
   } else {
     out.push('  因果账本：本场没有任何增减伤/克制归因（无归因路径之外无账本条目）');
   }
-  if (l.unattributed > 0) out.push(`  无归因路径（预存伤害等不吃增减伤）：${fmt(l.unattributed)}`);
+  if (l.unattributed > 0) out.push(`  无归因路径（事件未带增减伤归因的扣兵）：${fmt(l.unattributed)}`);
   if (l.cappedLoss > 0) out.push(`  兵力截断（applyTroopCap）损失：${fmt(l.cappedLoss)}`);
   if (l.clampedHits > 0) out.push(`  触底事件（增减伤净额 ≤ −90%，按 10% 结算）：${l.clampedHits} 条，账本按比例分摊`);
   out.push(`  账本闭合自检：Σ来源贡献 −（可作用分量 − 基线）= ${l.closedCheck}（应为 0）`);

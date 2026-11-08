@@ -56,6 +56,8 @@ describe('battle lifecycle contracts', () => {
     const report = runBattle({
       myTeam: [unit('killer', { speed: last ? 10 : 100 })],
       enemyTeam: [unit('victim', { maxTroops: 1, speed: 50 })],
+      // 只验生命周期收尾：关设施，避免铁壁营规避把 1 兵力木桩的首次攻击挡掉、拖到第 2 回合。
+      facilities: false,
       inertSides: ['enemy'], seed: 42, maxRounds: 8,
     });
     expect(report.result).toBe('win');

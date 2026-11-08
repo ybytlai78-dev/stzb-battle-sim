@@ -2,15 +2,18 @@
 /**
  * 战报渲染：JSON（结构透传）+ 人类可读文本（CLI）
  */
-import type { BattleEvent, BattleReport, UnitStats } from './types';
+import type { BattleEvent, BattleReport, DamageModifiers, UnitStats } from './types';
 import { SKILL_REGISTRY } from '../data/skills';
 import { computeDetailedStats } from './stats';
 import { formatBonusText } from './troopBonus';
 
 let _formationSawBonus = false;
+/** 设施加成文本渲染的「上一组」键（side|facilityId），用于只在换组时打印营名标题 */
+let _facilityLastKey = '';
 
 export function reportToText(report: BattleReport): string {
   _formationSawBonus = false;
+  _facilityLastKey = '';
   const lines: string[] = [];
   const fmt = (n: number) => n.toLocaleString('en-US');
 
@@ -105,7 +108,11 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
       lines.push(`> 出手顺序：${ev.turnOrder.join(' > ')}`);
       break;
     case 'prep_phase':
-      if (ev.phase === 'formation') {
+      if (ev.phase === 'facility') {
+        // 四大营：战报只描述特殊效果，四维 +20 不进战报（用户 2026-11-08 口径）。
+        _facilityLastKey = '';
+        lines.push('设施加成');
+      } else if (ev.phase === 'formation') {
         _formationSawBonus = false;
         lines.push('【阵容】');
       } else if (ev.phase === 'troop') {
@@ -116,6 +123,19 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
         lines.push('【战法】');
       }
       break;
+    case 'facility_bonus': {
+      const key = `${ev.side}|${ev.facilityId}`;
+      if (key !== _facilityLastKey) {
+        // 换边时补一行「我方/敌方」，同边换营只打营名标题
+        if (!_facilityLastKey || _facilityLastKey.split('|')[0] !== ev.side) {
+          lines.push(`  （${ev.side === 'my' ? '我方' : '敌方'}）`);
+        }
+        lines.push(`  ${ev.facilityName}满级使部队获得强化`);
+        _facilityLastKey = key;
+      }
+      lines.push(`    ${ev.detail}`);
+      break;
+    }
     case 'formation_bonus': {
       _formationSawBonus = true;
       const cat =
@@ -168,7 +188,15 @@ function renderEvent(lines: string[], ev: BattleEvent): void {
       break;
     case 'damage':
       if (ev.delayedEffect && ev.afterTroops !== undefined) {
-        lines.push(`  ✦ 【${ev.sourceId}】【${ev.skillName}】的效果使【${ev.targetId}】损失了${ev.damage}兵力${afterSuffix(ev.afterTroops)}`);
+        // 保留官方「效果使…损失了 X 兵力」主行，后面补伤害率与增减伤净合计
+        // （用户 2026-11-08 报障：白衣渡江这类延迟结算既看不见倍率也看不见增减伤）
+        const parts: string[] = [];
+        if (ev.damageRate !== undefined) parts.push(`伤害率 ${ev.damageRate.toFixed(1)}%`);
+        const net = netBoostPctOf(ev.modifiers);
+        if (net > 0) parts.push(`此次伤害共计提升 ${net}%`);
+        else if (net < 0) parts.push(`此次伤害共计降低 ${-net}%`);
+        const detail = parts.length > 0 ? `（${parts.join('，')}）` : '';
+        lines.push(`  ✦ 【${ev.sourceId}】【${ev.skillName}】的效果使【${ev.targetId}】损失了${ev.damage}兵力${afterSuffix(ev.afterTroops)}${detail}`);
       } else {
         lines.push(
           `  → ${ev.subSkill ? `〈${ev.subSkill}〉` : ''}对「${ev.targetId}」造成${ev.damageType === 'physical' ? '攻击' : '谋略'}伤害 ${fmt(ev.damage)}${afterSuffix(ev.afterTroops)}（${renderBreakdown(ev.breakdown)}）` +
@@ -302,6 +330,17 @@ function rateSuffix(rate?: number, flux?: { low: number; high: number; factor: n
   return flux
     ? `${head}，浮动 ${flux.low.toFixed(1)}%~${flux.high.toFixed(1)}% → ${flux.factor.toFixed(1)}%】`
     : `${head}】`;
+}
+
+/**
+ * 增减伤净合计（整数百分比）：Σ造成增伤 + Σ受到增伤 − Σ减伤，钳到 ≥ −90%。
+ * 与 Web 详情战报 `netBoostPct`（web/battleView.ts）同一语义；文本层不跨层 import web，故在此复刻几行。
+ */
+function netBoostPctOf(mods?: DamageModifiers): number {
+  if (!mods) return 0;
+  const sum = (arr: ReadonlyArray<{ rate: number }>) => arr.reduce((acc, s) => acc + s.rate, 0);
+  const net = sum(mods.caused) + sum(mods.taken) - sum(mods.reduce);
+  return Math.round(Math.max(net, -0.9) * 100);
 }
 
 /** 兵种特性来源（不是注册战法）在战报里的可读名：散射 / 重骑冲阵等 */

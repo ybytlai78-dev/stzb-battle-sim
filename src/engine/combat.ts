@@ -17,6 +17,7 @@ import { computeTroopBonuses } from './troopBonus';
 import { applyTreasureEffects, triggerTreasureRoundStart } from './treasure';
 import { applyChenshouEffects, applyChenshouPrepass } from './chenshou';
 import { SECONDARY_TROOPS } from './secondaryTroop';
+import { applyFacilityBonuses, makeFacilityRng } from './facility';
 
 const POSITION_PRIORITY: Record<string, number> = { 前锋: 0, 中军: 1, 大营: 2 };
 
@@ -132,6 +133,20 @@ export function runBattle(config: BattleConfig): BattleReport {
     turnOrder = buildTurnOrder([...myTeam, ...enemyTeam], turnOrderTieBreaks);
     battleStartEv.turnOrder = turnOrder.map((u) => u.general.id);
   };
+
+  // ── 设施加成（四大营）：战报顺序在「部队加成」之前，但必须**晚于** applyTeamBonus ──
+  // 用户 2026-11-08 口径：准备阶段在兵种加成之前加「设施加成」；双方各自生效。
+  // applyTeamBonus 会整块重写 formationBonus，设施 +20 必须在它之后并入，否则会被覆盖；
+  // formation 事件只渲染 applyTeamBonus 算出的 lines，所以这 20 点不会出现在战报里。
+  // 四营特殊效果由 facility.ts 统一施加并推 `facility_bonus` 事件。
+  // 疾风营首回合全体速度 +10 → 必须 refreshTurnOrder() 把 +10 后的速度写进 battle_start 的出手顺序。
+  if (config.facilities !== false) {
+    events.push({ type: 'prep_phase', phase: 'facility' });
+    const facilityRng = makeFacilityRng(config.seed);
+    applyFacilityBonuses(ctx, myTeam, 'my', facilityRng);
+    applyFacilityBonuses(ctx, enemyTeam, 'enemy', facilityRng);
+    refreshTurnOrder();
+  }
 
   events.push({ type: 'prep_phase', phase: 'formation' });
   const POS = { 大营: 0, 中军: 1, 前锋: 2 };
