@@ -21,6 +21,17 @@
 
 工作流：先读调研文档 → 与用户确认细节 → 确认后实现。战法/武将数据一律**严格按仓库根目录的调研文档**，不得编造。
 
+## 安卓打包（唯一入口）
+
+```bash
+node scripts/pack-apk.mjs --version 2.13
+```
+
+⚠️ **不要**自己拼 `vite build && npx cap sync && gradlew assembleRelease`：`scripts/deploy-gh-pages.sh` 会用
+`--base=/stzb-battle-sim/` 覆盖 `dist`，紧接着 `cap sync` 就把 Pages 口径的产物打进 APK，WebView 去拉
+`https://localhost/stzb-battle-sim/assets/*.js` 全部 404 → **启动纯黑屏**（v2.12 实测事故）。
+`pack-apk.mjs` 会删掉 dist 用默认 base 重新构建，并对 dist 与 APK 内嵌 index.html 各做一次断言。
+
 ## 常用命令
 
 ```bash
