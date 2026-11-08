@@ -4371,6 +4371,9 @@ header.app .season-pick select:focus-visible { outline: 2px solid var(--gold-bri
   /* 页签：右列只剩 ~250px，收紧内距让四个仍在一行 */
   .hero-detail-full .hd-tabs { gap: 0; }
   .hero-detail-full .hd-tab { padding: 5px 9px; font-size: 13px; letter-spacing: 1px; }
+  /* 陈寿特性格：max-height:480 那一档为省高度把它藏了，但双列后右列有富余 ——
+     小机型横屏（667×375 / 736×414）仍要能设特性。只在双列口径里恢复，宽屏口径不受影响 */
+  .hero-detail-full .hd-cs { display: flex; }
   /* 行内容器允许换行：宁可多一行，也别顶出右列被裁掉 */
   .hero-detail-full .hd-level-row { flex-wrap: wrap; gap: 6px 8px; }
   .hero-detail-full .hd-redness { flex-wrap: wrap; gap: 4px 8px; }
