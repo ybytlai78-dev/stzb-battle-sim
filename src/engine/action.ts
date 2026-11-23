@@ -1496,7 +1496,10 @@ function triggerStrategyAdjacentBonus(
       triggerStackBuff(ctx, source, raw, 'strategy');
       const hit: DamageHitContext = { damageSource: 'skill', damageType: 'strategy', skillType: l.skill.type };
       const { causedMult, takenMult } = damageBoosts(ctx, source, raw, hit);
-      const reduce = sumReduce(ctx, raw, hit, source) + troopCounterReduceOf(source, raw, 'strategy');
+      // 受击减伤（健卒不殆 / 分险 thisHitReduce）：并进同一求和池（加算），不另开乘区
+      const pre = triggerBeforeDamageHooks(ctx, raw, source, hit);
+      if (pre.evasionBlocked) continue;
+      const reduce = sumReduce(ctx, raw, hit, source) + troopCounterReduceOf(source, raw, 'strategy') + pre.reduce;
       const { damage, breakdown } = calcDamage(
         {
           damageType: 'strategy',
@@ -1527,7 +1530,7 @@ function triggerStrategyAdjacentBonus(
         // 才看得出哪部分是跳伤、哪部分是别的战法打出来的策略伤害（用户 2026-10-23 口径）。
         subSkill: '诛杀',
       });
-      applyDamage(ctx, raw, capped, source, 'strategy', 'skill', mods, { skillType: l.skill.type });
+      applyDamage(ctx, raw, capped, source, 'strategy', 'skill', mods, hit);
     }
   }
 }
@@ -1623,13 +1626,18 @@ export function triggerDelayedOutputs(ctx: CombatContext, round: number): void {
           // 只留「效果消失」那一行（用户 2026-10-27 口径：凡是指挥类型的效果都对免疫目标无效）。
           const immune = isCommandImmuneTarget(ctx, target, skill.type, caster);
           const hit: DamageHitContext = { damageSource: 'skill', damageType: d.damageType, skillType: skill.type };
+          // 受击减伤（健卒不殆 / 分险 thisHitReduce）：与实时增减伤同一求和池（加算）。
+          // 指挥免疫目标整段不结算，不判钩子（避免白消耗次数/层数）。
+          const pre = immune
+            ? { reduce: 0, evasionBlocked: false }
+            : triggerBeforeDamageHooks(ctx, target, caster, hit);
           // 施法者阵亡且非 retainAfterDeath 时上面已 continue；retainAfterDeath 的施法者仍可解析
           // （其增伤状态随之失效，等价乘区 1）。真的找不到施法者时退化为乘区 1、不写归因。
           let mult = 1;
           let mods: DamageModifiers | undefined;
           if (caster) {
             const { causedMult, takenMult } = damageBoosts(ctx, caster, target, hit);
-            const reduce = sumReduce(ctx, target, hit, caster) + troopCounterReduceOf(caster, target);
+            const reduce = sumReduce(ctx, target, hit, caster) + troopCounterReduceOf(caster, target) + pre.reduce;
             mult = buffMult(causedMult, takenMult, reduce);
             mods = collectDamageModifiers(ctx, caster, target, true, hit);
           }
@@ -1642,7 +1650,7 @@ export function triggerDelayedOutputs(ctx: CombatContext, round: number): void {
           const damage = breakdown.troopBase + breakdown.base + breakdown.main;
           if (immune) {
             reportCommandImmune(ctx, target, skill);
-          } else {
+          } else if (!pre.evasionBlocked) {
             const actual = Math.min(Math.max(0, damage), target.troops);
             ctx.events.push({
               type: 'damage',
@@ -1669,7 +1677,7 @@ export function triggerDelayedOutputs(ctx: CombatContext, round: number): void {
             damageType: d.damageType,
           });
           // 传 mods：避锐 / 每回合首次减伤的消耗与归因必须和这次结算一致（否则 applyDamage 会二次乘算）
-          if (!immune) applyDamage(ctx, target, damage, caster, d.damageType, 'skill', mods, hit);
+          if (!immune && !pre.evasionBlocked) applyDamage(ctx, target, damage, caster, d.damageType, 'skill', mods, hit);
         }
       } else if (caster) {
         // 非伤害类延迟输出（令明负榇：第 4 回合起进入分兵状态）→ 对锁定目标执行 output
@@ -2296,12 +2304,19 @@ function executeRoundCommand(ctx: CombatContext, unit: UnitState, skill: Command
         attacked = true;
         // 常驻伤害前叠层（持节镇西）：伤害源叠攻击、受击者叠防御
         triggerStackBuff(ctx, source, t, 'physical');
+        const hit: DamageHitContext = { damageSource: 'skill', damageType: 'physical', skillType: 'command', skillId: skill.id };
+        // 规避（用户 2026-11-23 报障）：二类指挥的站位伤害**不是**天然无视规避的 —— 魏延【奇兵拒北】
+        // 此前能穿透孙权【主战法规避】正是漏了这一行。本输出类型没有 `ignoresEvasion` 字段，一律判定；
+        // 吕蒙【白衣渡江】的无视规避来自一类指挥 `delayedOutput` 预结算路径，不经过这里。
+        if (consumeEvasion(ctx, t, source.general.id, hit)) continue;
         const atk = effectiveStat(source, 'attack');
         const def = physicalTargetDefense(source, t);
-        const hit: DamageHitContext = { damageSource: 'skill', damageType: 'physical', skillType: 'command' };
         const { causedMult, takenMult } = damageBoosts(ctx, source, t, hit);
+        // 受击减伤（健卒不殆 / 分险 thisHitReduce）：并进同一求和池（加算），不另开乘区
+        const pre = triggerBeforeDamageHooks(ctx, t, source, hit);
+        if (pre.evasionBlocked) continue;
         const counterReduce = out.ignoresTroopCounter ? 0 : troopCounterReduceOf(source, t);
-        const reduce = sumReduce(ctx, t, hit, source) + counterReduce;
+        const reduce = sumReduce(ctx, t, hit, source) + counterReduce + pre.reduce;
         const { damage, breakdown } = calcDamage(
           {
             damageType: 'physical',
@@ -2330,7 +2345,7 @@ function executeRoundCommand(ctx: CombatContext, unit: UnitState, skill: Command
         breakdown,
         modifiers: mods,
       });
-      applyDamage(ctx, t, capped, source, 'physical', 'skill', mods, { skillType: skill.type });
+      applyDamage(ctx, t, capped, source, 'physical', 'skill', mods, hit);
     }
     if (attacked) consumeAttackCharges(ctx, source, { damageSource: 'skill', damageType: 'physical', skillType: 'command' });
   }
@@ -3102,7 +3117,10 @@ function executeSplitAttack(
     const def = physicalTargetDefense(unit, adjTarget);
     const hit: DamageHitContext = { damageSource: 'basic', damageType: 'physical', split: true };
     const { causedMult, takenMult } = damageBoosts(ctx, unit, adjTarget, hit);
-    const reduce = sumReduce(ctx, adjTarget, hit, unit) + troopCounterReduceOf(unit, adjTarget);
+    // 受击减伤（健卒不殆 / 分险 thisHitReduce）：并进同一求和池（加算），不另开乘区
+    const pre = triggerBeforeDamageHooks(ctx, adjTarget, unit, hit);
+    if (pre.evasionBlocked) continue;
+    const reduce = sumReduce(ctx, adjTarget, hit, unit) + troopCounterReduceOf(unit, adjTarget) + pre.reduce;
     const { damage, breakdown } = calcDamage(
       {
         damageType: 'physical',
@@ -3129,7 +3147,7 @@ function executeSplitAttack(
       skillId: split.sourceSkillId,
       creditToId,
     });
-    applyDamage(ctx, adjTarget, capped, unit, 'physical', 'skill', splitMods);
+    applyDamage(ctx, adjTarget, capped, unit, 'physical', 'skill', splitMods, hit);
   }
 }
 
@@ -6217,6 +6235,15 @@ export type DamageHitContext = {
   split?: boolean;
   /** 本次伤害按「进行攻击」口径计入（乘间击隙 240% 群体攻击）：供 `attackOnly` 增伤判定 */
   attack?: boolean;
+  /**
+   * `before_damage` 受击钩子（健卒不殆 / 分险的 `thisHitReduce`）已在**结算点**跑过
+   * （见 `triggerBeforeDamageHooks`），`applyDamage` 不再重复触发。
+   *
+   * 为什么要提前：`thisHitReduce` 属减伤，用户 2026-11-23 口径「应与其它类型增减伤**合计相加**」，
+   * 必须进 `buffMult(caused, taken, reduce)` 的同一个求和池 —— 该池只在 `calcDamage` 之前可用，
+   * 而 `applyDamage` 收到的是已算好的伤害值，只能整体乘 `(1 − reduce)`（独立乘区）。
+   */
+  hurtHooksResolved?: boolean;
 };
 
 /**
@@ -8068,7 +8095,10 @@ export function triggerTreasureStrikes(ctx: CombatContext, unit: UnitState): voi
     const hit: DamageHitContext = { damageSource: 'skill', damageType: 'physical', skillType: 'passive' };
     if (consumeEvasion(ctx, target, unit.general.id, hit)) continue;
     const { causedMult, takenMult } = damageBoosts(ctx, unit, target, hit);
-    const reduce = sumReduce(ctx, target, hit, unit);
+    // 受击减伤（健卒不殆 / 分险 thisHitReduce）：并进同一求和池（加算），不另开乘区
+    const pre = triggerBeforeDamageHooks(ctx, target, unit, hit);
+    if (pre.evasionBlocked) continue;
+    const reduce = sumReduce(ctx, target, hit, unit) + pre.reduce;
     const { damage, breakdown } = calcDamage(
       {
         damageType: 'physical',
@@ -8095,7 +8125,7 @@ export function triggerTreasureStrikes(ctx: CombatContext, unit: UnitState): voi
       breakdown,
       modifiers: mods,
     });
-    applyDamage(ctx, target, capped, unit, 'physical', 'skill', mods, { skillType: 'passive' });
+    applyDamage(ctx, target, capped, unit, 'physical', 'skill', mods, hit);
   }
 }
 
@@ -8114,7 +8144,9 @@ function triggerDealPunish(ctx: CombatContext, source: UnitState): void {
     if (!caster || !caster.alive || !skill) continue;
     const hit: DamageHitContext = { damageSource: 'skill', damageType: 'strategy', skillType: skill.type, skillId: skill.id };
     const { causedMult, takenMult } = damageBoosts(ctx, caster, source, hit);
-    const reduce = sumReduce(ctx, source, hit, caster) + troopCounterReduceOf(caster, source);
+    // 受击减伤（健卒不殆 / 分险 thisHitReduce）：并进同一求和池（加算），不另开乘区
+    const pre = triggerBeforeDamageHooks(ctx, source, caster, hit);
+    const reduce = sumReduce(ctx, source, hit, caster) + troopCounterReduceOf(caster, source) + pre.reduce;
     const { damage, breakdown } = calcDamage(
       {
         damageType: 'strategy',
@@ -8141,7 +8173,7 @@ function triggerDealPunish(ctx: CombatContext, source: UnitState): void {
       breakdown,
       modifiers: dpMods,
     });
-    applyDamage(ctx, source, capped, caster, 'strategy', 'skill', dpMods, { skillType: skill.type });
+    applyDamage(ctx, source, capped, caster, 'strategy', 'skill', dpMods, hit);
   }
 }
 
@@ -9260,8 +9292,11 @@ function executeSkillOutputs(
               const def = useStrategy ? t.general.defense : physicalTargetDefense(rider, t);
               const hit: DamageHitContext = { damageSource: 'skill', damageType, skillType: skill.type, skillId: skill.id };
               const { causedMult, takenMult } = damageBoosts(ctx, rider, t, hit);
+              // 受击减伤（健卒不殆 / 分险 thisHitReduce）：并进同一求和池（加算），不另开乘区
+              const pre = triggerBeforeDamageHooks(ctx, t, rider, hit);
+              if (pre.evasionBlocked) continue;
               const counterReduce = out.ignoresTroopCounter ? 0 : troopCounterReduceOf(rider, t);
-              const reduce = sumReduce(ctx, t, hit, rider) + counterReduce;
+              const reduce = sumReduce(ctx, t, hit, rider) + counterReduce + pre.reduce;
               const rate = byHigher
                 ? useStrategy
                   ? byHigher.strategyGrowthRate !== undefined
@@ -9299,7 +9334,7 @@ function executeSkillOutputs(
                 breakdown,
                 modifiers: rideMods,
               });
-              applyDamage(ctx, t, capped, rider, damageType, 'skill', rideMods, { skillType: skill.type });
+              applyDamage(ctx, t, capped, rider, damageType, 'skill', rideMods, hit);
             }
             if (riderAttacked) consumeAttackCharges(ctx, rider, { damageSource: 'skill', damageType: 'physical', skillType: skill.type });
           }
@@ -9375,8 +9410,11 @@ function executeSkillOutputs(
               ...(out.asAttack ? { attack: true as const } : {}),
             };
             const { causedMult, takenMult } = damageBoosts(ctx, source, t, hit);
+            // 受击减伤（健卒不殆 / 分险 thisHitReduce）：并进同一求和池（加算），不另开乘区
+            const pre = triggerBeforeDamageHooks(ctx, t, source, hit);
+            if (pre.evasionBlocked) continue;
             const counterReduce = out.ignoresTroopCounter ? 0 : troopCounterReduceOf(source, t);
-            const reduce = sumReduce(ctx, t, hit, source) + counterReduce;
+            const reduce = sumReduce(ctx, t, hit, source) + counterReduce + pre.reduce;
             // 每次发动后伤害率递增（及锋而试）：加在输出段 rate 上（不封顶、整场累计）
             // 每次 repeats 逐次递增伤害率（银龙孤胆）：第 i 次（i 从 0 起）额外 +i×ratePerRepeat 个百分点
             // 自身兵力比例替换伤害率（亡命一搏）：低于初始 25% → 460%
@@ -9416,7 +9454,7 @@ function executeSkillOutputs(
               breakdown,
               modifiers: physMods,
             });
-            applyDamage(ctx, t, capped, source, 'physical', 'skill', physMods, { skillType: skill.type });
+            applyDamage(ctx, t, capped, source, 'physical', 'skill', physMods, hit);
             // 按造成伤害次数递增发动率（霸王渡江）：本战法每造成 1 次伤害计 1 层（上限 maxStacks）
             if (skill.chanceBoostPerDamage && capped > 0) {
               ctx.skillDamageCounters ??= new Map();
@@ -9552,7 +9590,10 @@ function executeSkillOutputs(
               ...(out.dotFormula ? { dotType: 'burning' as DotType } : {}),
             };
             const { causedMult, takenMult } = damageBoosts(ctx, stratSrc, t, hit);
-            const reduce = sumReduce(ctx, t, hit, stratSrc) + troopCounterReduceOf(stratSrc, t);
+            // 受击减伤（健卒不殆 / 分险 thisHitReduce）：并进同一求和池（加算），不另开乘区
+            const pre = triggerBeforeDamageHooks(ctx, t, stratSrc, hit);
+            if (pre.evasionBlocked) continue;
+            const reduce = sumReduce(ctx, t, hit, stratSrc) + troopCounterReduceOf(stratSrc, t) + pre.reduce;
             // 无视敌方属性（机制 161）：未雨绸缪「该战法造成的伤害无视目标 30% 的谋略属性（受谋略属性影响）」
             const ignoreRaw = 'ignoreStrategyPct' in out ? out.ignoreStrategyPct : undefined;
             const ignoreGrow = 'ignoreStrategyGrowthRate' in out ? out.ignoreStrategyGrowthRate : undefined;
@@ -9598,7 +9639,7 @@ function executeSkillOutputs(
                 ? { ignoreStrategy: { pct: Math.round(ignorePct * 100), skillId: 'weiyu_choumou', skillName: '未雨绸缪' } }
                 : {}),
             });
-            applyDamage(ctx, t, capped, stratActor, 'strategy', 'skill', stratMods, { skillType: skill.type });
+            applyDamage(ctx, t, capped, stratActor, 'strategy', 'skill', stratMods, hit);
             // 其徐如林：本侧施加的策略伤害生效后，对目标同侧相邻敌军额外造成一次策略伤害（原伤害率 × 比例）
             // 代打段（recipient / highest_strategy_ally）由**实际出手的那名友军**口径结算
             // （否则溅射会错用施法者的兵力/谋略/增减伤；非代打路径仍传 caster，零回归）
@@ -10139,12 +10180,19 @@ function executeSkillOutputs(
           attacked = true;
           selectedIds.push(t.general.id);
           triggerStackBuff(ctx, source, t, 'physical');
+          // 规避（用户 2026-11-23 报障）：站位伤害**不是**天然无视规避的 —— 本输出类型没有
+          // `ignoresEvasion` / `ignoresEvasionFirstRepeat` 字段（前者只存在于主动/追击伤害段），
+          // 因此一律走规避判定。魏延【奇兵拒北】此前能穿透孙权【主战法规避】正是漏了这一行；
+          // 吕蒙【白衣渡江】的无视规避来自一类指挥 `delayedOutput` 预结算路径，不经过本段。
+          if (consumeEvasion(ctx, t, source.general.id)) continue;
           const atk = effectiveStat(source, 'attack');
           const def = physicalTargetDefense(source, t);
           const hit: DamageHitContext = { damageSource: 'skill', damageType: 'physical', skillType: skill.type, skillId: skill.id };
           const { causedMult, takenMult } = damageBoosts(ctx, source, t, hit);
+          const pre = triggerBeforeDamageHooks(ctx, t, source, hit);
+          if (pre.evasionBlocked) continue;
           const counterReduce = out.ignoresTroopCounter ? 0 : troopCounterReduceOf(source, t);
-          const reduce = sumReduce(ctx, t, hit, source) + counterReduce;
+          const reduce = sumReduce(ctx, t, hit, source) + counterReduce + pre.reduce;
           const { damage, breakdown } = calcDamage(
             {
               damageType: 'physical',
@@ -10172,7 +10220,7 @@ function executeSkillOutputs(
             breakdown,
             modifiers: posMods,
           });
-          applyDamage(ctx, t, capped, source, 'physical', 'skill', posMods, { skillType: skill.type });
+          applyDamage(ctx, t, capped, source, 'physical', 'skill', posMods, hit);
         }
         rememberDamageTargets(selectedIds);
         if (attacked) consumeAttackCharges(ctx, source, { damageSource: 'skill', damageType: 'physical', skillType: skill.type });
@@ -11473,7 +11521,14 @@ function dealAttack(ctx: CombatContext, unit: UnitState, target: UnitState): Uni
   const def = physicalTargetDefense(unit, hit);
   const hitCtx: DamageHitContext = { damageSource: 'basic', damageType: 'physical' };
   const { causedMult, takenMult } = damageBoosts(ctx, unit, hit, hitCtx);
-  const reduce = sumReduce(ctx, hit, hitCtx, unit) + troopCounterReduceOf(unit, hit);
+  // 受击减伤（健卒不殆 / 分险 thisHitReduce）：并进同一求和池（加算），不另开乘区
+  const pre = triggerBeforeDamageHooks(ctx, hit, unit, hitCtx);
+  if (pre.evasionBlocked) {
+    consumeAttackCharges(ctx, unit, { damageSource: 'basic', damageType: 'physical' });
+    consumePendingBoostStacks(ctx, unit);
+    return hit;
+  }
+  const reduce = sumReduce(ctx, hit, hitCtx, unit) + troopCounterReduceOf(unit, hit) + pre.reduce;
   const mult = buffMult(causedMult, takenMult, reduce);
   const { damage, breakdown } = calcDamage(
     {
@@ -11511,7 +11566,7 @@ function dealAttack(ctx: CombatContext, unit: UnitState, target: UnitState): Uni
     breakdown,
     modifiers: basicMods,
   });
-  applyDamage(ctx, hit, capped, unit, 'physical', 'basic', basicMods);
+  applyDamage(ctx, hit, capped, unit, 'physical', 'basic', basicMods, hitCtx);
   // 普攻命中后钩子（疾风迅雷）：未被规避且命中目标存活时判定
   triggerBasicHitHooks(ctx, unit, hit);
   consumeAttackCharges(ctx, unit, { damageSource: 'basic', damageType: 'physical' });
@@ -12049,8 +12104,9 @@ function triggerOnHurt(
   const none = { thisHitReduce: 0, evasionBlocked: false };
   if (ctx.resolvingHurtHooks) return none;
   ctx.resolvingHurtHooks = true;
-  /** 剩余伤害系数，多条 thisHitReduce 各自乘算 (1 − rate) */
-  let remaining = 1;
+  /** 本次伤害的减伤合计：多条 `thisHitReduce` **相加**（与其它减伤同一求和池口径，
+   *  用户 2026-11-23 口径「应为和其他类型增减伤进行合计相加」，旧实现各自乘算 (1 − rate)） */
+  let hitReduceTotal = 0;
   let evasionBlocked = false;
   try {
     const all = ctx.myTeam.concat(ctx.enemyTeam);
@@ -12143,14 +12199,14 @@ function triggerOnHurt(
               });
             }
             if (timing === 'before_damage') {
-              if (cfg.thisHitReduce != null) remaining *= 1 - cfg.thisHitReduce;
+              if (cfg.thisHitReduce != null) hitReduceTotal += cfg.thisHitReduce;
               const outs = cfg.output;
               if (outs && outs.length > 0) {
                 applyOnHurtEffect(ctx, caster, skill, cfg, victim, source);
                 if (outs.some((o) => o.kind === 'grant_evasion')) {
                   if (consumeEvasion(ctx, victim, source?.general.id ?? '')) {
                     evasionBlocked = true;
-                    return { thisHitReduce: 1 - remaining, evasionBlocked: true };
+                    return { thisHitReduce: hitReduceTotal, evasionBlocked: true };
                   }
                 }
               }
@@ -12168,7 +12224,31 @@ function triggerOnHurt(
   } finally {
     ctx.resolvingHurtHooks = false;
   }
-  return { thisHitReduce: 1 - remaining, evasionBlocked };
+  return { thisHitReduce: hitReduceTotal, evasionBlocked };
+}
+
+/**
+ * 结算点侧的 `before_damage` 受击钩子入口（健卒不殆 / 分险的 `thisHitReduce`）。
+ *
+ * 伤害结算点在算 `mult = buffMult(caused, taken, reduce)` **之前**调用本函数，把返回值里的
+ * `reduce` 并进同一个 `reduce` 求和：`sumReduce(...) + counterReduce + pre.reduce`，
+ * 于是 `thisHitReduce` 与其它类型增减伤走**加算**（用户 2026-11-23 报障口径）。
+ *
+ * 调用后 `hit.hurtHooksResolved = true`，`applyDamage` 据此跳过重复触发（同一次伤害只判定一次）。
+ * 非池化路径（DoT 冻结跳伤 / 延迟预存 / 分摊 / 直调 `applyDamage`）没有 `mult` 可加，
+ * 仍由 `applyDamage` 内部触发并按 `(1 − reduce)` 乘算兜底 —— 与避锐 `avoid_charge` 的
+ * 「池化 + 兜底」双路径同款。
+ */
+export function triggerBeforeDamageHooks(
+  ctx: CombatContext,
+  victim: UnitState,
+  source: UnitState | undefined,
+  hit?: DamageHitContext
+): { reduce: number; evasionBlocked: boolean } {
+  if (ctx.resolvingHurtHooks || hit?.hurtHooksResolved) return { reduce: 0, evasionBlocked: false };
+  if (hit) hit.hurtHooksResolved = true;
+  const r = triggerOnHurt(ctx, victim, source, hit?.damageType, hit?.damageSource, 'before_damage');
+  return { reduce: r.thisHitReduce, evasionBlocked: r.evasionBlocked };
 }
 
 /** 受击触发：受伤者是否匹配战法 victim 侧（含一类指挥 locked 锁定目标） */
@@ -12442,9 +12522,14 @@ export function applyDamage(
   /** 本段 thisHitReduce 合计（缺省 0）；嵌套 applyDamage 跳过 before/after */
   let reduceRate = 0;
   if (!ctx.resolvingHurtHooks) {
-    const before = triggerOnHurt(ctx, target, source, damageType, damageSource, 'before_damage');
-    if (before.evasionBlocked) return;
-    reduceRate = before.thisHitReduce;
+    // 结算点已跑过 before_damage 钩子（`triggerBeforeDamageHooks`：减伤已并进 `mult` 求和池）：
+    // 这里不再重复触发、也不再乘算。未跑过（DoT 冻结跳伤 / 延迟预存 / 分摊 / 直调本函数）
+    // 才在此触发，并按 `(1 − reduce)` 整体乘算兜底。
+    if (!hit?.hurtHooksResolved) {
+      const before = triggerOnHurt(ctx, target, source, damageType, damageSource, 'before_damage');
+      if (before.evasionBlocked) return;
+      reduceRate = before.thisHitReduce;
+    }
     // 避锐（疲兵沮意）：受到伤害前消耗 1 层，令**该次**伤害降低对应档位（受谋略，施加时冻结）。
     // 分档口径：攻击伤害吃 perStackRate、策略伤害吃 perStackRateStrategy
     // （客户端是两个独立机制位 effect 522 受攻击伤害降低 / 524 受策略攻击伤害降低；缺省档位回退到攻击档）

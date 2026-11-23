@@ -1992,7 +1992,13 @@ export interface OnHurtConfig {
   endRound?: number;
   /** 只对这些站位的受伤者触发（美人计「前 4 回合**前锋**首次受到伤害时进入规避状态」） */
   victimPositions?: Position[];
-  /** before_damage 判定成功后，本段伤害乘 (1 − rate)。健卒 0.5 */
+  /**
+   * before_damage 判定成功后，本段伤害**降低的比例**（健卒 0.5 / 分险 0.32）。
+   * 口径（用户 2026-11-23）：「应为和其他类型增减伤进行合计相加」——
+   * 减伤并进 `buffMult(caused, taken, reduce)` 的同一求和池，**不是**独立乘区 `×(1 − rate)`；
+   * 多条 `thisHitReduce` 同时命中时也**相加**（旧实现各自相乘）。结算点侧入口见
+   * `triggerBeforeDamageHooks`（`src/engine/action.ts`），无 `mult` 可加的非池化路径仍乘算兜底。
+   */
   thisHitReduce?: number;
   /** 仅当 source 带 taunt 且 targetId 为受伤者（以诱待来回血） */
   onlyIfSourceTauntsVictim?: true;
