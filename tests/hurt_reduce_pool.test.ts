@@ -120,7 +120,7 @@ describe('站位伤害（positional_physical_damage）判定规避', () => {
     const skill = positionalSkill();
     const caster = dummyUnit('caster', '大营', { commandSkillIds: ['test_positional'] });
     const front = dummyUnit('front', '前锋', {}, 'enemy');
-    front.statuses.push({ type: 'evasion', stacks: 1, remaining: 99, appliedRound: 1, sourceSkillType: 'passive', sourceSkillId: 'test_evasion' });
+    front.statuses.push({ type: 'evasion', stacks: 1, appliedRound: 1, sourceSkillType: 'passive', sourceSkillId: 'test_evasion' });
     const mid = dummyUnit('mid', '中军', {}, 'enemy');
     const ctx = makeCtx([caster], [front, mid], [skill]);
     actUnit(ctx, caster);

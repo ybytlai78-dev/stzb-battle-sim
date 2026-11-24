@@ -4037,7 +4037,8 @@ function inflictStatusCore(
       // 设施（四大营）与宝物/陈寿同口径：作为既有状态时不参与同类冲突。
       // 尤其是铁壁营 1 层规避、疾风营 +10 速度不能被后续战法判成「先施加者」。
       !isFacilitySource(s.sourceSkillId) &&
-      (incomingClass === undefined || statusClassKey(s) === incomingClass) &&
+      // 分类键同类才冲突；减伤侧「全域 ⊇ 攻击/谋略」按同类处理（见 classKeysConflict，用户 2026-11-24）
+      (incomingClass === undefined || classKeysConflict(s, create)) &&
       (boostDir === undefined || !('direction' in s) || s.direction === boostDir) &&
       (incomingSign === undefined || conflictSign(statusValue(s)) === incomingSign)
   );
@@ -4199,6 +4200,41 @@ function inflictStatusCore(
   }
 
   if (sameType) {
+    // ── 减伤「全域 ↔ 限定伤害类型」冲突：按**伤害类型维拆分**，不整条替换 ──
+    // 用户 2026-11-24 口径（现场：于禁【当敌制决】「受到的所有伤害降低 50%」+【一夫当关】
+    // 「受到的攻击伤害降低」在模拟器里叠成 100%）：官方「受到所有伤害降低」= 攻击伤害降低 +
+    // 谋略伤害降低两条，故与限定类型的减伤在交集维上冲突、数值取较高（见 classKeysConflict）。
+    // ⚠️ 不能退回「整条取较高替换」：那样被顶掉一侧的**另一维**减伤会一起消失
+    // （全域 50% 被「受攻击伤害降低 95%」顶掉 → 策略伤害从此没有减伤）。
+    if (
+      sameType.type === 'damage_reduce' &&
+      create.type === 'damage_reduce' &&
+      (sameType.damageType === undefined) !== (create.damageType === undefined)
+    ) {
+      const limitedDim = (sameType.damageType ?? create.damageType)!;
+      const otherDim = limitedDim === 'physical' ? 'strategy' : 'physical';
+      const allRate = sameType.damageType === undefined ? sameType.rate : create.rate;
+      const limitedRate = sameType.damageType === undefined ? create.rate : sameType.rate;
+      const kept = Math.max(allRate, limitedRate);
+      if (sameType.damageType === undefined) {
+        // 既有 = 全域条：降为「另一维」保留其原值，交集维交给本次施加的限定条
+        sameType.damageType = otherDim;
+        pushStatus(ctx, target, { ...create, damageType: limitedDim, rate: kept }, sourceSkillType, sourceSkillId, casterId);
+      } else {
+        // 既有 = 限定条：交集维取较高，另补一条全域的「另一维」
+        sameType.rate = kept;
+        pushStatus(ctx, target, { ...create, damageType: otherDim, rate: allRate }, sourceSkillType, sourceSkillId, casterId);
+      }
+      ctx.events.push({
+        type: 'status_conflict',
+        unitId: target.general.id,
+        statusType: 'damage_reduce',
+        sourceSkillType,
+        detail: `减伤冲突（「受到的所有伤害降低」按攻击/策略两维拆分，${damageKindText(limitedDim)}维取较高 ${Math.round(kept * 100)}%）`,
+      });
+      return;
+    }
+
     // 同类型不同战法：冲突
     // 概率规避（列营守险）是状态类：不同来源同样先施加者生效、后施加者被拒（与同源冲突口径一致）
     // 反击 / 分兵（用户 2026-09-20 口径）：同为**状态类**效果——不同来源不可叠加，先施加者生效、后施加者被拒
@@ -4653,6 +4689,34 @@ function statusClassKey(s: Status): string | undefined {
 function createClassKey(c: CreateStatus): string | undefined {
   if (c.type !== 'damage_boost' && c.type !== 'damage_reduce') return undefined;
   return damageClassKey(c);
+}
+
+/**
+ * 增减伤两端是否**同类**（→ 走冲突、数值取较高）。缺省只有分类键完全相同才算同类
+ * （用户 2026-09-16 口径：分类不同的增伤/减伤各自共存、进同一加算池）。
+ *
+ * **减伤例外（用户 2026-11-24 口径，勿改回）**：官方「受到**所有**伤害降低」这句在语义上是
+ * 「受到的攻击伤害降低 + 受到的谋略伤害降低」两条，因此它（大类「全域」）与限定伤害类型的减伤
+ * 在**小类相同时属于同一维**、应当冲突。现场 = 于禁【当敌制决】（全域 50%，指挥）与
+ * 【一夫当关】（受攻击伤害降低，指挥）在模拟器里叠成 100%（`buffMult` 被压到下限）。
+ * 增伤侧**不适用**（2026-09-16 口径：血溅黄砂 +120% 全域 与 虎步关右 +70% 攻击 → +190% 并存）。
+ */
+function classKeysConflict(existing: Status, incoming: CreateStatus): boolean {
+  const a = statusClassKey(existing);
+  const b = createClassKey(incoming);
+  if (a === undefined || b === undefined) return false;
+  if (a === b) return true;
+  if (existing.type !== 'damage_reduce') return false;
+  const cut = (k: string) => {
+    const i = k.indexOf('|');
+    return [k.slice(0, i), k.slice(i + 1)] as const;
+  };
+  const [aMajor, aMinor] = cut(a);
+  const [bMajor, bMinor] = cut(b);
+  // 小类（普通 / 主动 / 追击 / 指挥 …）不同 = 两条独立效果，不冲突
+  if (aMinor !== bMinor) return false;
+  // 大类相同的情形已由 a === b 命中，这里只剩「全域 ↔ 攻击/谋略」
+  return aMajor === '全域' || bMajor === '全域';
 }
 
 function sameDamageBoostFilter(existing: Status, incoming: CreateStatus): boolean {

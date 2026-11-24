@@ -7,6 +7,9 @@
  * **分类键不同 → 各自共存、进同一加算池直接相加**；
  * **分类键相同 且来源战法类型相同 → 冲突、数值取较高替换**（既有规则不变）。
  * 全域是独立一类，与攻击/谋略大类、与四个小类都能叠。
+ * ⚠️ 例外（用户 2026-11-24）：**减伤**的「全域」不再独立 —— 官方「受到的所有伤害降低」在语义上
+ * 是「受到攻击伤害降低 + 受到谋略伤害降低」，故与限定伤害类型的减伤在交集维冲突、数值取较高
+ * （`classKeysConflict` + `inflictStatus` 按维拆分）。增伤侧口径不变。
  *
  * 依据：官方战法库措辞分布（造成的伤害提高 21 / 造成的攻击伤害提高 5 / 造成的策略伤害提高 1 /
  * 主动战法伤害提高 23 / 追击战法伤害提高 8 / 指挥战法伤害提高 1 / 普通攻击伤害提高 10）。
@@ -214,7 +217,7 @@ describe('增减伤分类键（大类|小类）', () => {
     expect(hit!.modifiers!.caused.map((m) => m.skillId)).toEqual(['command_0', 'jinguo_zhanzhen']);
   });
 
-  it('减伤（damage_reduce）同规则：全域 0.11 + 攻击大类 0.2 共存并相加；单条全域 0.31 同伤', () => {
+  it('减伤（damage_reduce）：全域 0.11 与攻击大类 0.2 在攻击维冲突取较高、谋略维保留全域值', () => {
     const split = actGuanyinping(
       [],
       [
@@ -222,11 +225,20 @@ describe('增减伤分类键（大类|小类）', () => {
         { type: 'damage_reduce', rate: 0.2, duration: 999, damageType: 'physical' },
       ]
     );
-    const merged = actGuanyinping([], [{ type: 'damage_reduce', rate: 0.31, duration: 999 }]);
+    const merged = actGuanyinping([], [{ type: 'damage_reduce', rate: 0.2, duration: 999, damageType: 'physical' }]);
 
-    expect(split.ctx.events.filter((e) => e.type === 'status_conflict').length).toBe(0);
-    expect(split.e1.statuses.filter((s) => s.type === 'damage_reduce')).toHaveLength(2);
-    expect(split.dmg!.modifiers!.reduce.map((m) => m.rate)).toEqual([0.11, 0.2]);
+    // 「受到的所有伤害降低」= 攻击伤害降低 + 谋略伤害降低两条（用户 2026-11-24 口径）
+    // → 与攻击大类同维冲突、不再相加
+    expect(split.ctx.events.filter((e) => e.type === 'status_conflict').length).toBe(1);
+    const dims = split.e1.statuses
+      .filter((s): s is Extract<Status, { type: 'damage_reduce' }> => s.type === 'damage_reduce')
+      .map((s) => [s.damageType ?? 'all', s.rate]);
+    expect(dims).toEqual([
+      ['strategy', 0.11],
+      ['physical', 0.2],
+    ]);
+    // 本次是物理伤害 → 只吃攻击维 0.2（旧口径下是 0.11 + 0.2 = 0.31）
+    expect(split.dmg!.modifiers!.reduce.map((m) => m.rate)).toEqual([0.2]);
     expect(split.dmg!.damage).toBe(merged.dmg!.damage);
   });
 
