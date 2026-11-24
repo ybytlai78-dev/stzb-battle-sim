@@ -207,7 +207,7 @@ npm run rag:slots                               # 槽位层对拍（tb_cfg_skill
 （2026-09-16 口径：血溅黄砂 +120% 全域 与 虎步关右 +70% 攻击 → +190% 并存）；
 ② `inflictStatus` 的 `sameType` 分支里**按伤害类型维拆分**：交集维取较高、另一维保留全域原值
 （全域 50% + 受攻击 95% → 物理 95% / 策略 50%），**不是整条替换** —— 整条替换会让被顶掉一侧的另一维减伤一起消失。
-小类不同（「受普通攻击伤害降低」vs「受所有伤害降低」）仍各自共存。回归 `tests/damage_reduce_all_types.test.ts`（6 例）＋
+小类不同（「受普通攻击伤害降低」vs「受所有伤害降低」）仍各自共存。回归 `tests/damage_reduce_all_types.test.ts`（7 例）＋
 `tests/damage_class_stack.test.ts` 该条已按新口径改写。
 **例外 —— 宝物 / 陈寿特性状态不参与冲突（双向，2026-10-17 报障后钉死）**：`treasure:` / `chenshou:` 前缀的施加**跳过全部冲突判定**（用户 2026-09-21 口径），
 反向同样成立 —— 它们作为**既有状态**时也不进 `sameType` 候选（`inflictStatusCore` 的 `sameType` 谓词显式排除 `isTreasureSource` / `isChenshouSource`），
