@@ -52,6 +52,7 @@ import { showNotice } from './notice';
 import { createBattleView } from './battleView';
 import { createBattleSummary, createStatsView } from './battleSummary';
 import { asset } from './assets';
+import { skinsOf, currentSkin, setActiveSkin } from './skins';
 import { openPlayback } from './playback/playbackView';
 import {
   PLAN_MAX,
@@ -768,7 +769,12 @@ export function renderSlot(team: 'red' | 'blue', i: number, slot: SlotState, lab
   }
 
   const hero = getHeroById(slot.heroId)!;
-  const portrait = portraitSrc(hero.id);
+  /* 皮肤：选了非默认外观、或默认外观自带动态段时，槽位卡换成皮肤封面；有动态段则叠一段小视频
+     （56px 宽的卡不必解 512，用 skins.json 里的 small 216×314）。 */
+  const slotSkin = currentSkin(hero.id);
+  const slotVid = slotSkin.loop ? slotSkin.small || slotSkin.loop : '';
+  const useSkinArt = !!slotVid || (slotSkin.id !== 'default' && !!slotSkin.poster);
+  const portrait = useSkinArt ? slotSkin.poster || portraitSrc(hero.id) : portraitSrc(hero.id);
   const avatar = avatarSrc(hero.id);
   /* 槽位信息行（宝物条与战法栏之间，用户 2026-09-22 口径）：
      等级 + 当前兵种（二级兵种转换后显示转换兵种；已学兵系特性写在括号里，如「弩兵（疾行 + 难测）」）。 */
@@ -787,7 +793,7 @@ export function renderSlot(team: 'red' | 'blue', i: number, slot: SlotState, lab
      右＝配将信息列（站位、头像、宝物条、等级兵种行、三战法位）。名称只画一次（在卡面竖排，类名仍是 .hero-name）。 */
   div.innerHTML = `
     <div class="slot-card">
-      <div class="slot-art" style="background-image:url('${portrait}')"></div>
+      <div class="slot-art" style="background-image:url('${portrait}')">${slotVid ? `<video class="slot-art-video" src="${slotVid}" poster="${portrait}" autoplay loop muted playsinline preload="metadata"></video>` : ''}</div>
       <div class="frame" style="background-image:url('${cardFrameSrc()}')"></div>
       <div class="plate">
         <img class="fac" data-faction="${hero.faction}" alt="${hero.faction}" src="${factionIconSrc(hero.faction)}" />
@@ -1028,7 +1034,7 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
   const h = opts.handlers;
 
   /** 详情页三个板块（按参考图骨架划分，不照抄）：详情 / 配点 / 兵种 */
-  let activeTab: 'detail' | 'points' | 'troop' | 'plans' = 'detail';
+  let activeTab: 'detail' | 'points' | 'troop' | 'skin' | 'plans' = 'detail';
 
   const redraw = () => {
     // 左右布局（按参考图）：左边「阵营 + 名字 + 画像 + 星级」三个板块共用、切换时不重建内容；
@@ -1154,11 +1160,25 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
     const scene = sceneArtSrc(heroId);
     const big = bigArtSrc(heroId);
     const src = big || portraitSrc(heroId);
+    /* 皮肤：左栏换成动态画像（video）。
+       默认皮肤的 poster 恒等于立绘（非空），所以 useSkin 必须按 id 分流判断，
+       否则 has-skin 永远为真、切回默认时摘不掉。 */
+    const skin = currentSkin(heroId);
+    const useSkin = skin.id === 'default' ? !!skin.loop : !!skin.poster || !!skin.loop;
+    const hasVid = useSkin && !!skin.loop;
+    const skinSrc = skin.poster || src;
+    const artEl = hasVid
+      ? `<div class="hd-bigart has-skin" style="background-image:url('${skinSrc}');background-size:cover;background-position:center">
+          <video class="hd-skin-video" src="${skin.intro || skin.loop}" ${skin.intro ? `data-loop="${skin.loop}"` : 'loop'} poster="${skinSrc}" autoplay muted playsinline preload="auto"></video>
+        </div>`
+      : useSkin
+        ? `<div class="hd-bigart has-skin" style="background-image:url('${skinSrc}');background-size:cover;background-position:center"></div>`
+        : `<div class="hd-bigart" style="background-image:url('${src}')"></div>`;
     return `
       <div class="hd-stage ${scene ? 'has-scene' : big ? 'has-big' : 'no-big'}">
         ${scene ? `<div class="hd-scene-fill" style="background-image:url('${scene}')"></div><div class="hd-scene" style="background-image:url('${scene}')"></div>` : ''}
-        <div class="hd-bigfill" style="background-image:url('${src}')"></div>
-        <div class="hd-bigart" style="background-image:url('${src}')"></div>
+        <div class="hd-bigfill" style="background-image:url('${useSkin ? skinSrc : src}')"></div>
+        ${artEl}
         <div class="hd-veil"></div>
         <div class="hd-side-labels">
           <span class="faction-badge ${FACTION_CLS[hero.faction] ?? ''}">${hero.faction}</span>
@@ -1231,10 +1251,10 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
     </div>`;
   };
 
-  /** 板块切换条（详情 / 配点 / 兵种 / 方案） */
+  /** 板块切换条（详情 / 配点 / 兵种 / 外观 / 方案） */
   const hdTabsHtml = (): string => {
-    const tabs: Array<['detail' | 'points' | 'troop' | 'plans', string]> = [
-      ['detail', '详情'], ['points', '配点'], ['troop', '兵种'], ['plans', '方案'],
+    const tabs: Array<['detail' | 'points' | 'troop' | 'skin' | 'plans', string]> = [
+      ['detail', '详情'], ['points', '配点'], ['troop', '兵种'], ['skin', '外观'], ['plans', '方案'],
     ];
     return `<nav class="hd-tabs" aria-label="武将详情板块">${tabs
       .map(([id, label]) => `<button type="button" class="hd-tab${id === activeTab ? ' on' : ''}" data-tab="${id}">${label}</button>`)
@@ -1248,7 +1268,62 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
         ? hdPointsHtml()
         : activeTab === 'troop'
           ? hdTroopHtml()
-          : hdPlansHtml();
+          : activeTab === 'skin'
+            ? hdSkinHtml()
+            : hdPlansHtml();
+
+  /**
+   * 板块 4 · 外观：左侧大图（hdSideHtml 负责）+ 右侧皮肤横滑卡。
+   * 默认卡恒在第一位（poster 走立绘；配了 defaultMedia 时默认也播动态）。
+   */
+  const hdSkinHtml = (): string => {
+    const list = skinsOf(heroId);
+    const cur = currentSkin(heroId);
+    // 只有「默认」一个、且默认也没有动态段时才是真空态；默认自带动态的武将仍要进来能看到
+    if (list.length <= 1 && !list[0].loop) {
+      return `<div class="hd-skin"><div class="hd-skin-empty">
+        该武将暂无额外外观<br /><span>客户端只给部分武将配了动态画像</span>
+      </div></div>`;
+    }
+    const cards = list
+      .map((s) => {
+        const on = s.id === cur.id ? ' on' : '';
+        const cost = s.cost ? `<span class="hd-skin-cost">风尚值 ${s.cost}</span>` : '';
+        const live = s.loop ? '<span class="hd-skin-live">动态</span>' : '';
+        return `
+          <button type="button" class="hd-skin-card${on}" data-skin="${s.id}" role="option" aria-selected="${s.id === cur.id}">
+            <span class="hd-skin-thumb"><img src="${s.poster}" alt="${s.name}" loading="lazy" /></span>
+            <span class="hd-skin-name">${s.name}</span>
+            ${cost}${live}
+          </button>`;
+      })
+      .join('');
+    return `<div class="hd-skin">
+      <div class="hd-skin-title">武将外观<span class="hs-hint">切换后配将页大图与战报页同步</span></div>
+      <div class="hd-skin-list" role="listbox" aria-label="武将外观">${cards}</div>
+      <div class="hd-skin-note">当前：${cur.name}${cur.loop ? '（左侧为动态画像）' : ''}${
+        cur.cg
+          ? ` <button type="button" class="hd-skin-cg" data-skin-cg="${cur.cg}" data-skin-cg-name="${cur.name}">观看 CG</button>`
+          : ''
+      }</div>
+    </div>`;
+  };
+
+  /** 皮肤 CG 弹层（横版 1024×576，点遮罩或 × 关闭） */
+  const openSkinCg = (src: string, name: string): void => {
+    const mask = document.createElement('div');
+    mask.className = 'hd-cg-mask';
+    mask.innerHTML = `<div class="hd-cg-box" role="dialog" aria-label="${name} CG">
+      <video src="${src}" autoplay loop muted playsinline></video>
+      <div class="hd-cg-cap">${name} · CG</div>
+      <button type="button" class="hd-cg-close" aria-label="关闭">×</button>
+    </div>`;
+    mask.addEventListener('click', (e) => {
+      const t = e.target as HTMLElement;
+      if (t === mask || t.classList.contains('hd-cg-close')) mask.remove();
+    });
+    document.body.appendChild(mask);
+  };
 
   /**
    * 板块 2 · 配点：每项 − / + / 最大（把剩余点数全加进该项），外加「重置」返还全部点数。
@@ -1470,12 +1545,45 @@ export function openHeroDetail(heroId: string, opts: DetailOpts): void {
       h.onSetChenshou?.(placed!.team, placed!.idx, undefined);
       redraw();
     });
-    // 板块切换（详情 / 配点 / 兵种）——切换条在顶栏里，所以从 modal 上取而不是 body
+    // 板块切换（详情 / 配点 / 兵种 / 外观 / 方案）——切换条在顶栏里，所以从 modal 上取而不是 body
     modal.querySelectorAll('.hd-tab').forEach((el) => {
       (el as HTMLElement).onclick = () => {
         activeTab = (el as HTMLElement).dataset.tab as typeof activeTab;
         redraw();
       };
+    });
+    // 外观板块：点皮肤卡切换（写 localStorage，切完重绘让左栏与卡片选中态一起更新）
+    body.querySelectorAll('[data-skin]').forEach((el) => {
+      (el as HTMLElement).onclick = () => {
+        const id = (el as HTMLElement).dataset.skin;
+        if (!id || id === currentSkin(heroId).id) return;
+        setActiveSkin(heroId, id);
+        redraw();
+      };
+    });
+    // 皮肤 CG 弹层
+    body.querySelectorAll('[data-skin-cg]').forEach((el) => {
+      (el as HTMLElement).onclick = () => {
+        const src = (el as HTMLElement).dataset.skinCg;
+        const name = (el as HTMLElement).dataset.skinCgName || '';
+        if (src) openSkinCg(src, name);
+      };
+    });
+    // 皮肤动态画像：先播入场运镜（intro），播完自动切循环段（loop）——还原游戏里的「先拉近再定格」。
+    // 没有入场段时 video 自带 loop 属性直接循环，走不到这里。
+    body.querySelectorAll<HTMLVideoElement>('.hd-skin-video[data-loop]').forEach((v) => {
+      v.addEventListener(
+        'ended',
+        () => {
+          const loopSrc = v.dataset.loop;
+          if (!loopSrc) return;
+          v.removeAttribute('data-loop');
+          v.loop = true;
+          v.src = loopSrc;
+          void v.play().catch(() => {});
+        },
+        { once: true },
+      );
     });
     // 方案（板块 4）：保存当前配置 / 套用 / 删除 —— 只换配置，不动武将
     body.querySelector('[data-plan-save]')?.addEventListener('click', () => {

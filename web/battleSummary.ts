@@ -16,6 +16,7 @@ import {
 } from '../src/engine/stats';
 import { avatarSrc, portraitSrc, getHeroById, heroIdOf, rednessStars, skillGrade, TROOP_CHAR, factionIconSrc, cardFrameSrc } from './heroes';
 import { RESULT_GLYPH } from './resultGlyph';
+import { currentSkin } from './skins';
 
 /** 统计视图用的占位单位（只取 general / side，兵力与状态不参与汇总） */
 function unitsFromReport(report: BattleReport): UnitState[] {
@@ -101,10 +102,20 @@ function heroCard(g: General, troops: number, wounded: number, deadTroops: numbe
   const hero = getHeroById(heroIdOf(g));
   const faction = hero?.faction ?? '';
   const facIcon = factionIconSrc(faction);
+  /* 皮肤：选了非默认外观、或默认外观自带动态段时，战报卡换上皮肤画像。
+     有动态段就用 video（与详情页同源），poster 兜底保证首帧不空；
+     默认皮肤的 poster 恒等于立绘，所以按 id 分流判断，切回默认才能摘掉。 */
+  const skin = currentSkin(heroIdOf(g));
+  const useSkin = skin.id === 'default' ? !!skin.loop : !!skin.poster || !!skin.loop;
+  const artSrc = useSkin ? skin.poster || portraitSrc(heroIdOf(g)) : portraitSrc(heroIdOf(g));
+  const artEl =
+    useSkin && skin.loop
+      ? `<video class="sh-art" src="${skin.loop}" poster="${artSrc}" autoplay loop muted playsinline preload="metadata"></video>`
+      : `<img class="sh-art" src="${artSrc}" alt="${g.name}" loading="lazy" decoding="async" onerror="this.style.display='none'" />`;
   return `
     <div class="sum-hero ${dead ? 'dead' : ''}">
       <div class="sh-card">
-        <img class="sh-art" src="${portraitSrc(heroIdOf(g))}" alt="${g.name}" loading="lazy" decoding="async" onerror="this.style.display='none'" />
+        ${artEl}
         <div class="frame" style="background-image:url('${cardFrameSrc()}')"></div>
         <div class="plate">
           ${facIcon ? `<img class="fac" data-faction="${faction}" alt="${faction}" src="${facIcon}" />` : ''}

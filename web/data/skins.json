@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "heroes": {
+    "h479": {
+      "heroId": 100479,
+      "skins": [
+        {
+          "id": "chengjiu",
+          "name": "成就·吕布",
+          "cost": 1000,
+          "poster": "/skins/h479_1_poster.webp",
+          "loop": "/skins/h479_1_loop.webm",
+          "intro": "/skins/h479_1_intro.webm",
+          "small": "/skins/h479_1_small.webm"
+        },
+        {
+          "id": "guishen",
+          "name": "鬼神无双",
+          "cost": 900,
+          "poster": "/skins/h479_3_poster.webp",
+          "loop": "/skins/h479_3_loop.webm",
+          "small": "/skins/h479_3_small.webm",
+          "cg": "/skins/h479_3_cg.webm"
+        },
+        {
+          "id": "longpan",
+          "name": "甲辰新春·龙蟠虎踞",
+          "cost": 600,
+          "poster": "/skins/h479_2_poster.webp",
+          "loop": "/skins/h479_2_loop.webm",
+          "intro": "/skins/h479_2_intro.webm",
+          "small": "/skins/h479_2_small.webm"
+        }
+      ]
+    },
+    "lvmeng": {
+      "heroId": 100035,
+      "defaultMedia": {
+        "loop": "/skins/lvmeng_defdyn_loop.webm",
+        "small": "/skins/lvmeng_defdyn_small.webm"
+      },
+      "skins": []
+    }
+  }
+}

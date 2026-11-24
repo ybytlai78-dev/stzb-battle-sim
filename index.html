@@ -15,9 +15,170 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet" />
+    <!--
+      启动加载页的样式内联在这里：JS 包还没解析完就要先看到画面，走 CSS 文件会白屏一拍。
+      进度条 / 「率」印章的推进由 web/splash.ts 接管（它负责预载武将画像）。
+    -->
+    <style>
+      #boot-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        overflow: hidden;
+        background: #15110b;
+        transition: opacity 0.45s ease;
+        -webkit-tap-highlight-color: transparent;
+      }
+      #boot-splash.is-out {
+        opacity: 0;
+        pointer-events: none;
+      }
+      .boot-bg {
+        position: absolute;
+        inset: 0;
+        /* 偏左取景：让左上「率土之滨」标识留在画面里，不做成居中裁切 */
+        background: url("./splash-bg.jpg") 18% center / cover no-repeat;
+      }
+      .boot-veil {
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(
+          to bottom,
+          rgba(10, 8, 6, 0.55) 0%,
+          rgba(10, 8, 6, 0.1) 24%,
+          rgba(10, 8, 6, 0.38) 58%,
+          rgba(8, 7, 10, 0.9) 76%,
+          #08070a 84%
+        );
+      }
+      .boot-stage {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 13%;
+        padding: 0 3.4%;
+        z-index: 2;
+      }
+      .boot-tip {
+        margin: 0 0 11px;
+        font: 600 16px/1.6 "Noto Serif SC", "Microsoft YaHei", serif;
+        color: #f3ede4;
+        letter-spacing: 0.06em;
+        text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
+      }
+      .boot-tip b {
+        margin-left: 8px;
+        font-size: 13px;
+        font-weight: 400;
+        letter-spacing: 0;
+        color: #c9b79f;
+      }
+      .boot-track {
+        position: relative;
+        height: 2px;
+        border-radius: 1px;
+        background: rgba(255, 255, 255, 0.22);
+      }
+      .boot-track i {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 0;
+        border-radius: 1px;
+        background: #fff;
+        box-shadow: 0 0 8px rgba(255, 255, 255, 0.9);
+        transition: width 0.18s ease-out;
+      }
+      .boot-seal {
+        position: absolute;
+        left: 0;
+        bottom: -14px;
+        width: 30px;
+        height: 30px;
+        margin-left: -15px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #0d0b10;
+        border: 1px solid rgba(255, 255, 255, 0.4);
+        color: #fff;
+        font: 600 17px/1 "Noto Serif SC", serif;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.7);
+        transition: left 0.18s ease-out;
+      }
+      .boot-foot {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 20px;
+        padding: 0 3.4%;
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        font: 13px/1.5 "Noto Serif SC", "Microsoft YaHei", serif;
+        color: #a89c8b;
+      }
+      #boot-skip {
+        flex: none;
+        padding: 5px 14px;
+        border: 1px solid rgba(222, 206, 182, 0.35);
+        border-radius: 3px;
+        background: transparent;
+        color: #e6dccb;
+        font: inherit;
+        cursor: pointer;
+      }
+      #boot-skip:hover {
+        border-color: rgba(232, 67, 74, 0.75);
+        color: #fff;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #boot-splash,
+        .boot-track i,
+        .boot-seal {
+          transition: none;
+        }
+      }
+      @media (max-width: 560px) {
+        .boot-foot span {
+          display: none;
+        }
+        .boot-stage {
+          bottom: 16%;
+        }
+        /* 竖屏下 cover 会狠裁，取景往中间偏左挪，保证骑马将入画 */
+        .boot-bg {
+          background-position: 27% center;
+        }
+      }
+    </style>
   </head>
   <body>
+    <div id="boot-splash" role="status" aria-live="polite">
+      <div class="boot-bg"></div>
+      <div class="boot-veil"></div>
+      <div class="boot-stage">
+        <p class="boot-tip"><span>正在加载武将画像</span><b id="boot-count"></b></p>
+        <div class="boot-track"><i id="boot-fill"></i><span class="boot-seal" id="boot-seal">率</span></div>
+      </div>
+      <div class="boot-foot">
+        <span>首次加载会把画像存进缓存，之后开页秒进</span>
+        <button type="button" id="boot-skip">跳过 ›</button>
+      </div>
+    </div>
     <div id="app"></div>
     <script type="module" src="/web/main.ts"></script>
+    <script>
+      // 兜底：JS 包迟迟到不了（弱网/CDN 抽风）时给句话，别让人对着 0% 干等
+      setTimeout(function () {
+        var s = document.getElementById('boot-splash');
+        if (!s || s.dataset.ready === '1') return;
+        var t = s.querySelector('.boot-tip span');
+        if (t) t.textContent = '加载较慢，请检查网络后刷新页面';
+      }, 12000);
+    </script>
   </body>
 </html>
