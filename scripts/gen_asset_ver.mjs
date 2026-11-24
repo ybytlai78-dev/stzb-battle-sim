@@ -17,6 +17,7 @@ const dirs = {
   portraitsBig: 'public/portraits_big',
   portraitsScene: 'public/portraits_scene',
   skills: 'public/skills',
+  skins: 'public/skins',
 };
 
 const out = {};
@@ -24,7 +25,7 @@ for (const [key, rel] of Object.entries(dirs)) {
   const dir = join(root, rel);
   let files = [];
   try {
-    files = readdirSync(dir).filter((f) => /\.(png|jpe?g|webp|svg)$/i.test(f)).sort();
+    files = readdirSync(dir).filter((f) => /\.(png|jpe?g|webp|svg|webm|mp4)$/i.test(f)).sort();
   } catch {
     out[key] = '0';
     continue;

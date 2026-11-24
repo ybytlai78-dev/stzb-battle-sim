@@ -27,7 +27,7 @@
 | 范围 | 内容（示例） | 许可 |
 |------|--------------|------|
 | ✅ 本项目自编代码 | `src/`、`web/`、`tests/`、`scripts/`、构建与部署脚本 | [MIT](LICENSE)：可自由使用、修改、分发 |
-| ❌ 游戏素材 | 武将立绘与小头像（`public/portraits/`）、武将全身大图（`public/portraits_big/`）、带战场背景的场景大卡（`public/portraits_scene/`）、官方标识（`public/rate-logo.png`）、武将 / 战法 / 宝物的名称、文案与数值（`web/data/*.json`、`scripts/*_extra.json` 等） | 版权归权利方所有，**不适用 MIT、不随本仓库授权**，仅为本项目演示目的随仓库附带 |
+| ❌ 游戏素材 | 武将立绘与小头像（`public/portraits/`）、武将全身大图（`public/portraits_big/`）、带战场背景的场景大卡（`public/portraits_scene/`）、武将动态外观（`public/skins/`）、官方标识（`public/rate-logo.png`、`public/splash-bg.jpg`）、武将 / 战法 / 宝物的名称、文案与数值（`web/data/*.json`、`scripts/*_extra.json` 等） | 版权归权利方所有，**不适用 MIT、不随本仓库授权**，仅为本项目演示目的随仓库附带 |
 | ➖ 项目文档 | `README.md`、`docs/`、`dateyuan/` 中作者自撰的部分随 MIT；其中**引用的官方文案、数值与截图**仍归权利方 | 引用部分不适用 MIT |
 | ➖ 第三方开源组件 | `package.json` 中的依赖与其产物（TypeScript / Vite / Vitest / Capacitor 等） | 各自的许可证 |
 
@@ -60,6 +60,8 @@
 | `public/portraits_big/`（137 张 WebP，透明底全身像） | 武将全身大图（招募宣发图） | 9.2.2 客户端包 `assets/card_c.npk` 的 `res/replace/card/card_summon` 族 ASTC 解码，q80 转 WebP（只读分析）；索引 `web/data/big_art.json`，取证见 `docs/逆向对拍/武将大图-取证-2026-11-07.md` |
 | `public/portraits_scene/`（159 张 WebP，带战场背景的全身大卡） | 武将场景大卡（详情页背景） | MuMu 模拟器已下载资源 `mini_client_res/card/card_big/big_card_*.jpg` 离线提取：8 字节重复 XOR 解密（`rea_stzb/tools/decrypt_res.py`）→ q80 转 WebP；索引 `web/data/scene_art.json`，取证见 `docs/武将详情页-全屏改版-2026-11-07.md` §六 |
 | `public/rate-logo.png` | 《率土之滨》标识（顶栏图标） | 官方标识素材，标识权归权利方 |
+| `public/splash-bg.jpg`（1600×900，188 KB） | 启动加载页背景（水墨风率土 KV） | 大神桌面版客户端 `GLClient/GLEmulator.exe` 内嵌 `launch_page.png` 的离线提取与压缩（素材在 exe 内以裸 PNG 存放，按 PNG 头切出、q84 转 JPEG；只读分析，未修改原包、未绕过任何校验） |
+| `public/skins/`（15 个文件，共约 5.3 MB：4 套外观的封面 webp + 各自的动态画像 webm + 鬼神无双的 CG webm） | 武将动态外观（群·吕布：「成就·吕布」「鬼神无双」「甲辰新春·龙蟠虎踞」；吴·吕蒙：原画像的动态段） | 大神模拟器客户端内 `card/card_2d_videos/{big,mid}_100479_*.nbs`、`{big,mid}_110245_*.nbs`、`{big,mid}_100035_*.nbs`、`facade_videos/100035_*.nbs`（VP9 封装的 1008×1008 / 1248×768 大图动态）、`card/card_videos/video_111044_2.nbs`（306×444 竖版动态卡面）、`card/card_videos_new/new_video_111044_1.nbs`（1366×768 卡面 CG）、`card/card_big/big_card_{100035,110245,111035,111044}.jpg`（8 字节周期 XOR 加密的皮肤大图，密钥同 nbs 容器）的离线解码：XOR 还原 → 借客户端自带 libvpx 逐帧解码 → ffmpeg 转 VP9 webm / webp 封面（只读分析，未修改原包、未绕过任何校验；管线脚本见 `scripts/skin/pull.mjs` + `scripts/skin/nbs_decode.py`） |
 | `web/data/*.json`、`scripts/skill_extra.json`、`scripts/hero_extra.json`、`scripts/_official_hero.json`、`dateyuan/宝物数据.json` | 武将 / 战法 / 宝物的名称、满级与 1 级文案、品级、数值 | 官方武将库 / 战法库 / 宝物库的公开页面与其服务端 JSON（`stzb.163.com`） |
 | `dateyuan/*.md` | 机制调研与数值推导文档 | 作者撰写；官方原文摘录归权利方，成长值等参考公开社区资料交叉验证 |
 | `src/data/mechanisms.ts` | 战法**效果机制名**字典（206 条）与「战法 → 机制码」挂载 | 官方客户端资源表的静态解析产物（只读分析，未修改原包、未绕过任何校验） |

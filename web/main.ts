@@ -73,6 +73,11 @@ import { closePlayback, isPlaybackOpen, openPlayback } from './playback/playback
 import { SITE_VERSION } from './changelog';
 import { maybeAutoOpenAnnouncement, openAnnouncementPanel, syncAnnouncementBadge } from './announcement';
 import { maybeAutoOpenDisclaimer, openDisclaimerPanel } from './disclaimer';
+import { onBootExit, startBootSplash } from './splash';
+
+// 启动加载页：先播水墨动画，同时把武将画像拉进缓存（DOM/样式在 index.html 内联，
+// 这里只接管进度；画像进缓存后换将、详情、战报都不会再空一块）
+if (typeof document !== 'undefined') startBootSplash();
 
 // ─── 状态 ───
 const state: EditorState = emptyEditor();
@@ -948,11 +953,14 @@ export function initApp(root?: HTMLElement): void {
   // 底栏「声明」：非官方身份 / 素材版权 / 使用限制（口径与 NOTICE.md、README 顶部声明同步）
   (controlBar.querySelector('#disclaimer-btn') as HTMLButtonElement).addEventListener('click', () => openDisclaimerPanel());
 
-  // 公告栏：版本号变化后首次进入自动弹一次（首次运行只静默记账，不打扰）→ 再同步一次未读红点
-  maybeAutoOpenAnnouncement();
-  syncAnnouncementBadge();
-  // 声明：首次进入自动弹一次；公告弹窗正开着时让路（本次不弹也不记账，下次再弹）→ 不叠两个遮罩
-  maybeAutoOpenDisclaimer();
+  // 公告与声明都压到加载页退场之后再弹 —— 否则进度条还在走，遮罩就先盖上来了
+  onBootExit(() => {
+    // 公告栏：版本号变化后首次进入自动弹一次（首次运行只静默记账，不打扰）→ 再同步一次未读红点
+    maybeAutoOpenAnnouncement();
+    syncAnnouncementBadge();
+    // 声明：首次进入自动弹一次；公告弹窗正开着时让路（本次不弹也不记账，下次再弹）→ 不叠两个遮罩
+    maybeAutoOpenDisclaimer();
+  });
 }
 
 // ─── 伤害测试实验室视图（顶栏「伤害测试」导航切换）───
