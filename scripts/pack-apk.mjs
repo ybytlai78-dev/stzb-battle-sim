@@ -21,6 +21,11 @@ const versionArg = args.includes('--version') ? args[args.indexOf('--version') +
 const run = (cmd, argv, cwd = root) =>
   execFileSync(cmd, argv, { cwd, stdio: 'inherit', shell: process.platform === 'win32' });
 
+// Windows 下 python 的 stdout 默认走 GBK：把内嵌 index.html 往 stdout 写会在 `›` 这类字符上
+// 抛 UnicodeEncodeError（2026-11-28 实测，害得打包在校验那一步假失败、APK 其实已经产出）。
+// 子进程继承环境变量，这里设一次即可，三条 python 调用都受益。
+process.env.PYTHONIOENCODING = 'utf-8';
+
 const fail = (msg) => {
   console.error(`\n✗ ${msg}`);
   process.exit(1);
